@@ -53,11 +53,7 @@ pub struct RuleSpec {
 
 impl RuleSpec {
     #[must_use]
-    pub const fn literal(
-        id: &'static str,
-        value: &'static str,
-        severity: Severity,
-    ) -> Self {
+    pub const fn literal(id: &'static str, value: &'static str, severity: Severity) -> Self {
         Self {
             id,
             kind: RuleKind::Literal,
@@ -67,11 +63,7 @@ impl RuleSpec {
     }
 
     #[must_use]
-    pub const fn prefix(
-        id: &'static str,
-        value: &'static str,
-        severity: Severity,
-    ) -> Self {
+    pub const fn prefix(id: &'static str, value: &'static str, severity: Severity) -> Self {
         Self {
             id,
             kind: RuleKind::Prefix,
@@ -81,11 +73,7 @@ impl RuleSpec {
     }
 
     #[must_use]
-    pub const fn suffix(
-        id: &'static str,
-        value: &'static str,
-        severity: Severity,
-    ) -> Self {
+    pub const fn suffix(id: &'static str, value: &'static str, severity: Severity) -> Self {
         Self {
             id,
             kind: RuleKind::Suffix,
@@ -95,11 +83,7 @@ impl RuleSpec {
     }
 
     #[must_use]
-    pub const fn pattern(
-        id: &'static str,
-        value: &'static str,
-        severity: Severity,
-    ) -> Self {
+    pub const fn pattern(id: &'static str, value: &'static str, severity: Severity) -> Self {
         Self {
             id,
             kind: RuleKind::Pattern,
@@ -108,7 +92,7 @@ impl RuleSpec {
         }
     }
 
-    #[must_use]
+    #[must_use = "result should be used"]
     pub fn to_rule(self) -> Result<Rule, RuleError> {
         match self.kind {
             RuleKind::Literal => Ok(Rule::literal(self.id, self.value, self.severity)),
@@ -151,11 +135,7 @@ impl Rule {
 
     /// Creates a rule that matches a prefix.
     #[must_use]
-    pub fn prefix(
-        id: impl Into<RuleId>,
-        prefix: impl Into<Box<str>>,
-        severity: Severity,
-    ) -> Self {
+    pub fn prefix(id: impl Into<RuleId>, prefix: impl Into<Box<str>>, severity: Severity) -> Self {
         Self {
             id: id.into(),
             severity,
@@ -165,11 +145,7 @@ impl Rule {
 
     /// Creates a rule that matches a suffix.
     #[must_use]
-    pub fn suffix(
-        id: impl Into<RuleId>,
-        suffix: impl Into<Box<str>>,
-        severity: Severity,
-    ) -> Self {
+    pub fn suffix(id: impl Into<RuleId>, suffix: impl Into<Box<str>>, severity: Severity) -> Self {
         Self {
             id: id.into(),
             severity,
@@ -188,7 +164,7 @@ impl Rule {
         severity: Severity,
     ) -> Result<Self, RuleError> {
         let pattern = Regex::new(pattern).map_err(RuleError::InvalidPattern)?;
-    
+
         Ok(Self {
             id: id.into(),
             severity,

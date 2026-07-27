@@ -1,9 +1,4 @@
-use crate::{
-    confidence::Confidence,
-    location::Location,
-    rule::RuleId,
-    severity::Severity,
-};
+use crate::{confidence::Confidence, location::Location, rule::RuleId, severity::Severity};
 
 /// A validated finding produced by a scanner rule.
 #[derive(Debug, Clone, Eq, PartialEq)]

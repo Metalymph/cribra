@@ -66,11 +66,7 @@ impl Scanner {
                 .start()
                 .cmp(&right.location().start())
                 .then_with(|| left.location().end().cmp(&right.location().end()))
-                .then_with(|| {
-                    left.rule_id()
-                        .as_str()
-                        .cmp(right.rule_id().as_str())
-                })
+                .then_with(|| left.rule_id().as_str().cmp(right.rule_id().as_str()))
         });
 
         populate_line_columns(source, &mut findings);
@@ -92,17 +88,13 @@ pub mod builtins {
     pub const STRIPE_SECRET_KEY: RuleSpec =
         RuleSpec::prefix("stripe.secret-key", "sk_live_", Severity::Critical);
 
-    pub const GITHUB_PAT: RuleSpec =
-        RuleSpec::prefix(
-            "github.personal-access-token",
-            "github_pat_",
-            Severity::Critical,
-        );
+    pub const GITHUB_PAT: RuleSpec = RuleSpec::prefix(
+        "github.personal-access-token",
+        "github_pat_",
+        Severity::Critical,
+    );
 
-    pub const ALL: &[RuleSpec] = &[
-        STRIPE_SECRET_KEY,
-        GITHUB_PAT,
-    ];
+    pub const ALL: &[RuleSpec] = &[STRIPE_SECRET_KEY, GITHUB_PAT];
 }
 
 fn scan_rule(rule: &Rule, source: &str, findings: &mut Vec<Finding>) {
@@ -122,32 +114,17 @@ fn scan_rule(rule: &Rule, source: &str, findings: &mut Vec<Finding>) {
     }
 }
 
-fn scan_literal(
-    rule: &Rule,
-    source: &str,
-    literal: &str,
-    findings: &mut Vec<Finding>,
-) {
+fn scan_literal(rule: &Rule, source: &str, literal: &str, findings: &mut Vec<Finding>) {
     if literal.is_empty() {
         return;
     }
 
     for (start, _) in source.match_indices(literal) {
-        push_finding(
-            findings,
-            rule,
-            start,
-            start + literal.len(),
-        );
+        push_finding(findings, rule, start, start + literal.len());
     }
 }
 
-fn scan_prefix(
-    rule: &Rule,
-    source: &str,
-    prefix: &str,
-    findings: &mut Vec<Finding>,
-) {
+fn scan_prefix(rule: &Rule, source: &str, prefix: &str, findings: &mut Vec<Finding>) {
     if prefix.is_empty() {
         return;
     }
@@ -164,16 +141,16 @@ fn scan_prefix(
             end += 1;
         }
 
+        // println!(
+        //     "match at {}, prev={:?}",
+        //     start,
+        //     start.checked_sub(1).map(|i| source.as_bytes()[i] as char),
+        // );
         push_finding(findings, rule, start, end);
     }
 }
 
-fn scan_suffix(
-    rule: &Rule,
-    source: &str,
-    suffix: &str,
-    findings: &mut Vec<Finding>,
-) {
+fn scan_suffix(rule: &Rule, source: &str, suffix: &str, findings: &mut Vec<Finding>) {
     if suffix.is_empty() {
         return;
     }
@@ -192,32 +169,22 @@ fn scan_suffix(
             start -= 1;
         }
 
+        // println!(
+        //     "suffix start {}, next={:?}",
+        //     end,
+        //     source.as_bytes().get(end).map(|b| *b as char),
+        // );
         push_finding(findings, rule, start, end);
     }
 }
 
-fn scan_pattern(
-    rule: &Rule,
-    source: &str,
-    pattern: &regex::Regex,
-    findings: &mut Vec<Finding>,
-) {
+fn scan_pattern(rule: &Rule, source: &str, pattern: &regex::Regex, findings: &mut Vec<Finding>) {
     for matched in pattern.find_iter(source) {
-        push_finding(
-            findings,
-            rule,
-            matched.start(),
-            matched.end(),
-        );
+        push_finding(findings, rule, matched.start(), matched.end());
     }
 }
 
-fn push_finding(
-    findings: &mut Vec<Finding>,
-    rule: &Rule,
-    start: usize,
-    end: usize,
-) {
+fn push_finding(findings: &mut Vec<Finding>, rule: &Rule, start: usize, end: usize) {
     findings.push(Finding::new(
         rule.id.clone(),
         Location::from_span(start, end),
@@ -232,11 +199,7 @@ fn push_finding(
 /// different lexical rules should use a Pattern rule.
 #[inline]
 const fn is_token_byte(byte: u8) -> bool {
-    byte.is_ascii_alphanumeric()
-        || matches!(
-            byte,
-            b'_' | b'-' | b'.' | b'~' | b'+' | b'/' | b'='
-        )
+    byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-')
 }
 
 /// Populates line/column position for each finding in-place.
