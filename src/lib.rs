@@ -1,20 +1,17 @@
 #![forbid(unsafe_code)]
 
-/// Public project name.
-pub const PROJECT_NAME: &str = "Silens Scan";
+mod confidence;
+mod finding;
+mod location;
+mod redaction;
+mod rule;
+mod scanner;
+mod scanner_builder;
+mod severity;
 
-/// Returns the public name of the scanner engine.
-#[must_use]
-pub const fn project_name() -> &'static str {
-    PROJECT_NAME
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn exposes_project_name() {
-        assert_eq!(project_name(), "Silens Scan");
-    }
-}
+pub use confidence::Confidence;
+pub use finding::Finding;
+pub use location::Location;
+pub use rule::{Rule, RuleError};
+pub use scanner::{ScanReport, Scanner, builtins};
+pub use severity::Severity;
