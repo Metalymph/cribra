@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
 
+mod compiled_rule;
 mod confidence;
 mod finding;
 mod location;

@@ -1,9 +1,9 @@
 use crate::{
+    compiled_rule::CompiledRule,
     rule::{Rule, RuleError, RuleSpec},
     scanner::Scanner,
 };
 
-/// Builds a scanner with a custom rule set.
 #[derive(Debug, Default)]
 pub struct ScannerBuilder {
     rules: Vec<Rule>,
@@ -19,14 +19,12 @@ impl ScannerBuilder {
         }
     }
 
-    /// Adds one built-in rule.
     #[must_use]
     pub fn builtin(mut self, rule: RuleSpec) -> Self {
         self.builtin_rules.push(rule);
         self
     }
 
-    /// Adds a collection of built-in rules.
     #[must_use]
     pub fn builtins<I>(mut self, rules: I) -> Self
     where
@@ -36,14 +34,12 @@ impl ScannerBuilder {
         self
     }
 
-    /// Adds one custom rule.
     #[must_use]
     pub fn rule(mut self, rule: Rule) -> Self {
         self.rules.push(rule);
         self
     }
 
-    /// Adds a collection of custom rules.
     #[must_use]
     pub fn rules<I>(mut self, rules: I) -> Self
     where
@@ -53,7 +49,6 @@ impl ScannerBuilder {
         self
     }
 
-    /// Builds the scanner.
     pub fn build(mut self) -> Result<Scanner, RuleError> {
         self.rules.reserve(self.builtin_rules.len());
 
@@ -61,6 +56,8 @@ impl ScannerBuilder {
             self.rules.push(spec.to_rule()?);
         }
 
-        Ok(Scanner::new(self.rules))
+        let compiled_rules = self.rules.into_iter().map(CompiledRule::compile).collect();
+
+        Ok(Scanner::new(compiled_rules))
     }
 }
