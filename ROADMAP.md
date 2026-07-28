@@ -1,44 +1,59 @@
 # Roadmap
 
-Silens Scan has an independent lifecycle from Silens Siren and Silens CLI.
+## S0 --- Foundation ✅
 
-## S0 — Foundation
+Repository, CI, privacy constraints.
 
-- [x] Initialize the public Rust library repository
-- [x] Define scope, ownership, and privacy constraints
-- [x] Add baseline validation and continuous integration
+## S1.1 --- Public Scanner Contracts ✅
 
-## S1 — Core Scanner
+Rule model, Finding, Location, Severity, Confidence, Redaction,
+ScanReport, Scanner, Builder, docs and tests.
 
-- [ ] Define input, rule, finding, location, severity, confidence, and redaction models
-- [ ] Implement deterministic in-memory scanning
-- [ ] Add an initial high-confidence secret rule set
-- [ ] Add false-positive controls
-- [ ] Add safe output contracts
-- [ ] Add focused unit and integration tests
+## S1.2 --- Compiled Execution Engine ✅
 
-## S2 — Stable Integration API
+CompiledRuleSet, Aho-Corasick, Regex, Suffix, InternalFinding,
+RuleIndex, deterministic ordering, UTF-8 coordinate resolution.
 
-- [ ] Stabilize the API consumed by Silens CLI
-- [ ] Add filesystem adapters outside the pure scanning layer
-- [ ] Define machine-readable serialization contracts
-- [ ] Prepare the first crates.io release
+## S1.3 --- Serial Engine Hardening 🚧
 
-## S3 — WebAssembly and PWA
+-   Criterion benchmarks
+-   Regression suite
+-   Provider rule packs
+-   Candidate validation
+-   False-positive reduction
+-   Allowlists
+-   Placeholder detection
+-   Deduplication
+-   Safe redaction
+-   Overlap handling
+-   Property tests
+-   Fuzzing
 
-- [ ] Validate supported WASM targets
-- [ ] Add a thin WASM binding layer
-- [ ] Integrate with the client-only Silens Scan PWA
-- [ ] Preserve offline operation in the browser
+## S1.4 --- Rule Ecosystem
 
-## S4 — Studio Integration
+Provider packs.
 
-- [ ] Integrate the engine into Silens Studio
-- [ ] Support Scan+ workflows without weakening the open core
+## S1.5 --- Engine Optimization
 
-## Permanent constraints
+RegexSet, SIMD, memchr, planner, memory optimizations, evaluate Rayon.
 
-- The core must not depend on Silens Siren.
-- Local scanning must not require authentication.
-- Network access must never become mandatory.
-- Frontends must consume the engine rather than reimplement detection.
+## S2 (0.2)
+
+Stable API.
+
+## S3 (0.3)
+
+CLI. 
+
+## S4 (0.4)
+
+WASM.
+
+## S5 (0.5)
+
+Studio.
+
+## Releases
+
+0.1.0 Scanner MVP 0.2.0 Production Detection 0.3.0 CLI 0.4.0 WASM 0.5.0
+Studio 0.6.x+ Performance

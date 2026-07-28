@@ -2,29 +2,50 @@
 
 Privacy-first Rust engine for detecting secrets and sensitive data.
 
-Silens Scan is the reusable open-source scanning core of the Silens ecosystem. It is designed to power:
-
-- `silens scan` in Silens CLI
-- the client-only Silens Scan WASM/PWA on `silenshq.com`
-- Silens Scan+ inside Silens Studio
-
 ## Status
 
-Early project bootstrap. The public API is not stable yet.
+**S1.2 completed**.
 
-## Principles
+### Features
 
-- Local-first and network-free by default
-- No account or authentication requirement
-- Deterministic structured findings
-- Precise source locations
-- Safe redaction by default
-- Reusable across native and WebAssembly targets
-- Independent from Silens Siren
+-   Deterministic UTF-8 scanning
+-   Compiled execution engine
+-   Literal, prefix, suffix and regex rules
+-   Immutable reports
+-   Unicode-aware locations
+-   Local-first, synchronous API
 
-## Repository role
+## Design Goals
 
-This repository contains the scanner engine only. Terminal, browser, desktop, authentication, and cloud concerns belong to separate clients or services.
+-   Local-first
+-   Deterministic
+-   Privacy-first
+-   WASM-friendly
+-   Cross-platform
+-   Single-thread optimized first
+
+## Architecture
+
+``` text
+Scanner -> CompiledRuleSet -> InternalFinding -> Sort -> UTF-8 Positions -> ScanReport
+```
+
+## Public API
+
+Scanner, ScannerBuilder, Rule, RuleSpec, RuleId, Finding, Location,
+Severity, Confidence, Redaction, ScanReport.
+
+## Coordinate Contract
+
+-   start/end: zero-based UTF-8 bytes
+-   line: one-based
+-   column: one-based Unicode scalar
+
+Matched secrets are never stored in public findings.
+
+## Roadmap
+
+✅ S0 ✅ S1.1 ✅ S1.2 🚧 S1.3 S1.4 S1.5 S2 S3 S4 S5
 
 ## License
 
