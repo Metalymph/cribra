@@ -1,215 +1,172 @@
 use crate::{
-    compiled_rule::{CompiledMatcher, CompiledRule},
-    confidence::Confidence,
+    compiled_rule::{CompiledRuleSet, InternalFinding},
     finding::Finding,
     location::Location,
-    rule::RuleSpec,
+    report::ScanReport,
     scanner_builder::ScannerBuilder,
 };
 
-#[derive(Debug, Default)]
-pub struct ScanReport {
-    findings: Vec<Finding>,
-}
-
-impl ScanReport {
-    #[must_use]
-    pub fn findings(&self) -> &[Finding] {
-        &self.findings
-    }
-
-    #[must_use]
-    pub fn is_empty(&self) -> bool {
-        self.findings.is_empty()
-    }
-
-    #[must_use]
-    pub fn len(&self) -> usize {
-        self.findings.len()
-    }
-}
-
-#[derive(Debug, Default)]
+/// Immutable scanner that executes a precompiled set of detection rules.
+///
+/// A scanner performs no rule validation or matcher compilation while
+/// scanning. All configuration work is completed by [`ScannerBuilder::build`],
+/// allowing the same scanner instance to be reused across multiple UTF-8
+/// inputs.
+///
+/// Scanning is currently deliberately single-threaded. The execution engine is
+/// optimized and benchmarked in serial before any optional parallel strategy
+/// is introduced.
+#[derive(Debug)]
 pub struct Scanner {
-    rules: Vec<CompiledRule>,
+    rules: CompiledRuleSet,
 }
 
 impl Scanner {
-    pub(crate) fn new(rules: Vec<CompiledRule>) -> Self {
+    pub(crate) const fn new(rules: CompiledRuleSet) -> Self {
         Self { rules }
     }
 
+    /// Creates an empty builder for configuring a scanner.
     #[must_use]
     pub const fn builder() -> ScannerBuilder {
         ScannerBuilder::new()
     }
 
-    #[must_use]
-    pub fn scan(&self, source: &str) -> ScanReport {
-        let mut findings = Vec::new();
-
-        for rule in &self.rules {
-            scan_rule(rule, source, &mut findings);
-        }
-
-        if findings.is_empty() {
-            return ScanReport { findings };
-        }
-
-        findings.sort_unstable_by(|left, right| {
-            left.location()
-                .start()
-                .cmp(&right.location().start())
-                .then_with(|| left.location().end().cmp(&right.location().end()))
-                .then_with(|| left.rule_id().as_str().cmp(right.rule_id().as_str()))
-        });
-
-        populate_line_columns(source, &mut findings);
-
-        ScanReport { findings }
-    }
-
+    /// Returns the number of rules compiled into this scanner.
     #[must_use]
     pub fn rules_count(&self) -> usize {
         self.rules.len()
     }
-}
 
-pub mod builtins {
-    use super::RuleSpec;
-    use crate::severity::Severity;
+    /// Returns `true` when this scanner contains no rules.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.rules.is_empty()
+    }
 
-    pub const STRIPE_SECRET_KEY: RuleSpec =
-        RuleSpec::prefix("stripe.secret-key", "sk_live_", Severity::Critical);
+    /// Scans a UTF-8 string and returns a deterministic report.
+    ///
+    /// The execution pipeline is:
+    ///
+    /// 1. execute every compiled matcher group into one internal finding
+    ///    buffer;
+    /// 2. sort matches deterministically by byte span and rule identifier;
+    /// 3. resolve one-based line and Unicode-scalar column coordinates in one
+    ///    forward pass;
+    /// 4. materialize the public [`Finding`] values.
+    ///
+    /// `start` and `end` locations remain zero-based byte offsets. `line` and
+    /// `column` are one-based, and columns count Unicode scalar values rather
+    /// than UTF-8 bytes.
+    #[must_use]
+    pub fn scan(&self, source: &str) -> ScanReport {
+        let mut internal = Vec::new();
+        self.rules.scan(source, &mut internal);
 
-    pub const GITHUB_PAT: RuleSpec = RuleSpec::prefix(
-        "github.personal-access-token",
-        "github_pat_",
-        Severity::Critical,
-    );
+        internal.sort_unstable_by(|left, right| {
+            left.start()
+                .cmp(&right.start())
+                .then_with(|| left.end().cmp(&right.end()))
+                .then_with(|| {
+                    self.rules
+                        .metadata(left.rule_index())
+                        .id()
+                        .as_str()
+                        .cmp(self.rules.metadata(right.rule_index()).id().as_str())
+                })
+        });
 
-    pub const ALL: &[RuleSpec] = &[STRIPE_SECRET_KEY, GITHUB_PAT];
-}
+        let positions = resolve_positions(source, &internal);
 
-fn scan_rule(rule: &CompiledRule, source: &str, findings: &mut Vec<Finding>) {
-    match rule.matcher() {
-        CompiledMatcher::Literal(value) => {
-            scan_literal(rule, source, value, findings);
-        }
-        CompiledMatcher::Prefix(value) => {
-            scan_prefix(rule, source, value, findings);
-        }
-        CompiledMatcher::Suffix(value) => {
-            scan_suffix(rule, source, value, findings);
-        }
-        CompiledMatcher::Pattern(pattern) => {
-            scan_pattern(rule, source, pattern, findings);
-        }
+        let findings = internal
+            .into_iter()
+            .zip(positions)
+            .map(|(finding, (line, column))| {
+                let metadata = self.rules.metadata(finding.rule_index());
+                let mut location = Location::from_span(finding.start(), finding.end());
+                location.set_position(line, column);
+
+                Finding::new(
+                    metadata.id().clone(),
+                    location,
+                    metadata.severity(),
+                    metadata.confidence(),
+                )
+            })
+            .collect();
+
+        ScanReport::new(findings)
     }
 }
 
-fn scan_literal(rule: &CompiledRule, source: &str, literal: &str, findings: &mut Vec<Finding>) {
-    if literal.is_empty() {
-        return;
-    }
-
-    for (start, _) in source.match_indices(literal) {
-        push_finding(findings, rule, start, start + literal.len());
+impl Default for Scanner {
+    fn default() -> Self {
+        Self::builder()
+            .build()
+            .expect("an empty scanner configuration must compile")
     }
 }
 
-fn scan_prefix(rule: &CompiledRule, source: &str, prefix: &str, findings: &mut Vec<Finding>) {
-    if prefix.is_empty() {
-        return;
-    }
+/// Resolves positions for findings already ordered by their start byte.
+///
+/// The function traverses the source only once. It returns positions separately
+/// from [`InternalFinding`] so the hot-path representation remains limited to a
+/// compact rule index and byte span.
+fn resolve_positions(source: &str, findings: &[InternalFinding]) -> Vec<(usize, usize)> {
+    let mut positions = Vec::with_capacity(findings.len());
 
-    let bytes = source.as_bytes();
-
-    for (start, _) in source.match_indices(prefix) {
-        if start > 0 && is_token_byte(bytes[start - 1]) {
-            continue;
-        }
-
-        let mut end = start + prefix.len();
-
-        while end < bytes.len() && is_token_byte(bytes[end]) {
-            end += 1;
-        }
-
-        push_finding(findings, rule, start, end);
-    }
-}
-
-fn scan_suffix(rule: &CompiledRule, source: &str, suffix: &str, findings: &mut Vec<Finding>) {
-    if suffix.is_empty() {
-        return;
-    }
-
-    let bytes = source.as_bytes();
-
-    for (suffix_start, _) in source.match_indices(suffix) {
-        let end = suffix_start + suffix.len();
-
-        if end < bytes.len() && is_token_byte(bytes[end]) {
-            continue;
-        }
-
-        let mut start = suffix_start;
-
-        while start > 0 && is_token_byte(bytes[start - 1]) {
-            start -= 1;
-        }
-
-        push_finding(findings, rule, start, end);
-    }
-}
-
-fn scan_pattern(
-    rule: &CompiledRule,
-    source: &str,
-    pattern: &regex::Regex,
-    findings: &mut Vec<Finding>,
-) {
-    for matched in pattern.find_iter(source) {
-        push_finding(findings, rule, matched.start(), matched.end());
-    }
-}
-
-fn push_finding(findings: &mut Vec<Finding>, rule: &CompiledRule, start: usize, end: usize) {
-    findings.push(Finding::new(
-        rule.id().clone(),
-        Location::from_span(start, end),
-        rule.severity(),
-        Confidence::High,
-    ));
-}
-
-#[inline]
-const fn is_token_byte(byte: u8) -> bool {
-    byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-')
-}
-
-fn populate_line_columns(source: &str, findings: &mut [Finding]) {
     let mut cursor = 0;
     let mut line = 1;
     let mut column = 1;
 
     for finding in findings {
-        let start = finding.location().start();
+        debug_assert!(finding.start() >= cursor);
+        debug_assert!(source.is_char_boundary(finding.start()));
+        debug_assert!(source.is_char_boundary(finding.end()));
 
-        if start > cursor {
-            for ch in source[cursor..start].chars() {
-                if ch == '\n' {
-                    line += 1;
-                    column = 1;
-                } else {
-                    column += 1;
-                }
+        for character in source[cursor..finding.start()].chars() {
+            if character == '\n' {
+                line += 1;
+                column = 1;
+            } else {
+                column += 1;
             }
-
-            cursor = start;
         }
 
-        finding.location_mut().set_position(line, column);
+        positions.push((line, column));
+        cursor = finding.start();
+    }
+
+    positions
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{Rule, Severity};
+
+    #[test]
+    fn empty_scanner_has_no_rules_or_findings() {
+        let scanner = Scanner::default();
+
+        assert!(scanner.is_empty());
+        assert_eq!(scanner.rules_count(), 0);
+        assert!(scanner.scan("anything").findings().is_empty());
+    }
+
+    #[test]
+    fn location_columns_count_unicode_scalars() {
+        let scanner = Scanner::builder()
+            .rule(Rule::literal("token", "secret", Severity::High))
+            .build()
+            .expect("scanner should compile");
+
+        let report = scanner.scan("😀 secret");
+        let location = report.findings()[0].location();
+
+        assert_eq!(location.start(), 5);
+        assert_eq!(location.end(), 11);
+        assert_eq!(location.line(), 1);
+        assert_eq!(location.column(), 3);
     }
 }
