@@ -91,10 +91,14 @@ impl From<RuleError> for ScannerBuildError {
 /// # Examples
 ///
 /// ```
-/// use silens_scan::{builtins, Rule, Scanner, Severity};
+/// use silens_scan::{Rule, Scanner, Severity};
 ///
 /// let scanner = Scanner::builder()
-///     .builtin(builtins::STRIPE_SECRET_KEY)
+///     .rule(Rule::literal(
+///         "example.exact-token",
+///         "internal_exact_token",
+///         Severity::High,
+///     ))
 ///     .rule(Rule::prefix(
 ///         "example.internal-token",
 ///         "internal_live_",
