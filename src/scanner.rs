@@ -1,9 +1,6 @@
 use crate::{
-    compiled_rule::{CompiledRuleSet, InternalFinding},
-    finding::Finding,
-    location::Location,
-    report::ScanReport,
-    scanner_builder::ScannerBuilder,
+    compiled_rule::CompiledRuleSet, finding::Finding, location::Location, report::ScanReport,
+    scanner_builder::ScannerBuilder, validators::dispatch::validate_candidate,
 };
 
 /// Immutable scanner that executes a precompiled set of detection rules.
@@ -48,22 +45,23 @@ impl Scanner {
     ///
     /// The execution pipeline is:
     ///
-    /// 1. execute every compiled matcher group into one internal finding
-    ///    buffer;
-    /// 2. sort matches deterministically by byte span and rule identifier;
-    /// 3. resolve one-based line and Unicode-scalar column coordinates in one
+    /// 1. execute every compiled matcher group into one candidate buffer;
+    /// 2. sort candidates deterministically by byte span and rule identifier;
+    /// 3. dispatch only the validator selected by each rule;
+    /// 4. reject invalid candidates before public materialization;
+    /// 5. resolve one-based line and Unicode-scalar column coordinates in one
     ///    forward pass;
-    /// 4. materialize the public [`Finding`] values.
+    /// 6. materialize the accepted public [`Finding`] values.
     ///
     /// `start` and `end` locations remain zero-based byte offsets. `line` and
     /// `column` are one-based, and columns count Unicode scalar values rather
     /// than UTF-8 bytes.
     #[must_use]
     pub fn scan(&self, source: &str) -> ScanReport {
-        let mut internal = Vec::new();
-        self.rules.scan(source, &mut internal);
+        let mut candidates = Vec::new();
+        self.rules.scan(source, &mut candidates);
 
-        internal.sort_unstable_by(|left, right| {
+        candidates.sort_unstable_by(|left, right| {
             left.start()
                 .cmp(&right.start())
                 .then_with(|| left.end().cmp(&right.end()))
@@ -76,24 +74,41 @@ impl Scanner {
                 })
         });
 
-        let positions = resolve_positions(source, &internal);
+        let mut findings = Vec::with_capacity(candidates.len());
+        let mut cursor = 0;
+        let mut line = 1;
+        let mut column = 1;
 
-        let findings = internal
-            .into_iter()
-            .zip(positions)
-            .map(|(finding, (line, column))| {
-                let metadata = self.rules.metadata(finding.rule_index());
-                let mut location = Location::from_span(finding.start(), finding.end());
-                location.set_position(line, column);
+        for candidate in candidates {
+            let metadata = self.rules.metadata(candidate.rule_index());
 
-                Finding::new(
-                    metadata.id().clone(),
-                    location,
-                    metadata.severity(),
-                    metadata.confidence(),
-                )
-            })
-            .collect();
+            let Some(validation) = validate_candidate(
+                metadata.validator(),
+                source,
+                candidate.start()..candidate.end(),
+                metadata.confidence(),
+            ) else {
+                continue;
+            };
+
+            advance_position(
+                source,
+                &mut cursor,
+                candidate.start(),
+                &mut line,
+                &mut column,
+            );
+
+            let mut location = Location::from_span(candidate.start(), candidate.end());
+            location.set_position(line, column);
+
+            findings.push(Finding::new(
+                metadata.id().clone(),
+                location,
+                metadata.severity(),
+                validation.confidence(),
+            ));
+        }
 
         ScanReport::new(findings)
     }
@@ -107,43 +122,37 @@ impl Default for Scanner {
     }
 }
 
-/// Resolves positions for findings already ordered by their start byte.
+/// Advances a one-based Unicode source position to `target`.
 ///
-/// The function traverses the source only once. It returns positions separately
-/// from [`InternalFinding`] so the hot-path representation remains limited to a
-/// compact rule index and byte span.
-fn resolve_positions(source: &str, findings: &[InternalFinding]) -> Vec<(usize, usize)> {
-    let mut positions = Vec::with_capacity(findings.len());
+/// Candidates are already ordered by start byte, so the scanner traverses each
+/// source byte range at most once while materializing accepted findings.
+fn advance_position(
+    source: &str,
+    cursor: &mut usize,
+    target: usize,
+    line: &mut usize,
+    column: &mut usize,
+) {
+    debug_assert!(target >= *cursor);
+    debug_assert!(source.is_char_boundary(*cursor));
+    debug_assert!(source.is_char_boundary(target));
 
-    let mut cursor = 0;
-    let mut line = 1;
-    let mut column = 1;
-
-    for finding in findings {
-        debug_assert!(finding.start() >= cursor);
-        debug_assert!(source.is_char_boundary(finding.start()));
-        debug_assert!(source.is_char_boundary(finding.end()));
-
-        for character in source[cursor..finding.start()].chars() {
-            if character == '\n' {
-                line += 1;
-                column = 1;
-            } else {
-                column += 1;
-            }
+    for character in source[*cursor..target].chars() {
+        if character == '\n' {
+            *line += 1;
+            *column = 1;
+        } else {
+            *column += 1;
         }
-
-        positions.push((line, column));
-        cursor = finding.start();
     }
 
-    positions
+    *cursor = target;
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Rule, Severity};
+    use crate::{Confidence, Rule, Severity, validators::dispatch::ValidatorKind};
 
     #[test]
     fn empty_scanner_has_no_rules_or_findings() {
@@ -168,5 +177,46 @@ mod tests {
         assert_eq!(location.end(), 11);
         assert_eq!(location.line(), 1);
         assert_eq!(location.column(), 3);
+    }
+    #[test]
+    fn specialized_validator_rejects_invalid_candidate() {
+        let scanner = Scanner::builder()
+            .rule(
+                Rule::prefix("github", "ghp_", Severity::Critical)
+                    .with_validator(ValidatorKind::GitHub),
+            )
+            .build()
+            .expect("scanner should compile");
+
+        let report = scanner.scan("GITHUB_TOKEN=ghp_your_token_here");
+
+        assert!(report.is_empty());
+    }
+
+    #[test]
+    fn specialized_validator_accepts_and_overrides_confidence() {
+        let token = "ghp_AbCdEf0123456789_AbCdEf0123456789";
+        let scanner = Scanner::builder()
+            .rule(
+                Rule::prefix("github", "ghp_", Severity::Critical)
+                    .with_validator(ValidatorKind::GitHub),
+            )
+            .build()
+            .expect("scanner should compile");
+
+        let report = scanner.scan(&format!("GITHUB_TOKEN={token}"));
+
+        assert_eq!(report.len(), 1);
+        assert_eq!(report.findings()[0].confidence(), Confidence::High);
+    }
+
+    #[test]
+    fn unvalidated_custom_rule_preserves_existing_behavior() {
+        let scanner = Scanner::builder()
+            .rule(Rule::literal("custom", "custom-value", Severity::Medium))
+            .build()
+            .expect("scanner should compile");
+
+        assert_eq!(scanner.scan("custom-value").len(), 1);
     }
 }

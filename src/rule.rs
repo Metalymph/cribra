@@ -12,7 +12,7 @@ use std::{error::Error, fmt, sync::Arc};
 
 use regex::Regex;
 
-use crate::severity::Severity;
+use crate::{severity::Severity, validators::dispatch::ValidatorKind};
 
 /// Stable identifier assigned to a detection rule.
 ///
@@ -116,6 +116,8 @@ pub struct RuleSpec {
     kind: RuleKind,
     value: &'static str,
     severity: Severity,
+    validator: ValidatorKind,
+    capture: Option<&'static str>,
 }
 
 impl RuleSpec {
@@ -127,6 +129,8 @@ impl RuleSpec {
             kind: RuleKind::Literal,
             value: literal,
             severity,
+            validator: ValidatorKind::None,
+            capture: None,
         }
     }
 
@@ -138,6 +142,8 @@ impl RuleSpec {
             kind: RuleKind::Prefix,
             value: prefix,
             severity,
+            validator: ValidatorKind::None,
+            capture: None,
         }
     }
 
@@ -149,6 +155,8 @@ impl RuleSpec {
             kind: RuleKind::Suffix,
             value: suffix,
             severity,
+            validator: ValidatorKind::None,
+            capture: None,
         }
     }
 
@@ -163,6 +171,30 @@ impl RuleSpec {
             kind: RuleKind::Pattern,
             value: pattern,
             severity,
+            validator: ValidatorKind::None,
+            capture: None,
+        }
+    }
+
+    /// Defines an internal regular-expression rule whose finding span is
+    /// projected from the named capture group.
+    ///
+    /// The complete expression discovers the candidate and its surrounding
+    /// context, while only `capture` is passed to validation and exposed as the
+    /// finding location.
+    pub(crate) const fn captured_pattern(
+        id: &'static str,
+        pattern: &'static str,
+        capture: &'static str,
+        severity: Severity,
+    ) -> Self {
+        Self {
+            id,
+            kind: RuleKind::Pattern,
+            value: pattern,
+            severity,
+            validator: ValidatorKind::None,
+            capture: Some(capture),
         }
     }
 
@@ -190,6 +222,15 @@ impl RuleSpec {
         self.severity
     }
 
+    /// Associates an internal validator with this built-in specification.
+    ///
+    /// This remains crate-private because validator selection is part of the
+    /// built-in detection contract, not the public custom-rule API.
+    pub(crate) const fn with_validator(mut self, validator: ValidatorKind) -> Self {
+        self.validator = validator;
+        self
+    }
+
     /// Converts this static specification into an owned rule.
     ///
     /// # Errors
@@ -197,12 +238,18 @@ impl RuleSpec {
     /// Returns [`RuleError::InvalidPattern`] when this is a pattern
     /// specification whose regular expression cannot be compiled.
     pub fn to_rule(self) -> Result<Rule, RuleError> {
-        match self.kind {
-            RuleKind::Literal => Ok(Rule::literal(self.id, self.value, self.severity)),
-            RuleKind::Prefix => Ok(Rule::prefix(self.id, self.value, self.severity)),
-            RuleKind::Suffix => Ok(Rule::suffix(self.id, self.value, self.severity)),
-            RuleKind::Pattern => Rule::pattern(self.id, self.value, self.severity),
-        }
+        let rule = match (self.kind, self.capture) {
+            (RuleKind::Literal, None) => Rule::literal(self.id, self.value, self.severity),
+            (RuleKind::Prefix, None) => Rule::prefix(self.id, self.value, self.severity),
+            (RuleKind::Suffix, None) => Rule::suffix(self.id, self.value, self.severity),
+            (RuleKind::Pattern, None) => Rule::pattern(self.id, self.value, self.severity)?,
+            (RuleKind::Pattern, Some(capture)) => {
+                Rule::captured_pattern(self.id, self.value, capture, self.severity)?
+            }
+            (_, Some(_)) => unreachable!("only pattern specifications support captures"),
+        };
+
+        Ok(rule.with_validator(self.validator))
     }
 }
 
@@ -212,7 +259,10 @@ pub(crate) enum Matcher {
     Literal(Box<str>),
     Prefix(Box<str>),
     Suffix(Box<str>),
-    Pattern(Regex),
+    Pattern {
+        regex: Regex,
+        capture: Option<usize>,
+    },
 }
 
 /// Owned declarative detection rule.
@@ -228,6 +278,7 @@ pub(crate) enum Matcher {
 pub struct Rule {
     pub(crate) id: RuleId,
     pub(crate) severity: Severity,
+    pub(crate) validator: ValidatorKind,
     pub(crate) matcher: Matcher,
 }
 
@@ -244,6 +295,7 @@ impl Rule {
         Self {
             id: id.into(),
             severity,
+            validator: ValidatorKind::None,
             matcher: Matcher::Literal(literal.into()),
         }
     }
@@ -258,6 +310,7 @@ impl Rule {
         Self {
             id: id.into(),
             severity,
+            validator: ValidatorKind::None,
             matcher: Matcher::Prefix(prefix.into()),
         }
     }
@@ -271,6 +324,7 @@ impl Rule {
         Self {
             id: id.into(),
             severity,
+            validator: ValidatorKind::None,
             matcher: Matcher::Suffix(suffix.into()),
         }
     }
@@ -297,8 +351,53 @@ impl Rule {
         Ok(Self {
             id: id.into(),
             severity,
-            matcher: Matcher::Pattern(pattern),
+            validator: ValidatorKind::None,
+            matcher: Matcher::Pattern {
+                regex: pattern,
+                capture: None,
+            },
         })
+    }
+
+    /// Creates an internal pattern rule that projects findings from a named
+    /// capture group.
+    ///
+    /// The capture name is resolved once during rule construction. The hot path
+    /// stores only its numeric index.
+    pub(crate) fn captured_pattern(
+        id: impl Into<RuleId>,
+        pattern: impl AsRef<str>,
+        capture: impl AsRef<str>,
+        severity: Severity,
+    ) -> Result<Self, RuleError> {
+        let regex = Regex::new(pattern.as_ref()).map_err(RuleError::InvalidPattern)?;
+        let capture_name = capture.as_ref();
+        let capture_index = regex
+            .capture_names()
+            .position(|name| name == Some(capture_name))
+            .ok_or_else(|| RuleError::MissingCaptureGroup {
+                name: capture_name.into(),
+            })?;
+
+        Ok(Self {
+            id: id.into(),
+            severity,
+            validator: ValidatorKind::None,
+            matcher: Matcher::Pattern {
+                regex,
+                capture: Some(capture_index),
+            },
+        })
+    }
+
+    /// Associates an internal validator with this rule.
+    ///
+    /// Public custom rules intentionally default to [`ValidatorKind::None`].
+    /// Built-in rule catalogs use this method while assembling their private
+    /// detection contracts.
+    pub(crate) const fn with_validator(mut self, validator: ValidatorKind) -> Self {
+        self.validator = validator;
+        self
     }
 
     /// Returns this rule's stable identifier.
@@ -328,12 +427,22 @@ impl fmt::Display for Rule {
 pub enum RuleError {
     /// The supplied regular expression is invalid.
     InvalidPattern(regex::Error),
+
+    /// An internal capture-aware rule references a group absent from its
+    /// regular expression.
+    MissingCaptureGroup {
+        /// Missing named capture.
+        name: Box<str>,
+    },
 }
 
 impl fmt::Display for RuleError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::InvalidPattern(error) => write!(formatter, "invalid rule pattern: {error}"),
+            Self::MissingCaptureGroup { name } => {
+                write!(formatter, "missing named capture group `{name}`")
+            }
         }
     }
 }
@@ -342,6 +451,7 @@ impl Error for RuleError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
             Self::InvalidPattern(error) => Some(error),
+            Self::MissingCaptureGroup { .. } => None,
         }
     }
 }
@@ -367,6 +477,50 @@ mod tests {
 
         assert_eq!(rule.id().as_str(), "literal");
         assert_eq!(rule.severity(), Severity::High);
+    }
+
+    #[test]
+    fn static_spec_preserves_internal_validator() {
+        let rule = RuleSpec::prefix("github", "ghp_", Severity::Critical)
+            .with_validator(ValidatorKind::GitHub)
+            .to_rule()
+            .expect("prefix specification should convert");
+
+        assert_eq!(rule.validator, ValidatorKind::GitHub);
+    }
+
+    #[test]
+    fn captured_pattern_resolves_named_group_once() {
+        let rule = RuleSpec::captured_pattern(
+            "assignment",
+            r#"KEY=(?P<value>[A-Za-z0-9_]+)"#,
+            "value",
+            Severity::High,
+        )
+        .to_rule()
+        .expect("named capture should resolve");
+
+        assert!(matches!(
+            rule.matcher,
+            Matcher::Pattern {
+                capture: Some(1),
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn captured_pattern_rejects_missing_named_group() {
+        let error = RuleSpec::captured_pattern(
+            "assignment",
+            r#"KEY=([A-Za-z0-9_]+)"#,
+            "value",
+            Severity::High,
+        )
+        .to_rule()
+        .expect_err("missing capture should fail");
+
+        assert!(matches!(error, RuleError::MissingCaptureGroup { .. }));
     }
 
     #[test]

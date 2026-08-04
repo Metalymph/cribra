@@ -26,6 +26,7 @@
 //! # Ok::<(), silens_scan::ScannerBuildError>(())
 //! ```
 
+pub mod builtins;
 mod compiled_rule;
 mod confidence;
 mod finding;
@@ -36,6 +37,8 @@ mod rule;
 mod scanner;
 mod scanner_builder;
 mod severity;
+mod transform;
+mod validators;
 
 pub use confidence::Confidence;
 pub use finding::Finding;

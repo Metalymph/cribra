@@ -6,6 +6,7 @@ use crate::{
     rule::{Matcher, Rule, RuleId},
     scanner_builder::ScannerBuildError,
     severity::Severity,
+    validators::dispatch::ValidatorKind,
 };
 
 /// Compact index into the immutable rule metadata table.
@@ -34,6 +35,7 @@ pub(crate) struct RuleMetadata {
     id: RuleId,
     severity: Severity,
     confidence: Confidence,
+    validator: ValidatorKind,
 }
 
 impl RuleMetadata {
@@ -47,6 +49,10 @@ impl RuleMetadata {
 
     pub(crate) const fn confidence(&self) -> Confidence {
         self.confidence
+    }
+
+    pub(crate) const fn validator(&self) -> ValidatorKind {
+        self.validator
     }
 }
 
@@ -152,15 +158,23 @@ impl SuffixRule {
 struct PatternRule {
     rule_index: RuleIndex,
     pattern: Regex,
+    capture: Option<usize>,
 }
 
 impl PatternRule {
     fn scan(&self, source: &str, findings: &mut Vec<InternalFinding>) {
-        findings.extend(
-            self.pattern.find_iter(source).map(|matched| {
+        match self.capture {
+            None => findings.extend(self.pattern.find_iter(source).map(|matched| {
                 InternalFinding::new(self.rule_index, matched.start(), matched.end())
-            }),
-        );
+            })),
+            Some(capture) => {
+                findings.extend(self.pattern.captures_iter(source).filter_map(|captures| {
+                    captures.get(capture).map(|matched| {
+                        InternalFinding::new(self.rule_index, matched.start(), matched.end())
+                    })
+                }));
+            }
+        }
     }
 }
 
@@ -190,6 +204,7 @@ impl CompiledRuleSet {
             let Rule {
                 id,
                 severity,
+                validator,
                 matcher,
             } = rule;
             let rule_index = RuleIndex::new(index as u32);
@@ -198,6 +213,7 @@ impl CompiledRuleSet {
                 id,
                 severity,
                 confidence: Confidence::High,
+                validator,
             });
 
             match matcher {
@@ -212,9 +228,10 @@ impl CompiledRuleSet {
                     needle,
                 }),
                 Matcher::Suffix(suffix) => suffixes.push(SuffixRule { rule_index, suffix }),
-                Matcher::Pattern(pattern) => patterns.push(PatternRule {
+                Matcher::Pattern { regex, capture } => patterns.push(PatternRule {
                     rule_index,
-                    pattern,
+                    pattern: regex,
+                    capture,
                 }),
             }
         }
@@ -263,7 +280,7 @@ fn validate_rule(rule: &Rule) -> Result<(), ScannerBuildError> {
         Matcher::Literal(value) | Matcher::Prefix(value) | Matcher::Suffix(value) => {
             value.is_empty()
         }
-        Matcher::Pattern(_) => false,
+        Matcher::Pattern { .. } => false,
     };
 
     if is_empty {
@@ -324,5 +341,73 @@ mod layout_tests {
             "InternalFinding: {} bytes",
             std::mem::size_of::<InternalFinding>()
         );
+    }
+}
+
+#[cfg(test)]
+mod validator_metadata_tests {
+    use super::*;
+    use crate::{Rule, Severity};
+
+    #[test]
+    fn compiled_metadata_preserves_validator_kind() {
+        let rule = Rule::prefix("github", "ghp_", Severity::Critical)
+            .with_validator(ValidatorKind::GitHub);
+
+        let rules = CompiledRuleSet::compile(vec![rule]).expect("rule set should compile");
+
+        assert_eq!(
+            rules.metadata(RuleIndex::new(0)).validator(),
+            ValidatorKind::GitHub,
+        );
+    }
+}
+
+#[cfg(test)]
+mod capture_projection_tests {
+    use super::*;
+    use crate::{Rule, Severity};
+
+    #[test]
+    fn captured_pattern_emits_only_named_capture_span() {
+        let rule = Rule::captured_pattern(
+            "assignment",
+            r#"AWS_SECRET_ACCESS_KEY=(?P<value>[A-Za-z0-9/+=]{40})"#,
+            "value",
+            Severity::Critical,
+        )
+        .expect("captured pattern should compile");
+
+        let rules = CompiledRuleSet::compile(vec![rule]).expect("rule set should compile");
+        let source = "AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY";
+        let expected = source
+            .find("wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY")
+            .expect("fixture must contain value");
+
+        let mut findings = Vec::new();
+        rules.scan(source, &mut findings);
+
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].start(), expected);
+        assert_eq!(
+            findings[0].end(),
+            expected + "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY".len(),
+        );
+    }
+
+    #[test]
+    fn normal_pattern_still_emits_complete_match_span() {
+        let rule = Rule::pattern("assignment", r#"KEY=[A-Za-z0-9_]+"#, Severity::High)
+            .expect("pattern should compile");
+
+        let rules = CompiledRuleSet::compile(vec![rule]).expect("rule set should compile");
+        let source = "KEY=secret_value";
+
+        let mut findings = Vec::new();
+        rules.scan(source, &mut findings);
+
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].start(), 0);
+        assert_eq!(findings[0].end(), source.len());
     }
 }
