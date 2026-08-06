@@ -216,9 +216,22 @@ fn bench_current_match_density(criterion: &mut Criterion) {
         ("dense", realistic_dense_source(MEDIUM)),
     ];
 
-    assert!(scanner.scan(&cases[0].1).is_empty());
-    assert!(scanner.scan(&cases[1].1).len() >= 6);
-    assert!(!scanner.scan(&cases[2].1).is_empty());
+    let counts = cases
+        .iter()
+        .map(|(name, source)| (*name, source.len(), scanner.scan(source).len()))
+        .collect::<Vec<_>>();
+
+    assert_eq!(counts[0].2, 0);
+    assert!(counts[1].2 >= 6);
+    assert!(counts[2].2 > 0);
+
+    eprintln!("match-density setup:");
+    for (name, bytes, findings) in &counts {
+        eprintln!(
+            "  {name}: bytes={bytes}, findings={findings}, bytes_per_finding={}",
+            if *findings == 0 { 0 } else { bytes / findings },
+        );
+    }
 
     let mut group = criterion.benchmark_group("scan/current/match-density");
 

@@ -43,6 +43,30 @@ impl AcceptedCandidate<'_> {
     }
 }
 
+/// Internal candidate counts used only by scanner diagnostics tests.
+///
+/// This type is intentionally unavailable to library consumers and contributes
+/// no branches, counters or synchronization to the production scan path.
+#[cfg(test)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+struct ScanDiagnostics {
+    raw_candidates: usize,
+    accepted_candidates: usize,
+    normalized_candidates: usize,
+    findings: usize,
+}
+
+#[cfg(test)]
+impl ScanDiagnostics {
+    const fn rejected_candidates(self) -> usize {
+        self.raw_candidates - self.accepted_candidates
+    }
+
+    const fn collapsed_candidates(self) -> usize {
+        self.accepted_candidates - self.normalized_candidates
+    }
+}
+
 impl Scanner {
     pub(crate) fn new(rules: Arc<CompiledRuleSet>) -> Self {
         Self { rules }
@@ -131,6 +155,51 @@ impl Scanner {
         }
 
         ScanReport::new(findings)
+    }
+
+    /// Executes the candidate stages and returns internal counts for tests.
+    ///
+    /// This deliberately duplicates the small orchestration portion of
+    /// [`Scanner::scan`] under `cfg(test)` so the production path remains free
+    /// from diagnostic branches and counters.
+    #[cfg(test)]
+    fn diagnostics(&self, source: &str) -> ScanDiagnostics {
+        let mut raw_candidates = Vec::new();
+        self.rules.scan(source, &mut raw_candidates);
+
+        let raw_count = raw_candidates.len();
+        let mut accepted = Vec::with_capacity(raw_count);
+
+        for candidate in raw_candidates {
+            let metadata = self.rules.metadata(candidate.rule_index());
+
+            let Some(validation) = validate_candidate(
+                metadata.validator(),
+                source,
+                candidate.start()..candidate.end(),
+                metadata.confidence(),
+            ) else {
+                continue;
+            };
+
+            accepted.push(AcceptedCandidate {
+                metadata,
+                start: candidate.start(),
+                end: candidate.end(),
+                confidence: validation.confidence(),
+            });
+        }
+
+        let accepted_count = accepted.len();
+        normalize_candidates(&mut accepted);
+        let normalized_count = accepted.len();
+
+        ScanDiagnostics {
+            raw_candidates: raw_count,
+            accepted_candidates: accepted_count,
+            normalized_candidates: normalized_count,
+            findings: normalized_count,
+        }
     }
 }
 
@@ -226,10 +295,34 @@ mod tests {
     use super::*;
     use crate::{Confidence, Rule, Severity, validators::dispatch::ValidatorKind};
 
+    const DENSE_DIAGNOSTIC_SIZE: usize = 64 * 1_024;
+
+    fn repeat_to_size(block: &str, size: usize) -> String {
+        let mut source = String::with_capacity(size + block.len());
+
+        while source.len() < size {
+            source.push_str(block);
+        }
+
+        source.truncate(size);
+        source
+    }
+
+    fn dense_diagnostic_source() -> String {
+        const BLOCK: &str = concat!(
+            "GITHUB_TOKEN=ghp_AbCdEf0123456789_AbCdEf0123456789\n",
+            "STRIPE_SECRET_KEY=sk_live_AbCdEf0123456789_AbCdEf0123456789\n",
+            "AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY\n",
+            "POSTGRES_PASSWORD=CorrectHorseBatteryStaple!\n",
+        );
+
+        repeat_to_size(BLOCK, DENSE_DIAGNOSTIC_SIZE)
+    }
+
     #[test]
     fn empty_builder_has_no_rules_or_findings() {
         let scanner = Scanner::builder().build().unwrap();
-    
+
         assert!(scanner.is_empty());
         assert_eq!(scanner.rules_count(), 0);
         assert!(scanner.scan("anything").findings().is_empty());
@@ -238,7 +331,7 @@ mod tests {
     #[test]
     fn default_scanner_contains_builtin_rules() {
         let scanner = Scanner::default();
-    
+
         assert!(!scanner.is_empty());
         assert!(scanner.rules_count() > 0);
     }
@@ -357,5 +450,28 @@ mod tests {
         let report = scanner.scan("secret-value");
 
         assert_eq!(report.len(), 2);
+    }
+    #[test]
+    fn dense_fixture_diagnostics() {
+        let scanner = Scanner::default();
+        let source = dense_diagnostic_source();
+        let diagnostics = scanner.diagnostics(&source);
+        let report = scanner.scan(&source);
+
+        println!(
+            "dense diagnostics: bytes={}, raw={}, accepted={}, rejected={}, normalized={}, collapsed={}, findings={}",
+            source.len(),
+            diagnostics.raw_candidates,
+            diagnostics.accepted_candidates,
+            diagnostics.rejected_candidates(),
+            diagnostics.normalized_candidates,
+            diagnostics.collapsed_candidates(),
+            diagnostics.findings,
+        );
+
+        assert_eq!(diagnostics.findings, report.len());
+        assert!(diagnostics.raw_candidates >= diagnostics.accepted_candidates);
+        assert!(diagnostics.accepted_candidates >= diagnostics.normalized_candidates);
+        assert!(diagnostics.findings > 0);
     }
 }
