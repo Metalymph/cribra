@@ -18,6 +18,10 @@ fn scanner_for(rules: impl IntoIterator<Item = silens_scan::RuleSpec>) -> Scanne
         .expect("built-in rules must compile")
 }
 
+fn scan_one<'a>(scanner: &Scanner, source: &'a str) -> silens_scan::ScanResults<&'static str> {
+    scanner.scan([("fixture", source)])
+}
+
 fn rule_ids(report: &silens_scan::ScanReport) -> BTreeSet<&str> {
     report
         .iter()
@@ -49,8 +53,9 @@ fn deterministic_builtins_detect_realistic_synthetic_values() {
         builtins::SIGNED_JWT,
     ]);
 
-    let report = scanner.scan(&source);
-    let ids = rule_ids(&report);
+    let results = scan_one(&scanner, &source);
+    let report = results.single_report().expect("one fixture was scanned");
+    let ids = rule_ids(report);
 
     assert_eq!(report.len(), 6);
     assert!(ids.contains("github.classic-pat"));
@@ -77,8 +82,9 @@ fn contextual_builtins_project_only_the_secret_value() {
         builtins::SENSITIVE_HASH,
     ]);
 
-    let report = scanner.scan(source);
-    let ids = rule_ids(&report);
+    let results = scan_one(&scanner, source);
+    let report = results.single_report().expect("one fixture was scanned");
+    let ids = rule_ids(report);
 
     assert_eq!(report.len(), 4);
     assert!(ids.contains("aws.secret-access-key"));
@@ -86,7 +92,7 @@ fn contextual_builtins_project_only_the_secret_value() {
     assert!(ids.contains("generic.database-password-field"));
     assert!(ids.contains("generic.sensitive-hash"));
 
-    for finding in &report {
+    for finding in report {
         let value = matched(source, finding);
 
         assert!(!value.contains('='));
@@ -106,8 +112,9 @@ fn gcp_json_builtins_detect_projected_fields() {
         builtins::GCP_PRIVATE_KEY,
     ]);
 
-    let report = scanner.scan(source);
-    let ids = rule_ids(&report);
+    let results = scan_one(&scanner, source);
+    let report = results.single_report().expect("one fixture was scanned");
+    let ids = rule_ids(report);
 
     assert_eq!(report.len(), 3);
     assert!(ids.contains("gcp.private-key-id"));
@@ -136,7 +143,8 @@ fn placeholders_and_unrelated_hashes_are_rejected() {
         builtins::SENSITIVE_HASH,
     ]);
 
-    let report = scanner.scan(source);
+    let results = scan_one(&scanner, source);
+    let report = results.single_report().expect("one fixture was scanned");
 
     assert!(
         report.is_empty(),
@@ -161,7 +169,8 @@ fn findings_are_sorted_and_unicode_locations_remain_correct() {
         builtins::GITHUB_CLASSIC_PAT,
     ]);
 
-    let report = scanner.scan(source);
+    let results = scan_one(&scanner, source);
+    let report = results.single_report().expect("one fixture was scanned");
 
     assert_eq!(report.len(), 2);
     assert!(report.findings()[0].location().start() < report.findings()[1].location().start());
@@ -184,8 +193,9 @@ fn full_pack_detects_expected_provider_specific_rules() {
     let source = include_str!("fixtures/mixed-config.txt");
     let scanner = scanner_for(builtins::CURRENT.iter().copied());
 
-    let report = scanner.scan(source);
-    let ids = rule_ids(&report);
+    let results = scan_one(&scanner, source);
+    let report = results.single_report().expect("one fixture was scanned");
+    let ids = rule_ids(report);
 
     // Exact total count is deliberately deferred to the overlap/deduplication
     // milestone. These assertions ensure the provider-specific contracts are

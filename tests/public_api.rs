@@ -1,11 +1,22 @@
-//! Integration tests for the public API.
+//! Integration tests for the public batch API.
 
 use silens_scan::{Rule, Scanner, Severity};
 
+fn report_for<'a>(
+    scanner: &Scanner,
+    key: &'a str,
+    source: &'a str,
+) -> silens_scan::ScanResults<&'a str> {
+    scanner.scan([(key, source)])
+}
+
 #[test]
-fn empty_scanner_has_no_findings() {
-    let scanner = Scanner::default();
-    assert!(scanner.scan("anything").is_empty());
+fn empty_builder_reports_no_findings() {
+    let scanner = Scanner::builder().build().unwrap();
+    let results = report_for(&scanner, "memory", "anything");
+
+    assert_eq!(results.len(), 1);
+    assert!(results.single_report().unwrap().is_empty());
 }
 
 #[test]
@@ -15,7 +26,9 @@ fn literal_rule_matches_multiple_occurrences() {
         .build()
         .unwrap();
 
-    assert_eq!(scanner.scan("SECRET xx SECRET").len(), 2);
+    let results = report_for(&scanner, "memory", "SECRET xx SECRET");
+
+    assert_eq!(results.single_report().unwrap().len(), 2);
 }
 
 #[test]
@@ -25,9 +38,40 @@ fn scanner_is_reusable() {
         .build()
         .unwrap();
 
-    assert_eq!(scanner.scan("SECRET").len(), 1);
-    assert_eq!(scanner.scan("nothing").len(), 0);
-    assert_eq!(scanner.scan("SECRET SECRET").len(), 2);
+    assert_eq!(
+        report_for(&scanner, "one", "SECRET")
+            .single_report()
+            .unwrap()
+            .len(),
+        1
+    );
+    assert_eq!(
+        report_for(&scanner, "two", "nothing")
+            .single_report()
+            .unwrap()
+            .len(),
+        0
+    );
+    assert_eq!(
+        report_for(&scanner, "three", "SECRET SECRET")
+            .single_report()
+            .unwrap()
+            .len(),
+        2
+    );
+}
+
+#[test]
+fn batch_scan_preserves_keys_order_and_source_lengths() {
+    let scanner = Scanner::builder().build().unwrap();
+    let results = scanner.scan([("first", "αβ"), ("second", "plain"), ("third", "")]);
+
+    assert_eq!(results.len(), 3);
+    assert_eq!(results.as_slice()[0].key(), &"first");
+    assert_eq!(results.as_slice()[0].source_bytes(), "αβ".len());
+    assert_eq!(results.as_slice()[1].key(), &"second");
+    assert_eq!(results.as_slice()[2].key(), &"third");
+    assert!(results.single_report().is_none());
 }
 
 #[test]
@@ -37,8 +81,8 @@ fn unicode_columns_count_scalars() {
         .build()
         .unwrap();
 
-    let report = scanner.scan("😀😀 SECRET");
-    let loc = report.findings()[0].location();
+    let results = report_for(&scanner, "memory", "😀😀 SECRET");
+    let loc = results.single_report().unwrap().findings()[0].location();
 
     assert_eq!(loc.line(), 1);
     assert_eq!(loc.column(), 4);
@@ -52,7 +96,9 @@ fn overlapping_literals_are_reported() {
         .build()
         .unwrap();
 
-    assert_eq!(scanner.scan("github_pat_123").len(), 2);
+    let results = report_for(&scanner, "memory", "github_pat_123");
+
+    assert_eq!(results.single_report().unwrap().len(), 2);
 }
 
 #[test]
@@ -63,7 +109,27 @@ fn identical_needles_produce_multiple_findings() {
         .build()
         .unwrap();
 
-    assert_eq!(scanner.scan("SECRET").len(), 2);
+    let results = report_for(&scanner, "memory", "SECRET");
+
+    assert_eq!(results.single_report().unwrap().len(), 2);
+}
+
+#[test]
+fn results_flatten_findings_with_their_source_keys() {
+    let scanner = Scanner::builder()
+        .rule(Rule::literal("secret", "SECRET", Severity::High))
+        .build()
+        .unwrap();
+
+    let results = scanner.scan([
+        ("a.env", "SECRET"),
+        ("b.env", "clean"),
+        ("c.env", "SECRET SECRET"),
+    ]);
+
+    let keys = results.findings().map(|(key, _)| *key).collect::<Vec<_>>();
+
+    assert_eq!(keys, ["a.env", "c.env", "c.env"]);
 }
 
 #[test]
@@ -73,7 +139,9 @@ fn report_helpers_work() {
         .build()
         .unwrap();
 
-    let report = scanner.scan("SECRET");
+    let results = report_for(&scanner, "memory", "SECRET");
+    let report = results.single_report().unwrap();
+
     assert!(report.has_critical());
     assert_eq!(report.by_severity(Severity::Critical).count(), 1);
 }

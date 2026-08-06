@@ -20,7 +20,11 @@
 //!     ))
 //!     .build()?;
 //!
-//! let report = scanner.scan("TOKEN=example_live_123456");
+//! let results = scanner.scan([
+//!     ("memory", "TOKEN=example_live_123456"),
+//! ]);
+//!
+//! let report = results.single_report().expect("one source was scanned");
 //! assert_eq!(report.len(), 1);
 //!
 //! # Ok::<(), silens_scan::ScannerBuildError>(())
@@ -34,6 +38,8 @@ mod location;
 mod redaction;
 mod report;
 mod rule;
+mod scan_entry;
+mod scan_results;
 mod scanner;
 mod scanner_builder;
 mod severity;
@@ -46,6 +52,8 @@ pub use location::Location;
 pub use redaction::Redaction;
 pub use report::ScanReport;
 pub use rule::{Rule, RuleError, RuleId, RuleKind, RuleSpec};
+pub use scan_entry::ScanEntry;
+pub use scan_results::ScanResults;
 pub use scanner::Scanner;
 pub use scanner_builder::{ScannerBuildError, ScannerBuilder};
 pub use severity::Severity;

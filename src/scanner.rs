@@ -5,6 +5,8 @@ use crate::{
     finding::Finding,
     location::Location,
     report::ScanReport,
+    scan_entry::ScanEntry,
+    scan_results::ScanResults,
     scanner_builder::ScannerBuilder,
     validators::dispatch::validate_candidate,
 };
@@ -106,8 +108,44 @@ impl Scanner {
     /// `start` and `end` locations remain zero-based byte offsets. `line` and
     /// `column` are one-based, and columns count Unicode scalar values rather
     /// than UTF-8 bytes.
+    /// Scans identified UTF-8 sources in input order.
+    ///
+    /// Every input is a `(key, source)` tuple. The key is preserved unchanged
+    /// in the returned [`ScanResults`] and is never interpreted by the scanner.
+    ///
+    /// A single source is represented by a one-element collection:
+    ///
+    /// ```
+    /// # use silens_scan::Scanner;
+    /// let scanner = Scanner::default();
+    /// let results = scanner.scan([("memory", "ordinary text")]);
+    ///
+    /// assert_eq!(results.len(), 1);
+    /// ```
+    ///
+    /// The per-source execution pipeline is:
+    ///
+    /// 1. execute every compiled matcher group into one candidate buffer;
+    /// 2. dispatch only the validator selected by each rule;
+    /// 3. reject invalid candidates;
+    /// 4. normalize accepted candidates deterministically;
+    /// 5. resolve one-based line and Unicode-scalar column coordinates;
+    /// 6. materialize an immutable [`ScanReport`].
     #[must_use]
-    pub fn scan(&self, source: &str) -> ScanReport {
+    pub fn scan<'a, K, I>(&self, inputs: I) -> ScanResults<K>
+    where
+        I: IntoIterator<Item = (K, &'a str)>,
+    {
+        ScanResults::new(
+            inputs
+                .into_iter()
+                .map(|(key, source)| ScanEntry::new(key, source.len(), self.scan_source(source)))
+                .collect(),
+        )
+    }
+
+    /// Scans one UTF-8 source through the compiled pipeline.
+    fn scan_source(&self, source: &str) -> ScanReport {
         let mut raw_candidates = Vec::new();
         self.rules.scan(source, &mut raw_candidates);
 
@@ -160,7 +198,7 @@ impl Scanner {
     /// Executes the candidate stages and returns internal counts for tests.
     ///
     /// This deliberately duplicates the small orchestration portion of
-    /// [`Scanner::scan`] under `cfg(test)` so the production path remains free
+    /// the production source pipeline under `cfg(test)` so the production path remains free
     /// from diagnostic branches and counters.
     #[cfg(test)]
     fn diagnostics(&self, source: &str) -> ScanDiagnostics {
@@ -325,7 +363,7 @@ mod tests {
 
         assert!(scanner.is_empty());
         assert_eq!(scanner.rules_count(), 0);
-        assert!(scanner.scan("anything").findings().is_empty());
+        assert!(scanner.scan_source("anything").findings().is_empty());
     }
 
     #[test]
@@ -343,7 +381,7 @@ mod tests {
             .build()
             .expect("scanner should compile");
 
-        let report = scanner.scan("😀 secret");
+        let report = scanner.scan_source("😀 secret");
         let location = report.findings()[0].location();
 
         assert_eq!(location.start(), 5);
@@ -361,7 +399,7 @@ mod tests {
             .build()
             .expect("scanner should compile");
 
-        let report = scanner.scan("GITHUB_TOKEN=ghp_your_token_here");
+        let report = scanner.scan_source("GITHUB_TOKEN=ghp_your_token_here");
 
         assert!(report.is_empty());
     }
@@ -377,7 +415,7 @@ mod tests {
             .build()
             .expect("scanner should compile");
 
-        let report = scanner.scan(&format!("GITHUB_TOKEN={token}"));
+        let report = scanner.scan_source(&format!("GITHUB_TOKEN={token}"));
 
         assert_eq!(report.len(), 1);
         assert_eq!(report.findings()[0].confidence(), Confidence::High);
@@ -390,7 +428,7 @@ mod tests {
             .build()
             .expect("scanner should compile");
 
-        assert_eq!(scanner.scan("custom-value").len(), 1);
+        assert_eq!(scanner.scan_source("custom-value").len(), 1);
     }
     #[test]
     fn exact_duplicate_spans_are_collapsed() {
@@ -400,7 +438,7 @@ mod tests {
             .build()
             .expect("scanner should compile");
 
-        let report = scanner.scan("secret");
+        let report = scanner.scan_source("secret");
 
         assert_eq!(report.len(), 1);
         assert_eq!(report.findings()[0].rule_id().as_str(), "duplicate");
@@ -414,7 +452,7 @@ mod tests {
             .build()
             .expect("scanner should compile");
 
-        let report = scanner.scan("secret");
+        let report = scanner.scan_source("secret");
 
         assert_eq!(report.len(), 2);
         assert_eq!(report.findings()[0].rule_id().as_str(), "first");
@@ -433,7 +471,7 @@ mod tests {
             .build()
             .expect("scanner should compile");
 
-        let report = scanner.scan(token);
+        let report = scanner.scan_source(token);
 
         assert_eq!(report.len(), 1);
         assert_eq!(report.findings()[0].rule_id().as_str(), "github");
@@ -447,7 +485,7 @@ mod tests {
             .build()
             .expect("scanner should compile");
 
-        let report = scanner.scan("secret-value");
+        let report = scanner.scan_source("secret-value");
 
         assert_eq!(report.len(), 2);
     }
@@ -456,7 +494,7 @@ mod tests {
         let scanner = Scanner::default();
         let source = dense_diagnostic_source();
         let diagnostics = scanner.diagnostics(&source);
-        let report = scanner.scan(&source);
+        let report = scanner.scan_source(&source);
 
         println!(
             "dense diagnostics: bytes={}, raw={}, accepted={}, rejected={}, normalized={}, collapsed={}, findings={}",

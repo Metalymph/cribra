@@ -1,4 +1,4 @@
-//! Immutable report returned by [`Scanner::scan`](crate::Scanner::scan).
+//! Immutable findings produced for one source in a batch scan.
 
 use crate::{finding::Finding, severity::Severity};
 
