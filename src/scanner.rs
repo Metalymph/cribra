@@ -1,6 +1,10 @@
 use crate::{
-    compiled_rule::CompiledRuleSet, finding::Finding, location::Location, report::ScanReport,
-    scanner_builder::ScannerBuilder, validators::dispatch::validate_candidate,
+    compiled_rule::{CompiledRuleSet, RuleMetadata},
+    finding::Finding,
+    location::Location,
+    report::ScanReport,
+    scanner_builder::ScannerBuilder,
+    validators::dispatch::validate_candidate,
 };
 
 /// Immutable scanner that executes a precompiled set of detection rules.
@@ -16,6 +20,25 @@ use crate::{
 #[derive(Debug)]
 pub struct Scanner {
     rules: CompiledRuleSet,
+}
+
+/// Validated internal candidate awaiting deterministic normalization.
+///
+/// This stage owns no rule metadata and no source text. It simply ties an
+/// accepted byte span to immutable compiled metadata and the confidence
+/// produced by validation.
+#[derive(Debug, Copy, Clone)]
+struct AcceptedCandidate<'a> {
+    metadata: &'a RuleMetadata,
+    start: usize,
+    end: usize,
+    confidence: crate::Confidence,
+}
+
+impl AcceptedCandidate<'_> {
+    const fn same_span(self, other: Self) -> bool {
+        self.start == other.start && self.end == other.end
+    }
 }
 
 impl Scanner {
@@ -46,9 +69,10 @@ impl Scanner {
     /// The execution pipeline is:
     ///
     /// 1. execute every compiled matcher group into one candidate buffer;
-    /// 2. sort candidates deterministically by byte span and rule identifier;
-    /// 3. dispatch only the validator selected by each rule;
-    /// 4. reject invalid candidates before public materialization;
+    /// 2. dispatch only the validator selected by each rule;
+    /// 3. reject invalid candidates;
+    /// 4. normalize accepted candidates deterministically and collapse exact
+    ///    duplicate spans;
     /// 5. resolve one-based line and Unicode-scalar column coordinates in one
     ///    forward pass;
     /// 6. materialize the accepted public [`Finding`] values.
@@ -58,28 +82,12 @@ impl Scanner {
     /// than UTF-8 bytes.
     #[must_use]
     pub fn scan(&self, source: &str) -> ScanReport {
-        let mut candidates = Vec::new();
-        self.rules.scan(source, &mut candidates);
+        let mut raw_candidates = Vec::new();
+        self.rules.scan(source, &mut raw_candidates);
 
-        candidates.sort_unstable_by(|left, right| {
-            left.start()
-                .cmp(&right.start())
-                .then_with(|| left.end().cmp(&right.end()))
-                .then_with(|| {
-                    self.rules
-                        .metadata(left.rule_index())
-                        .id()
-                        .as_str()
-                        .cmp(self.rules.metadata(right.rule_index()).id().as_str())
-                })
-        });
+        let mut accepted = Vec::with_capacity(raw_candidates.len());
 
-        let mut findings = Vec::with_capacity(candidates.len());
-        let mut cursor = 0;
-        let mut line = 1;
-        let mut column = 1;
-
-        for candidate in candidates {
+        for candidate in raw_candidates {
             let metadata = self.rules.metadata(candidate.rule_index());
 
             let Some(validation) = validate_candidate(
@@ -91,22 +99,32 @@ impl Scanner {
                 continue;
             };
 
-            advance_position(
-                source,
-                &mut cursor,
-                candidate.start(),
-                &mut line,
-                &mut column,
-            );
+            accepted.push(AcceptedCandidate {
+                metadata,
+                start: candidate.start(),
+                end: candidate.end(),
+                confidence: validation.confidence(),
+            });
+        }
 
-            let mut location = Location::from_span(candidate.start(), candidate.end());
+        normalize_candidates(&mut accepted);
+
+        let mut findings = Vec::with_capacity(accepted.len());
+        let mut cursor = 0;
+        let mut line = 1;
+        let mut column = 1;
+
+        for candidate in accepted {
+            advance_position(source, &mut cursor, candidate.start, &mut line, &mut column);
+
+            let mut location = Location::from_span(candidate.start, candidate.end);
             location.set_position(line, column);
 
             findings.push(Finding::new(
-                metadata.id().clone(),
+                candidate.metadata.id().clone(),
                 location,
-                metadata.severity(),
-                validation.confidence(),
+                candidate.metadata.severity(),
+                candidate.confidence,
             ));
         }
 
@@ -120,6 +138,60 @@ impl Default for Scanner {
             .build()
             .expect("an empty scanner configuration must compile")
     }
+}
+
+/// Sorts accepted candidates and normalizes exact-span collisions.
+///
+/// Rules with the same matcher remain independently observable unless they have
+/// the same rule identifier. This preserves the public contract that distinct
+/// rules may report the same source span.
+///
+/// When a specialized validated rule and a lower-priority generic or custom
+/// rule accept the exact same span, only candidates at the highest priority for
+/// that span are retained.
+///
+/// Ranking inside an exact-span group is deterministic:
+///
+/// 1. greater rule priority;
+/// 2. greater validation confidence;
+/// 3. greater severity;
+/// 4. lexicographically smaller rule identifier.
+///
+/// Partially overlapping spans are intentionally preserved.
+fn normalize_candidates(candidates: &mut Vec<AcceptedCandidate<'_>>) {
+    candidates.sort_unstable_by(|left, right| {
+        left.start
+            .cmp(&right.start)
+            .then_with(|| left.end.cmp(&right.end))
+            .then_with(|| right.metadata.priority().cmp(&left.metadata.priority()))
+            .then_with(|| right.confidence.cmp(&left.confidence))
+            .then_with(|| right.metadata.severity().cmp(&left.metadata.severity()))
+            .then_with(|| {
+                left.metadata
+                    .id()
+                    .as_str()
+                    .cmp(right.metadata.id().as_str())
+            })
+    });
+
+    candidates.dedup_by(|later, earlier| {
+        later.same_span(*earlier) && later.metadata.id() == earlier.metadata.id()
+    });
+
+    let mut current_span = None;
+    let mut highest_priority = 0;
+
+    candidates.retain(|candidate| {
+        let span = (candidate.start, candidate.end);
+
+        if current_span != Some(span) {
+            current_span = Some(span);
+            highest_priority = candidate.metadata.priority();
+            return true;
+        }
+
+        candidate.metadata.priority() == highest_priority
+    });
 }
 
 /// Advances a one-based Unicode source position to `target`.
@@ -218,5 +290,64 @@ mod tests {
             .expect("scanner should compile");
 
         assert_eq!(scanner.scan("custom-value").len(), 1);
+    }
+    #[test]
+    fn exact_duplicate_spans_are_collapsed() {
+        let scanner = Scanner::builder()
+            .rule(Rule::literal("duplicate", "secret", Severity::High))
+            .rule(Rule::literal("duplicate", "secret", Severity::High))
+            .build()
+            .expect("scanner should compile");
+
+        let report = scanner.scan("secret");
+
+        assert_eq!(report.len(), 1);
+        assert_eq!(report.findings()[0].rule_id().as_str(), "duplicate");
+    }
+
+    #[test]
+    fn distinct_rules_with_identical_spans_are_preserved() {
+        let scanner = Scanner::builder()
+            .rule(Rule::literal("first", "secret", Severity::High))
+            .rule(Rule::literal("second", "secret", Severity::High))
+            .build()
+            .expect("scanner should compile");
+
+        let report = scanner.scan("secret");
+
+        assert_eq!(report.len(), 2);
+        assert_eq!(report.findings()[0].rule_id().as_str(), "first");
+        assert_eq!(report.findings()[1].rule_id().as_str(), "second");
+    }
+
+    #[test]
+    fn provider_specific_rule_wins_exact_span_collision() {
+        let token = "ghp_AbCdEf0123456789_AbCdEf0123456789";
+        let scanner = Scanner::builder()
+            .rule(Rule::prefix("generic", "ghp_", Severity::Critical))
+            .rule(
+                Rule::prefix("github", "ghp_", Severity::Critical)
+                    .with_validator(ValidatorKind::GitHub),
+            )
+            .build()
+            .expect("scanner should compile");
+
+        let report = scanner.scan(token);
+
+        assert_eq!(report.len(), 1);
+        assert_eq!(report.findings()[0].rule_id().as_str(), "github");
+    }
+
+    #[test]
+    fn partially_overlapping_spans_are_preserved() {
+        let scanner = Scanner::builder()
+            .rule(Rule::literal("whole", "secret-value", Severity::High))
+            .rule(Rule::literal("part", "secret", Severity::Medium))
+            .build()
+            .expect("scanner should compile");
+
+        let report = scanner.scan("secret-value");
+
+        assert_eq!(report.len(), 2);
     }
 }

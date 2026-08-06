@@ -54,6 +54,28 @@ impl RuleMetadata {
     pub(crate) const fn validator(&self) -> ValidatorKind {
         self.validator
     }
+
+    /// Returns the normalization priority for findings produced by this rule.
+    ///
+    /// Provider-specific validators outrank generic contextual detectors when
+    /// both accept the exact same source span. The value is internal and may
+    /// evolve without affecting the public API.
+    pub(crate) const fn priority(&self) -> u16 {
+        match self.validator {
+            ValidatorKind::None => 0,
+            ValidatorKind::GenericCredential => 100,
+            ValidatorKind::Password | ValidatorKind::SensitiveHash => 200,
+            ValidatorKind::Jwt => 300,
+            ValidatorKind::GitHub
+            | ValidatorKind::Stripe
+            | ValidatorKind::Cloudflare
+            | ValidatorKind::Slack
+            | ValidatorKind::Telegram
+            | ValidatorKind::Aws
+            | ValidatorKind::Azure
+            | ValidatorKind::Gcp => 500,
+        }
+    }
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
@@ -359,6 +381,22 @@ mod validator_metadata_tests {
         assert_eq!(
             rules.metadata(RuleIndex::new(0)).validator(),
             ValidatorKind::GitHub,
+        );
+    }
+
+    #[test]
+    fn provider_specific_metadata_outranks_generic_metadata() {
+        let provider = Rule::prefix("github", "ghp_", Severity::Critical)
+            .with_validator(ValidatorKind::GitHub);
+        let generic = Rule::prefix("generic", "ghp_", Severity::Critical)
+            .with_validator(ValidatorKind::GenericCredential);
+
+        let rules =
+            CompiledRuleSet::compile(vec![provider, generic]).expect("rule set should compile");
+
+        assert!(
+            rules.metadata(RuleIndex::new(0)).priority()
+                > rules.metadata(RuleIndex::new(1)).priority()
         );
     }
 }
