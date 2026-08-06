@@ -66,3 +66,21 @@ pub const CURRENT: &[RuleSpec] = &[
     GENERIC_AUTH_TOKEN,
     GENERIC_SECRET,
 ];
+
+use std::sync::{Arc, LazyLock};
+
+use crate::{Scanner, compiled_rule::CompiledRuleSet};
+
+static CURRENT_COMPILED: LazyLock<Arc<CompiledRuleSet>> = LazyLock::new(|| {
+    let rules = CURRENT
+        .iter()
+        .map(|spec| spec.to_rule())
+        .collect::<Result<Vec<_>, _>>()
+        .expect("builtin rules must be valid");
+
+    Arc::new(CompiledRuleSet::compile(rules).expect("builtin rules must compile"))
+});
+
+pub(crate) fn current_scanner() -> Scanner {
+    Scanner::new(Arc::clone(&CURRENT_COMPILED))
+}

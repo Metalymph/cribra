@@ -1,0 +1,198 @@
+//! End-to-end tests for the public built-in detection contracts.
+//!
+//! These tests exercise the complete public path:
+//!
+//! `RuleSpec -> ScannerBuilder -> compiled matcher -> capture projection ->
+//! validator dispatch -> Finding`
+//!
+//! Every credential below is synthetic and intentionally unusable.
+
+use std::collections::BTreeSet;
+
+use silens_scan::{Confidence, Scanner, builtins};
+
+fn scanner_for(rules: impl IntoIterator<Item = silens_scan::RuleSpec>) -> Scanner {
+    Scanner::builder()
+        .builtins(rules)
+        .build()
+        .expect("built-in rules must compile")
+}
+
+fn rule_ids(report: &silens_scan::ScanReport) -> BTreeSet<&str> {
+    report
+        .iter()
+        .map(|finding| finding.rule_id().as_str())
+        .collect()
+}
+
+fn matched<'a>(source: &'a str, finding: &silens_scan::Finding) -> &'a str {
+    let location = finding.location();
+    &source[location.start()..location.end()]
+}
+
+#[test]
+fn deterministic_builtins_detect_realistic_synthetic_values() {
+    let mut source = include_str!("fixtures/deterministic.env").to_owned();
+
+    source.push_str("SLACK_BOT_TOKEN=");
+    source.push_str("xoxb-");
+    source.push_str("1234567890-");
+    source.push_str("1234567890-");
+    source.push_str("AbCdEfGhIjKlMnOpQrStUvWx\n");
+
+    let scanner = scanner_for([
+        builtins::GITHUB_CLASSIC_PAT,
+        builtins::STRIPE_LIVE_SECRET_KEY,
+        builtins::CLOUDFLARE_USER_API_TOKEN,
+        builtins::SLACK_BOT_TOKEN,
+        builtins::TELEGRAM_BOT_TOKEN,
+        builtins::SIGNED_JWT,
+    ]);
+
+    let report = scanner.scan(&source);
+    let ids = rule_ids(&report);
+
+    assert_eq!(report.len(), 6);
+    assert!(ids.contains("github.classic-pat"));
+    assert!(ids.contains("stripe.live-secret-key"));
+    assert!(ids.contains("cloudflare.user-api-token"));
+    assert!(ids.contains("slack.bot-token"));
+    assert!(ids.contains("telegram.bot-token"));
+    assert!(ids.contains("jwt.signed-compact"));
+
+    assert!(
+        report
+            .iter()
+            .all(|finding| finding.confidence() >= Confidence::Medium)
+    );
+}
+
+#[test]
+fn contextual_builtins_project_only_the_secret_value() {
+    let source = include_str!("fixtures/contextual.env");
+    let scanner = scanner_for([
+        builtins::AWS_SECRET_ACCESS_KEY,
+        builtins::AZURE_CLIENT_SECRET,
+        builtins::DATABASE_PASSWORD_FIELD,
+        builtins::SENSITIVE_HASH,
+    ]);
+
+    let report = scanner.scan(source);
+    let ids = rule_ids(&report);
+
+    assert_eq!(report.len(), 4);
+    assert!(ids.contains("aws.secret-access-key"));
+    assert!(ids.contains("azure.client-secret"));
+    assert!(ids.contains("generic.database-password-field"));
+    assert!(ids.contains("generic.sensitive-hash"));
+
+    for finding in &report {
+        let value = matched(source, finding);
+
+        assert!(!value.contains('='));
+        assert!(!value.contains("AWS_SECRET_ACCESS_KEY"));
+        assert!(!value.contains("AZURE_CLIENT_SECRET"));
+        assert!(!value.contains("POSTGRES_PASSWORD"));
+        assert!(!value.contains("password_hash"));
+    }
+}
+
+#[test]
+fn gcp_json_builtins_detect_projected_fields() {
+    let source = include_str!("fixtures/service-account.json");
+    let scanner = scanner_for([
+        builtins::GCP_PRIVATE_KEY_ID,
+        builtins::GCP_CLIENT_SECRET,
+        builtins::GCP_PRIVATE_KEY,
+    ]);
+
+    let report = scanner.scan(source);
+    let ids = rule_ids(&report);
+
+    assert_eq!(report.len(), 3);
+    assert!(ids.contains("gcp.private-key-id"));
+    assert!(ids.contains("gcp.client-secret"));
+    assert!(ids.contains("gcp.private-key"));
+
+    let private_key = report
+        .iter()
+        .find(|finding| finding.rule_id().as_str() == "gcp.private-key")
+        .expect("private key finding must exist");
+
+    let value = matched(source, private_key);
+    assert!(value.starts_with("-----BEGIN PRIVATE KEY-----"));
+    assert!(value.ends_with("-----END PRIVATE KEY-----"));
+}
+
+#[test]
+fn placeholders_and_unrelated_hashes_are_rejected() {
+    let source = include_str!("fixtures/false-positives.txt");
+    let scanner = scanner_for([
+        builtins::GITHUB_CLASSIC_PAT,
+        builtins::STRIPE_LIVE_SECRET_KEY,
+        builtins::SLACK_BOT_TOKEN,
+        builtins::GENERIC_API_KEY,
+        builtins::PASSWORD_FIELD,
+        builtins::SENSITIVE_HASH,
+    ]);
+
+    let report = scanner.scan(source);
+
+    assert!(
+        report.is_empty(),
+        "false-positive fixture produced: {:?}",
+        report
+            .iter()
+            .map(|finding| finding.rule_id().as_str())
+            .collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn findings_are_sorted_and_unicode_locations_remain_correct() {
+    let source = concat!(
+        "αβγ before\n",
+        "STRIPE_SECRET_KEY=sk_live_AbCdEf0123456789_AbCdEf0123456789\n",
+        "GITHUB_TOKEN=ghp_AbCdEf0123456789_AbCdEf0123456789\n",
+    );
+
+    let scanner = scanner_for([
+        builtins::STRIPE_LIVE_SECRET_KEY,
+        builtins::GITHUB_CLASSIC_PAT,
+    ]);
+
+    let report = scanner.scan(source);
+
+    assert_eq!(report.len(), 2);
+    assert!(report.findings()[0].location().start() < report.findings()[1].location().start());
+
+    let first = &report.findings()[0];
+    assert_eq!(first.rule_id().as_str(), "stripe.live-secret-key");
+    assert_eq!(first.location().line(), 2);
+    assert_eq!(first.location().column(), 19);
+}
+
+#[test]
+fn current_pack_is_public_and_compiles_as_one_scanner() {
+    let scanner = scanner_for(builtins::CURRENT.iter().copied());
+
+    assert_eq!(scanner.rules_count(), builtins::CURRENT.len());
+}
+
+#[test]
+fn full_pack_detects_expected_provider_specific_rules() {
+    let source = include_str!("fixtures/mixed-config.txt");
+    let scanner = scanner_for(builtins::CURRENT.iter().copied());
+
+    let report = scanner.scan(source);
+    let ids = rule_ids(&report);
+
+    // Exact total count is deliberately deferred to the overlap/deduplication
+    // milestone. These assertions ensure the provider-specific contracts are
+    // present before generic overlaps are normalized.
+    assert!(ids.contains("github.classic-pat"));
+    assert!(ids.contains("stripe.live-secret-key"));
+    assert!(ids.contains("aws.secret-access-key"));
+    assert!(ids.contains("azure.client-secret"));
+    assert!(ids.contains("generic.database-password-field"));
+}

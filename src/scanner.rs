@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use crate::{
     compiled_rule::{CompiledRuleSet, RuleMetadata},
     finding::Finding,
@@ -17,9 +19,9 @@ use crate::{
 /// Scanning is currently deliberately single-threaded. The execution engine is
 /// optimized and benchmarked in serial before any optional parallel strategy
 /// is introduced.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Scanner {
-    rules: CompiledRuleSet,
+    rules: Arc<CompiledRuleSet>,
 }
 
 /// Validated internal candidate awaiting deterministic normalization.
@@ -42,7 +44,7 @@ impl AcceptedCandidate<'_> {
 }
 
 impl Scanner {
-    pub(crate) const fn new(rules: CompiledRuleSet) -> Self {
+    pub(crate) fn new(rules: Arc<CompiledRuleSet>) -> Self {
         Self { rules }
     }
 
@@ -134,9 +136,7 @@ impl Scanner {
 
 impl Default for Scanner {
     fn default() -> Self {
-        Self::builder()
-            .build()
-            .expect("an empty scanner configuration must compile")
+        crate::builtins::current_scanner()
     }
 }
 
@@ -227,12 +227,20 @@ mod tests {
     use crate::{Confidence, Rule, Severity, validators::dispatch::ValidatorKind};
 
     #[test]
-    fn empty_scanner_has_no_rules_or_findings() {
-        let scanner = Scanner::default();
-
+    fn empty_builder_has_no_rules_or_findings() {
+        let scanner = Scanner::builder().build().unwrap();
+    
         assert!(scanner.is_empty());
         assert_eq!(scanner.rules_count(), 0);
         assert!(scanner.scan("anything").findings().is_empty());
+    }
+
+    #[test]
+    fn default_scanner_contains_builtin_rules() {
+        let scanner = Scanner::default();
+    
+        assert!(!scanner.is_empty());
+        assert!(scanner.rules_count() > 0);
     }
 
     #[test]

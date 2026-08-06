@@ -1,0 +1,7 @@
+# Documentation placeholders and non-sensitive hashes.
+GITHUB_TOKEN=ghp_your_token_here
+STRIPE_SECRET_KEY=sk_live_your_api_key_here
+SLACK_BOT_TOKEN=xoxb-your_token_here_123456789
+API_KEY=your_api_key_here
+PASSWORD=changeme
+release_checksum=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef

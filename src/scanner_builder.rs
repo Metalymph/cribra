@@ -1,4 +1,4 @@
-use std::{error::Error, fmt};
+use std::{error::Error, fmt, sync::Arc};
 
 use crate::{
     compiled_rule::CompiledRuleSet,
@@ -187,6 +187,6 @@ impl ScannerBuilder {
         }
 
         let rules = CompiledRuleSet::compile(self.rules)?;
-        Ok(Scanner::new(rules))
+        Ok(Scanner::new(Arc::new(rules)))
     }
 }
