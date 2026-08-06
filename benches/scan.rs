@@ -1,82 +1,139 @@
 use std::{hint::black_box, time::Duration};
 
-use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
-use silens_scan::{Rule, Scanner, Severity};
+use criterion::{BatchSize, BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
+use silens_scan::{Rule, Scanner, Severity, builtins};
 
 const SMALL: usize = 1_024;
 const MEDIUM: usize = 64 * 1_024;
 const LARGE: usize = 1_024 * 1_024;
 
-fn build_rules(count: usize, family: &str) -> Scanner {
+fn build_current_scanner() -> Scanner {
+    Scanner::builder()
+        .builtins(builtins::CURRENT.iter().copied())
+        .build()
+        .expect("built-in rules must compile")
+}
+
+fn build_custom_scanner(rule_count: usize) -> Scanner {
     let mut builder = Scanner::builder();
 
-    for index in 0..count {
-        let rule = match family {
-            "literal" => Rule::literal(
-                format!("literal-{index}"),
+    for index in 0..rule_count {
+        builder = builder.rule(Rule::literal(
+            format!("custom.literal.{index}"),
+            format!("silens_custom_literal_{index:04}"),
+            Severity::High,
+        ));
+    }
+
+    builder.build().expect("custom rules must compile")
+}
+
+fn build_mixed_scanner(rule_count: usize) -> Scanner {
+    let mut builder = Scanner::builder();
+
+    for index in 0..rule_count {
+        let rule = match index % 4 {
+            0 => Rule::literal(
+                format!("mixed.literal.{index}"),
                 format!("silens_literal_{index:04}_"),
                 Severity::High,
             ),
-            "prefix" => Rule::prefix(
-                format!("prefix-{index}"),
+            1 => Rule::prefix(
+                format!("mixed.prefix.{index}"),
                 format!("silens_prefix_{index:04}_"),
                 Severity::High,
             ),
-            "suffix" => Rule::suffix(
-                format!("suffix-{index}"),
+            2 => Rule::suffix(
+                format!("mixed.suffix.{index}"),
                 format!("_silens_suffix_{index:04}"),
                 Severity::High,
             ),
-            "pattern" => Rule::pattern(
-                format!("pattern-{index}"),
+            _ => Rule::pattern(
+                format!("mixed.pattern.{index}"),
                 format!(r"\bsilens_pattern_{index:04}_[A-Za-z0-9]{{16}}\b"),
                 Severity::High,
             )
-            .expect("benchmark regex must be valid"),
-            "mixed" => match index % 4 {
-                0 => Rule::literal(
-                    format!("mixed-literal-{index}"),
-                    format!("silens_literal_{index:04}_"),
-                    Severity::High,
-                ),
-                1 => Rule::prefix(
-                    format!("mixed-prefix-{index}"),
-                    format!("silens_prefix_{index:04}_"),
-                    Severity::High,
-                ),
-                2 => Rule::suffix(
-                    format!("mixed-suffix-{index}"),
-                    format!("_silens_suffix_{index:04}"),
-                    Severity::High,
-                ),
-                _ => Rule::pattern(
-                    format!("mixed-pattern-{index}"),
-                    format!(r"\bsilens_pattern_{index:04}_[A-Za-z0-9]{{16}}\b"),
-                    Severity::High,
-                )
-                .expect("benchmark regex must be valid"),
-            },
-            _ => unreachable!("known benchmark family"),
+            .expect("benchmark pattern must compile"),
         };
 
         builder = builder.rule(rule);
     }
 
-    builder.build().expect("benchmark rules must compile")
+    builder.build().expect("mixed rules must compile")
 }
 
-fn no_match_input(size: usize) -> String {
-    const CHUNK: &str = "ordinary application text without credentials or sensitive tokens\n";
-    let mut input = String::with_capacity(size);
-    while input.len() < size {
-        input.push_str(CHUNK);
+fn repeat_to_size(block: &str, size: usize) -> String {
+    let mut source = String::with_capacity(size + block.len());
+
+    while source.len() < size {
+        source.push_str(block);
     }
-    input.truncate(size);
-    input
+
+    source.truncate(size);
+    source
 }
 
-fn sparse_match_input(size: usize) -> String {
-    let mut input = no_match_input(size);
+fn no_match_source(size: usize) -> String {
+    repeat_to_size(
+        "ordinary application configuration without sensitive values\n",
+        size,
+    )
+}
+
+fn realistic_sparse_source(size: usize) -> String {
+    const BLOCK: &str = concat!(
+        "application_name=silens-demo\n",
+        "log_level=info\n",
+        "feature_flag=true\n",
+        "database_host=localhost\n",
+        "cache_ttl=300\n",
+    );
+
+    let mut source = repeat_to_size(BLOCK, size);
+
+    let findings = [
+        "\nGITHUB_TOKEN=ghp_AbCdEf0123456789_AbCdEf0123456789\n",
+        "\nSTRIPE_SECRET_KEY=sk_live_AbCdEf0123456789_AbCdEf0123456789\n",
+        "\nAWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY\n",
+        "\nAZURE_CLIENT_SECRET=AbCdEfGhIjKlMnOpQrStUvWxYz0123456789\n",
+        "\nPOSTGRES_PASSWORD=CorrectHorseBatteryStaple!\n",
+        "\nJWT=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c\n",
+    ];
+
+    for (index, finding) in findings.iter().enumerate() {
+        let position = ((index + 1) * source.len() / (findings.len() + 1)).min(source.len());
+        source.insert_str(position, finding);
+    }
+
+    source
+}
+
+fn realistic_dense_source(size: usize) -> String {
+    const BLOCK: &str = concat!(
+        "GITHUB_TOKEN=ghp_AbCdEf0123456789_AbCdEf0123456789\n",
+        "STRIPE_SECRET_KEY=sk_live_AbCdEf0123456789_AbCdEf0123456789\n",
+        "AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY\n",
+        "POSTGRES_PASSWORD=CorrectHorseBatteryStaple!\n",
+    );
+
+    repeat_to_size(BLOCK, size)
+}
+
+fn custom_sparse_source(size: usize) -> String {
+    let mut source = no_match_source(size);
+
+    for index in [0_usize, 4, 16, 63] {
+        let marker = format!(" silens_custom_literal_{index:04} ");
+        let position = ((index + 1) * source.len() / 80).min(source.len());
+        source.insert_str(position, &marker);
+    }
+
+    source
+}
+
+fn mixed_sparse_source(size: usize) -> String {
+    let mut source = no_match_source(size);
+
     let markers = [
         " silens_literal_0000_ ",
         " silens_prefix_0001_VALUE1234567890 ",
@@ -84,68 +141,41 @@ fn sparse_match_input(size: usize) -> String {
         " silens_pattern_0003_ABCDEF1234567890 ",
     ];
 
-    for (index, marker) in markers.iter().enumerate().rev() {
-        let position = ((index + 1) * size / (markers.len() + 1)).min(input.len());
-        input.insert_str(position, marker);
+    for (index, marker) in markers.iter().enumerate() {
+        let position = ((index + 1) * source.len() / (markers.len() + 1)).min(source.len());
+        source.insert_str(position, marker);
     }
 
-    input
+    source
 }
 
-fn dense_match_input(size: usize) -> String {
-    const BLOCK: &str = concat!(
-        "silens_literal_0000_ ",
-        "silens_prefix_0001_VALUE1234567890 ",
-        "value_silens_suffix_0002 ",
-        "silens_pattern_0003_ABCDEF1234567890\n",
-    );
-    let mut input = String::with_capacity(size);
-    while input.len() < size {
-        input.push_str(BLOCK);
-    }
-    input.truncate(size);
-    input
-}
+fn bench_build_cost(criterion: &mut Criterion) {
+    let mut group = criterion.benchmark_group("build");
 
-fn bench_input_sizes(c: &mut Criterion) {
-    let scanner = build_rules(64, "mixed");
-    let mut group = c.benchmark_group("scan/input-size");
+    group.sample_size(50);
+    group.measurement_time(Duration::from_secs(8));
 
-    for size in [SMALL, MEDIUM, LARGE] {
-        let input = sparse_match_input(size);
-        assert_eq!(
-            scanner.scan(&input).len(),
-            4,
-            "sparse mixed fixture must produce four findings",
+    group.bench_function("builtins-current", |bencher| {
+        bencher.iter_batched(
+            || builtins::CURRENT.iter().copied(),
+            |rules| {
+                black_box(
+                    Scanner::builder()
+                        .builtins(rules)
+                        .build()
+                        .expect("built-ins must compile"),
+                );
+            },
+            BatchSize::SmallInput,
         );
-        group.throughput(Throughput::Bytes(input.len() as u64));
-        group.bench_with_input(BenchmarkId::from_parameter(size), &input, |b, input| {
-            b.iter(|| scanner.scan(black_box(input)));
-        });
-    }
+    });
 
-    group.finish();
-}
-
-fn bench_rule_counts(c: &mut Criterion) {
-    let input = sparse_match_input(MEDIUM);
-    let mut group = c.benchmark_group("scan/rule-count");
-    group.throughput(Throughput::Bytes(input.len() as u64));
-    group.measurement_time(Duration::from_secs(10));
-    group.sample_size(60);
-
-    for count in [4, 64, 512] {
-        let scanner = build_rules(count, "mixed");
-        assert_eq!(
-            scanner.scan(&input).len(),
-            4,
-            "sparse mixed fixture must produce four findings",
-        );
+    for count in [4_usize, 64, 512] {
         group.bench_with_input(
-            BenchmarkId::from_parameter(count),
-            &scanner,
-            |b, scanner| {
-                b.iter(|| scanner.scan(black_box(&input)));
+            BenchmarkId::new("custom-literals", count),
+            &count,
+            |bencher, &count| {
+                bencher.iter(|| black_box(build_custom_scanner(count)));
             },
         );
     }
@@ -153,58 +183,106 @@ fn bench_rule_counts(c: &mut Criterion) {
     group.finish();
 }
 
-fn bench_match_density(c: &mut Criterion) {
-    let scanner = build_rules(64, "mixed");
-    let cases = [
-        ("none", no_match_input(MEDIUM)),
-        ("sparse", sparse_match_input(MEDIUM)),
-        ("dense", dense_match_input(MEDIUM)),
-    ];
-    assert!(
-        scanner.scan(&cases[0].1).is_empty(),
-        "no-match fixture must produce no findings",
-    );
-    assert_eq!(
-        scanner.scan(&cases[1].1).len(),
-        4,
-        "sparse fixture must produce four findings",
-    );
-    assert!(
-        !scanner.scan(&cases[2].1).is_empty(),
-        "dense fixture must produce findings",
-    );
+fn bench_current_input_sizes(criterion: &mut Criterion) {
+    let scanner = build_current_scanner();
+    let mut group = criterion.benchmark_group("scan/current/input-size");
 
-    let mut group = c.benchmark_group("scan/match-density");
+    for size in [SMALL, MEDIUM, LARGE] {
+        let source = realistic_sparse_source(size);
 
-    for (name, input) in cases {
-        group.throughput(Throughput::Bytes(input.len() as u64));
-        group.bench_with_input(BenchmarkId::from_parameter(name), &input, |b, input| {
-            b.iter(|| scanner.scan(black_box(input)));
-        });
+        assert!(
+            scanner.scan(&source).len() >= 6,
+            "realistic sparse fixture must produce expected findings",
+        );
+
+        group.throughput(Throughput::Bytes(source.len() as u64));
+        group.bench_with_input(
+            BenchmarkId::from_parameter(size),
+            &source,
+            |bencher, source| {
+                bencher.iter(|| black_box(scanner.scan(black_box(source))));
+            },
+        );
     }
 
     group.finish();
 }
 
-fn bench_matcher_families(c: &mut Criterion) {
-    let input = sparse_match_input(MEDIUM);
-    let mut group = c.benchmark_group("scan/matcher-family");
-    group.throughput(Throughput::Bytes(input.len() as u64));
+fn bench_current_match_density(criterion: &mut Criterion) {
+    let scanner = build_current_scanner();
+    let cases = [
+        ("none", no_match_source(MEDIUM)),
+        ("sparse", realistic_sparse_source(MEDIUM)),
+        ("dense", realistic_dense_source(MEDIUM)),
+    ];
 
-    for family in ["literal", "prefix", "suffix", "pattern", "mixed"] {
-        let scanner = build_rules(64, family);
-        let expected = if family == "mixed" { 4 } else { 1 };
-        assert_eq!(
-            scanner.scan(&input).len(),
-            expected,
-            "{family} fixture produced an unexpected finding count",
+    assert!(scanner.scan(&cases[0].1).is_empty());
+    assert!(scanner.scan(&cases[1].1).len() >= 6);
+    assert!(!scanner.scan(&cases[2].1).is_empty());
+
+    let mut group = criterion.benchmark_group("scan/current/match-density");
+
+    for (name, source) in cases {
+        group.throughput(Throughput::Bytes(source.len() as u64));
+        group.bench_with_input(
+            BenchmarkId::from_parameter(name),
+            &source,
+            |bencher, source| {
+                bencher.iter(|| black_box(scanner.scan(black_box(source))));
+            },
         );
+    }
+
+    group.finish();
+}
+
+fn bench_pipeline_comparison(criterion: &mut Criterion) {
+    let custom = build_custom_scanner(64);
+    let mixed = build_mixed_scanner(64);
+    let current = build_current_scanner();
+
+    let custom_source = custom_sparse_source(MEDIUM);
+    let mixed_source = mixed_sparse_source(MEDIUM);
+    let current_source = realistic_sparse_source(MEDIUM);
+
+    assert_eq!(custom.scan(&custom_source).len(), 4);
+    assert_eq!(mixed.scan(&mixed_source).len(), 4);
+    assert!(current.scan(&current_source).len() >= 6);
+
+    let mut group = criterion.benchmark_group("scan/pipeline-comparison");
+    group.throughput(Throughput::Bytes(MEDIUM as u64));
+
+    group.bench_function("custom-literal-only-64", |bencher| {
+        bencher.iter(|| black_box(custom.scan(black_box(&custom_source))));
+    });
+
+    group.bench_function("custom-mixed-64", |bencher| {
+        bencher.iter(|| black_box(mixed.scan(black_box(&mixed_source))));
+    });
+
+    group.bench_function("builtins-current", |bencher| {
+        bencher.iter(|| black_box(current.scan(black_box(&current_source))));
+    });
+
+    group.finish();
+}
+
+fn bench_custom_rule_scaling(criterion: &mut Criterion) {
+    let source = custom_sparse_source(MEDIUM);
+    let mut group = criterion.benchmark_group("scan/custom/rule-count");
+
+    group.sample_size(60);
+    group.measurement_time(Duration::from_secs(10));
+    group.throughput(Throughput::Bytes(source.len() as u64));
+
+    for count in [4_usize, 64, 512] {
+        let scanner = build_custom_scanner(count);
 
         group.bench_with_input(
-            BenchmarkId::from_parameter(family),
+            BenchmarkId::from_parameter(count),
             &scanner,
-            |b, scanner| {
-                b.iter(|| scanner.scan(black_box(&input)));
+            |bencher, scanner| {
+                bencher.iter(|| black_box(scanner.scan(black_box(&source))));
             },
         );
     }
@@ -214,9 +292,10 @@ fn bench_matcher_families(c: &mut Criterion) {
 
 criterion_group!(
     benches,
-    bench_input_sizes,
-    bench_rule_counts,
-    bench_match_density,
-    bench_matcher_families,
+    bench_build_cost,
+    bench_current_input_sizes,
+    bench_current_match_density,
+    bench_pipeline_comparison,
+    bench_custom_rule_scaling,
 );
 criterion_main!(benches);
