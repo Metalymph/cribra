@@ -145,3 +145,48 @@ fn report_helpers_work() {
     assert!(report.has_critical());
     assert_eq!(report.by_severity(Severity::Critical).count(), 1);
 }
+
+#[cfg(feature = "parallel")]
+#[test]
+fn parallel_scan_matches_serial_results_and_order() {
+    let scanner = Scanner::builder()
+        .rule(Rule::literal("secret", "SECRET", Severity::High))
+        .build()
+        .unwrap();
+
+    let inputs = [
+        ("a.env", "SECRET"),
+        ("b.env", "clean"),
+        ("c.env", "SECRET SECRET"),
+        ("d.env", "SECRET"),
+    ];
+
+    let serial = scanner.scan(inputs);
+    let parallel = scanner.parallel_scan(inputs);
+
+    assert_eq!(serial, parallel);
+    assert_eq!(
+        parallel
+            .iter()
+            .map(|entry| *entry.key())
+            .collect::<Vec<_>>(),
+        ["a.env", "b.env", "c.env", "d.env"],
+    );
+}
+
+#[cfg(feature = "parallel")]
+#[test]
+fn parallel_scan_supports_owned_keys() {
+    let scanner = Scanner::builder().build().unwrap();
+
+    let inputs = vec![
+        (String::from("one"), "alpha"),
+        (String::from("two"), "beta"),
+    ];
+
+    let results = scanner.parallel_scan(inputs);
+
+    assert_eq!(results.len(), 2);
+    assert_eq!(results.as_slice()[0].key(), "one");
+    assert_eq!(results.as_slice()[1].key(), "two");
+}

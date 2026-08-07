@@ -18,7 +18,7 @@ fn scanner_for(rules: impl IntoIterator<Item = silens_scan::RuleSpec>) -> Scanne
         .expect("built-in rules must compile")
 }
 
-fn scan_one<'a>(scanner: &Scanner, source: &'a str) -> silens_scan::ScanResults<&'static str> {
+fn scan_one(scanner: &Scanner, source: &str) -> silens_scan::ScanResults<&'static str> {
     scanner.scan([("fixture", source)])
 }
 

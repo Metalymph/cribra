@@ -7,6 +7,19 @@ const SMALL: usize = 1_024;
 const MEDIUM: usize = 64 * 1_024;
 const LARGE: usize = 1_024 * 1_024;
 
+const BENCH_SOURCE_ID: &str = "benchmark";
+
+fn scan_one(scanner: &Scanner, source: &str) -> silens_scan::ScanResults<&'static str> {
+    scanner.scan([(BENCH_SOURCE_ID, source)])
+}
+
+fn finding_count(scanner: &Scanner, source: &str) -> usize {
+    scan_one(scanner, source)
+        .single_report()
+        .expect("one benchmark source must produce one report")
+        .len()
+}
+
 fn build_current_scanner() -> Scanner {
     Scanner::builder()
         .builtins(builtins::CURRENT.iter().copied())
@@ -191,7 +204,7 @@ fn bench_current_input_sizes(criterion: &mut Criterion) {
         let source = realistic_sparse_source(size);
 
         assert!(
-            scanner.scan(&source).len() >= 6,
+            finding_count(&scanner, &source) >= 6,
             "realistic sparse fixture must produce expected findings",
         );
 
@@ -200,7 +213,7 @@ fn bench_current_input_sizes(criterion: &mut Criterion) {
             BenchmarkId::from_parameter(size),
             &source,
             |bencher, source| {
-                bencher.iter(|| black_box(scanner.scan(black_box(source))));
+                bencher.iter(|| black_box(scan_one(&scanner, black_box(source.as_str()))));
             },
         );
     }
@@ -218,7 +231,7 @@ fn bench_current_match_density(criterion: &mut Criterion) {
 
     let counts = cases
         .iter()
-        .map(|(name, source)| (*name, source.len(), scanner.scan(source).len()))
+        .map(|(name, source)| (*name, source.len(), finding_count(&scanner, source)))
         .collect::<Vec<_>>();
 
     assert_eq!(counts[0].2, 0);
@@ -241,7 +254,7 @@ fn bench_current_match_density(criterion: &mut Criterion) {
             BenchmarkId::from_parameter(name),
             &source,
             |bencher, source| {
-                bencher.iter(|| black_box(scanner.scan(black_box(source))));
+                bencher.iter(|| black_box(scan_one(&scanner, black_box(source.as_str()))));
             },
         );
     }
@@ -258,23 +271,23 @@ fn bench_pipeline_comparison(criterion: &mut Criterion) {
     let mixed_source = mixed_sparse_source(MEDIUM);
     let current_source = realistic_sparse_source(MEDIUM);
 
-    assert_eq!(custom.scan(&custom_source).len(), 4);
-    assert_eq!(mixed.scan(&mixed_source).len(), 4);
-    assert!(current.scan(&current_source).len() >= 6);
+    assert_eq!(finding_count(&custom, &custom_source), 4);
+    assert_eq!(finding_count(&mixed, &mixed_source), 4);
+    assert!(finding_count(&current, &current_source) >= 6);
 
     let mut group = criterion.benchmark_group("scan/pipeline-comparison");
     group.throughput(Throughput::Bytes(MEDIUM as u64));
 
     group.bench_function("custom-literal-only-64", |bencher| {
-        bencher.iter(|| black_box(custom.scan(black_box(&custom_source))));
+        bencher.iter(|| black_box(scan_one(&custom, black_box(custom_source.as_str()))));
     });
 
     group.bench_function("custom-mixed-64", |bencher| {
-        bencher.iter(|| black_box(mixed.scan(black_box(&mixed_source))));
+        bencher.iter(|| black_box(scan_one(&mixed, black_box(mixed_source.as_str()))));
     });
 
     group.bench_function("builtins-current", |bencher| {
-        bencher.iter(|| black_box(current.scan(black_box(&current_source))));
+        bencher.iter(|| black_box(scan_one(&current, black_box(current_source.as_str()))));
     });
 
     group.finish();
@@ -295,12 +308,69 @@ fn bench_custom_rule_scaling(criterion: &mut Criterion) {
             BenchmarkId::from_parameter(count),
             &scanner,
             |bencher, scanner| {
-                bencher.iter(|| black_box(scanner.scan(black_box(&source))));
+                bencher.iter(|| black_box(scan_one(scanner, black_box(source.as_str()))));
             },
         );
     }
 
     group.finish();
+}
+
+#[cfg(feature = "parallel")]
+fn batch_sources(count: usize, size: usize) -> Vec<(usize, String)> {
+    (0..count)
+        .map(|index| {
+            let mut source = realistic_sparse_source(size);
+            source.push_str(&format!("\n# batch-source={index}\n"));
+            (index, source)
+        })
+        .collect()
+}
+
+fn bench_batch_parallelism(criterion: &mut Criterion) {
+    #[cfg(feature = "parallel")]
+    {
+        let scanner = build_current_scanner();
+        let mut group = criterion.benchmark_group("scan/batch");
+
+        for size in [4 * 1024_usize, MEDIUM, LARGE] {
+            let sources = batch_sources(32, size);
+
+            group.throughput(Throughput::Bytes(
+                sources.iter().map(|(_, source)| source.len() as u64).sum(),
+            ));
+
+            group.bench_with_input(
+                BenchmarkId::new("serial", size),
+                &sources,
+                |bencher, sources| {
+                    bencher.iter(|| {
+                        black_box(
+                            scanner
+                                .scan(sources.iter().map(|(key, source)| (*key, source.as_str()))),
+                        )
+                    });
+                },
+            );
+
+            group.bench_with_input(
+                BenchmarkId::new("parallel", size),
+                &sources,
+                |bencher, sources| {
+                    bencher.iter(|| {
+                        black_box(scanner.parallel_scan(
+                            sources.iter().map(|(key, source)| (*key, source.as_str())),
+                        ))
+                    });
+                },
+            );
+        }
+
+        group.finish();
+    }
+
+    #[cfg(not(feature = "parallel"))]
+    let _ = criterion;
 }
 
 criterion_group!(
@@ -310,5 +380,6 @@ criterion_group!(
     bench_current_match_density,
     bench_pipeline_comparison,
     bench_custom_rule_scaling,
+    bench_batch_parallelism,
 );
 criterion_main!(benches);

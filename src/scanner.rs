@@ -1,5 +1,8 @@
 use std::sync::Arc;
 
+#[cfg(feature = "parallel")]
+use rayon::prelude::*;
+
 use crate::{
     compiled_rule::{CompiledRuleSet, RuleMetadata},
     finding::Finding,
@@ -139,6 +142,33 @@ impl Scanner {
         ScanResults::new(
             inputs
                 .into_iter()
+                .map(|(key, source)| ScanEntry::new(key, source.len(), self.scan_source(source)))
+                .collect(),
+        )
+    }
+
+    /// Scans identified UTF-8 sources in parallel while preserving input order.
+    ///
+    /// This method is available with the `parallel` feature. Each source is
+    /// scanned independently through the same per-source pipeline used by
+    /// [`Scanner::scan`]. The scanner does not split individual sources into
+    /// chunks and does not create a dedicated thread pool; Rayon uses the
+    /// current pool.
+    ///
+    /// The returned [`ScanResults`] have the same ordering and semantics as
+    /// serial scanning.
+    #[cfg(feature = "parallel")]
+    #[must_use]
+    pub fn parallel_scan<'a, K, I>(&self, inputs: I) -> ScanResults<K>
+    where
+        K: Send,
+        I: IntoIterator<Item = (K, &'a str)>,
+    {
+        let inputs = inputs.into_iter().collect::<Vec<_>>();
+
+        ScanResults::new(
+            inputs
+                .into_par_iter()
                 .map(|(key, source)| ScanEntry::new(key, source.len(), self.scan_source(source)))
                 .collect(),
         )
