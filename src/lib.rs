@@ -49,7 +49,7 @@ mod scan_summary;
 mod scanner;
 mod scanner_builder;
 mod severity;
-mod transform;
+pub mod transform;
 mod validators;
 
 pub use confidence::Confidence;
@@ -66,3 +66,4 @@ pub use scan_summary::ScanSummary;
 pub use scanner::Scanner;
 pub use scanner_builder::{ScannerBuildError, ScannerBuilder};
 pub use severity::Severity;
+pub use transform::redact;
