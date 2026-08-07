@@ -203,7 +203,7 @@ fn query_api_filters_sorts_and_exposes_convenience_helpers() {
 
     let query = results.query().minimum_severity(Severity::High);
 
-    assert!(query.any());
+    assert!(query.has_matches());
     assert_eq!(query.count(), 2);
 
     let sorted = query.sort(ScanSort::RuleId);

@@ -8,7 +8,8 @@
 /// `(source, finding)` pairs.
 ///
 /// Because source ordering is part of this unified enum, sorting requires the
-/// source key type to implement [`Ord`].
+/// source key type to implement [`Ord`], even when another sort variant is
+/// selected. Equal primary keys use deterministic secondary ordering.
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 #[non_exhaustive]
 pub enum ScanSort {

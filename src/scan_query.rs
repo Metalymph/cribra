@@ -4,21 +4,22 @@ use std::cmp::Ordering;
 
 use crate::{Confidence, Finding, ScanEntry, ScanSort, Severity};
 
+#[derive(Debug, Copy, Clone)]
+enum QueryConstraint<T> {
+    Exact(T),
+    AtLeast(T),
+}
+
 /// Borrowed query over findings produced by a batch scan.
 ///
-/// A query never owns source keys, reports or findings. The initial query is
-/// allocation-free and iterates findings in their existing deterministic
-/// source/report order.
-///
-/// Filtering and sorting capabilities are layered onto this type without
-/// mutating the underlying [`ScanResults`](crate::ScanResults).
+/// Queries are lazy and allocation-free until sorting or collection is
+/// explicitly requested.
 #[derive(Debug, Copy, Clone)]
+#[must_use = "queries do nothing until they are iterated, inspected, collected, or sorted"]
 pub struct ScanQuery<'a, K> {
     entries: &'a [ScanEntry<K>],
-    severity: Option<Severity>,
-    minimum_severity: Option<Severity>,
-    confidence: Option<Confidence>,
-    minimum_confidence: Option<Confidence>,
+    severity: Option<QueryConstraint<Severity>>,
+    confidence: Option<QueryConstraint<Confidence>>,
     rule_id: Option<&'a str>,
 }
 
@@ -27,20 +28,16 @@ impl<'a, K> ScanQuery<'a, K> {
         Self {
             entries,
             severity: None,
-            minimum_severity: None,
             confidence: None,
-            minimum_confidence: None,
             rule_id: None,
         }
     }
 
     /// Restricts the query to findings with exactly `severity`.
     ///
-    /// This replaces any previously configured minimum-severity filter.
-    #[must_use]
+    /// This replaces any previously configured severity constraint.
     pub const fn severity(mut self, severity: Severity) -> Self {
-        self.severity = Some(severity);
-        self.minimum_severity = None;
+        self.severity = Some(QueryConstraint::Exact(severity));
         self
     }
 
@@ -49,21 +46,17 @@ impl<'a, K> ScanQuery<'a, K> {
     /// Severity follows its documented natural ordering:
     /// `Info < Low < Medium < High < Critical`.
     ///
-    /// This replaces any previously configured exact-severity filter.
-    #[must_use]
+    /// This replaces any previously configured severity constraint.
     pub const fn minimum_severity(mut self, severity: Severity) -> Self {
-        self.minimum_severity = Some(severity);
-        self.severity = None;
+        self.severity = Some(QueryConstraint::AtLeast(severity));
         self
     }
 
     /// Restricts the query to findings with exactly `confidence`.
     ///
-    /// This replaces any previously configured minimum-confidence filter.
-    #[must_use]
+    /// This replaces any previously configured confidence constraint.
     pub const fn confidence(mut self, confidence: Confidence) -> Self {
-        self.confidence = Some(confidence);
-        self.minimum_confidence = None;
+        self.confidence = Some(QueryConstraint::Exact(confidence));
         self
     }
 
@@ -73,11 +66,9 @@ impl<'a, K> ScanQuery<'a, K> {
     /// Confidence follows its documented natural ordering:
     /// `Low < Medium < High`.
     ///
-    /// This replaces any previously configured exact-confidence filter.
-    #[must_use]
+    /// This replaces any previously configured confidence constraint.
     pub const fn minimum_confidence(mut self, confidence: Confidence) -> Self {
-        self.minimum_confidence = Some(confidence);
-        self.confidence = None;
+        self.confidence = Some(QueryConstraint::AtLeast(confidence));
         self
     }
 
@@ -85,26 +76,22 @@ impl<'a, K> ScanQuery<'a, K> {
     ///
     /// The identifier is borrowed by the query and is compared without
     /// allocation.
-    #[must_use]
     pub const fn rule_id(mut self, rule_id: &'a str) -> Self {
         self.rule_id = Some(rule_id);
         self
     }
 
     /// Restricts the query to critical findings.
-    #[must_use]
     pub const fn critical(self) -> Self {
         self.severity(Severity::Critical)
     }
 
     /// Restricts the query to high- or critical-severity findings.
-    #[must_use]
     pub const fn high_priority(self) -> Self {
         self.minimum_severity(Severity::High)
     }
 
     /// Restricts the query to high-confidence findings.
-    #[must_use]
     pub const fn high_confidence(self) -> Self {
         self.confidence(Confidence::High)
     }
@@ -126,28 +113,13 @@ impl<'a, K> ScanQuery<'a, K> {
     }
 
     /// Returns `true` when `finding` satisfies every configured filter.
+    #[must_use]
     fn matches(&self, finding: &Finding) -> bool {
-        if let Some(severity) = self.severity
-            && finding.severity() != severity
-        {
+        if !matches_constraint(finding.severity(), self.severity) {
             return false;
         }
 
-        if let Some(minimum) = self.minimum_severity
-            && finding.severity() < minimum
-        {
-            return false;
-        }
-
-        if let Some(confidence) = self.confidence
-            && finding.confidence() != confidence
-        {
-            return false;
-        }
-
-        if let Some(minimum) = self.minimum_confidence
-            && finding.confidence() < minimum
-        {
+        if !matches_constraint(finding.confidence(), self.confidence) {
             return false;
         }
 
@@ -170,7 +142,6 @@ impl<'a, K> ScanQuery<'a, K> {
     /// Source sorting requires `K: Ord`. The same bound is applied to the
     /// complete sorting API so one `sort(ScanSort::...)` method can cover every
     /// supported ordering consistently.
-    #[must_use]
     pub fn sort(&self, sort: ScanSort) -> SortedScanQuery<'a, K>
     where
         K: Ord,
@@ -183,9 +154,6 @@ impl<'a, K> ScanQuery<'a, K> {
     }
 
     /// Returns the number of findings selected by this query.
-    ///
-    /// In this initial unfiltered query stage, this is the total number of
-    /// findings in the referenced batch.
     #[must_use]
     pub fn count(&self) -> usize {
         self.iter().count()
@@ -211,7 +179,7 @@ impl<'a, K> ScanQuery<'a, K> {
     ///
     /// Evaluation short-circuits at the first match.
     #[must_use]
-    pub fn any(&self) -> bool {
+    pub fn has_matches(&self) -> bool {
         self.iter().next().is_some()
     }
 
@@ -220,7 +188,7 @@ impl<'a, K> ScanQuery<'a, K> {
     /// Evaluation short-circuits at the first match.
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        !self.any()
+        !self.has_matches()
     }
 
     /// Materializes the selected findings as borrowed `(source, finding)`
@@ -231,13 +199,16 @@ impl<'a, K> ScanQuery<'a, K> {
     pub fn collect(&self) -> Vec<(&'a K, &'a Finding)> {
         self.iter().collect()
     }
+}
 
-    /// Materializes the selected findings into a vector of borrowed pairs.
-    ///
-    /// This is an explicit convenience alias for [`ScanQuery::collect`].
-    #[must_use]
-    pub fn into_vec(&self) -> Vec<(&'a K, &'a Finding)> {
-        self.collect()
+fn matches_constraint<T>(value: T, constraint: Option<QueryConstraint<T>>) -> bool
+where
+    T: Copy + Ord,
+{
+    match constraint {
+        None => true,
+        Some(QueryConstraint::Exact(expected)) => value == expected,
+        Some(QueryConstraint::AtLeast(minimum)) => value >= minimum,
     }
 }
 
@@ -247,6 +218,7 @@ impl<'a, K> ScanQuery<'a, K> {
 /// Source keys and findings remain owned by the originating
 /// [`ScanResults`](crate::ScanResults).
 #[derive(Debug, Clone)]
+#[must_use = "sorted queries should be inspected, iterated, or consumed"]
 pub struct SortedScanQuery<'a, K> {
     findings: Vec<(&'a K, &'a Finding)>,
 }
@@ -270,7 +242,7 @@ impl<'a, K> SortedScanQuery<'a, K> {
 
     /// Returns `true` when the sorted query contains at least one finding.
     #[must_use]
-    pub const fn any(&self) -> bool {
+    pub const fn has_matches(&self) -> bool {
         !self.findings.is_empty()
     }
 
@@ -281,7 +253,9 @@ impl<'a, K> SortedScanQuery<'a, K> {
     }
 
     /// Iterates over sorted `(source, finding)` pairs.
-    pub fn iter(&self) -> impl DoubleEndedIterator<Item = (&'a K, &'a Finding)> + '_ {
+    pub fn iter(
+        &self,
+    ) -> impl DoubleEndedIterator<Item = (&'a K, &'a Finding)> + ExactSizeIterator + '_ {
         self.findings.iter().copied()
     }
 
@@ -303,11 +277,11 @@ impl<'a, K> SortedScanQuery<'a, K> {
         &self.findings
     }
 
-    /// Returns a cloned vector of the sorted borrowed pairs.
+    /// Returns the sorted borrowed pairs as a new vector.
     ///
-    /// Only the references are copied; source keys and findings are not cloned.
+    /// Only references are copied; source keys and findings are not cloned.
     #[must_use]
-    pub fn collect(&self) -> Vec<(&'a K, &'a Finding)> {
+    pub fn to_vec(&self) -> Vec<(&'a K, &'a Finding)> {
         self.findings.clone()
     }
 
@@ -723,11 +697,11 @@ mod tests {
 
         let query = ScanQuery::new(&entries).minimum_severity(Severity::High);
 
-        assert!(query.any());
+        assert!(query.has_matches());
         assert!(!query.is_empty());
         assert_eq!(query.first().unwrap().1.rule_id().as_str(), "first");
         assert_eq!(query.last().unwrap().1.rule_id().as_str(), "last");
-        assert_eq!(query.into_vec().len(), 2);
+        assert_eq!(query.collect().len(), 2);
     }
 
     #[test]
@@ -740,11 +714,11 @@ mod tests {
 
         let query = ScanQuery::new(&entries).critical();
 
-        assert!(!query.any());
+        assert!(!query.has_matches());
         assert!(query.is_empty());
         assert!(query.first().is_none());
         assert!(query.last().is_none());
-        assert!(query.into_vec().is_empty());
+        assert!(query.collect().is_empty());
     }
 
     #[test]
@@ -762,9 +736,9 @@ mod tests {
 
         assert_eq!(sorted.len(), 2);
         assert_eq!(sorted.count(), 2);
-        assert!(sorted.any());
+        assert!(sorted.has_matches());
         assert!(!sorted.is_empty());
-        assert_eq!(sorted.collect().len(), 2);
+        assert_eq!(sorted.to_vec().len(), 2);
         assert_eq!(sorted.first().unwrap().1.rule_id().as_str(), "alpha");
         assert_eq!(sorted.last().unwrap().1.rule_id().as_str(), "zeta");
     }

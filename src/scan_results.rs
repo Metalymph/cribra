@@ -46,7 +46,6 @@ impl<K> ScanResults<K> {
     ///
     /// Creating the query performs no allocation and does not mutate the
     /// underlying results.
-    #[must_use]
     pub fn query(&self) -> ScanQuery<'_, K> {
         ScanQuery::new(&self.entries)
     }
@@ -66,7 +65,6 @@ impl<K> ScanResults<K> {
     /// Returns the total number of UTF-8 source bytes scanned.
     ///
     /// This performs no allocation.
-    #[must_use]
     pub fn total_bytes(&self) -> usize {
         self.entries.iter().map(ScanEntry::source_bytes).sum()
     }
@@ -74,7 +72,6 @@ impl<K> ScanResults<K> {
     /// Returns the total number of findings across all source reports.
     ///
     /// This performs no allocation.
-    #[must_use]
     pub fn total_findings(&self) -> usize {
         self.entries.iter().map(|entry| entry.report().len()).sum()
     }
@@ -82,7 +79,6 @@ impl<K> ScanResults<K> {
     /// Returns `true` when any source report contains a critical finding.
     ///
     /// Iteration stops at the first critical report.
-    #[must_use]
     pub fn has_critical(&self) -> bool {
         self.entries
             .iter()
@@ -111,7 +107,6 @@ impl<K> ScanResults<K> {
     ///
     /// The summary contains counters only and never retains source text,
     /// findings or matched values.
-    #[must_use]
     pub fn summary(&self) -> ScanSummary {
         let mut stats = ScanSummaryStats {
             scanned_sources: self.entries.len(),
@@ -145,7 +140,6 @@ impl<K> ScanResults<K> {
     }
 
     /// Consumes the collection and returns its entries.
-    #[must_use]
     pub fn into_inner(self) -> Vec<ScanEntry<K>> {
         self.entries
     }
@@ -154,7 +148,6 @@ impl<K> ScanResults<K> {
     ///
     /// This is a convenience for callers that intentionally submit a
     /// single-element batch while keeping the public scanning model uniform.
-    #[must_use]
     pub fn single_report(&self) -> Option<&ScanReport> {
         match self.entries.as_slice() {
             [entry] => Some(entry.report()),
