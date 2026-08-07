@@ -1,6 +1,6 @@
 //! Integration tests for the public batch API.
 
-use silens_scan::{Rule, Scanner, Severity};
+use silens_scan::{Rule, ScanSort, Scanner, Severity};
 
 fn report_for<'a>(
     scanner: &Scanner,
@@ -189,4 +189,25 @@ fn parallel_scan_supports_owned_keys() {
     assert_eq!(results.len(), 2);
     assert_eq!(results.as_slice()[0].key(), "one");
     assert_eq!(results.as_slice()[1].key(), "two");
+}
+
+#[test]
+fn query_api_filters_sorts_and_exposes_convenience_helpers() {
+    let scanner = Scanner::builder()
+        .rule(Rule::literal("zeta", "ZETA", Severity::High))
+        .rule(Rule::literal("alpha", "ALPHA", Severity::Critical))
+        .build()
+        .unwrap();
+
+    let results = scanner.scan([("b.env", "ZETA"), ("a.env", "ALPHA")]);
+
+    let query = results.query().minimum_severity(Severity::High);
+
+    assert!(query.any());
+    assert_eq!(query.count(), 2);
+
+    let sorted = query.sort(ScanSort::RuleId);
+
+    assert_eq!(sorted.first().unwrap().1.rule_id().as_str(), "alpha");
+    assert_eq!(sorted.last().unwrap().1.rule_id().as_str(), "zeta");
 }

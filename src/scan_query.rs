@@ -197,6 +197,32 @@ impl<'a, K> ScanQuery<'a, K> {
         self.iter().next()
     }
 
+    /// Returns the last finding selected by this query, if any.
+    ///
+    /// The query remains allocation-free. This walks the selected findings to
+    /// completion because the underlying filtered iterator is not required to
+    /// be double-ended.
+    #[must_use]
+    pub fn last(&self) -> Option<(&'a K, &'a Finding)> {
+        self.iter().last()
+    }
+
+    /// Returns `true` when this query selects at least one finding.
+    ///
+    /// Evaluation short-circuits at the first match.
+    #[must_use]
+    pub fn any(&self) -> bool {
+        self.iter().next().is_some()
+    }
+
+    /// Returns `true` when this query selects no findings.
+    ///
+    /// Evaluation short-circuits at the first match.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        !self.any()
+    }
+
     /// Materializes the selected findings as borrowed `(source, finding)`
     /// pairs.
     ///
@@ -204,6 +230,14 @@ impl<'a, K> ScanQuery<'a, K> {
     #[must_use]
     pub fn collect(&self) -> Vec<(&'a K, &'a Finding)> {
         self.iter().collect()
+    }
+
+    /// Materializes the selected findings into a vector of borrowed pairs.
+    ///
+    /// This is an explicit convenience alias for [`ScanQuery::collect`].
+    #[must_use]
+    pub fn into_vec(&self) -> Vec<(&'a K, &'a Finding)> {
+        self.collect()
     }
 }
 
@@ -226,6 +260,18 @@ impl<'a, K> SortedScanQuery<'a, K> {
     #[must_use]
     pub const fn len(&self) -> usize {
         self.findings.len()
+    }
+
+    /// Returns the number of sorted findings.
+    #[must_use]
+    pub const fn count(&self) -> usize {
+        self.findings.len()
+    }
+
+    /// Returns `true` when the sorted query contains at least one finding.
+    #[must_use]
+    pub const fn any(&self) -> bool {
+        !self.findings.is_empty()
     }
 
     /// Returns `true` when the sorted query contains no findings.
@@ -257,7 +303,16 @@ impl<'a, K> SortedScanQuery<'a, K> {
         &self.findings
     }
 
-    /// Consumes the sorted query and returns its borrowed pairs.
+    /// Returns a cloned vector of the sorted borrowed pairs.
+    ///
+    /// Only the references are copied; source keys and findings are not cloned.
+    #[must_use]
+    pub fn collect(&self) -> Vec<(&'a K, &'a Finding)> {
+        self.findings.clone()
+    }
+
+    /// Consumes the sorted query and returns its borrowed pairs without copying
+    /// the vector.
     #[must_use]
     pub fn into_vec(self) -> Vec<(&'a K, &'a Finding)> {
         self.findings
@@ -653,5 +708,64 @@ mod tests {
         let pairs = sorted.into_vec();
         assert_eq!(pairs.len(), 1);
         assert_eq!(pairs[0].1.rule_id().as_str(), "rule");
+    }
+
+    #[test]
+    fn lazy_query_helpers_short_circuit_semantically() {
+        let entries = [ScanEntry::new(
+            "source",
+            2,
+            ScanReport::new(vec![
+                finding("first", Severity::High, Confidence::High),
+                finding("last", Severity::Critical, Confidence::High),
+            ]),
+        )];
+
+        let query = ScanQuery::new(&entries).minimum_severity(Severity::High);
+
+        assert!(query.any());
+        assert!(!query.is_empty());
+        assert_eq!(query.first().unwrap().1.rule_id().as_str(), "first");
+        assert_eq!(query.last().unwrap().1.rule_id().as_str(), "last");
+        assert_eq!(query.into_vec().len(), 2);
+    }
+
+    #[test]
+    fn lazy_query_helpers_handle_no_matches() {
+        let entries = [ScanEntry::new(
+            "source",
+            1,
+            report("medium", Severity::Medium),
+        )];
+
+        let query = ScanQuery::new(&entries).critical();
+
+        assert!(!query.any());
+        assert!(query.is_empty());
+        assert!(query.first().is_none());
+        assert!(query.last().is_none());
+        assert!(query.into_vec().is_empty());
+    }
+
+    #[test]
+    fn sorted_query_helpers_match_materialized_state() {
+        let entries = [ScanEntry::new(
+            "source",
+            2,
+            ScanReport::new(vec![
+                finding("zeta", Severity::High, Confidence::High),
+                finding("alpha", Severity::Critical, Confidence::High),
+            ]),
+        )];
+
+        let sorted = ScanQuery::new(&entries).sort(ScanSort::RuleId);
+
+        assert_eq!(sorted.len(), 2);
+        assert_eq!(sorted.count(), 2);
+        assert!(sorted.any());
+        assert!(!sorted.is_empty());
+        assert_eq!(sorted.collect().len(), 2);
+        assert_eq!(sorted.first().unwrap().1.rule_id().as_str(), "alpha");
+        assert_eq!(sorted.last().unwrap().1.rule_id().as_str(), "zeta");
     }
 }
