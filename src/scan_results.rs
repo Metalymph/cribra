@@ -1,7 +1,8 @@
 //! Ordered results returned by [`Scanner::scan`](crate::Scanner::scan).
 
 use crate::{
-    Finding, ScanEntry, ScanReport, ScanSummary, Severity, scan_summary::ScanSummaryStats,
+    Finding, ScanEntry, ScanQuery, ScanReport, ScanSummary, Severity,
+    scan_summary::ScanSummaryStats,
 };
 
 /// Ordered results for a batch of identified UTF-8 sources.
@@ -39,6 +40,15 @@ impl<K> ScanResults<K> {
     /// Iterates over entries in input order.
     pub fn iter(&self) -> std::slice::Iter<'_, ScanEntry<K>> {
         self.entries.iter()
+    }
+
+    /// Creates a borrowed query over all findings in this batch.
+    ///
+    /// Creating the query performs no allocation and does not mutate the
+    /// underlying results.
+    #[must_use]
+    pub fn query(&self) -> ScanQuery<'_, K> {
+        ScanQuery::new(&self.entries)
     }
 
     /// Iterates over every finding while retaining its source key.
@@ -252,5 +262,18 @@ mod tests {
         assert_eq!(summary.info(), 1);
         assert!(summary.has_critical());
         assert!(!summary.is_clean());
+    }
+    #[test]
+    fn creates_borrowed_query_over_findings() {
+        let results = ScanResults::new(vec![ScanEntry::new(
+            "source",
+            4,
+            report_with(&[Severity::High, Severity::Medium]),
+        )]);
+
+        let query = results.query();
+
+        assert_eq!(query.count(), 2);
+        assert_eq!(query.first().unwrap().0, &"source");
     }
 }
