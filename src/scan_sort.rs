@@ -2,9 +2,13 @@
 
 /// Ordering applied when a scan query is materialized.
 ///
-/// Sorting is intentionally separate from filtering. A query can remain
-/// allocation-free while iterating in source order; sorting may materialize
-/// borrowed finding references in a later query step.
+/// Sorting is intentionally separate from filtering. A query remains
+/// allocation-free while filtering and iterating in source order; calling
+/// [`ScanQuery::sort`](crate::ScanQuery::sort) materializes only borrowed
+/// `(source, finding)` pairs.
+///
+/// Because source ordering is part of this unified enum, sorting requires the
+/// source key type to implement [`Ord`].
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 #[non_exhaustive]
 pub enum ScanSort {

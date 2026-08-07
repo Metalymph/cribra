@@ -59,7 +59,7 @@ pub use redaction::Redaction;
 pub use report::ScanReport;
 pub use rule::{Rule, RuleError, RuleId, RuleKind, RuleSpec};
 pub use scan_entry::ScanEntry;
-pub use scan_query::ScanQuery;
+pub use scan_query::{ScanQuery, SortedScanQuery};
 pub use scan_results::ScanResults;
 pub use scan_sort::ScanSort;
 pub use scan_summary::ScanSummary;
