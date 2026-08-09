@@ -1,0 +1,6 @@
+This file intentionally contains harmless configuration prose.
+api_key = example
+password = changeme
+token = placeholder
+sha256 = documentation-only
+Nothing here belongs to the canonical demo token families.

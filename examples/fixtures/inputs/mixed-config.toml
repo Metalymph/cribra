@@ -1,0 +1,7 @@
+[service]
+name = "fixture-service"
+endpoint = "https://example.invalid"
+
+[credentials]
+api_key = "demo_api_Z9Y8X7W6V5U4"
+password = "demo-pass-local-only-73"

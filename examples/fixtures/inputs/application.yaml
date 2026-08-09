@@ -1,0 +1,6 @@
+application:
+  name: silens-fixture
+  environment: test
+security:
+  recovery_token: DEMO_SECRET_ALPHA
+  signing_material: DEMO_PRIVATE_KEY_MATERIAL

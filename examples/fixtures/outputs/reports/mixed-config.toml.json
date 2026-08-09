@@ -1,0 +1,36 @@
+{
+  "entries": [
+    {
+      "key": "mixed-config.toml",
+      "source_bytes": 158,
+      "report": {
+        "findings": [
+          {
+            "rule_id": "demo.api-key",
+            "location": {
+              "start": 98,
+              "end": 119,
+              "line": 6,
+              "column": 12
+            },
+            "severity": "critical",
+            "confidence": "high",
+            "remediation": "rotate_credential"
+          },
+          {
+            "rule_id": "demo.password",
+            "location": {
+              "start": 133,
+              "end": 156,
+              "line": 7,
+              "column": 13
+            },
+            "severity": "high",
+            "confidence": "high",
+            "remediation": "rotate_password"
+          }
+        ]
+      }
+    }
+  ]
+}

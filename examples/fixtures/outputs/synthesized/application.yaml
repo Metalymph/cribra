@@ -1,0 +1,6 @@
+application:
+  name: silens-fixture
+  environment: test
+security:
+  recovery_token: silens_synthe3J3w
+  signing_material: silens_synthetic_value_rz

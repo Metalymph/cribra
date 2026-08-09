@@ -1,0 +1,11 @@
+{
+  "entries": [
+    {
+      "key": "false-positives.txt",
+      "source_bytes": 208,
+      "report": {
+        "findings": []
+      }
+    }
+  ]
+}

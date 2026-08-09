@@ -1,0 +1,6 @@
+application:
+  name: silens-fixture
+  environment: test
+security:
+  recovery_token: [REDACTED]
+  signing_material: [REDACTED]

@@ -1,0 +1,6 @@
+application:
+  name: silens-fixture
+  environment: test
+security:
+  recovery_token: silens_pseudo_5019a10c416070570193d77b90e419c5
+  signing_material: silens_pseudo_b19dac455dbafc7902cd8d314adb0d1f

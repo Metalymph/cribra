@@ -1,0 +1,7 @@
+[service]
+name = "fixture-service"
+endpoint = "https://example.invalid"
+
+[credentials]
+api_key = "silens_synthetic_1Huj"
+password = "silens_synthetic_vaYi0M"
