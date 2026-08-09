@@ -1,5 +1,7 @@
 //! Confidence assigned to findings produced by detection rules.
 
+use core::fmt;
+
 /// Indicates how reliable a detection is.
 ///
 /// Confidence represents how certain the scanner is that a reported finding is
@@ -14,6 +16,8 @@
 /// Low < Medium < High
 /// ```
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 pub enum Confidence {
     /// Detection is plausible but may require manual verification.
     Low,
@@ -30,6 +34,16 @@ impl Confidence {
     #[must_use]
     pub const fn is_high(self) -> bool {
         matches!(self, Self::High)
+    }
+}
+
+impl fmt::Display for Confidence {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(match self {
+            Self::Low => "low",
+            Self::Medium => "medium",
+            Self::High => "high",
+        })
     }
 }
 

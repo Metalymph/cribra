@@ -1,5 +1,7 @@
 //! Source location model used by public findings.
 
+use core::fmt;
+
 /// Exact location of a detected span in a UTF-8 source string.
 ///
 /// `start` and `end` are zero-based byte offsets and follow Rust's standard
@@ -11,6 +13,7 @@
 /// A location produced by [`Scanner::scan`](crate::Scanner::scan) always refers
 /// to valid UTF-8 character boundaries in the scanned source.
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Location {
     start: usize,
     end: usize,
@@ -79,6 +82,16 @@ impl Location {
     #[must_use]
     pub const fn byte_range(&self) -> std::ops::Range<usize> {
         self.start..self.end
+    }
+}
+
+impl fmt::Display for Location {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            formatter,
+            "{}:{} (bytes {}..{})",
+            self.line, self.column, self.start, self.end,
+        )
     }
 }
 

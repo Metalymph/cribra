@@ -31,6 +31,7 @@ use crate::{remediation::Remediation, severity::Severity, validators::dispatch::
 /// assert_eq!(id.as_str(), "github-personal-access-token");
 /// ```
 #[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct RuleId(Arc<str>);
 
 impl RuleId {
@@ -81,6 +82,8 @@ impl fmt::Display for RuleId {
 ///
 /// The concrete matcher representation used during scanning is private.
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 pub enum RuleKind {
     /// Match the exact text wherever it occurs.
     Literal,

@@ -9,7 +9,7 @@
 //! [`ScanResults`](crate::ScanResults). The builder validates source count and
 //! byte lengths before applying transformations.
 
-use std::time::SystemTime;
+use std::{fmt, time::SystemTime};
 
 use crate::{ScanResults, ScanSummary};
 
@@ -47,6 +47,8 @@ impl ShareMode {
 
 /// Stable transformation identifier stored in share manifests.
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 #[non_exhaustive]
 pub enum ShareModeKind {
     /// Conservative redaction.
@@ -63,6 +65,7 @@ pub enum ShareModeKind {
 ///
 /// The original source is not retained.
 #[derive(Debug, Clone, Eq, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct TransformedSource<K> {
     key: K,
     content: String,
@@ -103,9 +106,11 @@ impl<K> TransformedSource<K> {
 /// The manifest stores aggregate counters only. It never stores source text,
 /// matched secret values, findings, or pseudonymization/synthesis keys.
 #[derive(Debug, Clone, Eq, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct ShareManifest {
     mode: ShareModeKind,
     summary: ScanSummary,
+    #[cfg_attr(feature = "serde", serde(with = "system_time_wire"))]
     generated_at: SystemTime,
 }
 
@@ -141,11 +146,30 @@ impl ShareManifest {
     }
 }
 
+impl fmt::Display for ShareModeKind {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(match self {
+            Self::Redact => "redact",
+            Self::Template => "template",
+            Self::Pseudonymize => "pseudonymize",
+            Self::Synthesize => "synthesize",
+        })
+    }
+}
+
+impl fmt::Display for ShareManifest {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        writeln!(formatter, "transformation: {}", self.mode)?;
+        self.summary.fmt(formatter)
+    }
+}
+
 /// In-memory collection of transformed sources and share-safe metadata.
 ///
 /// The bundle owns transformed content and cloned source keys, but never owns or
 /// retains the original source text.
 #[derive(Debug, Clone, Eq, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct ShareBundle<K> {
     sources: Vec<TransformedSource<K>>,
     manifest: ShareManifest,
@@ -465,5 +489,48 @@ mod tests {
         assert_eq!(key, "memory");
         assert_eq!(content, "TOKEN=[REDACTED]");
         assert_eq!(manifest.mode(), ShareModeKind::Redact);
+    }
+}
+
+#[cfg(feature = "serde")]
+mod system_time_wire {
+    use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+    #[derive(Serialize, Deserialize)]
+    struct WireTime {
+        secs_since_epoch: u64,
+        nanos_since_epoch: u32,
+    }
+
+    pub(super) fn serialize<S>(value: &SystemTime, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let duration = value
+            .duration_since(UNIX_EPOCH)
+            .map_err(serde::ser::Error::custom)?;
+
+        WireTime {
+            secs_since_epoch: duration.as_secs(),
+            nanos_since_epoch: duration.subsec_nanos(),
+        }
+        .serialize(serializer)
+    }
+
+    pub(super) fn deserialize<'de, D>(deserializer: D) -> Result<SystemTime, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let wire = WireTime::deserialize(deserializer)?;
+
+        if wire.nanos_since_epoch >= 1_000_000_000 {
+            return Err(serde::de::Error::custom(
+                "nanos_since_epoch must be less than 1,000,000,000",
+            ));
+        }
+
+        Ok(UNIX_EPOCH + Duration::new(wire.secs_since_epoch, wire.nanos_since_epoch))
     }
 }

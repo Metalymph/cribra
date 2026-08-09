@@ -9,6 +9,7 @@ use crate::Severity;
 /// A summary contains only counters and byte totals. It never stores source
 /// text, findings, source keys or matched secret values.
 #[derive(Debug, Copy, Clone, Default, Eq, PartialEq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct ScanSummary {
     scanned_sources: usize,
     scanned_bytes: usize,

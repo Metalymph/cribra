@@ -11,6 +11,7 @@ use crate::ScanReport;
 /// The entry stores the original UTF-8 byte length so aggregate APIs can report
 /// how much text was scanned without retaining the source itself.
 #[derive(Debug, Clone, Eq, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct ScanEntry<K> {
     key: K,
     source_bytes: usize,

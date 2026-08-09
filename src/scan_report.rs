@@ -1,5 +1,7 @@
 //! Immutable findings produced for one source in a batch scan.
 
+use core::fmt;
+
 use crate::{finding::Finding, severity::Severity};
 
 /// Findings produced by scanning one UTF-8 source.
@@ -7,6 +9,7 @@ use crate::{finding::Finding, severity::Severity};
 /// Findings are stored in deterministic source order. A report owns its
 /// findings and cannot be mutated after construction.
 #[derive(Debug, Clone, Default, Eq, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct ScanReport {
     findings: Box<[Finding]>,
 }
@@ -69,6 +72,23 @@ impl ScanReport {
     #[must_use]
     pub fn into_findings(self) -> Box<[Finding]> {
         self.findings
+    }
+}
+
+impl fmt::Display for ScanReport {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.findings.is_empty() {
+            return formatter.write_str("clean");
+        }
+
+        for (index, finding) in self.findings.iter().enumerate() {
+            if index != 0 {
+                formatter.write_str("\n")?;
+            }
+            finding.fmt(formatter)?;
+        }
+
+        Ok(())
     }
 }
 

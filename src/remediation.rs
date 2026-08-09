@@ -9,6 +9,8 @@ use core::fmt;
 
 /// Recommended response to a detected sensitive value.
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 #[non_exhaustive]
 pub enum Remediation {
     /// Revoke the exposed credential and issue a replacement.

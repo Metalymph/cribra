@@ -1,5 +1,7 @@
 //! Public finding model produced by a scan.
 
+use core::fmt;
+
 use crate::{
     confidence::Confidence, location::Location, remediation::Remediation, rule::RuleId,
     severity::Severity,
@@ -14,11 +16,13 @@ use crate::{
 /// the original source using [`Location::start`] and [`Location::end`] when
 /// they explicitly need access to the matched span.
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Finding {
     rule_id: RuleId,
     location: Location,
     severity: Severity,
     confidence: Confidence,
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     remediation: Option<Remediation>,
 }
 
@@ -85,6 +89,26 @@ impl Finding {
     #[must_use]
     pub const fn is_high_confidence(&self) -> bool {
         self.confidence.is_high()
+    }
+}
+
+impl fmt::Display for Finding {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            formatter,
+            "{} · {} confidence · {} · {}:{}",
+            self.severity,
+            self.confidence,
+            self.rule_id,
+            self.location.line(),
+            self.location.column(),
+        )?;
+
+        if let Some(remediation) = self.remediation {
+            write!(formatter, " · {}", remediation.label())?;
+        }
+
+        Ok(())
     }
 }
 

@@ -10,6 +10,7 @@ use crate::{
 /// Entries preserve input order. The collection owns caller-supplied keys and
 /// reports, but never stores source text.
 #[derive(Debug, Clone, Default, Eq, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct ScanResults<K> {
     entries: Vec<ScanEntry<K>>,
 }
