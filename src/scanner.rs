@@ -219,6 +219,7 @@ impl Scanner {
                 location,
                 candidate.metadata.severity(),
                 candidate.confidence,
+                candidate.metadata.remediation(),
             ));
         }
 

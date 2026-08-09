@@ -101,6 +101,7 @@ mod tests {
             Location::from_span(0, 1),
             severity,
             Confidence::High,
+            None,
         )
     }
 

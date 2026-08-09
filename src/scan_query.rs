@@ -356,6 +356,7 @@ mod tests {
             Location::from_span(0, 1),
             severity,
             confidence,
+            None,
         )
     }
 
@@ -633,12 +634,14 @@ mod tests {
                     Location::from_span(8, 9),
                     Severity::High,
                     Confidence::High,
+                    None,
                 ),
                 Finding::new(
                     RuleId::from("first"),
                     Location::from_span(1, 2),
                     Severity::High,
                     Confidence::High,
+                    None,
                 ),
             ]),
         )];

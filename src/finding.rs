@@ -1,6 +1,9 @@
 //! Public finding model produced by a scan.
 
-use crate::{confidence::Confidence, location::Location, rule::RuleId, severity::Severity};
+use crate::{
+    confidence::Confidence, location::Location, remediation::Remediation, rule::RuleId,
+    severity::Severity,
+};
 
 /// A single detection produced by a scanner.
 ///
@@ -16,6 +19,7 @@ pub struct Finding {
     location: Location,
     severity: Severity,
     confidence: Confidence,
+    remediation: Option<Remediation>,
 }
 
 impl Finding {
@@ -24,12 +28,14 @@ impl Finding {
         location: Location,
         severity: Severity,
         confidence: Confidence,
+        remediation: Option<Remediation>,
     ) -> Self {
         Self {
             rule_id,
             location,
             severity,
             confidence,
+            remediation,
         }
     }
 
@@ -55,6 +61,12 @@ impl Finding {
     #[must_use]
     pub const fn confidence(&self) -> Confidence {
         self.confidence
+    }
+
+    /// Returns the recommended response to this finding, when one is known.
+    #[must_use]
+    pub const fn remediation(&self) -> Option<Remediation> {
+        self.remediation
     }
 
     /// Returns `true` when this finding has critical severity.
@@ -87,6 +99,7 @@ mod tests {
             Location::from_span(2, 8),
             Severity::High,
             Confidence::High,
+            None,
         );
 
         assert_eq!(finding.rule_id().as_str(), "example");
@@ -94,6 +107,7 @@ mod tests {
         assert_eq!(finding.location().end(), 8);
         assert_eq!(finding.severity(), Severity::High);
         assert_eq!(finding.confidence(), Confidence::High);
+        assert_eq!(finding.remediation(), None);
         assert!(!finding.is_critical());
         assert!(finding.is_high_priority());
         assert!(finding.is_high_confidence());
@@ -106,9 +120,14 @@ mod tests {
             Location::from_span(0, 1),
             Severity::Critical,
             Confidence::Medium,
+            Some(Remediation::RemoveSensitiveValue),
         );
 
         assert!(finding.is_critical());
+        assert_eq!(
+            finding.remediation(),
+            Some(Remediation::RemoveSensitiveValue),
+        );
         assert!(finding.is_high_priority());
         assert!(!finding.is_high_confidence());
     }

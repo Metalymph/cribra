@@ -4,17 +4,19 @@
 //! an assignment and its key name, while only the named `value` capture is
 //! passed to validation and exposed as the final finding span.
 
-use crate::{RuleSpec, Severity, validators::dispatch::ValidatorKind};
+use crate::{Remediation, RuleSpec, Severity, validators::dispatch::ValidatorKind};
 
 /// AWS long-term access key ID beginning with `AKIA`.
 pub const AWS_ACCESS_KEY_ID: RuleSpec =
     RuleSpec::prefix("aws.access-key-id", "AKIA", Severity::High)
-        .with_validator(ValidatorKind::Aws);
+        .with_validator(ValidatorKind::Aws)
+        .with_remediation(Remediation::RevokeAndRotateCredential);
 
 /// AWS temporary STS access key ID beginning with `ASIA`.
 pub const AWS_TEMPORARY_ACCESS_KEY_ID: RuleSpec =
     RuleSpec::prefix("aws.temporary-access-key-id", "ASIA", Severity::High)
-        .with_validator(ValidatorKind::Aws);
+        .with_validator(ValidatorKind::Aws)
+        .with_remediation(Remediation::RevokeAndRotateCredential);
 
 /// AWS secret access key assigned through a recognized configuration key.
 pub const AWS_SECRET_ACCESS_KEY: RuleSpec = RuleSpec::captured_pattern(
@@ -23,7 +25,8 @@ pub const AWS_SECRET_ACCESS_KEY: RuleSpec = RuleSpec::captured_pattern(
     "value",
     Severity::Critical,
 )
-.with_validator(ValidatorKind::Aws);
+.with_validator(ValidatorKind::Aws)
+.with_remediation(Remediation::RevokeAndRotateCredential);
 
 /// AWS temporary session token assigned through a recognized configuration key.
 pub const AWS_SESSION_TOKEN: RuleSpec = RuleSpec::captured_pattern(
@@ -32,7 +35,8 @@ pub const AWS_SESSION_TOKEN: RuleSpec = RuleSpec::captured_pattern(
     "value",
     Severity::Critical,
 )
-.with_validator(ValidatorKind::Aws);
+.with_validator(ValidatorKind::Aws)
+.with_remediation(Remediation::RevokeAndRotateCredential);
 
 /// Microsoft Azure or Entra application client secret.
 pub const AZURE_CLIENT_SECRET: RuleSpec = RuleSpec::captured_pattern(
@@ -41,7 +45,8 @@ pub const AZURE_CLIENT_SECRET: RuleSpec = RuleSpec::captured_pattern(
     "value",
     Severity::Critical,
 )
-.with_validator(ValidatorKind::Azure);
+.with_validator(ValidatorKind::Azure)
+.with_remediation(Remediation::RevokeAndRotateCredential);
 
 /// Azure Storage account key.
 pub const AZURE_STORAGE_ACCOUNT_KEY: RuleSpec = RuleSpec::captured_pattern(
@@ -50,7 +55,8 @@ pub const AZURE_STORAGE_ACCOUNT_KEY: RuleSpec = RuleSpec::captured_pattern(
     "value",
     Severity::Critical,
 )
-.with_validator(ValidatorKind::Azure);
+.with_validator(ValidatorKind::Azure)
+.with_remediation(Remediation::RevokeAndRotateCredential);
 
 /// Azure shared access signature.
 pub const AZURE_SHARED_ACCESS_SIGNATURE: RuleSpec = RuleSpec::captured_pattern(
@@ -59,7 +65,8 @@ pub const AZURE_SHARED_ACCESS_SIGNATURE: RuleSpec = RuleSpec::captured_pattern(
     "value",
     Severity::Critical,
 )
-.with_validator(ValidatorKind::Azure);
+.with_validator(ValidatorKind::Azure)
+.with_remediation(Remediation::RevokeAndRotateCredential);
 
 /// Google Cloud service-account private-key identifier.
 pub const GCP_PRIVATE_KEY_ID: RuleSpec = RuleSpec::captured_pattern(
@@ -68,7 +75,8 @@ pub const GCP_PRIVATE_KEY_ID: RuleSpec = RuleSpec::captured_pattern(
     "value",
     Severity::High,
 )
-.with_validator(ValidatorKind::Gcp);
+.with_validator(ValidatorKind::Gcp)
+.with_remediation(Remediation::RevokeAndRotateCredential);
 
 /// Google Cloud OAuth client secret.
 pub const GCP_CLIENT_SECRET: RuleSpec = RuleSpec::captured_pattern(
@@ -77,7 +85,8 @@ pub const GCP_CLIENT_SECRET: RuleSpec = RuleSpec::captured_pattern(
     "value",
     Severity::Critical,
 )
-.with_validator(ValidatorKind::Gcp);
+.with_validator(ValidatorKind::Gcp)
+.with_remediation(Remediation::RevokeAndRotateCredential);
 
 /// Google Cloud service-account private key in PEM form.
 ///
@@ -89,7 +98,8 @@ pub const GCP_PRIVATE_KEY: RuleSpec = RuleSpec::captured_pattern(
     "value",
     Severity::Critical,
 )
-.with_validator(ValidatorKind::Gcp);
+.with_validator(ValidatorKind::Gcp)
+.with_remediation(Remediation::ReplacePrivateKey);
 
 /// Generic password field.
 pub const PASSWORD_FIELD: RuleSpec = RuleSpec::captured_pattern(
@@ -98,7 +108,8 @@ pub const PASSWORD_FIELD: RuleSpec = RuleSpec::captured_pattern(
     "value",
     Severity::High,
 )
-.with_validator(ValidatorKind::Password);
+.with_validator(ValidatorKind::Password)
+.with_remediation(Remediation::RotatePassword);
 
 /// Database password field.
 pub const DATABASE_PASSWORD_FIELD: RuleSpec = RuleSpec::captured_pattern(
@@ -107,7 +118,8 @@ pub const DATABASE_PASSWORD_FIELD: RuleSpec = RuleSpec::captured_pattern(
     "value",
     Severity::Critical,
 )
-.with_validator(ValidatorKind::Password);
+.with_validator(ValidatorKind::Password)
+.with_remediation(Remediation::RotatePassword);
 
 /// Private-key or application passphrase field.
 pub const PASSPHRASE_FIELD: RuleSpec = RuleSpec::captured_pattern(
@@ -116,7 +128,8 @@ pub const PASSPHRASE_FIELD: RuleSpec = RuleSpec::captured_pattern(
     "value",
     Severity::High,
 )
-.with_validator(ValidatorKind::Password);
+.with_validator(ValidatorKind::Password)
+.with_remediation(Remediation::RotatePassword);
 
 /// Hash-like value explicitly associated with sensitive material.
 pub const SENSITIVE_HASH: RuleSpec = RuleSpec::captured_pattern(
@@ -125,7 +138,8 @@ pub const SENSITIVE_HASH: RuleSpec = RuleSpec::captured_pattern(
     "value",
     Severity::Medium,
 )
-.with_validator(ValidatorKind::SensitiveHash);
+.with_validator(ValidatorKind::SensitiveHash)
+.with_remediation(Remediation::ReviewSensitiveHash);
 
 /// Explicit generic API-key field.
 pub const GENERIC_API_KEY: RuleSpec = RuleSpec::captured_pattern(
@@ -134,7 +148,8 @@ pub const GENERIC_API_KEY: RuleSpec = RuleSpec::captured_pattern(
     "value",
     Severity::High,
 )
-.with_validator(ValidatorKind::GenericCredential);
+.with_validator(ValidatorKind::GenericCredential)
+.with_remediation(Remediation::RotateCredential);
 
 /// Explicit generic authentication-token field.
 pub const GENERIC_AUTH_TOKEN: RuleSpec = RuleSpec::captured_pattern(
@@ -143,12 +158,14 @@ pub const GENERIC_AUTH_TOKEN: RuleSpec = RuleSpec::captured_pattern(
     "value",
     Severity::High,
 )
-.with_validator(ValidatorKind::GenericCredential);
+.with_validator(ValidatorKind::GenericCredential)
+.with_remediation(Remediation::RotateCredential);
 
 /// Explicit generic secret field.
 pub const GENERIC_SECRET: RuleSpec = RuleSpec::captured_pattern(
     "generic.secret",
-    r#"(?i)(?:secret|secret_key|signing_secret|webhook_secret)\s*[:=]\s*["']?(?P<value>[^\s"'`;]{16,2048})"#,
+    r#"(?i)(?:secret|secret_key|signing_secret|webhook_secret)\s*[:=]\s*["']?(?P<value>[^\s"'`
+.with_remediation(Remediation::RemoveSensitiveValue);]{16,2048})"#,
     "value",
     Severity::High,
 )

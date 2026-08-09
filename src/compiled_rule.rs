@@ -3,6 +3,7 @@ use regex::Regex;
 
 use crate::{
     confidence::Confidence,
+    remediation::Remediation,
     rule::{Matcher, Rule, RuleId},
     scanner_builder::ScannerBuildError,
     severity::Severity,
@@ -36,6 +37,7 @@ pub(crate) struct RuleMetadata {
     severity: Severity,
     confidence: Confidence,
     validator: ValidatorKind,
+    remediation: Option<Remediation>,
 }
 
 impl RuleMetadata {
@@ -53,6 +55,10 @@ impl RuleMetadata {
 
     pub(crate) const fn validator(&self) -> ValidatorKind {
         self.validator
+    }
+
+    pub(crate) const fn remediation(&self) -> Option<Remediation> {
+        self.remediation
     }
 
     /// Returns the normalization priority for findings produced by this rule.
@@ -228,6 +234,7 @@ impl CompiledRuleSet {
                 severity,
                 validator,
                 matcher,
+                remediation,
             } = rule;
             let rule_index = RuleIndex::new(index as u32);
 
@@ -236,6 +243,7 @@ impl CompiledRuleSet {
                 severity,
                 confidence: Confidence::High,
                 validator,
+                remediation,
             });
 
             match matcher {

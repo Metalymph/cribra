@@ -12,7 +12,7 @@ use std::{error::Error, fmt, sync::Arc};
 
 use regex::Regex;
 
-use crate::{severity::Severity, validators::dispatch::ValidatorKind};
+use crate::{remediation::Remediation, severity::Severity, validators::dispatch::ValidatorKind};
 
 /// Stable identifier assigned to a detection rule.
 ///
@@ -117,6 +117,7 @@ pub struct RuleSpec {
     value: &'static str,
     severity: Severity,
     validator: ValidatorKind,
+    remediation: Option<Remediation>,
     capture: Option<&'static str>,
 }
 
@@ -130,6 +131,7 @@ impl RuleSpec {
             value: literal,
             severity,
             validator: ValidatorKind::None,
+            remediation: None,
             capture: None,
         }
     }
@@ -143,6 +145,7 @@ impl RuleSpec {
             value: prefix,
             severity,
             validator: ValidatorKind::None,
+            remediation: None,
             capture: None,
         }
     }
@@ -156,6 +159,7 @@ impl RuleSpec {
             value: suffix,
             severity,
             validator: ValidatorKind::None,
+            remediation: None,
             capture: None,
         }
     }
@@ -172,6 +176,7 @@ impl RuleSpec {
             value: pattern,
             severity,
             validator: ValidatorKind::None,
+            remediation: None,
             capture: None,
         }
     }
@@ -194,6 +199,7 @@ impl RuleSpec {
             value: pattern,
             severity,
             validator: ValidatorKind::None,
+            remediation: None,
             capture: Some(capture),
         }
     }
@@ -222,6 +228,19 @@ impl RuleSpec {
         self.severity
     }
 
+    /// Returns the remediation assigned to findings from this specification.
+    #[must_use]
+    pub const fn remediation(self) -> Option<Remediation> {
+        self.remediation
+    }
+
+    /// Associates remediation guidance with this specification.
+    #[must_use]
+    pub const fn with_remediation(mut self, remediation: Remediation) -> Self {
+        self.remediation = Some(remediation);
+        self
+    }
+
     /// Associates an internal validator with this built-in specification.
     ///
     /// This remains crate-private because validator selection is part of the
@@ -247,6 +266,12 @@ impl RuleSpec {
                 Rule::captured_pattern(self.id, self.value, capture, self.severity)?
             }
             (_, Some(_)) => unreachable!("only pattern specifications support captures"),
+        };
+
+        let rule = if let Some(remediation) = self.remediation {
+            rule.with_remediation(remediation)
+        } else {
+            rule
         };
 
         Ok(rule.with_validator(self.validator))
@@ -280,6 +305,7 @@ pub struct Rule {
     pub(crate) severity: Severity,
     pub(crate) validator: ValidatorKind,
     pub(crate) matcher: Matcher,
+    pub(crate) remediation: Option<Remediation>,
 }
 
 impl Rule {
@@ -297,6 +323,7 @@ impl Rule {
             severity,
             validator: ValidatorKind::None,
             matcher: Matcher::Literal(literal.into()),
+            remediation: None,
         }
     }
 
@@ -312,6 +339,7 @@ impl Rule {
             severity,
             validator: ValidatorKind::None,
             matcher: Matcher::Prefix(prefix.into()),
+            remediation: None,
         }
     }
 
@@ -326,6 +354,7 @@ impl Rule {
             severity,
             validator: ValidatorKind::None,
             matcher: Matcher::Suffix(suffix.into()),
+            remediation: None,
         }
     }
 
@@ -352,6 +381,7 @@ impl Rule {
             id: id.into(),
             severity,
             validator: ValidatorKind::None,
+            remediation: None,
             matcher: Matcher::Pattern {
                 regex: pattern,
                 capture: None,
@@ -383,6 +413,7 @@ impl Rule {
             id: id.into(),
             severity,
             validator: ValidatorKind::None,
+            remediation: None,
             matcher: Matcher::Pattern {
                 regex,
                 capture: Some(capture_index),
@@ -410,6 +441,19 @@ impl Rule {
     #[must_use]
     pub const fn severity(&self) -> Severity {
         self.severity
+    }
+
+    /// Returns the remediation assigned to findings produced by this rule.
+    #[must_use]
+    pub const fn remediation(&self) -> Option<Remediation> {
+        self.remediation
+    }
+
+    /// Returns this rule with the specified remediation assigned.
+    #[must_use]
+    pub fn with_remediation(mut self, remediation: Remediation) -> Self {
+        self.remediation = Some(remediation);
+        self
     }
 }
 

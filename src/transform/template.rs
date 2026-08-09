@@ -205,6 +205,7 @@ mod tests {
             Location::from_span(start, end),
             Severity::High,
             Confidence::High,
+            None,
         )
     }
 

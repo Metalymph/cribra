@@ -198,6 +198,7 @@ mod tests {
                     crate::Location::from_span(index, index + 1),
                     *severity,
                     crate::Confidence::High,
+                    None,
                 )
             })
             .collect();
