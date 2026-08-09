@@ -17,6 +17,10 @@ fn main() {
 }
 
 #[cfg(feature = "serde")]
+#[path = "fixtures/corpus.rs"]
+mod corpus;
+
+#[cfg(feature = "serde")]
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     generate::run()
 }
@@ -29,75 +33,34 @@ mod generate {
     };
 
     use silens_scan::{
-        Remediation, Rule, Scanner, Severity,
+        Scanner,
         transform::{
             PseudonymizationOptions, SynthesisOptions, pseudonymize, redact, synthesize, template,
         },
     };
 
-    const PSEUDONYMIZATION_KEY: [u8; 32] = [0x31; 32];
-    const SYNTHESIS_KEY: [u8; 32] = [0x53; 32];
+    use super::corpus;
 
     pub(super) fn run() -> Result<(), Box<dyn std::error::Error>> {
-        let fixture_root =
-            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("examples/fixtures");
+        let fixture_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("examples/fixtures");
         let inputs = fixture_root.join("inputs");
         let outputs = fixture_root.join("outputs");
 
         prepare_output_directories(&outputs)?;
 
-        let scanner = canonical_scanner()?;
-        let mut input_files = input_files(&inputs)?;
-        input_files.sort();
+        let scanner = corpus::scanner()?;
+        let input_files = sorted_input_files(&inputs)?;
 
-        for input_path in input_files {
-            generate_for_input(&scanner, &inputs, &outputs, &input_path)?;
+        for input_path in &input_files {
+            generate_for_input(&scanner, &inputs, &outputs, input_path)?;
         }
 
         println!(
             "generated canonical outputs for {} fixture files",
-            fs::read_dir(&inputs)?.count()
+            input_files.len(),
         );
 
         Ok(())
-    }
-
-    fn canonical_scanner() -> Result<Scanner, silens_scan::ScannerBuildError> {
-        Scanner::builder()
-            .rule(
-                Rule::prefix(
-                    "demo.api-key",
-                    "demo_api_",
-                    Severity::Critical,
-                )
-                .with_remediation(Remediation::RotateCredential),
-            )
-            .rule(
-                Rule::pattern(
-                    "demo.password",
-                    r"demo-pass-[A-Za-z0-9_\-\p{L}]+",
-                    Severity::High,
-                )
-                .expect("canonical password pattern must compile")
-                .with_remediation(Remediation::RotatePassword),
-            )
-            .rule(
-                Rule::literal(
-                    "demo.private-key",
-                    "DEMO_PRIVATE_KEY_MATERIAL",
-                    Severity::Critical,
-                )
-                .with_remediation(Remediation::ReplacePrivateKey),
-            )
-            .rule(
-                Rule::literal(
-                    "demo.secret",
-                    "DEMO_SECRET_ALPHA",
-                    Severity::High,
-                )
-                .with_remediation(Remediation::RemoveSensitiveValue),
-            )
-            .build()
     }
 
     fn prepare_output_directories(outputs: &Path) -> std::io::Result<()> {
@@ -114,8 +77,8 @@ mod generate {
         Ok(())
     }
 
-    fn input_files(inputs: &Path) -> std::io::Result<Vec<PathBuf>> {
-        fs::read_dir(inputs)?
+    fn sorted_input_files(inputs: &Path) -> std::io::Result<Vec<PathBuf>> {
+        let mut files = fs::read_dir(inputs)?
             .filter_map(|entry| match entry {
                 Ok(entry) if entry.file_type().is_ok_and(|kind| kind.is_file()) => {
                     Some(Ok(entry.path()))
@@ -123,7 +86,10 @@ mod generate {
                 Ok(_) => None,
                 Err(error) => Some(Err(error)),
             })
-            .collect()
+            .collect::<std::io::Result<Vec<_>>>()?;
+
+        files.sort();
+        Ok(files)
     }
 
     fn generate_for_input(
@@ -170,7 +136,7 @@ mod generate {
             pseudonymize(
                 &source,
                 report,
-                &PseudonymizationOptions::new(PSEUDONYMIZATION_KEY),
+                &PseudonymizationOptions::new(corpus::PSEUDONYMIZATION_KEY),
             )?
             .as_bytes(),
         )?;
@@ -181,7 +147,7 @@ mod generate {
             synthesize(
                 &source,
                 report,
-                &SynthesisOptions::new(SYNTHESIS_KEY),
+                &SynthesisOptions::new(corpus::SYNTHESIS_KEY),
             )?
             .as_bytes(),
         )?;
