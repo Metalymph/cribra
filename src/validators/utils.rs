@@ -54,8 +54,6 @@ pub(crate) fn is_obvious_placeholder(value: &str) -> bool {
         return true;
     }
 
-    let normalized = trimmed.to_ascii_lowercase();
-
     const EXACT_PLACEHOLDERS: &[&str] = &[
         "changeme",
         "change_me",
@@ -82,11 +80,29 @@ pub(crate) fn is_obvious_placeholder(value: &str) -> bool {
         "changeme",
     ];
 
-    EXACT_PLACEHOLDERS.contains(&normalized.as_str())
+    EXACT_PLACEHOLDERS
+        .iter()
+        .any(|placeholder| trimmed.eq_ignore_ascii_case(placeholder))
         || EMBEDDED_MARKERS
             .iter()
-            .any(|marker| normalized.contains(marker))
+            .any(|marker| contains_ignore_ascii_case(trimmed, marker))
         || has_single_repeated_ascii_byte(trimmed)
+}
+
+#[inline]
+fn contains_ignore_ascii_case(value: &str, needle: &str) -> bool {
+    if needle.is_empty() {
+        return true;
+    }
+
+    if needle.len() > value.len() {
+        return false;
+    }
+
+    value
+        .as_bytes()
+        .windows(needle.len())
+        .any(|window| window.eq_ignore_ascii_case(needle.as_bytes()))
 }
 
 /// Returns `true` when all bytes are the same ASCII byte and the value contains
@@ -124,6 +140,21 @@ mod tests {
         assert!(is_obvious_placeholder("your_api_key_here"));
         assert!(is_obvious_placeholder("xxxxxxxx"));
         assert!(is_obvious_placeholder("[REDACTED]"));
+        assert!(!is_obvious_placeholder("aB3_dE7_kL9"));
+    }
+
+    #[test]
+    fn rejects_placeholders_case_insensitively() {
+        assert!(is_obvious_placeholder("CHANGEME"));
+        assert!(is_obvious_placeholder("Example_Token"));
+        assert!(is_obvious_placeholder("[REDACTED]"));
+        assert!(is_obvious_placeholder("prefix_YOUR_TOKEN_HERE_suffix"));
+    }
+
+    #[test]
+    fn accepts_non_placeholder_values_with_similar_text() {
+        assert!(!is_obvious_placeholder("change_me_now_7f3a"));
+        assert!(!is_obvious_placeholder("production_api_7f3a91"));
         assert!(!is_obvious_placeholder("aB3_dE7_kL9"));
     }
 }
