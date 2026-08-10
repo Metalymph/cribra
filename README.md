@@ -1,118 +1,69 @@
 # Silens Scan
 
-Privacy-first Rust engine for detecting secrets and sensitive data.
+Privacy-first Rust core for detecting, querying and safely transforming
+secrets and sensitive data.
 
-Silens Scan is a reusable scanning core designed for CLI, WASM/PWA, desktop,
-editor and service integrations. Clients provide UTF-8 text; the core handles
-detection, validation, deterministic normalization and reporting without
-retaining matched secrets in public findings.
+Silens Scan is designed as a reusable engine rather than an application
+shell. Callers provide UTF-8 text and retain control of I/O, storage and
+presentation. The core performs detection, validation, deterministic
+normalization, reporting and share-safe transformations without storing
+matched secret values inside public findings.
 
-## Status
+The serial core is suitable for native applications and WASM/PWA
+integrations. Native callers can optionally enable Rayon-backed parallel
+scanning across independent inputs.
 
-Core scanning, validation, built-in detection, batch execution and optional
-parallel batch scanning are implemented.
+## Capabilities
 
-The current focus is API ergonomics, query/reporting helpers, documentation and
-release polish.
+-   Deterministic UTF-8 scanning
+-   Literal, prefix, suffix and regex rules
+-   Capture-aware regex projection
+-   Deterministic and contextual validators
+-   Selectable built-in detector catalog
+-   Immutable per-source `ScanReport`
+-   Ordered batch `ScanResults<K>`
+-   Lazy query/filter API with explicit sorting
+-   Aggregated `ScanSummary`
+-   Optional remediation guidance per finding
+-   Safe redaction
+-   Semantic template generation
+-   Deterministic keyed pseudonymization
+-   Deterministic keyed synthetic replacements
+-   Share-bundle construction
+-   Optional Serde support
+-   Optional Rayon parallel batch scanning
+-   Unicode-aware source locations
+-   Stable serial/parallel ordering
+-   Reusable cached built-in scanner
+-   No matched secret value stored in public findings
 
-## Features
+## Install
 
-- Deterministic UTF-8 scanning
-- Compiled execution engine
-- Literal, prefix, suffix and regex rules
-- Capture-aware regex projection
-- Deterministic and contextual validators
-- Public selectable built-in rule pack
-- Immutable per-source reports
-- Ordered batch scan API
-- Optional Rayon-backed parallel batch scanning
-- Unicode-aware locations
-- Deterministic finding normalization
-- Reusable cached built-in scanner
-- Local-first and WASM-friendly serial core
-- No matched secret value stored in public findings
-
-## Design Goals
-
-- Local-first
-- Deterministic
-- Privacy-first
-- WASM-friendly
-- Cross-platform
-- Single-thread optimized core
-- Parallelism across independent inputs
-- Small and explicit public API
-- Stable ordering between serial and parallel execution
-- Zero-copy or allocation-conscious internals where practical
-
-## Architecture
-
-```text
-                         Scanner
-                            │
-                            ▼
-                    CompiledRuleSet
-                            │
-          ┌─────────────────┼─────────────────┐
-          ▼                 ▼                 ▼
-    Aho-Corasick        regex engine      specialized
-   literal/prefix      pattern/capture      suffix
-          │                 │                 │
-          └──────────────┬──┴─────────────────┘
-                         ▼
-                  InternalFinding[]
-                rule_index/start/end
-                         │
-                         ▼
-                  validator dispatch
-                         │
-                         ▼
-                AcceptedCandidate[]
-                         │
-                         ▼
-             deterministic normalization
-                         │
-                         ▼
-             line/column finalization
-                         │
-                         ▼
-                     ScanReport
-                         │
-                         ▼
-                  ScanEntry<K>[]
-                         │
-                         ▼
-                  ScanResults<K>
+``` toml
+[dependencies]
+silens-scan = "0.1"
 ```
 
-A single source is scanned serially through the optimized core. Batch
-parallelism, when enabled, distributes independent sources through Rayon while
-reusing the same immutable scanner.
+Optional features are deliberately independent:
 
-## Public API
+``` toml
+silens-scan = { version = "0.1", features = ["serde", "parallel"] }
+```
 
-Core public types include:
+  Feature      Default   Purpose
+  ------------ --------- -------------------------------------------------
+  `serde`      no        Serialize and deserialize public data contracts
+  `parallel`   no        Scan independent inputs concurrently with Rayon
 
-- `Scanner`
-- `ScannerBuilder`
-- `Rule`
-- `RuleSpec`
-- `RuleId`
-- `ScanEntry<K>`
-- `ScanResults<K>`
-- `ScanReport`
-- `Finding`
-- `Location`
-- `Severity`
-- `Confidence`
-- `Redaction`
+The default build keeps the core serial and does not pull Rayon or
+Serde.
 
-### Batch scanning
+## Quick start
 
-Scanning has one batch-oriented shape. A single input is simply a one-element
-batch.
+Scanning always uses a batch-oriented API. One source is simply a
+one-element batch.
 
-```rust
+``` rust
 use silens_scan::Scanner;
 
 let scanner = Scanner::default();
@@ -122,20 +73,275 @@ let results = scanner.scan([
     ("settings.toml", "log_level = \"info\""),
 ]);
 
-assert_eq!(results.len(), 2);
+println!("{}", results.summary());
+
+for (source, finding) in results.findings() {
+    println!(
+        "{source}:{}:{} {}",
+        finding.location().line(),
+        finding.location().column(),
+        finding.rule_id(),
+    );
+}
 ```
 
-Each result preserves the caller-provided key and original source byte length.
+Caller-provided keys are preserved in the result. Each `ScanEntry<K>`
+also retains the original source byte length, while `Finding` contains
+metadata and coordinates rather than a copy of the matched secret.
 
-### Parallel scanning
+## Detection model
 
-Enable the optional `parallel` feature to scan independent sources concurrently:
+The built-in scanner combines multiple matching families behind one
+compiled execution pipeline:
 
-```toml
-silens-scan = { version = "...", features = ["parallel"] }
+``` text
+UTF-8 source
+    │
+    ▼
+CompiledRuleSet
+    │
+    ├── Aho-Corasick ── literal / prefix
+    ├── regex engine ── pattern / capture
+    └── specialized ─── suffix
+    │
+    ▼
+candidate validation
+    │
+    ├── deterministic validators
+    └── contextual validators
+    │
+    ▼
+deterministic normalization
+    │
+    ▼
+line / Unicode-column finalization
+    │
+    ▼
+ScanReport → ScanResults<K>
 ```
 
-```rust
+A single source is scanned serially. With `parallel`, independent
+sources are distributed through Rayon while the same immutable scanner
+is reused.
+
+### Built-in detection
+
+The current built-in catalog covers detector families for:
+
+-   GitHub
+-   Stripe
+-   Cloudflare
+-   Slack
+-   Telegram
+-   JWT
+-   AWS
+-   Azure
+-   GCP
+-   password and passphrase fields
+-   sensitive hashes
+-   generic API keys, tokens and secrets
+
+The canonical selectable built-in pack is exposed as
+`builtins::CURRENT`.
+
+Custom rules can be composed with the builder:
+
+``` rust
+use silens_scan::{Remediation, Rule, Scanner, Severity};
+
+let scanner = Scanner::builder()
+    .rule(
+        Rule::prefix("acme.api-key", "acme_", Severity::Critical)
+            .with_remediation(Remediation::RotateCredential),
+    )
+    .rule(
+        Rule::literal("internal.marker", "PRIVATE_VALUE", Severity::High)
+            .with_remediation(Remediation::RemoveSensitiveValue),
+    )
+    .build()?;
+
+# Ok::<(), silens_scan::ScannerBuildError>(())
+```
+
+## Reports, queries and summaries
+
+`ScanResults<K>` is the batch result. It exposes direct iteration as
+well as a lazy query surface.
+
+``` rust
+use silens_scan::{ScanSort, Scanner, Severity};
+
+let scanner = Scanner::default();
+let results = scanner.scan([
+    ("a.env", "TOKEN=example"),
+    ("b.env", "MODE=production"),
+]);
+
+let high_priority = results
+    .query()
+    .minimum_severity(Severity::High)
+    .sort(ScanSort::Location);
+
+for (source, finding) in high_priority.iter() {
+    println!("{source}: {}", finding.rule_id());
+}
+
+let summary = results.summary();
+println!("{summary}");
+```
+
+Queries can filter by exact or minimum severity, exact or minimum
+confidence, exact rule identifier, and convenience predicates such as
+critical/high-priority/high-confidence. Sorting is explicit and happens
+after lazy filtering.
+
+`ScanSummary` reports:
+
+-   sources and bytes scanned
+-   reports with and without findings
+-   total findings
+-   counts per severity
+-   clean/critical status helpers
+
+## Remediation
+
+A finding may carry an optional `Remediation`. Remediation is
+presentation-safe guidance attached to the rule, not an automatic
+mutation of the source.
+
+``` rust
+for (_, finding) in results.findings() {
+    if let Some(remediation) = finding.remediation() {
+        println!("{}: {}", remediation.label(), remediation.message());
+    }
+}
+```
+
+This allows applications to present actionable guidance such as rotating
+a credential, replacing a private key, changing a password or removing a
+sensitive value without embedding application-specific copy into the
+scanner pipeline.
+
+## Transformations
+
+The `transform` module turns a `ScanReport` plus the original source
+into share-safe output.
+
+### Redaction
+
+Redaction is the conservative transform. It replaces detected spans and
+safely merges overlaps.
+
+``` rust
+use silens_scan::{Rule, Scanner, Severity, transform::redact};
+
+let scanner = Scanner::builder()
+    .rule(Rule::literal("credential", "SECRET", Severity::High))
+    .build()?;
+
+let source = "TOKEN=SECRET";
+let results = scanner.scan([("memory", source)]);
+let report = results.single_report().expect("one report");
+
+assert_eq!(redact(source, report)?, "TOKEN=[REDACTED]");
+
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+Use `redact_with` when a custom replacement marker is required.
+
+### Semantic templates
+
+Templates preserve the semantic rule identity while discarding the
+matched value:
+
+``` text
+TOKEN=<SILENS:credential>
+```
+
+`TemplateOptions` can configure the namespace and deterministic per-rule
+numbering. Template generation rejects ambiguous overlapping findings
+instead of guessing which semantic placeholder should win.
+
+### Pseudonymization
+
+`pseudonymize` replaces findings with deterministic keyed pseudonyms.
+The same input value under the same key produces the same pseudonym,
+allowing correlation without retaining the original value.
+
+``` rust
+use silens_scan::transform::PseudonymizationOptions;
+
+let options = PseudonymizationOptions::new([0x31; 32]);
+```
+
+The key is supplied by the caller and is not part of a public finding.
+
+### Synthetic replacements
+
+`synthesize` creates deterministic keyed synthetic values. For supported
+detector families it preserves useful structural characteristics while
+intentionally producing validator-invalid output, so generated material
+can be used safely in examples and shareable artifacts.
+
+``` rust
+use silens_scan::transform::SynthesisOptions;
+
+let options = SynthesisOptions::new([0x53; 32]);
+```
+
+### Share bundles
+
+`ShareBundle` applies one explicit transformation mode to a batch while
+preserving source keys and a manifest containing the transformation
+mode, summary and generation time.
+
+Available modes are represented by `ShareMode`; the manifest exposes the
+non-secret `ShareModeKind`.
+
+Use share bundles when an application needs to package transformed
+sources and scan metadata together for export, support or collaboration
+workflows.
+
+## Canonical examples and golden corpus
+
+The repository contains a canonical fixture corpus under:
+
+``` text
+examples/fixtures/
+├── inputs/
+└── outputs/
+    ├── reports/
+    ├── redacted/
+    ├── templates/
+    ├── pseudonymized/
+    └── synthesized/
+```
+
+These are not hand-written expected outputs.
+`examples/generate_fixtures.rs` runs the real scanner and transformation
+APIs to regenerate them:
+
+``` text
+cargo run --example generate_fixtures --features serde
+```
+
+Golden tests independently generate the same artifacts in memory and
+compare them with the committed outputs. This keeps documentation
+examples tied to actual crate behavior.
+
+The shared corpus scanner intentionally exercises custom prefix, regex
+and literal rules plus remediation metadata.
+
+## Parallel scanning
+
+Enable `parallel` to scan independent sources concurrently:
+
+``` toml
+silens-scan = { version = "0.1", features = ["parallel"] }
+```
+
+``` rust
 let results = scanner.parallel_scan([
     ("config.env", env_source),
     ("settings.toml", toml_source),
@@ -143,144 +349,177 @@ let results = scanner.parallel_scan([
 ]);
 ```
 
-Serial and parallel execution use the same per-source pipeline and preserve
-input order. Silens Scan does not split a single source into chunks and does not
-create a private thread pool; Rayon uses the current pool.
+Serial and parallel execution use the same per-source pipeline and
+preserve input order. Silens Scan does not split one source into chunks
+and does not create a private thread pool; Rayon uses the current pool.
 
-## Coordinate Contract
+Parallelism is therefore an application choice, not a semantic
+difference in scanning.
 
-- `start` / `end`: zero-based UTF-8 byte offsets
-- `line`: one-based
-- `column`: one-based Unicode scalar position
+## Serde
 
-Matched secrets are never stored in public findings.
+Enable `serde` when results need to cross an application boundary or be
+persisted/serialized:
 
-## Built-in Detection
+``` toml
+silens-scan = { version = "0.1", features = ["serde"] }
+```
 
-The current built-in catalog includes rules and validators for:
+``` rust
+let json = serde_json::to_string_pretty(&results)?;
+```
 
-- GitHub
-- Stripe
-- Cloudflare
-- Slack
-- Telegram
-- JWT
-- AWS
-- Azure
-- GCP
-- password and passphrase fields
-- sensitive hashes
-- generic API keys, tokens and secrets
+The canonical fixture generator uses this feature for JSON report
+artifacts.
 
-The canonical selectable pack is exposed as `builtins::CURRENT`.
+## Coordinate contract
+
+Locations have an explicit mixed coordinate contract:
+
+-   `start`: zero-based UTF-8 byte offset, inclusive
+-   `end`: zero-based UTF-8 byte offset, exclusive
+-   `line`: one-based
+-   `column`: one-based Unicode scalar position
+
+Byte offsets are suitable for exact source slicing. Line/column values
+are presentation-oriented.
+
+Silens Scan does not copy the matched source value into a public
+`Finding`.
+
+## Privacy and trust boundary
+
+Silens Scan is a core library. It does not decide where source data
+comes from or where transformed output is sent.
+
+The intended boundary is:
+
+``` text
+application owns I/O
+        │
+        ▼
+     &str input
+        │
+        ▼
+   Silens Scan
+        │
+        ├── metadata-only findings
+        └── explicit transformations
+```
+
+This makes the serial core suitable for local-first WASM/PWA and desktop
+use: applications can keep scanning and transformation local to the
+process/browser. Network access, remote repositories, uploads,
+authentication and persistence belong to the integrating application
+rather than this crate.
 
 ## Performance
 
-Benchmarks are run with Criterion on Rust 1.97.1. Numbers below are the current
-release baseline and should be treated as workload-specific rather than absolute
-hardware-independent guarantees.
+Criterion benchmarks below were measured with Rust 1.97.1. They are
+workload- and machine-specific engineering baselines, not portable
+performance guarantees.
 
 ### Core scanning
 
-| Workload | Median time | Throughput |
-| --- | ---: | ---: |
-| Built-ins, 1 KiB | 23.55 µs | 57.47 MiB/s |
-| Built-ins, 64 KiB | 259.19 µs | 242.59 MiB/s |
-| Built-ins, 1 MiB | 3.815 ms | 262.25 MiB/s |
-| 64 custom literal rules | 47.37 µs | 1.29 GiB/s |
-| 512 custom literal rules | 49.50 µs | 1.24 GiB/s |
-| 64 custom mixed rules | 154.39 µs | 404.81 MiB/s |
-| Full built-in pipeline | 258.02 µs | 242.23 MiB/s |
+  Workload                     Median time         Throughput
+  -------------------------- ------------- ------------------
+  Built-ins, 1 KiB                20.25 µs        66.81 MiB/s
+  Built-ins, 64 KiB              253.90 µs       247.64 MiB/s
+  Built-ins, 1 MiB                3.759 ms   **266.13 MiB/s**
+  64 custom literal rules         48.09 µs     **1.27 GiB/s**
+  512 custom literal rules        48.93 µs     **1.25 GiB/s**
+  64 custom mixed rules          151.32 µs   **413.04 MiB/s**
+  Full built-in pipeline         253.94 µs   **246.12 MiB/s**
 
 ### Match density
 
 For a 64 KiB input:
 
-| Density | Findings | Median time | Throughput |
-| --- | ---: | ---: | ---: |
-| None | 0 | 214.01 µs | 292.04 MiB/s |
-| Sparse | 7 | 264.78 µs | 237.47 MiB/s |
-| Dense | 1496 | 3.401 ms | 18.38 MiB/s |
+  Density     Findings   Median time             Throughput
+  --------- ---------- ------------- ----------------------
+  None               0     211.97 µs       **294.85 MiB/s**
+  Sparse             7      \~255 µs   **\~246--248 MiB/s**
+  Dense           1496     \~2.85 ms         **\~22 MiB/s**
 
-The dense case is intentionally output-heavy: roughly one final finding every
-43 bytes. Internal diagnostics on the same fixture currently report 2394 raw
-candidates, 1496 accepted candidates and 1496 normalized findings.
+The dense fixture intentionally produces roughly one final finding every
+43 bytes, making result production and validation a substantial part of
+the workload.
 
 ### Parallel batch scanning
 
-The benchmark below scans 32 independent sources.
+The benchmark scans 32 independent sources.
 
-| Source size | Serial | Parallel | Approx. speedup |
-| --- | ---: | ---: | ---: |
-| 4 KiB × 32 | 1.132 ms | 265.94 µs | 4.26× |
-| 64 KiB × 32 | 8.301 ms | 1.342 ms | 6.19× |
-| 1 MiB × 32 | 122.93 ms | 18.39 ms | 6.69× |
+  Source size        Serial    Parallel   Approx. speedup
+  ------------- ----------- ----------- -----------------
+  4 KiB × 32       1.027 ms   244.49 µs             4.20×
+  64 KiB × 32      8.161 ms    1.307 ms             6.24×
+  1 MiB × 32      121.16 ms    18.24 ms             6.64×
 
 Parallel throughput reaches approximately:
 
-- 517.5 MiB/s for 4 KiB sources
-- 1.46 GiB/s for 64 KiB sources
-- 1.70 GiB/s for 1 MiB sources
-
-The serial core remains the unit of work; parallelism is applied only across
-independent inputs.
+-   **563 MiB/s** for 4 KiB sources
+-   **1.50 GiB/s** for 64 KiB sources
+-   **1.71 GiB/s** for 1 MiB sources
 
 ### Build cost
 
-| Ruleset | Median build time |
-| --- | ---: |
-| Built-in pack, cold compile | 48.72 ms |
-| 4 custom literal rules | 15.93 µs |
-| 64 custom literal rules | 61.23 µs |
-| 512 custom literal rules | 301.71 µs |
+  Ruleset                         Median build time
+  ----------------------------- -------------------
+  Built-in pack, cold compile              49.69 ms
+  4 custom literal rules                   15.58 µs
+  64 custom literal rules                  60.95 µs
+  512 custom literal rules                299.24 µs
 
-The default built-in scanner uses a shared compiled cache, so the cold built-in
-compile cost is paid once per process and reused afterward.
+The default built-in scanner uses a shared compiled cache, so the cold
+built-in compile cost is paid once per process and reused afterward.
 
-## Current Performance Decision
+### Performance policy
 
-The current engine is considered performance-frozen for this release.
+The `0.1.0` engine is performance-frozen unless a correctness issue is
+found. Manual SIMD has deliberately not been introduced: current
+workloads do not justify the extra architecture-specific complexity. It
+can be reconsidered if real-world profiling exposes a concrete
+bottleneck.
 
-A specialized shared contextual-assignment engine was evaluated but deferred:
-the existing capture-aware pipeline is already fast and maintainable, while the
-dense benchmark is dominated by the cost of producing a large number of real
-findings. A deeper contextual matcher rewrite should be reconsidered only if the
-catalog grows substantially or future profiling demonstrates a clear need.
+## Testing and hardening
 
-## Roadmap
+The release test surface includes:
 
-Completed foundation:
+-   unit tests across rules, validators, reporting and transformations
+-   doctests for public APIs
+-   canonical end-to-end fixtures
+-   golden output verification
+-   serial/parallel equivalence
+-   deterministic transformation checks
+-   UTF-8 scalar-column checks
+-   CRLF preservation
+-   empty-input behavior
+-   dense repeated-finding stress
+-   large single-line input
+-   Serde round-trip coverage
 
-- Core matcher architecture
-- Public custom rules
-- Compiled rule metadata
-- Built-in validators
-- Capture-aware pattern projection
-- Deterministic normalization
-- Built-in compiled cache
-- End-to-end fixtures
-- Batch scan API
-- Optional parallel batch execution
-- Performance baseline and diagnostics
+The canonical corpus is intended to remain part of the public
+documentation as the crate evolves.
 
-Current work:
+## Scope
 
-1. `ScanResults<K>` ergonomics
-2. query/filter/sort API
-3. `ScanSummary`
-4. formatting and serialization surface
-5. API documentation and examples
-6. README / crate metadata / CI / changelog polish
-7. release preparation
+Silens Scan intentionally stops at the reusable scanning core.
 
-Future work:
+Application-level concerns such as file selection, remote repository
+loading, authenticated workflows, uploads, UI, persistence and
+subscription features belong to consumers such as the Silens Scan web
+application and Silens Studio.
 
-- redaction and share-safe transforms
-- expanded detector catalog
-- CLI
-- WASM/PWA
-- desktop integration
-- contextual matcher redesign only if justified by profiling
+A standalone CLI is not required by the core architecture and is not
+part of the `0.1.0` scope.
+
+## Release status
+
+`0.1.0` targets the first public crates.io release.
+
+The core capability set is frozen. Remaining release work is
+documentation, example polish, package metadata and publication
+validation.
 
 ## License
 
