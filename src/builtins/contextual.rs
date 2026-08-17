@@ -134,7 +134,7 @@ pub const PASSPHRASE_FIELD: RuleSpec = RuleSpec::captured_pattern(
 /// Hash-like value explicitly associated with sensitive material.
 pub const SENSITIVE_HASH: RuleSpec = RuleSpec::captured_pattern(
     "generic.sensitive-hash",
-    r#"(?i)["\']?(?:password_hash|passwd_hash|secret_hash|credential_hash|api_key_hash|token_hash)["\']?\s*[:=]\s*["']?(?P<value>[A-Fa-f0-9]{32}|[A-Fa-f0-9]{40}|[A-Fa-f0-9]{64}|[A-Fa-f0-9]{96}|[A-Fa-f0-9]{128})"#,
+    r#"(?i)["\']?(?:password_hash|passwd_hash|secret_hash|credential_hash|api_key_hash|token_hash)["\']?\s*[:=]\s*["']?(?P<value>[A-Fa-f0-9]{128}|[A-Fa-f0-9]{96}|[A-Fa-f0-9]{64}|[A-Fa-f0-9]{40}|[A-Fa-f0-9]{32})"#,
     "value",
     Severity::Medium,
 )
