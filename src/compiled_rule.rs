@@ -4,7 +4,7 @@ use regex::Regex;
 use crate::{
     confidence::Confidence,
     remediation::Remediation,
-    rule::{Matcher, Rule, RuleId},
+    rule::{Matcher, Rule, RuleId, RuleKind},
     scanner_builder::ScannerBuildError,
     severity::Severity,
     validators::dispatch::ValidatorKind,
@@ -32,15 +32,16 @@ impl RuleIndex {
 
 /// Immutable metadata shared by every finding produced by one rule.
 #[derive(Debug)]
-pub(crate) struct RuleMetadata {
+pub(crate) struct CompiledRuleMetadata {
     id: RuleId,
+    kind: RuleKind,
     severity: Severity,
     confidence: Confidence,
     validator: ValidatorKind,
     remediation: Option<Remediation>,
 }
 
-impl RuleMetadata {
+impl CompiledRuleMetadata {
     pub(crate) const fn id(&self) -> &RuleId {
         &self.id
     }
@@ -213,7 +214,7 @@ impl PatternRule {
 /// workloads justify a more specialized representation.
 #[derive(Debug, Default)]
 pub(crate) struct CompiledRuleSet {
-    metadata: Box<[RuleMetadata]>,
+    metadata: Box<[CompiledRuleMetadata]>,
     multi_pattern: Option<MultiPatternEngine>,
     suffixes: Box<[SuffixRule]>,
     patterns: Box<[PatternRule]>,
@@ -228,6 +229,7 @@ impl CompiledRuleSet {
 
         for (index, rule) in rules.into_iter().enumerate() {
             validate_rule(&rule)?;
+            let kind = rule.kind();
 
             let Rule {
                 id,
@@ -238,8 +240,9 @@ impl CompiledRuleSet {
             } = rule;
             let rule_index = RuleIndex::new(index as u32);
 
-            metadata.push(RuleMetadata {
+            metadata.push(CompiledRuleMetadata {
                 id,
+                kind,
                 severity,
                 confidence: Confidence::High,
                 validator,
@@ -288,8 +291,21 @@ impl CompiledRuleSet {
         }
     }
 
-    pub(crate) fn metadata(&self, index: RuleIndex) -> &RuleMetadata {
+    pub(crate) fn metadata(&self, index: RuleIndex) -> &CompiledRuleMetadata {
         &self.metadata[index.get()]
+    }
+
+    pub(crate) fn public_metadata(
+        &self,
+    ) -> impl ExactSizeIterator<Item = crate::RuleMetadata<'_>> + '_ {
+        self.metadata.iter().map(|metadata| {
+            crate::RuleMetadata::new(
+                metadata.id.as_str(),
+                metadata.kind,
+                metadata.severity,
+                metadata.remediation,
+            )
+        })
     }
 
     pub(crate) fn len(&self) -> usize {
@@ -390,6 +406,25 @@ mod validator_metadata_tests {
             rules.metadata(RuleIndex::new(0)).validator(),
             ValidatorKind::GitHub,
         );
+    }
+
+    #[test]
+    fn public_metadata_is_projected_from_compiled_rules() {
+        let literal = Rule::literal("literal", "secret", Severity::High);
+        let pattern = Rule::pattern("pattern", r#"token_[A-Za-z0-9]+"#, Severity::Critical)
+            .expect("pattern should compile");
+
+        let rules =
+            CompiledRuleSet::compile(vec![literal, pattern]).expect("rule set should compile");
+        let metadata = rules.public_metadata().collect::<Vec<_>>();
+
+        assert_eq!(metadata.len(), 2);
+        assert_eq!(metadata[0].id(), "literal");
+        assert_eq!(metadata[0].kind(), RuleKind::Literal);
+        assert_eq!(metadata[0].severity(), Severity::High);
+        assert_eq!(metadata[1].id(), "pattern");
+        assert_eq!(metadata[1].kind(), RuleKind::Pattern);
+        assert_eq!(metadata[1].severity(), Severity::Critical);
     }
 
     #[test]

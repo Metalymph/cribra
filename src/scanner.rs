@@ -4,7 +4,8 @@ use std::sync::Arc;
 use rayon::prelude::*;
 
 use crate::{
-    compiled_rule::{CompiledRuleSet, RuleMetadata},
+    RuleMetadata,
+    compiled_rule::{CompiledRuleMetadata, CompiledRuleSet},
     finding::Finding,
     location::Location,
     scan_entry::ScanEntry,
@@ -36,7 +37,7 @@ pub struct Scanner {
 /// produced by validation.
 #[derive(Debug, Copy, Clone)]
 struct AcceptedCandidate<'a> {
-    metadata: &'a RuleMetadata,
+    metadata: &'a CompiledRuleMetadata,
     start: usize,
     end: usize,
     confidence: crate::Confidence,
@@ -269,6 +270,15 @@ impl Scanner {
             normalized_candidates: normalized_count,
             findings: normalized_count,
         }
+    }
+
+    /// Returns presentation-safe metadata for the rules compiled into this scanner.
+    ///
+    /// Metadata is projected lazily from the immutable compiled rule table, so
+    /// calling this method performs no matcher compilation and allocates no
+    /// additional rule metadata.
+    pub fn rule_metadata(&self) -> impl ExactSizeIterator<Item = RuleMetadata<'_>> + '_ {
+        self.rules.public_metadata()
     }
 }
 
@@ -542,5 +552,39 @@ mod tests {
         assert!(diagnostics.raw_candidates >= diagnostics.accepted_candidates);
         assert!(diagnostics.accepted_candidates >= diagnostics.normalized_candidates);
         assert!(diagnostics.findings > 0);
+    }
+
+    #[test]
+    fn exposes_metadata_for_compiled_builtin_rules() {
+        let scanner = Scanner::default();
+        let metadata = scanner.rule_metadata().collect::<Vec<_>>();
+
+        assert_eq!(scanner.rules_count(), metadata.len());
+        assert!(!metadata.is_empty());
+        assert!(metadata.iter().all(|metadata| !metadata.id().is_empty()));
+    }
+
+    #[test]
+    fn exposes_metadata_for_custom_rules() {
+        let scanner = Scanner::builder()
+            .rules([
+                crate::Rule::literal("literal", "secret", crate::Severity::High),
+                crate::Rule::pattern(
+                    "pattern",
+                    r#"token_[A-Za-z0-9]+"#,
+                    crate::Severity::Critical,
+                )
+                .expect("pattern should compile"),
+            ])
+            .build()
+            .expect("scanner should build");
+
+        let metadata = scanner.rule_metadata().collect::<Vec<_>>();
+
+        assert_eq!(metadata.len(), 2);
+        assert_eq!(metadata[0].id(), "literal");
+        assert_eq!(metadata[0].kind(), crate::RuleKind::Literal);
+        assert_eq!(metadata[1].id(), "pattern");
+        assert_eq!(metadata[1].kind(), crate::RuleKind::Pattern);
     }
 }

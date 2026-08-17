@@ -477,7 +477,7 @@ impl Rule {
     #[must_use]
     pub fn metadata(&self) -> RuleMetadata<'_> {
         RuleMetadata::new(
-            self.id.as_ref(),
+            self.id.as_str(),
             self.kind(),
             self.severity,
             self.remediation,
