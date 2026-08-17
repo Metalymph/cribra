@@ -12,7 +12,10 @@ use std::{error::Error, fmt, sync::Arc};
 
 use regex::Regex;
 
-use crate::{remediation::Remediation, severity::Severity, validators::dispatch::ValidatorKind};
+use crate::{
+    remediation::Remediation, rule_metadata::RuleMetadata, severity::Severity,
+    validators::dispatch::ValidatorKind,
+};
 
 /// Stable identifier assigned to a detection rule.
 ///
@@ -452,11 +455,33 @@ impl Rule {
         self.remediation
     }
 
+    /// Returns the matching family used by this rule.
+    #[must_use]
+    pub const fn kind(&self) -> RuleKind {
+        match self.matcher {
+            Matcher::Literal(_) => RuleKind::Literal,
+            Matcher::Prefix(_) => RuleKind::Prefix,
+            Matcher::Suffix(_) => RuleKind::Suffix,
+            Matcher::Pattern { .. } => RuleKind::Pattern,
+        }
+    }
+
     /// Returns this rule with the specified remediation assigned.
     #[must_use]
     pub fn with_remediation(mut self, remediation: Remediation) -> Self {
         self.remediation = Some(remediation);
         self
+    }
+
+    /// Returns presentation-safe metadata for this rule.
+    #[must_use]
+    pub fn metadata(&self) -> RuleMetadata<'_> {
+        RuleMetadata::new(
+            self.id.as_ref(),
+            self.kind(),
+            self.severity,
+            self.remediation,
+        )
     }
 }
 
