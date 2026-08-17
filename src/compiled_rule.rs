@@ -302,6 +302,7 @@ impl CompiledRuleSet {
             crate::RuleMetadata::new(
                 metadata.id.as_str(),
                 metadata.kind,
+                metadata.validator.detection_mode(),
                 metadata.severity,
                 metadata.remediation,
             )
@@ -409,22 +410,30 @@ mod validator_metadata_tests {
     }
 
     #[test]
-    fn public_metadata_is_projected_from_compiled_rules() {
-        let literal = Rule::literal("literal", "secret", Severity::High);
-        let pattern = Rule::pattern("pattern", r#"token_[A-Za-z0-9]+"#, Severity::Critical)
-            .expect("pattern should compile");
+    fn public_metadata_preserves_detection_mode() {
+        let matcher_only = Rule::literal("literal", "secret", Severity::High);
+        let deterministic = Rule::prefix("github", "ghp_", Severity::Critical)
+            .with_validator(ValidatorKind::GitHub);
+        let contextual = Rule::pattern("password", r#"(?i)password\s*=\s*[^\s]+"#, Severity::High)
+            .expect("pattern should compile")
+            .with_validator(ValidatorKind::Password);
 
-        let rules =
-            CompiledRuleSet::compile(vec![literal, pattern]).expect("rule set should compile");
+        let rules = CompiledRuleSet::compile(vec![matcher_only, deterministic, contextual])
+            .expect("rule set should compile");
         let metadata = rules.public_metadata().collect::<Vec<_>>();
 
-        assert_eq!(metadata.len(), 2);
-        assert_eq!(metadata[0].id(), "literal");
-        assert_eq!(metadata[0].kind(), RuleKind::Literal);
-        assert_eq!(metadata[0].severity(), Severity::High);
-        assert_eq!(metadata[1].id(), "pattern");
-        assert_eq!(metadata[1].kind(), RuleKind::Pattern);
-        assert_eq!(metadata[1].severity(), Severity::Critical);
+        assert_eq!(
+            metadata[0].detection_mode(),
+            crate::DetectionMode::MatcherOnly
+        );
+        assert_eq!(
+            metadata[1].detection_mode(),
+            crate::DetectionMode::Deterministic
+        );
+        assert_eq!(
+            metadata[2].detection_mode(),
+            crate::DetectionMode::Contextual
+        );
     }
 
     #[test]

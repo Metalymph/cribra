@@ -479,6 +479,7 @@ impl Rule {
         RuleMetadata::new(
             self.id.as_str(),
             self.kind(),
+            self.validator.detection_mode(),
             self.severity,
             self.remediation,
         )
@@ -559,6 +560,28 @@ mod tests {
             .expect("prefix specification should convert");
 
         assert_eq!(rule.validator, ValidatorKind::GitHub);
+    }
+
+    #[test]
+    fn metadata_exposes_validator_detection_mode() {
+        let deterministic = RuleSpec::prefix("github", "ghp_", Severity::Critical)
+            .with_validator(ValidatorKind::GitHub)
+            .to_rule()
+            .expect("prefix specification should convert");
+        let contextual =
+            RuleSpec::pattern("password", r#"(?i)password\s*=\s*[^\s]+"#, Severity::High)
+                .with_validator(ValidatorKind::Password)
+                .to_rule()
+                .expect("pattern specification should convert");
+
+        assert_eq!(
+            deterministic.metadata().detection_mode(),
+            crate::DetectionMode::Deterministic
+        );
+        assert_eq!(
+            contextual.metadata().detection_mode(),
+            crate::DetectionMode::Contextual
+        );
     }
 
     #[test]

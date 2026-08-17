@@ -161,7 +161,7 @@ pub use location::Location;
 pub use redaction::Redaction;
 pub use remediation::Remediation;
 pub use rule::{Rule, RuleError, RuleId, RuleKind, RuleSpec};
-pub use rule_metadata::RuleMetadata;
+pub use rule_metadata::{DetectionMode, RuleMetadata};
 pub use scan_entry::ScanEntry;
 pub use scan_query::{ScanQuery, SortedScanQuery};
 pub use scan_report::ScanReport;

@@ -3,7 +3,7 @@
 use std::ops::Range;
 
 use crate::{
-    Confidence,
+    Confidence, DetectionMode,
     validators::{
         contextual::{
             ValidationContext,
@@ -42,6 +42,27 @@ pub(crate) enum ValidatorKind {
     Password,
     SensitiveHash,
     GenericCredential,
+}
+
+impl ValidatorKind {
+    /// Returns the public validation mode represented by this internal validator.
+    pub(crate) const fn detection_mode(self) -> DetectionMode {
+        match self {
+            Self::None => DetectionMode::MatcherOnly,
+            Self::GitHub
+            | Self::Stripe
+            | Self::Cloudflare
+            | Self::Slack
+            | Self::Telegram
+            | Self::Jwt => DetectionMode::Deterministic,
+            Self::Aws
+            | Self::Azure
+            | Self::Gcp
+            | Self::Password
+            | Self::SensitiveHash
+            | Self::GenericCredential => DetectionMode::Contextual,
+        }
+    }
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
@@ -166,6 +187,36 @@ mod tests {
             .find(candidate)
             .expect("fixture must contain candidate");
         start..start + candidate.len()
+    }
+
+    #[test]
+    fn validator_kinds_expose_their_detection_mode() {
+        assert_eq!(
+            ValidatorKind::None.detection_mode(),
+            DetectionMode::MatcherOnly
+        );
+
+        for validator in [
+            ValidatorKind::GitHub,
+            ValidatorKind::Stripe,
+            ValidatorKind::Cloudflare,
+            ValidatorKind::Slack,
+            ValidatorKind::Telegram,
+            ValidatorKind::Jwt,
+        ] {
+            assert_eq!(validator.detection_mode(), DetectionMode::Deterministic);
+        }
+
+        for validator in [
+            ValidatorKind::Aws,
+            ValidatorKind::Azure,
+            ValidatorKind::Gcp,
+            ValidatorKind::Password,
+            ValidatorKind::SensitiveHash,
+            ValidatorKind::GenericCredential,
+        ] {
+            assert_eq!(validator.detection_mode(), DetectionMode::Contextual);
+        }
     }
 
     #[test]

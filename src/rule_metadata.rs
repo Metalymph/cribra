@@ -1,5 +1,18 @@
 use crate::{Remediation, RuleKind, Severity};
 
+/// Describes how a rule decides whether a matched candidate should become a finding.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
+pub enum DetectionMode {
+    /// The matcher itself is authoritative and no built-in validator is applied.
+    MatcherOnly,
+    /// Validation depends only on the matched candidate's own structure.
+    Deterministic,
+    /// Validation also depends on surrounding source context.
+    Contextual,
+}
+
 /// Presentation-safe metadata describing a scan rule.
 ///
 /// `RuleMetadata` exposes stable rule characteristics without exposing
@@ -9,6 +22,7 @@ use crate::{Remediation, RuleKind, Severity};
 pub struct RuleMetadata<'a> {
     id: &'a str,
     kind: RuleKind,
+    detection_mode: DetectionMode,
     severity: Severity,
     remediation: Option<Remediation>,
 }
@@ -19,12 +33,14 @@ impl<'a> RuleMetadata<'a> {
     pub const fn new(
         id: &'a str,
         kind: RuleKind,
+        detection_mode: DetectionMode,
         severity: Severity,
         remediation: Option<Remediation>,
     ) -> Self {
         Self {
             id,
             kind,
+            detection_mode,
             severity,
             remediation,
         }
@@ -40,6 +56,12 @@ impl<'a> RuleMetadata<'a> {
     #[must_use]
     pub const fn kind(&self) -> RuleKind {
         self.kind
+    }
+
+    /// Returns how this rule validates matched candidates.
+    #[must_use]
+    pub const fn detection_mode(&self) -> DetectionMode {
+        self.detection_mode
     }
 
     /// Returns the default severity assigned by the rule.
@@ -64,12 +86,14 @@ mod tests {
         let metadata = RuleMetadata::new(
             "github.token",
             RuleKind::Prefix,
+            DetectionMode::Deterministic,
             Severity::High,
             Some(Remediation::RotateCredential),
         );
 
         assert_eq!(metadata.id(), "github.token");
         assert_eq!(metadata.kind(), RuleKind::Prefix);
+        assert_eq!(metadata.detection_mode(), DetectionMode::Deterministic);
         assert_eq!(metadata.severity(), Severity::High);
         assert_eq!(metadata.remediation(), Some(Remediation::RotateCredential));
     }
@@ -80,6 +104,7 @@ mod tests {
         let metadata = RuleMetadata::new(
             "stripe.secret",
             RuleKind::Prefix,
+            DetectionMode::Deterministic,
             Severity::Critical,
             Some(Remediation::RotateCredential),
         );
