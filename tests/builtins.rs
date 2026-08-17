@@ -34,6 +34,26 @@ fn matched<'a>(source: &'a str, finding: &silens_scan::Finding) -> &'a str {
     &source[location.start()..location.end()]
 }
 
+fn contextual_scanner() -> Scanner {
+    scanner_for([
+        builtins::AWS_SECRET_ACCESS_KEY,
+        builtins::AZURE_CLIENT_SECRET,
+        builtins::DATABASE_PASSWORD_FIELD,
+        builtins::SENSITIVE_HASH,
+        builtins::GENERIC_API_KEY,
+    ])
+}
+
+fn expected_contextual_rule_ids() -> BTreeSet<&'static str> {
+    BTreeSet::from([
+        "aws.secret-access-key",
+        "azure.client-secret",
+        "generic.database-password-field",
+        "generic.sensitive-hash",
+        "generic.api-key",
+    ])
+}
+
 #[test]
 fn deterministic_builtins_detect_realistic_synthetic_values() {
     let mut source = include_str!("fixtures/deterministic.env").to_owned();
@@ -101,6 +121,68 @@ fn contextual_builtins_project_only_the_secret_value() {
         assert!(!value.contains("POSTGRES_PASSWORD"));
         assert!(!value.contains("password_hash"));
     }
+}
+
+#[test]
+fn contextual_builtins_are_equivalent_across_common_config_syntaxes() {
+    let scanner = contextual_scanner();
+    let expected = expected_contextual_rule_ids();
+
+    for (name, source) in [
+        ("env", include_str!("fixtures/contextual.env")),
+        ("yaml", include_str!("fixtures/contextual.yaml")),
+        ("toml", include_str!("fixtures/contextual.toml")),
+        ("json", include_str!("fixtures/contextual.json")),
+    ] {
+        let results = scan_one(&scanner, source);
+        let report = results.single_report().expect("one fixture was scanned");
+        let ids = rule_ids(report);
+
+        assert_eq!(
+            ids, expected,
+            "{name} fixture did not preserve contextual detection semantics"
+        );
+        assert_eq!(
+            report.len(),
+            expected.len(),
+            "{name} fixture produced an unexpected number of findings"
+        );
+
+        for finding in report {
+            let value = matched(source, finding);
+            assert!(
+                !value.contains(['=', ':', '"', '\'']),
+                "{name} fixture projected assignment syntax into the finding: {value:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn contextual_placeholders_and_unrelated_fields_are_rejected_across_syntaxes() {
+    let source = include_str!("fixtures/contextual-false-positives.txt");
+    let scanner = scanner_for([
+        builtins::AWS_SECRET_ACCESS_KEY,
+        builtins::AZURE_CLIENT_SECRET,
+        builtins::PASSWORD_FIELD,
+        builtins::DATABASE_PASSWORD_FIELD,
+        builtins::SENSITIVE_HASH,
+        builtins::GENERIC_API_KEY,
+        builtins::GENERIC_AUTH_TOKEN,
+        builtins::GENERIC_SECRET,
+    ]);
+
+    let results = scan_one(&scanner, source);
+    let report = results.single_report().expect("one fixture was scanned");
+
+    assert!(
+        report.is_empty(),
+        "contextual false-positive corpus produced: {:?}",
+        report
+            .iter()
+            .map(|finding| finding.rule_id().as_str())
+            .collect::<Vec<_>>()
+    );
 }
 
 #[test]

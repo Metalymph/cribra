@@ -1,0 +1,6 @@
+# Synthetic values: never use these as credentials.
+aws_secret_access_key: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+azure_client_secret: "AbCdEfGhIjKlMnOpQrStUvWxYz0123456789"
+postgres_password: "CorrectHorseBatteryStaple!"
+password_hash: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+api_key: "AbCdEfGhIjKlMnOpQrStUvWx"

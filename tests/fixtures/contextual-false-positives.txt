@@ -1,0 +1,36 @@
+# Contextual false-positive corpus across common configuration syntaxes.
+# Placeholder values and unrelated fields must not become findings.
+
+# ENV
+PASSWORD=changeme
+API_KEY=your_api_key_here
+TOKEN=example_token_here
+SECRET=replace_me
+release_checksum=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+display_name=AbCdEfGhIjKlMnOpQrStUvWx
+
+# YAML
+password: "changeme"
+api_key: "your_api_key_here"
+token: "example_token_here"
+secret: "replace_me"
+release_checksum: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+display_name: "AbCdEfGhIjKlMnOpQrStUvWx"
+
+# TOML
+password = "changeme"
+api_key = "your_api_key_here"
+token = "example_token_here"
+secret = "replace_me"
+release_checksum = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+display_name = "AbCdEfGhIjKlMnOpQrStUvWx"
+
+# JSON
+{
+  "password": "changeme",
+  "api_key": "your_api_key_here",
+  "token": "example_token_here",
+  "secret": "replace_me",
+  "release_checksum": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "display_name": "AbCdEfGhIjKlMnOpQrStUvWx"
+}

@@ -59,6 +59,7 @@ pub(crate) fn is_obvious_placeholder(value: &str) -> bool {
         "change_me",
         "example",
         "example_token",
+        "example_token_here",
         "placeholder",
         "redacted",
         "secret",
@@ -73,6 +74,7 @@ pub(crate) fn is_obvious_placeholder(value: &str) -> bool {
     ];
 
     const EMBEDDED_MARKERS: &[&str] = &[
+        "example_token_here",
         "your_api_key_here",
         "your_token_here",
         "placeholder",
@@ -138,6 +140,7 @@ mod tests {
     #[test]
     fn rejects_obvious_placeholders() {
         assert!(is_obvious_placeholder("your_api_key_here"));
+        assert!(is_obvious_placeholder("example_token_here"));
         assert!(is_obvious_placeholder("xxxxxxxx"));
         assert!(is_obvious_placeholder("[REDACTED]"));
         assert!(!is_obvious_placeholder("aB3_dE7_kL9"));
@@ -147,8 +150,10 @@ mod tests {
     fn rejects_placeholders_case_insensitively() {
         assert!(is_obvious_placeholder("CHANGEME"));
         assert!(is_obvious_placeholder("Example_Token"));
+        assert!(is_obvious_placeholder("EXAMPLE_TOKEN_HERE"));
         assert!(is_obvious_placeholder("[REDACTED]"));
         assert!(is_obvious_placeholder("prefix_YOUR_TOKEN_HERE_suffix"));
+        assert!(is_obvious_placeholder("prefix_EXAMPLE_TOKEN_HERE_suffix"));
     }
 
     #[test]
