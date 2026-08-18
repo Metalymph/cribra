@@ -21,6 +21,7 @@ use crate::{CandidateEvidence, DetectionMode, Finding, Scanner};
 pub enum Explanation {
     /// The scanner classified a rule-backed result using the given detection mode.
     Classified(DetectionMode),
+
     /// The scanner surfaced a review-only candidate from the given evidence.
     Ambiguous(CandidateEvidence),
 }
@@ -40,36 +41,27 @@ impl Explanation {
 
     /// Resolves explanation facts for `finding` against `scanner`.
     ///
-    /// Findings deliberately do not duplicate rule metadata. This method
-    /// resolves the finding's stable public identity against the scanner's
-    /// immutable compiled rule metadata and returns the explanation only when
-    /// that identity maps unambiguously to one explanation.
+    /// Findings deliberately do not duplicate rule metadata. Rule identifiers
+    /// are unique within a compiled scanner, so resolution uses the finding's
+    /// stable rule identity and verifies the finding metadata against the
+    /// scanner-owned authority.
     ///
-    /// `None` is returned when:
-    ///
-    /// - the scanner does not contain metadata compatible with the finding; or
-    /// - multiple compatible rules would imply different explanations.
+    /// `None` is returned when the scanner does not contain metadata compatible
+    /// with the finding. This covers deserialized findings resolved against an
+    /// unrelated scanner without weakening the scanner-owned authority.
     ///
     /// Resolution performs no allocation and is outside the scanning hot path.
     /// It never inspects source text or matched values.
     #[must_use]
     pub fn for_finding(scanner: &Scanner, finding: &Finding) -> Option<Self> {
-        let mut explanations = scanner
+        scanner
             .rule_metadata()
-            .filter(|metadata| {
+            .find(|metadata| {
                 metadata.id() == finding.rule_id().as_str()
                     && metadata.severity() == finding.severity()
                     && metadata.remediation() == finding.remediation()
             })
-            .map(|metadata| metadata.explanation());
-
-        let explanation = explanations.next()?;
-
-        if explanations.all(|candidate| candidate == explanation) {
-            Some(explanation)
-        } else {
-            None
-        }
+            .map(|metadata| metadata.explanation())
     }
 
     /// Returns the classified detection mode, when this explanation represents
@@ -108,10 +100,7 @@ impl Explanation {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        Confidence, Location, Remediation, Rule, RuleId, Severity,
-        validators::dispatch::ValidatorKind,
-    };
+    use crate::{Confidence, Location, Remediation, Rule, RuleId, Severity};
 
     fn finding(rule_id: &str, severity: Severity, remediation: Option<Remediation>) -> Finding {
         Finding::new(
@@ -184,33 +173,14 @@ mod tests {
     }
 
     #[test]
-    fn finding_resolution_fails_closed_when_same_identity_has_conflicting_modes() {
+    fn finding_resolution_rejects_incompatible_metadata() {
         let scanner = Scanner::builder()
-            .rule(Rule::literal("shared", "first", Severity::High))
-            .rule(
-                Rule::literal("shared", "second", Severity::High)
-                    .with_validator(ValidatorKind::GitHub),
-            )
+            .rule(Rule::literal("shared", "secret", Severity::Critical))
             .build()
             .expect("scanner should compile");
         let finding = finding("shared", Severity::High, None);
 
         assert_eq!(Explanation::for_finding(&scanner, &finding), None);
-    }
-
-    #[test]
-    fn duplicate_compatible_metadata_resolves_when_explanation_agrees() {
-        let scanner = Scanner::builder()
-            .rule(Rule::literal("shared", "first", Severity::High))
-            .rule(Rule::literal("shared", "second", Severity::High))
-            .build()
-            .expect("scanner should compile");
-        let finding = finding("shared", Severity::High, None);
-
-        assert_eq!(
-            Explanation::for_finding(&scanner, &finding),
-            Some(Explanation::Classified(DetectionMode::MatcherOnly))
-        );
     }
 
     #[cfg(feature = "serde")]

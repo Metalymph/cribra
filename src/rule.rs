@@ -8,7 +8,7 @@
 //! rule construction ergonomic while allowing the scanner internals to evolve
 //! without exposing matcher implementation details.
 
-use std::{error::Error, fmt, sync::Arc};
+use std::{fmt, sync::Arc};
 
 use regex::Regex;
 
@@ -369,19 +369,34 @@ impl Rule {
     /// The expression is compiled once during rule construction and moved into
     /// the scanner's compiled rule set. It is never recompiled by `scan`.
     ///
-    /// Each non-overlapping span returned by the regex engine becomes one
-    /// finding.
+    /// Each non-overlapping, non-empty span returned by the regex engine
+    /// becomes one finding.
+    ///
+    /// Custom patterns that can match the empty string are rejected. Empty
+    /// findings have no useful secret-detection semantics and can otherwise
+    /// produce large numbers of zero-length results from anchors, optional
+    /// expressions or zero-width assertions.
     ///
     /// # Errors
     ///
     /// Returns [`RuleError::InvalidPattern`] when `pattern` is not a valid
     /// regular expression.
+    ///
+    /// Returns [`RuleError::PatternMatchesEmpty`] when the expression can
+    /// produce a zero-length match.
     pub fn pattern(
         id: impl Into<RuleId>,
         pattern: impl AsRef<str>,
         severity: Severity,
     ) -> Result<Self, RuleError> {
-        let pattern = Regex::new(pattern.as_ref()).map_err(RuleError::InvalidPattern)?;
+        let pattern = pattern.as_ref();
+        let regex = Regex::new(pattern).map_err(RuleError::InvalidPattern)?;
+        let hir = regex_syntax::parse(pattern)
+            .map_err(|error| RuleError::InvalidPattern(regex::Error::Syntax(error.to_string())))?;
+
+        if hir.properties().minimum_len() == Some(0) {
+            return Err(RuleError::PatternMatchesEmpty);
+        }
 
         Ok(Self {
             id: id.into(),
@@ -389,7 +404,7 @@ impl Rule {
             validator: ValidatorKind::None,
             remediation: None,
             matcher: Matcher::Pattern {
-                regex: pattern,
+                regex,
                 capture: None,
             },
         })
@@ -501,6 +516,12 @@ pub enum RuleError {
     /// The supplied regular expression is invalid.
     InvalidPattern(regex::Error),
 
+    /// A public custom pattern can produce a zero-length match.
+    ///
+    /// Zero-length findings are not useful secret detections and are rejected
+    /// at rule construction rather than filtered later in the scan hot path.
+    PatternMatchesEmpty,
+
     /// An internal capture-aware rule references a group absent from its
     /// regular expression.
     MissingCaptureGroup {
@@ -513,6 +534,9 @@ impl fmt::Display for RuleError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::InvalidPattern(error) => write!(formatter, "invalid rule pattern: {error}"),
+            Self::PatternMatchesEmpty => {
+                formatter.write_str("rule pattern can produce a zero-length match")
+            }
             Self::MissingCaptureGroup { name } => {
                 write!(formatter, "missing named capture group `{name}`")
             }
@@ -520,11 +544,11 @@ impl fmt::Display for RuleError {
     }
 }
 
-impl Error for RuleError {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
+impl std::error::Error for RuleError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::InvalidPattern(error) => Some(error),
-            Self::MissingCaptureGroup { .. } => None,
+            Self::PatternMatchesEmpty | Self::MissingCaptureGroup { .. } => None,
         }
     }
 }
@@ -624,5 +648,33 @@ mod tests {
             Rule::pattern("invalid", "(", Severity::High).expect_err("invalid regex should fail");
 
         assert!(matches!(error, RuleError::InvalidPattern(_)));
+    }
+    #[test]
+    fn public_pattern_rejects_zero_length_language() {
+        for pattern in [r"", r".*", r"a?", r"(?:secret)?", r"\b", r"secret|"] {
+            let error = Rule::pattern("empty-capable", pattern, Severity::High)
+                .expect_err("zero-length-capable pattern should fail");
+
+            assert!(matches!(error, RuleError::PatternMatchesEmpty), "{pattern}");
+        }
+    }
+
+    #[test]
+    fn public_pattern_accepts_non_empty_unicode_and_anchored_patterns() {
+        for pattern in [
+            r"\p{L}+",
+            r"\A[A-Z2-9]{4}(?:-[A-Z2-9]{4}){3}\z",
+            r"\bsecret\b",
+            r"(?:foo|bar)+",
+        ] {
+            let rule = Rule::pattern("non-empty", pattern, Severity::High)
+                .expect("non-empty pattern should compile");
+
+            assert_eq!(rule.kind(), RuleKind::Pattern);
+            assert_eq!(
+                rule.metadata().detection_mode(),
+                crate::DetectionMode::MatcherOnly
+            );
+        }
     }
 }

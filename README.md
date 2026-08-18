@@ -291,7 +291,34 @@ The current built-in catalog covers detector families for:
 The canonical selectable built-in pack is exposed as
 `builtins::CURRENT`.
 
-Custom rules can be composed with the builder:
+## Custom rules and domain knowledge
+
+Custom rules let the integrating application declare sensitive values that
+Silens Scan cannot infer from generic structure alone.
+
+They use the same public rule model as the scanner core:
+
+```text
+application/domain knowledge
+        │
+        ▼
+      Rule
+        │
+        ├── literal
+        ├── prefix
+        ├── suffix
+        └── pattern
+        │
+        ▼
+  ScannerBuilder
+        │
+        ▼
+      Finding
+```
+
+A custom rule is matcher-authoritative. Its public metadata therefore reports
+`DetectionMode::MatcherOnly`; private built-in validators are not exposed to
+custom rules.
 
 ``` rust
 use silens_scan::{Remediation, Rule, Scanner, Severity};
@@ -308,6 +335,71 @@ let scanner = Scanner::builder()
     .build()?;
 
 # Ok::<(), silens_scan::ScannerBuildError>(())
+```
+
+Built-ins and custom rules can be composed in the same scanner:
+
+``` rust
+use silens_scan::{Rule, Scanner, Severity, builtins};
+
+let scanner = Scanner::builder()
+    .builtins(builtins::CURRENT)
+    .rule(Rule::literal(
+        "acme.recovery-code",
+        "ABCD-EFGH-IJKL-MNOP",
+        Severity::Critical,
+    ))
+    .build()?;
+
+# Ok::<(), silens_scan::ScannerBuildError>(())
+```
+
+Rule identifiers are scanner-wide identities. Duplicate IDs are rejected,
+including collisions between a custom rule and a built-in rule. Distinct IDs
+may intentionally use identical matchers.
+
+Custom regular-expression rules use the full regex match as the finding span.
+Capture projection remains an internal built-in capability rather than a public
+custom-rule feature.
+
+Patterns that can produce a zero-length match are rejected at construction
+time. This prevents empty findings from anchors, optional expressions and other
+zero-width patterns from entering the scan pipeline.
+
+For example:
+
+``` rust
+use silens_scan::{Rule, RuleError, Severity};
+
+let error = Rule::pattern("bad", r".*", Severity::High)
+    .expect_err("zero-length-capable patterns are rejected");
+
+assert!(matches!(error, RuleError::PatternMatchesEmpty));
+```
+
+Custom rules are also the explicit escape hatch for ambiguous values. A value
+such as:
+
+``` text
+ABCD-EFGH-IJKL-MNOP
+```
+
+may only be a `SensitiveCandidate` when scanned generically. If an application
+knows that this exact value or shape is a real credential in its domain, a
+custom rule can classify it as a normal `Finding`. The confirmed finding then
+suppresses the overlapping ambiguous candidate.
+
+This keeps the scanner honest:
+
+```text
+built-in knowledge
+        +
+structural ambiguity
+        +
+application/domain knowledge
+        │
+        ▼
+      Scanner
 ```
 
 ## Reports, queries and summaries
@@ -381,7 +473,49 @@ scanner pipeline.
 
 ## Ambiguous sensitive values
 
-Silens Scan separates confirmed detections from values that are only structurally suspicious.
+Silens Scan separates confirmed detections from values that are only
+structurally suspicious.
+
+```text
+ScanReport
+├── findings()
+│   └── classified detections
+├── candidates()
+│   └── review-only structural candidates
+└── needs_review()
+    └── true when either channel is non-empty
+
+ScanResults
+├── findings()
+├── candidates()
+├── failed()   -> sources containing findings
+├── review()   -> candidate-only sources
+└── clean()    -> sources containing neither
+```
+
+A `SensitiveCandidate` is deliberately not a `Finding`:
+
+- it has no `Severity`;
+- it has no finding `Confidence`;
+- it has no `Remediation`;
+- it never stores the matched source value;
+- it does not participate in `ScanQuery`;
+- it is never transformed automatically.
+
+The current structural candidate detector recognizes a narrow recovery-like
+grouped form such as:
+
+```text
+ABCD-EFGH-IJKL-MNOP
+```
+
+This does not mean the value is a recovery credential. The same structure can
+represent an activation code, license key, coupon or application identifier.
+The scanner therefore emits only structural review evidence unless a normal
+rule provides enough evidence to classify the span.
+
+If a confirmed finding overlaps a structural candidate, the finding wins and
+the ambiguous candidate is suppressed.
 
 ## Explainability
 
