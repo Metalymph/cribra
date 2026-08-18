@@ -98,10 +98,8 @@
 //! persistence and UI are intentionally outside this crate. This keeps the
 //! scanner reusable in local-first native, WASM/PWA, desktop and service
 //! applications.
-
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
-
 //! Privacy-first Rust engine for detecting secrets and sensitive data.
 //!
 //! Silens Scan is a deterministic, local-first scanning core. It accepts UTF-8
@@ -133,7 +131,6 @@
 //!
 //! With the optional `parallel` feature, the same batch can be scanned with
 //! [`Scanner::parallel_scan`] while preserving input order.
-
 pub mod builtins;
 mod compiled_rule;
 mod confidence;
@@ -151,10 +148,10 @@ mod scan_sort;
 mod scan_summary;
 mod scanner;
 mod scanner_builder;
+mod sensitive_candidate;
 mod severity;
 pub mod transform;
 mod validators;
-
 pub use confidence::Confidence;
 pub use finding::Finding;
 pub use location::Location;
@@ -170,5 +167,6 @@ pub use scan_sort::ScanSort;
 pub use scan_summary::ScanSummary;
 pub use scanner::Scanner;
 pub use scanner_builder::{ScannerBuildError, ScannerBuilder};
+pub use sensitive_candidate::{CandidateEvidence, SensitiveCandidate, SensitiveCandidateKind};
 pub use severity::Severity;
 pub use transform::redact;
