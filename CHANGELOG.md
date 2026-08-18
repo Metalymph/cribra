@@ -81,6 +81,24 @@ privacy-first, application-agnostic core architecture introduced in `0.1.0`.
   authority, overlap suppression, serialization and source-value
   non-leakage.
 
+#### Custom rules
+
+- Scanner-wide uniqueness for `RuleId`, including duplicate custom IDs and
+  custom/built-in collisions.
+- Borrowed built-in catalogs such as `builtins::CURRENT` can be passed directly
+  to `ScannerBuilder::builtins`.
+- Public custom-rule regression contract covering literal, prefix and pattern
+  rules, metadata, remediation, built-in composition and ambiguity promotion.
+- Custom patterns that can produce zero-length matches are rejected at
+  construction time with `RuleError::PatternMatchesEmpty`.
+- Custom pattern coverage for Unicode, anchors, boundaries and alternation.
+- Public custom patterns keep full-match span semantics; capture projection
+  remains private to built-in rules.
+- Identical matcher definitions remain valid when their stable rule IDs are
+  distinct.
+- Custom rules remain `MatcherOnly` and cannot select private built-in
+  validators.
+
 ### Changed
 
 #### Result semantics
