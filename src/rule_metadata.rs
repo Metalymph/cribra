@@ -1,7 +1,7 @@
-use crate::{Remediation, RuleKind, Severity};
+use crate::{Explanation, Remediation, RuleKind, Severity};
 
 /// Describes how a rule decides whether a matched candidate should become a finding.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 pub enum DetectionMode {
@@ -64,6 +64,16 @@ impl<'a> RuleMetadata<'a> {
         self.detection_mode
     }
 
+    /// Returns typed explanation facts for findings produced by this rule.
+    ///
+    /// The explanation is projected directly from [`DetectionMode`], which is
+    /// already the public authority describing how the rule validates matched
+    /// candidates. No separate evidence classification is stored.
+    #[must_use]
+    pub const fn explanation(&self) -> Explanation {
+        Explanation::classified(self.detection_mode)
+    }
+
     /// Returns the default severity assigned by the rule.
     #[must_use]
     pub const fn severity(&self) -> Severity {
@@ -94,8 +104,29 @@ mod tests {
         assert_eq!(metadata.id(), "github.token");
         assert_eq!(metadata.kind(), RuleKind::Prefix);
         assert_eq!(metadata.detection_mode(), DetectionMode::Deterministic);
+        assert_eq!(
+            metadata.explanation(),
+            Explanation::Classified(DetectionMode::Deterministic)
+        );
         assert_eq!(metadata.severity(), Severity::High);
         assert_eq!(metadata.remediation(), Some(Remediation::RotateCredential));
+    }
+
+    #[test]
+    fn explanation_tracks_detection_mode_without_parallel_state() {
+        for mode in [
+            DetectionMode::MatcherOnly,
+            DetectionMode::Deterministic,
+            DetectionMode::Contextual,
+        ] {
+            let metadata =
+                RuleMetadata::new("rule", RuleKind::Pattern, mode, Severity::Medium, None);
+
+            assert_eq!(metadata.explanation(), Explanation::classified(mode));
+            assert_eq!(metadata.explanation().detection_mode(), Some(mode));
+            assert!(metadata.explanation().is_classified());
+            assert!(!metadata.explanation().is_ambiguous());
+        }
     }
 
     #[cfg(feature = "serde")]

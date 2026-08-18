@@ -7,7 +7,7 @@
 //!
 //! Candidates never retain or copy the source value.
 
-use crate::Location;
+use crate::{Explanation, Location};
 
 /// Describes the kind of sensitive value a candidate resembles.
 ///
@@ -87,6 +87,16 @@ impl SensitiveCandidate {
     pub const fn evidence(&self) -> CandidateEvidence {
         self.evidence
     }
+
+    /// Returns typed explanation facts for this review-only candidate.
+    ///
+    /// The explanation reuses [`CandidateEvidence`] directly. It does not
+    /// assign finding severity, finding confidence, remediation, or source
+    /// content to an ambiguous value.
+    #[must_use]
+    pub const fn explanation(&self) -> Explanation {
+        Explanation::ambiguous(self.evidence)
+    }
 }
 
 #[cfg(test)]
@@ -105,6 +115,16 @@ mod tests {
         assert_eq!(candidate.location().start(), 4);
         assert_eq!(candidate.location().end(), 23);
         assert_eq!(candidate.evidence(), CandidateEvidence::Structural);
+        assert_eq!(
+            candidate.explanation(),
+            Explanation::Ambiguous(CandidateEvidence::Structural)
+        );
+        assert_eq!(
+            candidate.explanation().candidate_evidence(),
+            Some(CandidateEvidence::Structural)
+        );
+        assert!(candidate.explanation().is_ambiguous());
+        assert!(!candidate.explanation().is_classified());
     }
 
     #[cfg(feature = "serde")]
