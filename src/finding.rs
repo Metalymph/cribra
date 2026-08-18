@@ -3,8 +3,8 @@
 use core::fmt;
 
 use crate::{
-    confidence::Confidence, location::Location, remediation::Remediation, rule::RuleId,
-    severity::Severity,
+    Explanation, Scanner, confidence::Confidence, location::Location, remediation::Remediation,
+    rule::RuleId, severity::Severity,
 };
 
 /// A single detection produced by a scanner.
@@ -73,6 +73,19 @@ impl Finding {
         self.remediation
     }
 
+    /// Resolves typed explanation facts against the scanner that produced this finding.
+    ///
+    /// A finding intentionally stores no duplicate detection-mode or explanation
+    /// metadata. Resolution uses the scanner's immutable compiled rule metadata
+    /// and fails closed when the finding cannot be mapped unambiguously.
+    ///
+    /// This operation performs no allocation and never accesses source text or
+    /// the matched sensitive value.
+    #[must_use]
+    pub fn explanation(&self, scanner: &Scanner) -> Option<Explanation> {
+        Explanation::for_finding(scanner, self)
+    }
+
     /// Returns `true` when this finding has critical severity.
     #[must_use]
     pub const fn is_critical(&self) -> bool {
@@ -115,6 +128,7 @@ impl fmt::Display for Finding {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{DetectionMode, Rule};
 
     #[test]
     fn exposes_immutable_finding_metadata() {
@@ -135,6 +149,38 @@ mod tests {
         assert!(!finding.is_critical());
         assert!(finding.is_high_priority());
         assert!(finding.is_high_confidence());
+    }
+
+    #[test]
+    fn resolves_explanation_without_storing_duplicate_rule_metadata() {
+        let scanner = Scanner::builder()
+            .rule(Rule::literal("example", "secret", Severity::High))
+            .build()
+            .expect("scanner should compile");
+        let results = scanner.scan([("memory", "secret")]);
+        let finding = &results
+            .single_report()
+            .expect("one source was scanned")
+            .findings()[0];
+
+        assert_eq!(
+            finding.explanation(&scanner),
+            Some(Explanation::Classified(DetectionMode::MatcherOnly))
+        );
+    }
+
+    #[test]
+    fn explanation_fails_closed_against_unrelated_scanner() {
+        let scanner = Scanner::builder().build().expect("scanner should compile");
+        let finding = Finding::new(
+            RuleId::from("example"),
+            Location::from_span(2, 8),
+            Severity::High,
+            Confidence::High,
+            None,
+        );
+
+        assert_eq!(finding.explanation(&scanner), None);
     }
 
     #[test]
