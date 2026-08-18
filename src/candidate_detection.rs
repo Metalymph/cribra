@@ -35,11 +35,10 @@ const RECOVERY_LIKE_LEN: usize = GROUP_LEN * GROUP_COUNT + SEPARATOR_COUNT;
 
 /// Detects structurally plausible sensitive values without promoting them to findings.
 ///
-/// This function is wired into the public report pipeline in the following
-/// 0.2.3 integration step. Until then it is exercised through its regression
-/// tests so the structural contract can be frozen independently from report
-/// semantics.
-#[allow(dead_code)]
+/// The scanner invokes this path independently from compiled rule matching.
+/// Candidates that overlap an accepted finding are discarded before the
+/// immutable report is materialized, so one span is never simultaneously
+/// presented as both a confirmed finding and an ambiguous candidate.
 pub(crate) fn detect_sensitive_candidates(source: &str) -> Vec<SensitiveCandidate> {
     let bytes = source.as_bytes();
     let mut candidates = Vec::new();

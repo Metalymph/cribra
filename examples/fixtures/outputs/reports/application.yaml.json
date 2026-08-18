@@ -29,7 +29,8 @@
             "confidence": "high",
             "remediation": "replace_private_key"
           }
-        ]
+        ],
+        "candidates": []
       }
     }
   ]

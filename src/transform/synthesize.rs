@@ -363,7 +363,7 @@ mod tests {
     #[test]
     fn synthesis_is_deterministic_for_key_rule_and_span() {
         let source = "TOKEN=SECRET";
-        let report = ScanReport::new(vec![finding("custom.secret", 6, 12)]);
+        let report = ScanReport::new_with_candidates(vec![finding("custom.secret", 6, 12)], Vec::new());
         let options = SynthesisOptions::new([1; 32]);
 
         let first = synthesize(source, &report, &options).unwrap();
@@ -375,7 +375,7 @@ mod tests {
     #[test]
     fn different_keys_produce_different_synthetic_values() {
         let source = "TOKEN=SECRET";
-        let report = ScanReport::new(vec![finding("custom.secret", 6, 12)]);
+        let report = ScanReport::new_with_candidates(vec![finding("custom.secret", 6, 12)], Vec::new());
 
         let first = synthesize(source, &report, &SynthesisOptions::new([1; 32])).unwrap();
         let second = synthesize(source, &report, &SynthesisOptions::new([2; 32])).unwrap();
@@ -390,7 +390,7 @@ mod tests {
     #[test]
     fn short_values_still_include_keyed_material() {
         let source = "SECRET";
-        let report = ScanReport::new(vec![finding("custom.secret", 0, 6)]);
+        let report = ScanReport::new_with_candidates(vec![finding("custom.secret", 0, 6)], Vec::new());
 
         let first = synthesize(source, &report, &SynthesisOptions::new([11; 32])).unwrap();
         let second = synthesize(source, &report, &SynthesisOptions::new([12; 32])).unwrap();
@@ -405,7 +405,10 @@ mod tests {
     #[test]
     fn stripe_shape_preserves_prefix_and_length_but_breaks_validator_alphabet() {
         let source = "sk_live_1234567890abcdefghijkl";
-        let report = ScanReport::new(vec![finding("stripe.live-secret-key", 0, source.len())]);
+        let report = ScanReport::new_with_candidates(
+            vec![finding("stripe.live-secret-key", 0, source.len())],
+            Vec::new(),
+        );
 
         let output = synthesize(source, &report, &SynthesisOptions::new([3; 32])).unwrap();
 
@@ -417,7 +420,10 @@ mod tests {
     #[test]
     fn github_shape_preserves_family_prefix() {
         let source = "ghp_1234567890abcdefghijklmnop";
-        let report = ScanReport::new(vec![finding("github.classic-pat", 0, source.len())]);
+        let report = ScanReport::new_with_candidates(
+            vec![finding("github.classic-pat", 0, source.len())],
+            Vec::new(),
+        );
 
         let output = synthesize(source, &report, &SynthesisOptions::new([4; 32])).unwrap();
 
@@ -428,7 +434,10 @@ mod tests {
     #[test]
     fn aws_access_key_preserves_prefix_but_is_not_uppercase_digit_only() {
         let source = "AKIA1234567890ABCDEF";
-        let report = ScanReport::new(vec![finding("aws.access-key-id", 0, source.len())]);
+        let report = ScanReport::new_with_candidates(
+            vec![finding("aws.access-key-id", 0, source.len())],
+            Vec::new(),
+        );
 
         let output = synthesize(source, &report, &SynthesisOptions::new([5; 32])).unwrap();
 
@@ -439,7 +448,10 @@ mod tests {
     #[test]
     fn generic_values_are_explicitly_marked_synthetic() {
         let source = "SUPER_SECRET_VALUE_123456";
-        let report = ScanReport::new(vec![finding("generic.secret", 0, source.len())]);
+        let report = ScanReport::new_with_candidates(
+            vec![finding("generic.secret", 0, source.len())],
+            Vec::new(),
+        );
 
         let output = synthesize(source, &report, &SynthesisOptions::new([6; 32])).unwrap();
 
@@ -451,7 +463,10 @@ mod tests {
     #[test]
     fn custom_marker_is_normalized() {
         let source = "SUPER_SECRET_VALUE_123456";
-        let report = ScanReport::new(vec![finding("generic.secret", 0, source.len())]);
+        let report = ScanReport::new_with_candidates(
+            vec![finding("generic.secret", 0, source.len())],
+            Vec::new(),
+        );
         let options = SynthesisOptions::new([7; 32]).marker("MY DEMO!");
 
         let output = synthesize(source, &report, &options).unwrap();
@@ -463,7 +478,10 @@ mod tests {
     fn original_secret_bytes_do_not_survive() {
         let source = "TOKEN=SUPER_SECRET_VALUE";
         let start = "TOKEN=".len();
-        let report = ScanReport::new(vec![finding("generic.secret", start, source.len())]);
+        let report = ScanReport::new_with_candidates(
+            vec![finding("generic.secret", start, source.len())],
+            Vec::new(),
+        );
 
         let output = synthesize(source, &report, &SynthesisOptions::new([8; 32])).unwrap();
 
@@ -487,7 +505,10 @@ mod tests {
 
     #[test]
     fn overlaps_are_rejected() {
-        let report = ScanReport::new(vec![finding("one", 0, 6), finding("two", 0, 10)]);
+        let report = ScanReport::new_with_candidates(
+            vec![finding("one", 0, 6), finding("two", 0, 10)],
+            Vec::new(),
+        );
 
         assert!(matches!(
             synthesize("0123456789", &report, &SynthesisOptions::new([10; 32]),),

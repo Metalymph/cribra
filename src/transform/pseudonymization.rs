@@ -192,7 +192,10 @@ mod tests {
     #[test]
     fn same_value_and_key_produce_same_pseudonym() {
         let source = "SECRET x SECRET";
-        let report = ScanReport::new(vec![finding("one", 0, 6), finding("two", 9, 15)]);
+        let report = ScanReport::new_with_candidates(
+            vec![finding("one", 0, 6), finding("two", 9, 15)],
+            Vec::new(),
+        );
         let options = PseudonymizationOptions::new([1; 32]);
 
         let output = pseudonymize(source, &report, &options).unwrap();
@@ -204,7 +207,10 @@ mod tests {
     #[test]
     fn different_values_produce_different_pseudonyms() {
         let source = "SECRET x OTHER!";
-        let report = ScanReport::new(vec![finding("one", 0, 6), finding("two", 9, 15)]);
+        let report = ScanReport::new_with_candidates(
+            vec![finding("one", 0, 6), finding("two", 9, 15)],
+            Vec::new(),
+        );
         let options = PseudonymizationOptions::new([2; 32]);
 
         let output = pseudonymize(source, &report, &options).unwrap();
@@ -216,7 +222,7 @@ mod tests {
     #[test]
     fn different_keys_produce_different_pseudonyms() {
         let source = "SECRET";
-        let report = ScanReport::new(vec![finding("secret", 0, 6)]);
+        let report = ScanReport::new_with_candidates(vec![finding("secret", 0, 6)], Vec::new());
 
         let first = pseudonymize(source, &report, &PseudonymizationOptions::new([3; 32])).unwrap();
         let second = pseudonymize(source, &report, &PseudonymizationOptions::new([4; 32])).unwrap();
@@ -227,10 +233,13 @@ mod tests {
     #[test]
     fn rule_identity_does_not_change_pseudonym_identity() {
         let source = "SECRET x SECRET";
-        let report = ScanReport::new(vec![
-            finding("provider-specific", 0, 6),
-            finding("generic", 9, 15),
-        ]);
+        let report = ScanReport::new_with_candidates(
+            vec![
+                finding("provider-specific", 0, 6),
+                finding("generic", 9, 15),
+            ],
+            Vec::new(),
+        );
         let options = PseudonymizationOptions::new([5; 32]);
 
         let output = pseudonymize(source, &report, &options).unwrap();
@@ -242,7 +251,7 @@ mod tests {
     #[test]
     fn prefix_and_digest_length_are_configurable() {
         let source = "SECRET";
-        let report = ScanReport::new(vec![finding("secret", 0, 6)]);
+        let report = ScanReport::new_with_candidates(vec![finding("secret", 0, 6)], Vec::new());
         let options = PseudonymizationOptions::new([6; 32])
             .prefix("pseudo:")
             .digest_bytes(8);
@@ -283,7 +292,10 @@ mod tests {
 
     #[test]
     fn overlap_is_rejected() {
-        let report = ScanReport::new(vec![finding("short", 0, 6), finding("long", 0, 10)]);
+        let report = ScanReport::new_with_candidates(
+            vec![finding("short", 0, 6), finding("long", 0, 10)],
+            Vec::new(),
+        );
         let options = PseudonymizationOptions::new([8; 32]);
 
         assert!(matches!(
@@ -296,7 +308,10 @@ mod tests {
     fn original_value_does_not_survive_transformation() {
         let source = "TOKEN=SUPER_SECRET_VALUE";
         let start = "TOKEN=".len();
-        let report = ScanReport::new(vec![finding("credential", start, source.len())]);
+        let report = ScanReport::new_with_candidates(
+            vec![finding("credential", start, source.len())],
+            Vec::new(),
+        );
         let options = PseudonymizationOptions::new([9; 32]);
 
         let output = pseudonymize(source, &report, &options).unwrap();
@@ -309,7 +324,8 @@ mod tests {
     fn utf8_values_are_pseudonymized_by_exact_bytes() {
         let source = "PASSWORD=pässwörd😀";
         let start = "PASSWORD=".len();
-        let report = ScanReport::new(vec![finding("password", start, source.len())]);
+        let report =
+            ScanReport::new_with_candidates(vec![finding("password", start, source.len())], Vec::new());
         let options = PseudonymizationOptions::new([10; 32]);
 
         let output = pseudonymize(source, &report, &options).unwrap();

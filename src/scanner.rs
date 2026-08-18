@@ -5,6 +5,7 @@ use rayon::prelude::*;
 
 use crate::{
     RuleMetadata,
+    candidate_detection::detect_sensitive_candidates,
     compiled_rule::{CompiledRuleMetadata, CompiledRuleSet},
     finding::Finding,
     location::Location,
@@ -224,7 +225,14 @@ impl Scanner {
             ));
         }
 
-        ScanReport::new(findings)
+        let mut candidates = detect_sensitive_candidates(source);
+        candidates.retain(|candidate| {
+            findings
+                .iter()
+                .all(|finding| !spans_overlap(candidate.location(), finding.location()))
+        });
+
+        ScanReport::new_with_candidates(findings, candidates)
     }
 
     /// Executes the candidate stages and returns internal counts for tests.
@@ -340,6 +348,11 @@ fn normalize_candidates(candidates: &mut Vec<AcceptedCandidate<'_>>) {
 
         candidate.metadata.priority() == highest_priority
     });
+}
+
+/// Returns `true` when two half-open source spans overlap.
+fn spans_overlap(left: &Location, right: &Location) -> bool {
+    left.start() < right.end() && right.start() < left.end()
 }
 
 /// Advances a one-based Unicode source position to `target`.
@@ -530,6 +543,37 @@ mod tests {
 
         assert_eq!(report.len(), 2);
     }
+    #[test]
+    fn emits_ambiguous_candidates_separately_from_findings() {
+        let scanner = Scanner::default();
+        let report = scanner.scan_source("ABCD-EFGH-IJKL-MNOP");
+
+        assert!(report.findings().is_empty());
+        assert_eq!(report.candidate_len(), 1);
+        assert!(report.needs_review());
+        assert_eq!(
+            report.candidates()[0].kind(),
+            crate::SensitiveCandidateKind::RecoveryLikeCode
+        );
+    }
+
+    #[test]
+    fn finding_suppresses_overlapping_ambiguous_candidate() {
+        let scanner = Scanner::builder()
+            .rule(Rule::literal(
+                "known-recovery-code",
+                "ABCD-EFGH-IJKL-MNOP",
+                Severity::Critical,
+            ))
+            .build()
+            .expect("scanner should compile");
+
+        let report = scanner.scan_source("ABCD-EFGH-IJKL-MNOP");
+
+        assert_eq!(report.findings().len(), 1);
+        assert!(report.candidates().is_empty());
+    }
+
     #[test]
     fn dense_fixture_diagnostics() {
         let scanner = Scanner::default();

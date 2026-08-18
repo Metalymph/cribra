@@ -361,7 +361,7 @@ mod tests {
     }
 
     fn report(rule: &str, severity: Severity) -> ScanReport {
-        ScanReport::new(vec![finding(rule, severity, Confidence::High)])
+        ScanReport::new_with_candidates(vec![finding(rule, severity, Confidence::High)], Vec::new())
     }
 
     #[test]
@@ -411,11 +411,14 @@ mod tests {
         let entries = [ScanEntry::new(
             "source",
             3,
-            ScanReport::new(vec![
-                finding("low", Severity::Low, Confidence::High),
-                finding("high", Severity::High, Confidence::High),
-                finding("critical", Severity::Critical, Confidence::High),
-            ]),
+            ScanReport::new_with_candidates(
+                vec![
+                    finding("low", Severity::Low, Confidence::High),
+                    finding("high", Severity::High, Confidence::High),
+                    finding("critical", Severity::Critical, Confidence::High),
+                ],
+                Vec::new(),
+            ),
         )];
 
         let findings = ScanQuery::new(&entries).severity(Severity::High).collect();
@@ -429,11 +432,14 @@ mod tests {
         let entries = [ScanEntry::new(
             "source",
             3,
-            ScanReport::new(vec![
-                finding("medium", Severity::Medium, Confidence::High),
-                finding("high", Severity::High, Confidence::High),
-                finding("critical", Severity::Critical, Confidence::High),
-            ]),
+            ScanReport::new_with_candidates(
+                vec![
+                    finding("medium", Severity::Medium, Confidence::High),
+                    finding("high", Severity::High, Confidence::High),
+                    finding("critical", Severity::Critical, Confidence::High),
+                ],
+                Vec::new(),
+            ),
         )];
 
         let findings = ScanQuery::new(&entries)
@@ -450,11 +456,14 @@ mod tests {
         let entries = [ScanEntry::new(
             "source",
             3,
-            ScanReport::new(vec![
-                finding("low", Severity::High, Confidence::Low),
-                finding("medium", Severity::High, Confidence::Medium),
-                finding("high", Severity::High, Confidence::High),
-            ]),
+            ScanReport::new_with_candidates(
+                vec![
+                    finding("low", Severity::High, Confidence::Low),
+                    finding("medium", Severity::High, Confidence::Medium),
+                    finding("high", Severity::High, Confidence::High),
+                ],
+                Vec::new(),
+            ),
         )];
 
         let exact = ScanQuery::new(&entries)
@@ -474,10 +483,13 @@ mod tests {
         let entries = [ScanEntry::new(
             "source",
             2,
-            ScanReport::new(vec![
-                finding("github.token", Severity::Critical, Confidence::High),
-                finding("stripe.secret", Severity::Critical, Confidence::High),
-            ]),
+            ScanReport::new_with_candidates(
+                vec![
+                    finding("github.token", Severity::Critical, Confidence::High),
+                    finding("stripe.secret", Severity::Critical, Confidence::High),
+                ],
+                Vec::new(),
+            ),
         )];
 
         let findings = ScanQuery::new(&entries).rule_id("stripe.secret").collect();
@@ -491,12 +503,15 @@ mod tests {
         let entries = [ScanEntry::new(
             "source",
             4,
-            ScanReport::new(vec![
-                finding("target", Severity::High, Confidence::High),
-                finding("target", Severity::High, Confidence::Medium),
-                finding("target", Severity::Medium, Confidence::High),
-                finding("other", Severity::Critical, Confidence::High),
-            ]),
+            ScanReport::new_with_candidates(
+                vec![
+                    finding("target", Severity::High, Confidence::High),
+                    finding("target", Severity::High, Confidence::Medium),
+                    finding("target", Severity::Medium, Confidence::High),
+                    finding("other", Severity::Critical, Confidence::High),
+                ],
+                Vec::new(),
+            ),
         )];
 
         let findings = ScanQuery::new(&entries)
@@ -514,10 +529,13 @@ mod tests {
         let entries = [ScanEntry::new(
             "source",
             2,
-            ScanReport::new(vec![
-                finding("high", Severity::High, Confidence::High),
-                finding("critical", Severity::Critical, Confidence::High),
-            ]),
+            ScanReport::new_with_candidates(
+                vec![
+                    finding("high", Severity::High, Confidence::High),
+                    finding("critical", Severity::Critical, Confidence::High),
+                ],
+                Vec::new(),
+            ),
         )];
 
         let findings = ScanQuery::new(&entries)
@@ -533,11 +551,14 @@ mod tests {
         let entries = [ScanEntry::new(
             "source",
             3,
-            ScanReport::new(vec![
-                finding("medium", Severity::Medium, Confidence::High),
-                finding("high", Severity::High, Confidence::Medium),
-                finding("critical", Severity::Critical, Confidence::High),
-            ]),
+            ScanReport::new_with_candidates(
+                vec![
+                    finding("medium", Severity::Medium, Confidence::High),
+                    finding("high", Severity::High, Confidence::Medium),
+                    finding("critical", Severity::Critical, Confidence::High),
+                ],
+                Vec::new(),
+            ),
         )];
 
         assert_eq!(ScanQuery::new(&entries).critical().count(), 1);
@@ -550,11 +571,14 @@ mod tests {
         let entries = [ScanEntry::new(
             "source",
             3,
-            ScanReport::new(vec![
-                finding("zeta", Severity::High, Confidence::High),
-                finding("alpha", Severity::High, Confidence::High),
-                finding("middle", Severity::High, Confidence::High),
-            ]),
+            ScanReport::new_with_candidates(
+                vec![
+                    finding("zeta", Severity::High, Confidence::High),
+                    finding("alpha", Severity::High, Confidence::High),
+                    finding("middle", Severity::High, Confidence::High),
+                ],
+                Vec::new(),
+            ),
         )];
 
         let ascending = ScanQuery::new(&entries).sort(ScanSort::RuleId);
@@ -597,11 +621,14 @@ mod tests {
         let entries = [ScanEntry::new(
             "source",
             3,
-            ScanReport::new(vec![
-                finding("medium", Severity::Medium, Confidence::Low),
-                finding("critical", Severity::Critical, Confidence::Medium),
-                finding("high", Severity::High, Confidence::High),
-            ]),
+            ScanReport::new_with_candidates(
+                vec![
+                    finding("medium", Severity::Medium, Confidence::Low),
+                    finding("critical", Severity::Critical, Confidence::Medium),
+                    finding("high", Severity::High, Confidence::High),
+                ],
+                Vec::new(),
+            ),
         )];
 
         let severity = ScanQuery::new(&entries).sort(ScanSort::SeverityDescending);
@@ -628,22 +655,25 @@ mod tests {
         let entries = [ScanEntry::new(
             "source",
             12,
-            ScanReport::new(vec![
-                Finding::new(
-                    RuleId::from("later"),
-                    Location::from_span(8, 9),
-                    Severity::High,
-                    Confidence::High,
-                    None,
-                ),
-                Finding::new(
-                    RuleId::from("first"),
-                    Location::from_span(1, 2),
-                    Severity::High,
-                    Confidence::High,
-                    None,
-                ),
-            ]),
+            ScanReport::new_with_candidates(
+                vec![
+                    Finding::new(
+                        RuleId::from("later"),
+                        Location::from_span(8, 9),
+                        Severity::High,
+                        Confidence::High,
+                        None,
+                    ),
+                    Finding::new(
+                        RuleId::from("first"),
+                        Location::from_span(1, 2),
+                        Severity::High,
+                        Confidence::High,
+                        None,
+                    ),
+                ],
+                Vec::new(),
+            ),
         )];
 
         let sorted = ScanQuery::new(&entries).sort(ScanSort::Location);
@@ -657,11 +687,14 @@ mod tests {
         let entries = [ScanEntry::new(
             "source",
             3,
-            ScanReport::new(vec![
-                finding("zeta", Severity::High, Confidence::High),
-                finding("ignored", Severity::Low, Confidence::High),
-                finding("alpha", Severity::Critical, Confidence::High),
-            ]),
+            ScanReport::new_with_candidates(
+                vec![
+                    finding("zeta", Severity::High, Confidence::High),
+                    finding("ignored", Severity::Low, Confidence::High),
+                    finding("alpha", Severity::Critical, Confidence::High),
+                ],
+                Vec::new(),
+            ),
         )];
 
         let sorted = ScanQuery::new(&entries)
@@ -692,10 +725,13 @@ mod tests {
         let entries = [ScanEntry::new(
             "source",
             2,
-            ScanReport::new(vec![
-                finding("first", Severity::High, Confidence::High),
-                finding("last", Severity::Critical, Confidence::High),
-            ]),
+            ScanReport::new_with_candidates(
+                vec![
+                    finding("first", Severity::High, Confidence::High),
+                    finding("last", Severity::Critical, Confidence::High),
+                ],
+                Vec::new(),
+            ),
         )];
 
         let query = ScanQuery::new(&entries).minimum_severity(Severity::High);
@@ -729,10 +765,13 @@ mod tests {
         let entries = [ScanEntry::new(
             "source",
             2,
-            ScanReport::new(vec![
-                finding("zeta", Severity::High, Confidence::High),
-                finding("alpha", Severity::Critical, Confidence::High),
-            ]),
+            ScanReport::new_with_candidates(
+                vec![
+                    finding("zeta", Severity::High, Confidence::High),
+                    finding("alpha", Severity::Critical, Confidence::High),
+                ],
+                Vec::new(),
+            ),
         )];
 
         let sorted = ScanQuery::new(&entries).sort(ScanSort::RuleId);

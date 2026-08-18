@@ -16,6 +16,8 @@ pub struct ScanSummary {
     reports_with_findings: usize,
     reports_without_findings: usize,
     total_findings: usize,
+    total_candidates: usize,
+    reports_with_candidates: usize,
     critical: usize,
     high: usize,
     medium: usize,
@@ -35,6 +37,8 @@ pub(crate) struct ScanSummaryStats {
     pub(crate) reports_with_findings: usize,
     pub(crate) reports_without_findings: usize,
     pub(crate) total_findings: usize,
+    pub(crate) total_candidates: usize,
+    pub(crate) reports_with_candidates: usize,
     pub(crate) critical: usize,
     pub(crate) high: usize,
     pub(crate) medium: usize,
@@ -52,6 +56,8 @@ impl ScanSummary {
             reports_with_findings: stats.reports_with_findings,
             reports_without_findings: stats.reports_without_findings,
             total_findings: stats.total_findings,
+            total_candidates: stats.total_candidates,
+            reports_with_candidates: stats.reports_with_candidates,
             critical: stats.critical,
             high: stats.high,
             medium: stats.medium,
@@ -88,6 +94,26 @@ impl ScanSummary {
     #[must_use]
     pub const fn total_findings(self) -> usize {
         self.total_findings
+    }
+
+    /// Returns the total number of ambiguous sensitive candidates across all sources.
+    #[must_use]
+    pub const fn total_candidates(self) -> usize {
+        self.total_candidates
+    }
+
+    /// Returns the number of source reports containing at least one ambiguous
+    /// sensitive candidate.
+    #[must_use]
+    pub const fn reports_with_candidates(self) -> usize {
+        self.reports_with_candidates
+    }
+
+    /// Returns `true` when the batch contains at least one ambiguous sensitive
+    /// candidate.
+    #[must_use]
+    pub const fn has_candidates(self) -> bool {
+        self.total_candidates != 0
     }
 
     /// Returns the number of findings with the requested severity.
@@ -132,10 +158,11 @@ impl ScanSummary {
         self.info
     }
 
-    /// Returns `true` when the batch contains no findings.
+    /// Returns `true` when the batch contains neither findings nor ambiguous
+    /// sensitive candidates.
     #[must_use]
     pub const fn is_clean(self) -> bool {
-        self.total_findings == 0
+        self.total_findings == 0 && self.total_candidates == 0
     }
 
     /// Returns `true` when the batch contains at least one critical finding.
@@ -150,9 +177,10 @@ impl fmt::Display for ScanSummary {
         write!(
             formatter,
             concat!(
-                "sources: {} (failed: {}, clean: {})\n",
+                "sources: {} (with findings: {}, without findings: {})\n",
                 "bytes: {}\n",
                 "findings: {}\n",
+                "ambiguous candidates: {} (reports: {})\n",
                 "critical: {}\n",
                 "high: {}\n",
                 "medium: {}\n",
@@ -164,6 +192,8 @@ impl fmt::Display for ScanSummary {
             self.reports_without_findings,
             self.scanned_bytes,
             self.total_findings,
+            self.total_candidates,
+            self.reports_with_candidates,
             self.critical,
             self.high,
             self.medium,
@@ -185,6 +215,8 @@ mod tests {
             reports_with_findings: 2,
             reports_without_findings: 1,
             total_findings: 5,
+            total_candidates: 2,
+            reports_with_candidates: 1,
             critical: 1,
             high: 2,
             medium: 1,
@@ -197,6 +229,9 @@ mod tests {
         assert_eq!(summary.reports_with_findings(), 2);
         assert_eq!(summary.reports_without_findings(), 1);
         assert_eq!(summary.total_findings(), 5);
+        assert_eq!(summary.total_candidates(), 2);
+        assert_eq!(summary.reports_with_candidates(), 1);
+        assert!(summary.has_candidates());
         assert_eq!(summary.by_severity(Severity::Critical), 1);
         assert_eq!(summary.by_severity(Severity::High), 2);
         assert_eq!(summary.by_severity(Severity::Medium), 1);
@@ -214,6 +249,8 @@ mod tests {
             reports_with_findings: 1,
             reports_without_findings: 1,
             total_findings: 1,
+            total_candidates: 2,
+            reports_with_candidates: 1,
             critical: 1,
             high: 0,
             medium: 0,
@@ -224,9 +261,10 @@ mod tests {
         assert_eq!(
             summary.to_string(),
             concat!(
-                "sources: 2 (failed: 1, clean: 1)\n",
+                "sources: 2 (with findings: 1, without findings: 1)\n",
                 "bytes: 64\n",
                 "findings: 1\n",
+                "ambiguous candidates: 2 (reports: 1)\n",
                 "critical: 1\n",
                 "high: 0\n",
                 "medium: 0\n",

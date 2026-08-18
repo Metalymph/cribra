@@ -124,14 +124,14 @@ mod tests {
 
     #[test]
     fn redacts_one_span_with_safe_default() {
-        let report = ScanReport::new(vec![finding("secret", 6, 12)]);
+        let report = ScanReport::new_with_candidates(vec![finding("secret", 6, 12)], Vec::new());
 
         assert_eq!(redact("TOKEN=SECRET", &report).unwrap(), "TOKEN=[REDACTED]",);
     }
 
     #[test]
     fn supports_custom_replacement() {
-        let report = ScanReport::new(vec![finding("secret", 6, 12)]);
+        let report = ScanReport::new_with_candidates(vec![finding("secret", 6, 12)], Vec::new());
         let replacement = Redaction::new("***");
 
         assert_eq!(
@@ -150,7 +150,8 @@ mod tests {
     #[test]
     fn redacts_multiple_spans_without_changing_other_text() {
         let source = "A=SECRET B=PASSWORD C=public";
-        let report = ScanReport::new(vec![finding("a", 2, 8), finding("b", 11, 19)]);
+        let report =
+            ScanReport::new_with_candidates(vec![finding("a", 2, 8), finding("b", 11, 19)], Vec::new());
 
         assert_eq!(
             redact(source, &report).unwrap(),
@@ -160,7 +161,10 @@ mod tests {
 
     #[test]
     fn duplicate_spans_emit_one_marker() {
-        let report = ScanReport::new(vec![finding("one", 0, 6), finding("two", 0, 6)]);
+        let report = ScanReport::new_with_candidates(
+            vec![finding("one", 0, 6), finding("two", 0, 6)],
+            Vec::new(),
+        );
 
         assert_eq!(redact("SECRET", &report).unwrap(), "[REDACTED]");
     }
@@ -168,7 +172,10 @@ mod tests {
     #[test]
     fn overlapping_spans_are_merged_safely() {
         let source = "0123456789";
-        let report = ScanReport::new(vec![finding("left", 2, 7), finding("right", 5, 9)]);
+        let report = ScanReport::new_with_candidates(
+            vec![finding("left", 2, 7), finding("right", 5, 9)],
+            Vec::new(),
+        );
 
         assert_eq!(redact(source, &report).unwrap(), "01[REDACTED]9");
     }
@@ -176,7 +183,10 @@ mod tests {
     #[test]
     fn adjacent_spans_remain_distinct() {
         let source = "ABCDEF";
-        let report = ScanReport::new(vec![finding("left", 0, 3), finding("right", 3, 6)]);
+        let report = ScanReport::new_with_candidates(
+            vec![finding("left", 0, 3), finding("right", 3, 6)],
+            Vec::new(),
+        );
 
         assert_eq!(redact(source, &report).unwrap(), "[REDACTED][REDACTED]",);
     }
@@ -186,7 +196,7 @@ mod tests {
         let source = "prefix SUPER_SECRET_VALUE suffix";
         let start = source.find("SUPER_SECRET_VALUE").unwrap();
         let end = start + "SUPER_SECRET_VALUE".len();
-        let report = ScanReport::new(vec![finding("secret", start, end)]);
+        let report = ScanReport::new_with_candidates(vec![finding("secret", start, end)], Vec::new());
 
         let output = redact(source, &report).unwrap();
 

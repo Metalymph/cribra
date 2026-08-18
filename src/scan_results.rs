@@ -1,7 +1,7 @@
 //! Ordered results returned by [`Scanner::scan`](crate::Scanner::scan).
 
 use crate::{
-    Finding, ScanEntry, ScanQuery, ScanReport, ScanSummary, Severity,
+    Finding, ScanEntry, ScanQuery, ScanReport, ScanSummary, SensitiveCandidate, Severity,
     scan_summary::ScanSummaryStats,
 };
 
@@ -63,6 +63,21 @@ impl<K> ScanResults<K> {
         })
     }
 
+    /// Iterates over every ambiguous sensitive candidate while retaining its
+    /// source key.
+    ///
+    /// Candidates remain separate from findings and no key or candidate is
+    /// cloned.
+    pub fn candidates(&self) -> impl Iterator<Item = (&K, &SensitiveCandidate)> {
+        self.entries.iter().flat_map(|entry| {
+            entry
+                .report()
+                .candidates()
+                .iter()
+                .map(move |candidate| (entry.key(), candidate))
+        })
+    }
+
     /// Returns the total number of UTF-8 source bytes scanned.
     ///
     /// This performs no allocation.
@@ -75,6 +90,17 @@ impl<K> ScanResults<K> {
     /// This performs no allocation.
     pub fn total_findings(&self) -> usize {
         self.entries.iter().map(|entry| entry.report().len()).sum()
+    }
+
+    /// Returns the total number of ambiguous sensitive candidates across all
+    /// source reports.
+    ///
+    /// This performs no allocation.
+    pub fn total_candidates(&self) -> usize {
+        self.entries
+            .iter()
+            .map(|entry| entry.report().candidate_len())
+            .sum()
     }
 
     /// Returns `true` when any source report contains a critical finding.
@@ -95,13 +121,22 @@ impl<K> ScanResults<K> {
             .filter(|entry| !entry.report().is_empty())
     }
 
-    /// Iterates over source entries containing no findings.
+    /// Iterates over source entries with no findings but at least one ambiguous
+    /// sensitive candidate requiring review.
+    pub fn review(&self) -> impl DoubleEndedIterator<Item = &ScanEntry<K>> {
+        self.entries
+            .iter()
+            .filter(|entry| entry.report().is_empty() && entry.report().has_candidates())
+    }
+
+    /// Iterates over source entries containing neither findings nor
+    /// ambiguous sensitive candidates.
     ///
     /// No entry, key or report is cloned.
     pub fn clean(&self) -> impl DoubleEndedIterator<Item = &ScanEntry<K>> {
         self.entries
             .iter()
-            .filter(|entry| entry.report().is_empty())
+            .filter(|entry| !entry.report().needs_review())
     }
 
     /// Computes aggregate statistics for the complete batch.
@@ -122,6 +157,10 @@ impl<K> ScanResults<K> {
                 stats.reports_without_findings += 1;
             } else {
                 stats.reports_with_findings += 1;
+            }
+            if report.has_candidates() {
+                stats.reports_with_candidates += 1;
+                stats.total_candidates += report.candidate_len();
             }
 
             for finding in report {
@@ -186,6 +225,8 @@ mod tests {
         assert!(results.is_empty());
         assert_eq!(results.len(), 0);
         assert_eq!(results.findings().count(), 0);
+        assert_eq!(results.candidates().count(), 0);
+        assert_eq!(results.total_candidates(), 0);
         assert!(results.single_report().is_none());
     }
 
@@ -204,7 +245,7 @@ mod tests {
             })
             .collect();
 
-        ScanReport::new(findings)
+        ScanReport::new_with_candidates(findings, Vec::new())
     }
 
     #[test]
@@ -270,5 +311,45 @@ mod tests {
 
         assert_eq!(query.count(), 2);
         assert_eq!(query.first().unwrap().0, &"source");
+    }
+    fn candidate_report() -> ScanReport {
+        ScanReport::new_with_candidates(
+            Vec::new(),
+            vec![crate::SensitiveCandidate::new(
+                crate::SensitiveCandidateKind::RecoveryLikeCode,
+                crate::Location::from_span(0, 19),
+                crate::CandidateEvidence::Structural,
+            )],
+        )
+    }
+
+    #[test]
+    fn candidates_are_exposed_without_becoming_findings() {
+        let results = ScanResults::new(vec![ScanEntry::new("review", 19, candidate_report())]);
+
+        assert_eq!(results.total_findings(), 0);
+        assert_eq!(results.total_candidates(), 1);
+        assert_eq!(results.findings().count(), 0);
+        assert_eq!(results.candidates().count(), 1);
+        assert_eq!(results.review().count(), 1);
+        assert_eq!(results.failed().count(), 0);
+        assert_eq!(results.clean().count(), 0);
+    }
+
+    #[test]
+    fn summary_keeps_candidates_separate_from_findings() {
+        let results = ScanResults::new(vec![
+            ScanEntry::new("clear", 4, ScanReport::default()),
+            ScanEntry::new("review", 19, candidate_report()),
+        ]);
+
+        let summary = results.summary();
+
+        assert_eq!(summary.scanned_sources(), 2);
+        assert_eq!(summary.total_findings(), 0);
+        assert_eq!(summary.total_candidates(), 1);
+        assert_eq!(summary.reports_with_candidates(), 1);
+        assert!(summary.has_candidates());
+        assert!(!summary.is_clean());
     }
 }

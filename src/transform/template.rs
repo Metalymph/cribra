@@ -211,7 +211,7 @@ mod tests {
 
     #[test]
     fn replaces_value_with_rule_placeholder() {
-        let report = ScanReport::new(vec![finding("stripe.secret", 6, 12)]);
+        let report = ScanReport::new_with_candidates(vec![finding("stripe.secret", 6, 12)], Vec::new());
 
         assert_eq!(
             template("TOKEN=SECRET", &report).unwrap(),
@@ -222,7 +222,10 @@ mod tests {
     #[test]
     fn preserves_text_outside_findings() {
         let source = "A=SECRET B=PASSWORD C=public";
-        let report = ScanReport::new(vec![finding("api-key", 2, 8), finding("password", 11, 19)]);
+        let report = ScanReport::new_with_candidates(
+            vec![finding("api-key", 2, 8), finding("password", 11, 19)],
+            Vec::new(),
+        );
 
         assert_eq!(
             template(source, &report).unwrap(),
@@ -232,7 +235,7 @@ mod tests {
 
     #[test]
     fn supports_custom_namespace() {
-        let report = ScanReport::new(vec![finding("secret", 6, 12)]);
+        let report = ScanReport::new_with_candidates(vec![finding("secret", 6, 12)], Vec::new());
         let options = TemplateOptions::new().namespace("EXAMPLE");
 
         assert_eq!(
@@ -243,7 +246,8 @@ mod tests {
 
     #[test]
     fn normalizes_unsafe_placeholder_components() {
-        let report = ScanReport::new(vec![finding("custom rule > token", 6, 12)]);
+        let report =
+            ScanReport::new_with_candidates(vec![finding("custom rule > token", 6, 12)], Vec::new());
         let options = TemplateOptions::new().namespace("My App!");
 
         assert_eq!(
@@ -254,7 +258,7 @@ mod tests {
 
     #[test]
     fn empty_namespace_falls_back_to_silens() {
-        let report = ScanReport::new(vec![finding("secret", 6, 12)]);
+        let report = ScanReport::new_with_candidates(vec![finding("secret", 6, 12)], Vec::new());
         let options = TemplateOptions::new().namespace("!!!");
 
         assert_eq!(
@@ -266,11 +270,14 @@ mod tests {
     #[test]
     fn numbering_is_deterministic_per_rule() {
         let source = "SECRET x SECRET y OTHER";
-        let report = ScanReport::new(vec![
-            finding("secret", 0, 6),
-            finding("secret", 9, 15),
-            finding("other", 18, 23),
-        ]);
+        let report = ScanReport::new_with_candidates(
+            vec![
+                finding("secret", 0, 6),
+                finding("secret", 9, 15),
+                finding("other", 18, 23),
+            ],
+            Vec::new(),
+        );
         let options = TemplateOptions::new().numbered(true);
 
         assert_eq!(
@@ -288,7 +295,10 @@ mod tests {
 
     #[test]
     fn overlapping_findings_are_rejected_as_ambiguous() {
-        let report = ScanReport::new(vec![finding("short", 0, 6), finding("long", 0, 10)]);
+        let report = ScanReport::new_with_candidates(
+            vec![finding("short", 0, 6), finding("long", 0, 10)],
+            Vec::new(),
+        );
 
         assert!(matches!(
             template("0123456789", &report),
@@ -298,7 +308,10 @@ mod tests {
 
     #[test]
     fn adjacent_findings_remain_independent() {
-        let report = ScanReport::new(vec![finding("left", 0, 3), finding("right", 3, 6)]);
+        let report = ScanReport::new_with_candidates(
+            vec![finding("left", 0, 3), finding("right", 3, 6)],
+            Vec::new(),
+        );
 
         assert_eq!(
             template("ABCDEF", &report).unwrap(),
@@ -310,7 +323,10 @@ mod tests {
     fn matched_secret_never_appears_in_placeholder() {
         let source = "TOKEN=SUPER_SECRET_VALUE";
         let start = "TOKEN=".len();
-        let report = ScanReport::new(vec![finding("credential", start, source.len())]);
+        let report = ScanReport::new_with_candidates(
+            vec![finding("credential", start, source.len())],
+            Vec::new(),
+        );
 
         let output = template(source, &report).unwrap();
 

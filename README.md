@@ -138,10 +138,10 @@ activation code, coupon, license key or application identifier. Silens Scan
 therefore records only structural evidence until stronger semantic context
 exists.
 
-At the current `0.2.3b` step this detector is an internal, regression-tested
-stage. Candidate emission is intentionally not yet attached to `ScanReport`;
-that integration is the next `0.2.3` step so report semantics can evolve
-separately from structural detection.
+From `0.2.3c`, candidate emission is part of the normal per-source scan path.
+`ScanReport` owns findings and ambiguous candidates as separate immutable
+collections. If a structural candidate overlaps an accepted finding, the
+finding wins and the redundant ambiguous candidate is discarded.
 
 ## Install
 

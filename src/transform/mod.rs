@@ -217,7 +217,10 @@ mod tests {
 
     #[test]
     fn validates_and_sorts_spans() {
-        let report = ScanReport::new(vec![finding("later", 5, 8), finding("first", 0, 2)]);
+        let report = ScanReport::new_with_candidates(
+            vec![finding("later", 5, 8), finding("first", 0, 2)],
+            Vec::new(),
+        );
 
         let spans = validated_spans("abcdefgh", &report).unwrap();
 
@@ -227,7 +230,7 @@ mod tests {
 
     #[test]
     fn rejects_out_of_bounds_span() {
-        let report = ScanReport::new(vec![finding("bad", 0, 10)]);
+        let report = ScanReport::new_with_candidates(vec![finding("bad", 0, 10)], Vec::new());
 
         assert_eq!(
             validated_spans("short", &report),
@@ -241,7 +244,7 @@ mod tests {
 
     #[test]
     fn rejects_non_utf8_boundary_span() {
-        let report = ScanReport::new(vec![finding("bad", 1, 4)]);
+        let report = ScanReport::new_with_candidates(vec![finding("bad", 1, 4)], Vec::new());
 
         assert_eq!(
             validated_spans("😀x", &report),
@@ -251,7 +254,10 @@ mod tests {
 
     #[test]
     fn detects_overlapping_spans_for_strict_transformations() {
-        let report = ScanReport::new(vec![finding("first", 1, 5), finding("second", 3, 7)]);
+        let report = ScanReport::new_with_candidates(
+            vec![finding("first", 1, 5), finding("second", 3, 7)],
+            Vec::new(),
+        );
         let spans = validated_spans("abcdefgh", &report).unwrap();
 
         assert_eq!(
