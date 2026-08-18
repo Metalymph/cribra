@@ -44,12 +44,6 @@ struct AcceptedCandidate<'a> {
     confidence: crate::Confidence,
 }
 
-impl AcceptedCandidate<'_> {
-    const fn same_span(self, other: Self) -> bool {
-        self.start == other.start && self.end == other.end
-    }
-}
-
 /// Internal candidate counts used only by scanner diagnostics tests.
 ///
 /// This type is intentionally unavailable to library consumers and contributes
@@ -296,11 +290,10 @@ impl Default for Scanner {
     }
 }
 
-/// Sorts accepted candidates and normalizes exact-span collisions.
+/// Sorts accepted candidates and resolves exact-span collisions.
 ///
-/// Rules with the same matcher remain independently observable unless they have
-/// the same rule identifier. This preserves the public contract that distinct
-/// rules may report the same source span.
+/// Distinct rules remain independently observable when they have the same
+/// priority, even when they match the same source span.
 ///
 /// When a specialized validated rule and a lower-priority generic or custom
 /// rule accept the exact same span, only candidates at the highest priority for
@@ -328,10 +321,6 @@ fn normalize_candidates(candidates: &mut Vec<AcceptedCandidate<'_>>) {
                     .as_str()
                     .cmp(right.metadata.id().as_str())
             })
-    });
-
-    candidates.dedup_by(|later, earlier| {
-        later.same_span(*earlier) && later.metadata.id() == earlier.metadata.id()
     });
 
     let mut current_span = None;
@@ -483,19 +472,6 @@ mod tests {
             .expect("scanner should compile");
 
         assert_eq!(scanner.scan_source("custom-value").len(), 1);
-    }
-    #[test]
-    fn exact_duplicate_spans_are_collapsed() {
-        let scanner = Scanner::builder()
-            .rule(Rule::literal("duplicate", "secret", Severity::High))
-            .rule(Rule::literal("duplicate", "secret", Severity::High))
-            .build()
-            .expect("scanner should compile");
-
-        let report = scanner.scan_source("secret");
-
-        assert_eq!(report.len(), 1);
-        assert_eq!(report.findings()[0].rule_id().as_str(), "duplicate");
     }
 
     #[test]

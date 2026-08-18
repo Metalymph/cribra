@@ -213,3 +213,89 @@ fn custom_rule_ids_and_matchers_are_validated_at_build_boundary() {
 
     assert!(empty_matcher.to_string().contains("empty matcher"));
 }
+
+#[test]
+fn custom_pattern_rejects_all_zero_length_capable_forms() {
+    for pattern in [r"", r".*", r"a?", r"(?:secret)?", r"\b", r"secret|"] {
+        let error = Rule::pattern("acme.zero-length", pattern, Severity::High)
+            .expect_err("zero-length-capable custom pattern should fail");
+
+        assert!(matches!(error, silens_scan::RuleError::PatternMatchesEmpty));
+        assert!(error.to_string().contains("zero-length match"));
+    }
+}
+
+#[test]
+fn custom_pattern_supports_unicode_anchors_boundaries_and_alternation() {
+    let patterns = [
+        r"\p{L}{8,}",
+        r"\A[A-Z2-9]{4}(?:-[A-Z2-9]{4}){3}\z",
+        r"\b(?:secret|credential|token)_[A-Za-z0-9]{8,}\b",
+    ];
+
+    for (index, pattern) in patterns.into_iter().enumerate() {
+        let rule = Rule::pattern(format!("acme.pattern-{index}"), pattern, Severity::High)
+            .expect("non-empty custom pattern should compile")
+            .with_remediation(Remediation::RemoveSensitiveValue);
+
+        let metadata = rule.metadata();
+
+        assert_eq!(metadata.kind(), RuleKind::Pattern);
+        assert_eq!(metadata.detection_mode(), DetectionMode::MatcherOnly);
+        assert_eq!(metadata.severity(), Severity::High);
+        assert_eq!(
+            metadata.remediation(),
+            Some(Remediation::RemoveSensitiveValue)
+        );
+    }
+}
+
+#[test]
+fn identical_custom_patterns_are_allowed_when_rule_ids_are_distinct() {
+    let pattern = r"ACME_[A-Z0-9]{16}";
+
+    let scanner = Scanner::builder()
+        .rules([
+            Rule::pattern("acme.primary-token", pattern, Severity::Critical)
+                .expect("first pattern should compile"),
+            Rule::pattern("acme.secondary-token", pattern, Severity::High)
+                .expect("second pattern should compile"),
+        ])
+        .build()
+        .expect("pattern identity is the rule id, not regex source");
+
+    assert_eq!(scanner.rules_count(), 2);
+
+    let ids = scanner
+        .rule_metadata()
+        .map(|metadata| metadata.id().to_owned())
+        .collect::<Vec<_>>();
+
+    assert_eq!(ids, ["acme.primary-token", "acme.secondary-token"]);
+}
+
+#[test]
+fn public_custom_pattern_uses_complete_match_span_not_capture_projection() {
+    let scanner = Scanner::builder()
+        .rule(
+            Rule::pattern(
+                "acme.assignment",
+                r"RECOVERY=[A-Z2-9]{4}(?:-[A-Z2-9]{4}){3}",
+                Severity::High,
+            )
+            .expect("pattern should compile"),
+        )
+        .build()
+        .expect("scanner should compile");
+
+    let source = "RECOVERY=ABCD-EFGH-IJKL-MNOP";
+    let results = scanner.scan([("config", source)]);
+    let report = results.single_report().expect("one source was scanned");
+
+    assert_eq!(report.findings().len(), 1);
+    let finding = &report.findings()[0];
+
+    assert_eq!(finding.location().start(), 0);
+    assert_eq!(finding.location().end(), source.len());
+    assert_eq!(&source[finding.location().byte_range()], source);
+}
