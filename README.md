@@ -383,21 +383,134 @@ scanner pipeline.
 
 Silens Scan separates confirmed detections from values that are only structurally suspicious.
 
+## Explainability
+
+Silens Scan exposes typed explanation facts without introducing a second
+classification authority or presentation copy into the core.
+
 ```text
 caller-owned UTF-8 input
         │
-        ├── compiled detection pipeline
-        │        │
-        │        ▼
-        │     Finding
+        ├──────────────── rule-backed detection ────────────────┐
+        │                                                       │
+        │                                                       ▼
+        │                                                compiled matcher
+        │                                                       │
+        │                                                       ▼
+        │                                                   validator
+        │                                                       │
+        │                                    ┌──────────────────┴──────────────────┐
+        │                                    │                                     │
+        │                              insufficient                           accepted
+        │                                    │                                     │
+        │                                    ▼                                     ▼
+        │                                  reject                               Finding
+        │                                                                          │
+        │                                                                          │
+        │                                                        Scanner rule metadata
+        │                                                                          │
+        │                                                                          ▼
+        │                                                   Explanation::Classified
+        │                                                   ├── MatcherOnly
+        │                                                   ├── Deterministic
+        │                                                   └── Contextual
         │
-        │     enough evidence to classify
-        │
-        └── structural review path
-                 │
-                 ▼
-          SensitiveCandidate
+        └──────────────── structural review path ───────────────┐
+                                                                │
+                                                                ▼
+                                                     ambiguous-shape detector
+                                                                │
+                                                                ▼
+                                                       SensitiveCandidate
+                                                                │
+                                                                │
+                                                        CandidateEvidence
+                                                                │
+                                                                ▼
+                                                    Explanation::Ambiguous
 ```
+
+`Explanation` is deliberately presentation-agnostic:
+
+```rust
+use silens_scan::{CandidateEvidence, DetectionMode, Explanation};
+
+let classified = Explanation::classified(DetectionMode::Contextual);
+let ambiguous = Explanation::ambiguous(CandidateEvidence::Structural);
+
+assert!(classified.is_classified());
+assert!(ambiguous.is_ambiguous());
+```
+
+For a confirmed `Finding`, explanation is resolved against the `Scanner` that
+owns the compiled rule metadata:
+
+```rust
+let explanation = finding.explanation(&scanner);
+```
+
+The finding does not duplicate detection mode or other rule authority.
+Resolution returns `None` when the supplied scanner cannot resolve the finding
+unambiguously, including when compatible rule identities imply conflicting
+explanations.
+
+For a `SensitiveCandidate`, explanation is derived directly from its existing
+candidate evidence:
+
+```rust
+let explanation = candidate.explanation();
+```
+
+This distinction preserves the result model:
+
+```text
+Finding
+    │
+    │ stable rule identity
+    ▼
+Scanner / RuleMetadata
+    │
+    ▼
+DetectionMode
+    │
+    ▼
+Explanation::Classified
+
+SensitiveCandidate
+    │
+    ▼
+CandidateEvidence
+    │
+    ▼
+Explanation::Ambiguous
+```
+
+Explanation facts are not embedded as duplicate state in `Finding`,
+`SensitiveCandidate`, `ScanReport` or `ScanResults`. With the `serde` feature,
+`Explanation` itself is serializable when an application explicitly needs the
+derived explanation contract.
+
+The core intentionally does not provide human-facing explanation strings.
+Applications such as a WASM/PWA interface, desktop application, service,
+middleware or custom integration can map the typed facts to their own copy and
+presentation without changing scanner semantics.
+
+### Evidence semantics
+
+The public evidence vocabulary has two independent axes:
+
+| Result | Classification authority | Explanation fact | Severity | Finding confidence | Remediation |
+| --- | --- | --- | --- | --- | --- |
+| `Finding` | configured rule pipeline | `Classified(DetectionMode)` | yes | yes | optional |
+| `SensitiveCandidate` | structural review detector | `Ambiguous(CandidateEvidence)` | no | no | no |
+
+`DetectionMode` describes **how a rule-backed detection is validated**.
+`CandidateEvidence` describes **why an unclassified value is worth review**.
+Neither should be inferred from the other.
+
+This is also why ambiguous candidates remain outside `ScanQuery` and automatic
+share-safe transformations: review evidence is not silently promoted into a
+classified secret.
 
 ## Transformations
 
@@ -589,6 +702,13 @@ use: applications can keep scanning and transformation local to the
 process/browser. Network access, remote repositories, uploads,
 authentication and persistence belong to the integrating application
 rather than this crate.
+
+Silens Scan itself performs no network access. The core accepts
+caller-provided UTF-8 text and returns local structured results.
+
+Network access, repository loading, uploads, authentication, persistence,
+filesystem traversal and presentation belong exclusively to the integrating
+application.
 
 ## Performance
 

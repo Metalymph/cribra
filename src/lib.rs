@@ -35,6 +35,28 @@
 //!
 //! Findings intentionally do not contain the matched source value.
 //!
+//! //! # Ambiguous candidates and explainability
+//!
+//! [`ScanReport`] keeps classified [`Finding`] values separate from
+//! [`SensitiveCandidate`] values that are structurally review-worthy but do not
+//! have enough evidence for classification.
+//!
+//! Explainability projects those existing authorities into [`Explanation`]:
+//!
+//! - `Explanation::Classified(DetectionMode)` describes how a rule-backed
+//!   finding was validated;
+//! - `Explanation::Ambiguous(CandidateEvidence)` describes the evidence behind
+//!   a review-only candidate.
+//!
+//! Findings do not duplicate rule metadata. Their explanation is resolved
+//! against the [`Scanner`] that owns the compiled metadata and fails closed when
+//! it cannot be resolved unambiguously. Candidate explanation is projected
+//! directly from its existing evidence.
+//!
+//! Explanation is presentation-agnostic and contains no source snippets or
+//! matched sensitive values. Applications remain responsible for human-facing
+//! copy.
+//!
 //! # Querying
 //!
 //! [`ScanResults::query`] builds a lazy [`ScanQuery`] over borrowed findings.
