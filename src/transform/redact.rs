@@ -150,8 +150,10 @@ mod tests {
     #[test]
     fn redacts_multiple_spans_without_changing_other_text() {
         let source = "A=SECRET B=PASSWORD C=public";
-        let report =
-            ScanReport::new_with_candidates(vec![finding("a", 2, 8), finding("b", 11, 19)], Vec::new());
+        let report = ScanReport::new_with_candidates(
+            vec![finding("a", 2, 8), finding("b", 11, 19)],
+            Vec::new(),
+        );
 
         assert_eq!(
             redact(source, &report).unwrap(),
@@ -196,7 +198,8 @@ mod tests {
         let source = "prefix SUPER_SECRET_VALUE suffix";
         let start = source.find("SUPER_SECRET_VALUE").unwrap();
         let end = start + "SUPER_SECRET_VALUE".len();
-        let report = ScanReport::new_with_candidates(vec![finding("secret", start, end)], Vec::new());
+        let report =
+            ScanReport::new_with_candidates(vec![finding("secret", start, end)], Vec::new());
 
         let output = redact(source, &report).unwrap();
 

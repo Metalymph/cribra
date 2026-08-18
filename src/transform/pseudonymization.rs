@@ -324,8 +324,10 @@ mod tests {
     fn utf8_values_are_pseudonymized_by_exact_bytes() {
         let source = "PASSWORD=pässwörd😀";
         let start = "PASSWORD=".len();
-        let report =
-            ScanReport::new_with_candidates(vec![finding("password", start, source.len())], Vec::new());
+        let report = ScanReport::new_with_candidates(
+            vec![finding("password", start, source.len())],
+            Vec::new(),
+        );
         let options = PseudonymizationOptions::new([10; 32]);
 
         let output = pseudonymize(source, &report, &options).unwrap();

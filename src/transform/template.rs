@@ -211,7 +211,8 @@ mod tests {
 
     #[test]
     fn replaces_value_with_rule_placeholder() {
-        let report = ScanReport::new_with_candidates(vec![finding("stripe.secret", 6, 12)], Vec::new());
+        let report =
+            ScanReport::new_with_candidates(vec![finding("stripe.secret", 6, 12)], Vec::new());
 
         assert_eq!(
             template("TOKEN=SECRET", &report).unwrap(),
@@ -246,8 +247,10 @@ mod tests {
 
     #[test]
     fn normalizes_unsafe_placeholder_components() {
-        let report =
-            ScanReport::new_with_candidates(vec![finding("custom rule > token", 6, 12)], Vec::new());
+        let report = ScanReport::new_with_candidates(
+            vec![finding("custom rule > token", 6, 12)],
+            Vec::new(),
+        );
         let options = TemplateOptions::new().namespace("My App!");
 
         assert_eq!(

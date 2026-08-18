@@ -363,7 +363,8 @@ mod tests {
     #[test]
     fn synthesis_is_deterministic_for_key_rule_and_span() {
         let source = "TOKEN=SECRET";
-        let report = ScanReport::new_with_candidates(vec![finding("custom.secret", 6, 12)], Vec::new());
+        let report =
+            ScanReport::new_with_candidates(vec![finding("custom.secret", 6, 12)], Vec::new());
         let options = SynthesisOptions::new([1; 32]);
 
         let first = synthesize(source, &report, &options).unwrap();
@@ -375,7 +376,8 @@ mod tests {
     #[test]
     fn different_keys_produce_different_synthetic_values() {
         let source = "TOKEN=SECRET";
-        let report = ScanReport::new_with_candidates(vec![finding("custom.secret", 6, 12)], Vec::new());
+        let report =
+            ScanReport::new_with_candidates(vec![finding("custom.secret", 6, 12)], Vec::new());
 
         let first = synthesize(source, &report, &SynthesisOptions::new([1; 32])).unwrap();
         let second = synthesize(source, &report, &SynthesisOptions::new([2; 32])).unwrap();
@@ -390,7 +392,8 @@ mod tests {
     #[test]
     fn short_values_still_include_keyed_material() {
         let source = "SECRET";
-        let report = ScanReport::new_with_candidates(vec![finding("custom.secret", 0, 6)], Vec::new());
+        let report =
+            ScanReport::new_with_candidates(vec![finding("custom.secret", 0, 6)], Vec::new());
 
         let first = synthesize(source, &report, &SynthesisOptions::new([11; 32])).unwrap();
         let second = synthesize(source, &report, &SynthesisOptions::new([12; 32])).unwrap();

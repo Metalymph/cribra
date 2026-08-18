@@ -143,6 +143,47 @@ From `0.2.3c`, candidate emission is part of the normal per-source scan path.
 collections. If a structural candidate overlaps an accepted finding, the
 finding wins and the redundant ambiguous candidate is discarded.
 
+
+#### Candidate result semantics
+
+The candidate channel remains separate throughout the public result model:
+
+```text
+ScanReport
+├── findings()       classified detections
+├── candidates()     review-only structural candidates
+└── needs_review()   either channel is non-empty
+
+ScanResults
+├── findings()       flattened confirmed findings
+├── candidates()     flattened ambiguous candidates
+├── failed()         sources containing findings
+├── review()         candidate-only sources
+└── clean()          sources containing neither
+
+ScanSummary
+├── total_findings()
+├── total_candidates()
+├── reports_with_candidates()
+├── has_candidates()
+└── is_clean()       false when either channel requires review
+```
+
+Candidates are deliberately excluded from ScanQuery and from all share-safe
+transformations. An isolated recovery-like candidate is therefore never
+automatically redacted or rewritten.
+
+If caller or domain knowledge establishes that the same value is sensitive, a
+custom rule can classify that span as a Finding. The confirmed finding then
+suppresses the overlapping ambiguous candidate.
+
+The regression corpus freezes both sides of this boundary. It covers positive
+ambiguous examples as well as non-candidates such as numeric-only groups,
+hexadecimal groups, obvious placeholders, UUIDs, commit/checksum-style hashes,
+package-integrity hashes, version/date strings, lowercase or mixed-case
+variants, and malformed or extended grouped values.
+
+
 ## Install
 
 ``` toml
@@ -301,13 +342,23 @@ confidence, exact rule identifier, and convenience predicates such as
 critical/high-priority/high-confidence. Sorting is explicit and happens
 after lazy filtering.
 
+`ScanQuery` intentionally operates on confirmed findings only. Ambiguous
+candidates are exposed separately through `ScanReport::candidates()` and
+`ScanResults::candidates()` because review evidence has no finding severity or
+confidence semantics.
+
+Candidate-only sources are available through `ScanResults::review()`. Sources
+containing neither findings nor candidates are returned by
+`ScanResults::clean()`.
+
 `ScanSummary` reports:
 
 -   sources and bytes scanned
 -   reports with and without findings
--   total findings
+-   reports containing ambiguous candidates
+-   total findings and total ambiguous candidates
 -   counts per severity
--   clean/critical status helpers
+-   finding, candidate-review and clean-state helpers
 
 ## Remediation
 
@@ -327,6 +378,26 @@ This allows applications to present actionable guidance such as rotating
 a credential, replacing a private key, changing a password or removing a
 sensitive value without embedding application-specific copy into the
 scanner pipeline.
+
+## Ambiguous sensitive values
+
+Silens Scan separates confirmed detections from values that are only structurally suspicious.
+
+```text
+caller-owned UTF-8 input
+        │
+        ├── compiled detection pipeline
+        │        │
+        │        ▼
+        │     Finding
+        │
+        │     enough evidence to classify
+        │
+        └── structural review path
+                 │
+                 ▼
+          SensitiveCandidate
+```
 
 ## Transformations
 
@@ -616,16 +687,14 @@ loading, authenticated workflows, uploads, UI, persistence and
 subscription features belong to consumers such as the Silens Scan web
 application and Silens Studio.
 
-A standalone CLI is not required by the core architecture and is not
-part of the `0.1.0` scope.
-
 ## Release status
 
-`0.1.0` targets the first public crates.io release.
+`0.1.0` is the first published crates.io release.
 
-The core capability set is frozen. Remaining release work is
-documentation, example polish, package metadata and publication
-validation.
+Development toward `0.2.0` focuses on detection quality, contextual
+classification, ambiguous sensitive-value review, explainability and stronger
+public metadata while preserving the local-first privacy boundary and the
+separation between confirmed findings and review-only candidates.
 
 ## License
 
