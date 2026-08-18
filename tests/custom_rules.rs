@@ -6,7 +6,9 @@
 //! remains `MatcherOnly`; it does not gain access to private built-in
 //! validators.
 
-use silens_scan::{DetectionMode, Explanation, Remediation, Rule, RuleKind, Scanner, Severity};
+use silens_scan::{
+    DetectionMode, Explanation, Remediation, Rule, RuleKind, Scanner, ScannerBuildError, Severity,
+};
 
 const RECOVERY_LIKE: &str = "ABCD-EFGH-IJKL-MNOP";
 
@@ -110,7 +112,6 @@ fn multiple_custom_rules_compose_without_private_validator_access() {
     }
 
     let results = scanner.scan([("config.txt", "ABCD-EFGH-IJKL-MNOP\nacme_live_1234567890")]);
-
     let report = results.single_report().expect("one source was scanned");
 
     assert_eq!(report.findings().len(), 2);
@@ -118,9 +119,9 @@ fn multiple_custom_rules_compose_without_private_validator_access() {
 }
 
 #[test]
-fn custom_rules_can_be_combined_with_builtins() {
+fn custom_rules_can_be_combined_with_borrowed_builtin_catalog() {
     let scanner = Scanner::builder()
-        .builtins(silens_scan::builtins::CURRENT.iter().copied())
+        .builtins(silens_scan::builtins::CURRENT)
         .rule(Rule::literal(
             "acme.recovery-code",
             RECOVERY_LIKE,
@@ -137,6 +138,63 @@ fn custom_rules_can_be_combined_with_builtins() {
         .expect("custom metadata should be present");
 
     assert_eq!(custom.detection_mode(), DetectionMode::MatcherOnly);
+}
+
+#[test]
+fn duplicate_custom_rule_ids_are_rejected_deterministically() {
+    let error = Scanner::builder()
+        .rules([
+            Rule::literal("acme.shared", "FIRST", Severity::High),
+            Rule::literal("acme.shared", "SECOND", Severity::Critical),
+        ])
+        .build()
+        .expect_err("duplicate custom rule identifiers should fail");
+
+    assert!(matches!(
+        error,
+        ScannerBuildError::DuplicateRuleId { ref rule_id }
+            if rule_id.as_str() == "acme.shared"
+    ));
+}
+
+#[test]
+fn custom_rule_cannot_shadow_builtin_rule_identity() {
+    let builtin = silens_scan::builtins::CURRENT[0];
+
+    let error = Scanner::builder()
+        .builtin(builtin)
+        .rule(Rule::literal(
+            builtin.id(),
+            "CUSTOM_VALUE",
+            Severity::Critical,
+        ))
+        .build()
+        .expect_err("custom rule should not shadow built-in identity");
+
+    assert!(matches!(
+        error,
+        ScannerBuildError::DuplicateRuleId { ref rule_id }
+            if rule_id.as_str() == builtin.id()
+    ));
+}
+
+#[test]
+fn custom_rule_order_is_preserved_in_metadata() {
+    let scanner = Scanner::builder()
+        .rules([
+            Rule::literal("acme.first", "FIRST", Severity::Low),
+            Rule::literal("acme.second", "SECOND", Severity::Medium),
+            Rule::literal("acme.third", "THIRD", Severity::High),
+        ])
+        .build()
+        .expect("custom scanner should compile");
+
+    let ids = scanner
+        .rule_metadata()
+        .map(|metadata| metadata.id().to_owned())
+        .collect::<Vec<_>>();
+
+    assert_eq!(ids, ["acme.first", "acme.second", "acme.third"]);
 }
 
 #[test]
