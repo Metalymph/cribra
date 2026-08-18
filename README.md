@@ -36,6 +36,112 @@ scanning across independent inputs.
 -   Stable serial/parallel ordering
 -   Reusable cached built-in scanner
 -   No matched secret value stored in public findings
+-   Presentation-safe rule metadata with matcher/detection mode introspection
+-   Separate `SensitiveCandidate` model for ambiguous review-worthy values
+
+
+## Detection pipeline
+
+Silens Scan keeps detection evidence and ambiguous review candidates separate.
+
+```text
+caller-owned UTF-8 input
+        │
+        ▼
+compiled matcher groups
+        │
+        ▼
+raw matched candidates
+        │
+        ├─────────────── rule validator ───────────────┐
+        │                                              │
+        │                                  insufficient / invalid
+        │                                              │
+        │                                              ▼
+        │                                           reject
+        │
+        ▼
+accepted rule candidates
+        │
+        ▼
+deterministic normalization
+        │
+        ▼
+Finding
+├── rule id
+├── location
+├── severity
+├── confidence
+└── optional remediation
+
+separate structural review path
+        │
+        ▼
+narrow ambiguous-shape detector
+        │
+        ▼
+SensitiveCandidate
+├── kind
+├── location
+└── evidence
+```
+
+A `Finding` means the configured rule pipeline has enough evidence to classify
+a span. A `SensitiveCandidate` does **not** mean that a credential was detected:
+it represents a structurally plausible value worth reviewing when semantic
+evidence is insufficient.
+
+This separation is intentional:
+
+- candidate evidence is not finding `Confidence`;
+- candidates have no `Severity` or `Remediation`;
+- candidates never store or expose the matched source value;
+- share-safe transformations operate on findings, not ambiguous candidates;
+- presentation layers can explain/review candidates without weakening finding
+  semantics.
+
+### Detection modes
+
+Public `RuleMetadata` exposes how configured rules validate matched spans:
+
+```text
+MatcherOnly
+    matcher itself is authoritative
+
+Deterministic
+    candidate structure is sufficient for validation
+
+Contextual
+    surrounding source context contributes to validation
+```
+
+For example, a provider token with a distinctive documented shape can be
+validated deterministically, while a generic password or API-key-shaped value
+usually needs a recognizable surrounding configuration key.
+
+### Ambiguous recovery-like values
+
+The initial v0.2 structural candidate detector deliberately recognizes only a
+narrow grouped shape:
+
+```text
+ABCD-EFGH-IJKL-MNOP
+```
+
+The current structural contract requires four groups of four uppercase ASCII
+alphanumeric characters separated by hyphens and clear token boundaries.
+Numeric-only values, hexadecimal-only values, lowercase/mixed-case variants,
+obvious placeholders and longer/partial tokens are rejected.
+
+This is not a recovery-code `Finding`. The same shape may also represent an
+activation code, coupon, license key or application identifier. Silens Scan
+therefore records only structural evidence until stronger semantic context
+exists.
+
+At the current `0.2.3b` step this detector is an internal, regression-tested
+stage. Candidate emission is intentionally not yet attached to `ScanReport`;
+that integration is the next `0.2.3` step so report semantics can evolve
+separately from structural detection.
 
 ## Install
 

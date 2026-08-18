@@ -132,6 +132,7 @@
 //! With the optional `parallel` feature, the same batch can be scanned with
 //! [`Scanner::parallel_scan`] while preserving input order.
 pub mod builtins;
+mod candidate_detection;
 mod compiled_rule;
 mod confidence;
 mod finding;
