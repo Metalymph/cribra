@@ -40,3 +40,21 @@ green.
 
 These fixtures intentionally combine cases that are individually plausible but
 easy to misclassify as detector coverage expands.
+
+## Cross-format corpus
+
+`0.2.7c` adds equivalent sensitive content represented as ENV, JSON, YAML,
+TOML, plain text and explicit CRLF input.
+
+These fixtures freeze an important architectural property: Cribra receives
+caller-owned UTF-8 text and is not coupled to an application-level file-format
+parser. Equivalent evidence should therefore preserve equivalent detection and
+review semantics across textual representations.
+
+The cross-format suite also covers:
+
+- LF/CRLF equivalence;
+- source-start/source-end boundaries;
+- Unicode surrounding text;
+- adjacent deterministic findings;
+- stable multi-source input ordering.
