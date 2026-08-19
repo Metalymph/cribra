@@ -58,3 +58,14 @@ The cross-format suite also covers:
 - Unicode surrounding text;
 - adjacent deterministic findings;
 - stable multi-source input ordering.
+
+## Collision and final v0.2 gate
+
+`0.2.7d`/`0.2.7e` complete the detection-quality corpus with exact-span
+collision ordering, partial-overlap preservation, ambiguity promotion,
+nearby finding/candidate separation, same-line ordering and optional
+serial/parallel equivalence.
+
+The final gate for this phase is the complete normal and all-features test
+surface plus Clippy and documentation checks. Detector or fixture changes after
+this point should be treated as deliberate semantic changes.
