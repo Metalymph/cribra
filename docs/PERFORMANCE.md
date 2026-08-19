@@ -72,3 +72,33 @@ For each release-oriented baseline, record at least:
 
 Numbers are engineering baselines for that environment, not portable
 performance guarantees.
+
+
+## Diagnostic isolation
+
+During the v0.2 regression investigation, `benches/isolation.rs` separates the
+cost of the candidate path from built-in matcher families.
+
+The clean 64 KiB workload measures:
+
+- an empty scanner;
+- deterministic prefix rules;
+- deterministic regex rules;
+- all deterministic built-ins;
+- contextual prefix rules;
+- contextual capture-aware regex rules;
+- all contextual built-ins;
+- the complete `builtins::CURRENT` pack.
+
+A second group scales the number of contextual capture-aware patterns from one
+rule to the complete contextual pattern set. This is diagnostic tooling rather
+than a portable performance promise.
+
+Run it with:
+
+```text
+cargo bench --bench isolation --all-features
+```
+
+The purpose is to identify the concrete family responsible for a regression
+before changing scanner internals.

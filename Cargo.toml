@@ -32,6 +32,14 @@ harness = false
 name = "v02"
 harness = false
 
+[[bench]]
+name = "isolation"
+harness = false
+
+[[bench]]
+name = "contextual_tail"
+harness = false
+
 [dev-dependencies]
 criterion = "0.8.2"
 serde_json = "1.0"
