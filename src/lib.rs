@@ -110,7 +110,7 @@
 //!
 //! `serde` enables serialization support for public data contracts.
 //!
-//! `parallel` enables [`Scanner::parallel_scan`], which distributes independent
+//! `parallel` enables `Scanner::parallel_scan`, which distributes independent
 //! inputs through Rayon while preserving input order and the same per-source
 //! semantics as serial scanning.
 //!
@@ -151,8 +151,8 @@
 //! # Ok::<(), cribra::ScannerBuildError>(())
 //! ```
 //!
-//! With the optional `parallel` feature, the same batch can be scanned with
-//! [`Scanner::parallel_scan`] while preserving input order.
+//! With the optional `parallel` feature, native callers can use
+//! `Scanner::parallel_scan` while preserving input order.
 pub mod builtins;
 mod candidate_detection;
 mod compiled_rule;
