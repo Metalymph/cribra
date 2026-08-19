@@ -1,0 +1,54 @@
+name: WASM
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "src/**"
+      - "tests/**"
+      - ".github/workflows/wasm.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wasm-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  wasm32:
+    name: wasm32-unknown-unknown
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust stable with WASM target
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Cache Rust artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Check default WASM build
+        run: cargo check --target wasm32-unknown-unknown
+
+      - name: Check WASM build with serde
+        run: cargo check --target wasm32-unknown-unknown --features serde
+
+      - name: Ensure parallel is not part of the browser WASM contract
+        shell: bash
+        run: |
+          if cargo check --target wasm32-unknown-unknown --features parallel; then
+            echo "::notice::parallel currently compiles for wasm32-unknown-unknown; it remains outside the supported browser WASM contract."
+          else
+            echo "::notice::parallel is intentionally not required for the supported browser WASM contract."
+          fi
