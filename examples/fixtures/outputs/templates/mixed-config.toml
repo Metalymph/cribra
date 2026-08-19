@@ -3,5 +3,5 @@ name = "fixture-service"
 endpoint = "https://example.invalid"
 
 [credentials]
-api_key = "<SILENS:demo.api-key>"
-password = "<SILENS:demo.password>"
+api_key = "<CRIBRA:demo.api-key>"
+password = "<CRIBRA:demo.password>"

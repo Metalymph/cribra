@@ -3,11 +3,11 @@
 //! Synthesis creates shareable fixture/demo values that preserve useful
 //! structural cues without retaining the original matched value.
 //!
-//! For known built-in rule identifiers, Silens Scan preserves provider identity
+//! For known built-in rule identifiers, Cribra preserves provider identity
 //! and, where practical, the original byte length while deliberately breaking a
 //! provider-validating character or structural invariant. For contextual and
 //! generic credentials where "validity" is defined mainly by surrounding key
-//! context, output is explicitly marked `silens_synthetic`.
+//! context, output is explicitly marked `cribra_synthetic`.
 //!
 //! Synthesis is deterministic for a given caller key, rule identifier and source
 //! span. It does not contact providers and cannot prove global non-existence of
@@ -18,7 +18,7 @@ use crate::ScanReport;
 
 use super::{TransformError, ensure_non_overlapping, validated_spans};
 
-const DEFAULT_MARKER: &str = "silens_synthetic";
+const DEFAULT_MARKER: &str = "cribra_synthetic";
 
 /// Configuration for deterministic synthetic-value generation.
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -156,7 +156,7 @@ fn synthetic_value(
         // Telegram/JWT preserve the broad visual family while deliberately
         // breaking the scanner-valid alphabet/shape.
         "telegram.bot-token" => fixed_or_padded(
-            "00000:SILENS_SYNTHETIC_BOT_TOKEN!",
+            "00000:CRIBRA_SYNTHETIC_BOT_TOKEN!",
             original_len,
             &mut random,
         ),
@@ -169,10 +169,10 @@ fn synthetic_value(
         "aws.access-key-id" => prefixed_invalid("AKIA", original_len, 's', &mut random),
         "aws.temporary-access-key-id" => prefixed_invalid("ASIA", original_len, 's', &mut random),
         "aws.secret-access-key" => {
-            fixed_or_padded("SILENS_SYNTHETIC_AWS_SECRET!", original_len, &mut random)
+            fixed_or_padded("CRIBRA_SYNTHETIC_AWS_SECRET!", original_len, &mut random)
         }
         "aws.session-token" => {
-            fixed_or_padded("SILENS_SYNTHETIC_AWS_SESSION!", original_len, &mut random)
+            fixed_or_padded("CRIBRA_SYNTHETIC_AWS_SESSION!", original_len, &mut random)
         }
 
         // Azure.
@@ -180,15 +180,15 @@ fn synthetic_value(
             contextual_marker(marker, "azure_client_secret", original_len, &mut random)
         }
         "azure.storage-account-key" => {
-            fixed_or_padded("SILENS_SYNTHETIC_AZURE_STORAGE!", original_len, &mut random)
+            fixed_or_padded("CRIBRA_SYNTHETIC_AZURE_STORAGE!", original_len, &mut random)
         }
         "azure.shared-access-signature" => {
-            fixed_or_padded("SILENS_SYNTHETIC_AZURE_SAS!", original_len, &mut random)
+            fixed_or_padded("CRIBRA_SYNTHETIC_AZURE_SAS!", original_len, &mut random)
         }
 
         // GCP.
         "gcp.private-key-id" => fixed_or_padded(
-            "g000000000000000_silens_synthetic",
+            "g000000000000000_cribra_synthetic",
             original_len,
             &mut random,
         ),
@@ -196,7 +196,7 @@ fn synthetic_value(
             contextual_marker(marker, "gcp_client_secret", original_len, &mut random)
         }
         "gcp.private-key" => fixed_or_padded(
-            "-----BEGIN SYNTHETIC PRIVATE KEY-----SILENS-----END SYNTHETIC PRIVATE KEY-----",
+            "-----BEGIN SYNTHETIC PRIVATE KEY-----CRIBRA-----END SYNTHETIC PRIVATE KEY-----",
             original_len,
             &mut random,
         ),
@@ -212,7 +212,7 @@ fn synthetic_value(
             contextual_marker(marker, "passphrase", original_len, &mut random)
         }
         "generic.sensitive-hash" => {
-            fixed_or_padded("g_silens_synthetic_hash", original_len, &mut random)
+            fixed_or_padded("g_cribra_synthetic_hash", original_len, &mut random)
         }
         "generic.api-key" => contextual_marker(marker, "api_key", original_len, &mut random),
         "generic.auth-token" => contextual_marker(marker, "auth_token", original_len, &mut random),
@@ -320,7 +320,7 @@ struct SyntheticBytes {
 impl SyntheticBytes {
     fn new(key: &[u8; 32], rule_id: &str, start: usize, end: usize) -> Self {
         let mut hasher = blake3::Hasher::new_keyed(key);
-        hasher.update(b"silens-scan:synthesis:v1\0");
+        hasher.update(b"cribra:synthesis:v1\0");
         hasher.update(rule_id.as_bytes());
         hasher.update(b"\0");
         hasher.update(&start.to_le_bytes());
@@ -459,7 +459,7 @@ mod tests {
         let output = synthesize(source, &report, &SynthesisOptions::new([6; 32])).unwrap();
 
         assert_eq!(output.len(), source.len());
-        assert!(output.starts_with("silens_synthetic_"));
+        assert!(output.starts_with("cribra_synthetic_"));
         assert_ne!(output, source);
     }
 

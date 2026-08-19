@@ -1,7 +1,7 @@
 //! Regression contract for contextual built-in detection.
 //!
 //! These tests deliberately sit above individual matcher and validator units.
-//! They freeze the public semantics established for Silens Scan 0.2:
+//! They freeze the public semantics established for Cribra 0.2:
 //!
 //! - common configuration syntaxes are semantically equivalent;
 //! - contextual rules remain explicitly identifiable through public metadata;
@@ -14,7 +14,7 @@
 
 use std::collections::BTreeMap;
 
-use silens_scan::{Confidence, DetectionMode, Remediation, Scanner, Severity, builtins};
+use cribra::{Confidence, DetectionMode, Remediation, Scanner, Severity, builtins};
 
 const AWS_SECRET: &str = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY";
 const AZURE_SECRET: &str = "AbCdEfGhIjKlMnOpQrStUvWxYz0123456789";

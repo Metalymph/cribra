@@ -1,6 +1,6 @@
 application:
-  name: silens-fixture
+  name: cribra-fixture
   environment: test
 security:
-  recovery_token: silens_synthe3J3w
-  signing_material: silens_synthetic_value_rz
+  recovery_token: cribra_syntheuIYk
+  signing_material: cribra_synthetic_value_9i

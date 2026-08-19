@@ -1,16 +1,16 @@
-//! Shared definition of the canonical Silens Scan fixture corpus.
+//! Shared definition of the canonical Cribra fixture corpus.
 //!
 //! This module is intentionally outside the public crate API. It is compiled by
 //! both `examples/generate_fixtures.rs` and `tests/golden.rs`, ensuring that the
 //! generator and verifier use the exact same scanner configuration and
 //! deterministic transformation keys.
 
-use silens_scan::{Remediation, Rule, Scanner, Severity};
+use cribra::{Remediation, Rule, Scanner, Severity};
 
 pub const PSEUDONYMIZATION_KEY: [u8; 32] = [0x31; 32];
 pub const SYNTHESIS_KEY: [u8; 32] = [0x53; 32];
 
-pub fn scanner() -> Result<Scanner, silens_scan::ScannerBuildError> {
+pub fn scanner() -> Result<Scanner, cribra::ScannerBuildError> {
     Scanner::builder()
         .rule(
             Rule::prefix("demo.api-key", "demo_api_", Severity::Critical)

@@ -1,9 +1,9 @@
-# Silens Scan
+# Cribra
 
 Privacy-first Rust core for detecting, querying and safely transforming
 secrets and sensitive data.
 
-Silens Scan is designed as a reusable engine rather than an application
+Cribra is designed as a reusable engine rather than an application
 shell. Callers provide UTF-8 text and retain control of I/O, storage and
 presentation. The core performs detection, validation, deterministic
 normalization, reporting and share-safe transformations without storing
@@ -12,6 +12,11 @@ matched secret values inside public findings.
 The serial core is suitable for native applications and WASM/PWA
 integrations. Native callers can optionally enable Rayon-backed parallel
 scanning across independent inputs.
+
+> **Project rename:** the reusable engine was published as `silens-scan`
+> through the `0.1.x` line. Starting with `0.2.0`, the engine is named
+> **Cribra** and the Rust package/crate is `cribra`. **Silens Scan** remains
+> the Silens web product powered by Cribra.
 
 ## Capabilities
 
@@ -42,7 +47,7 @@ scanning across independent inputs.
 
 ## Detection pipeline
 
-Silens Scan keeps detection evidence and ambiguous review candidates separate.
+Cribra keeps detection evidence and ambiguous review candidates separate.
 
 ```text
 caller-owned UTF-8 input
@@ -134,7 +139,7 @@ Numeric-only values, hexadecimal-only values, lowercase/mixed-case variants,
 obvious placeholders and longer/partial tokens are rejected.
 
 This is not a recovery-code `Finding`. The same shape may also represent an
-activation code, coupon, license key or application identifier. Silens Scan
+activation code, coupon, license key or application identifier. Cribra
 therefore records only structural evidence until stronger semantic context
 exists.
 
@@ -188,13 +193,13 @@ variants, and malformed or extended grouped values.
 
 ``` toml
 [dependencies]
-silens-scan = "0.1"
+cribra = "0.1"
 ```
 
 Optional features are deliberately independent:
 
 ``` toml
-silens-scan = { version = "0.1", features = ["serde", "parallel"] }
+cribra = { version = "0.1", features = ["serde", "parallel"] }
 ```
 
   Feature      Default   Purpose
@@ -211,7 +216,7 @@ Scanning always uses a batch-oriented API. One source is simply a
 one-element batch.
 
 ``` rust
-use silens_scan::Scanner;
+use cribra::Scanner;
 
 let scanner = Scanner::default();
 
@@ -294,7 +299,7 @@ The canonical selectable built-in pack is exposed as
 ## Custom rules and domain knowledge
 
 Custom rules let the integrating application declare sensitive values that
-Silens Scan cannot infer from generic structure alone.
+Cribra cannot infer from generic structure alone.
 
 They use the same public rule model as the scanner core:
 
@@ -321,7 +326,7 @@ A custom rule is matcher-authoritative. Its public metadata therefore reports
 custom rules.
 
 ``` rust
-use silens_scan::{Remediation, Rule, Scanner, Severity};
+use cribra::{Remediation, Rule, Scanner, Severity};
 
 let scanner = Scanner::builder()
     .rule(
@@ -334,13 +339,13 @@ let scanner = Scanner::builder()
     )
     .build()?;
 
-# Ok::<(), silens_scan::ScannerBuildError>(())
+# Ok::<(), cribra::ScannerBuildError>(())
 ```
 
 Built-ins and custom rules can be composed in the same scanner:
 
 ``` rust
-use silens_scan::{Rule, Scanner, Severity, builtins};
+use cribra::{Rule, Scanner, Severity, builtins};
 
 let scanner = Scanner::builder()
     .builtins(builtins::CURRENT)
@@ -351,7 +356,7 @@ let scanner = Scanner::builder()
     ))
     .build()?;
 
-# Ok::<(), silens_scan::ScannerBuildError>(())
+# Ok::<(), cribra::ScannerBuildError>(())
 ```
 
 Rule identifiers are scanner-wide identities. Duplicate IDs are rejected,
@@ -369,7 +374,7 @@ zero-width patterns from entering the scan pipeline.
 For example:
 
 ``` rust
-use silens_scan::{Rule, RuleError, Severity};
+use cribra::{Rule, RuleError, Severity};
 
 let error = Rule::pattern("bad", r".*", Severity::High)
     .expect_err("zero-length-capable patterns are rejected");
@@ -408,7 +413,7 @@ application/domain knowledge
 well as a lazy query surface.
 
 ``` rust
-use silens_scan::{ScanSort, Scanner, Severity};
+use cribra::{ScanSort, Scanner, Severity};
 
 let scanner = Scanner::default();
 let results = scanner.scan([
@@ -473,7 +478,7 @@ scanner pipeline.
 
 ## Ambiguous sensitive values
 
-Silens Scan separates confirmed detections from values that are only
+Cribra separates confirmed detections from values that are only
 structurally suspicious.
 
 ```text
@@ -519,7 +524,7 @@ the ambiguous candidate is suppressed.
 
 ## Explainability
 
-Silens Scan exposes typed explanation facts without introducing a second
+Cribra exposes typed explanation facts without introducing a second
 classification authority or presentation copy into the core.
 
 ```text
@@ -567,7 +572,7 @@ caller-owned UTF-8 input
 `Explanation` is deliberately presentation-agnostic:
 
 ```rust
-use silens_scan::{CandidateEvidence, DetectionMode, Explanation};
+use cribra::{CandidateEvidence, DetectionMode, Explanation};
 
 let classified = Explanation::classified(DetectionMode::Contextual);
 let ambiguous = Explanation::ambiguous(CandidateEvidence::Structural);
@@ -657,7 +662,7 @@ Redaction is the conservative transform. It replaces detected spans and
 safely merges overlaps.
 
 ``` rust
-use silens_scan::{Rule, Scanner, Severity, transform::redact};
+use cribra::{Rule, Scanner, Severity, transform::redact};
 
 let scanner = Scanner::builder()
     .rule(Rule::literal("credential", "SECRET", Severity::High))
@@ -680,7 +685,7 @@ Templates preserve the semantic rule identity while discarding the
 matched value:
 
 ``` text
-TOKEN=<SILENS:credential>
+TOKEN=<CRIBRA:credential>
 ```
 
 `TemplateOptions` can configure the namespace and deterministic per-rule
@@ -694,7 +699,7 @@ The same input value under the same key produces the same pseudonym,
 allowing correlation without retaining the original value.
 
 ``` rust
-use silens_scan::transform::PseudonymizationOptions;
+use cribra::transform::PseudonymizationOptions;
 
 let options = PseudonymizationOptions::new([0x31; 32]);
 ```
@@ -709,7 +714,7 @@ intentionally producing validator-invalid output, so generated material
 can be used safely in examples and shareable artifacts.
 
 ``` rust
-use silens_scan::transform::SynthesisOptions;
+use cribra::transform::SynthesisOptions;
 
 let options = SynthesisOptions::new([0x53; 32]);
 ```
@@ -762,7 +767,7 @@ and literal rules plus remediation metadata.
 Enable `parallel` to scan independent sources concurrently:
 
 ``` toml
-silens-scan = { version = "0.1", features = ["parallel"] }
+cribra = { version = "0.1", features = ["parallel"] }
 ```
 
 ``` rust
@@ -774,7 +779,7 @@ let results = scanner.parallel_scan([
 ```
 
 Serial and parallel execution use the same per-source pipeline and
-preserve input order. Silens Scan does not split one source into chunks
+preserve input order. Cribra does not split one source into chunks
 and does not create a private thread pool; Rayon uses the current pool.
 
 Parallelism is therefore an application choice, not a semantic
@@ -786,7 +791,7 @@ Enable `serde` when results need to cross an application boundary or be
 persisted/serialized:
 
 ``` toml
-silens-scan = { version = "0.1", features = ["serde"] }
+cribra = { version = "0.1", features = ["serde"] }
 ```
 
 ``` rust
@@ -808,12 +813,12 @@ Locations have an explicit mixed coordinate contract:
 Byte offsets are suitable for exact source slicing. Line/column values
 are presentation-oriented.
 
-Silens Scan does not copy the matched source value into a public
+Cribra does not copy the matched source value into a public
 `Finding`.
 
 ## Privacy and trust boundary
 
-Silens Scan is a core library. It does not decide where source data
+Cribra is a core library. It does not decide where source data
 comes from or where transformed output is sent.
 
 The intended boundary is:
@@ -825,7 +830,7 @@ application owns I/O
      &str input
         │
         ▼
-   Silens Scan
+   Cribra
         │
         ├── metadata-only findings
         └── explicit transformations
@@ -837,7 +842,7 @@ process/browser. Network access, remote repositories, uploads,
 authentication and persistence belong to the integrating application
 rather than this crate.
 
-Silens Scan itself performs no network access. The core accepts
+Cribra itself performs no network access. The core accepts
 caller-provided UTF-8 text and returns local structured results.
 
 Network access, repository loading, uploads, authentication, persistence,
@@ -934,12 +939,12 @@ documentation as the crate evolves.
 
 ## Scope
 
-Silens Scan intentionally stops at the reusable scanning core.
+Cribra intentionally stops at the reusable scanning core.
 
 Application-level concerns such as file selection, remote repository
 loading, authenticated workflows, uploads, UI, persistence and
 subscription features belong to consumers such as the Silens Scan web
-application and Silens Studio.
+application and Silens Studio desktop app.
 
 ## Release status
 

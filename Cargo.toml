@@ -1,12 +1,12 @@
 [package]
-name = "silens-scan"
+name = "cribra"
 version = "0.1.0"
 edition = "2024"
 description = "Privacy-first Rust core for detecting, querying, and safely transforming secrets and sensitive data"
 license = "MIT"
 readme = "README.md"
-repository = "https://github.com/Metalymph/silens-scan"
-documentation = "https://docs.rs/silens-scan"
+repository = "https://github.com/Metalymph/cribra"
+documentation = "https://docs.rs/cribra"
 keywords = ["secrets", "security", "scanner", "redaction", "privacy"]
 categories = ["development-tools", "text-processing"]
 rust-version = "1.97"

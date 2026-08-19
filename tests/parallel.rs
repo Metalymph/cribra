@@ -2,7 +2,7 @@
 
 #![cfg(feature = "parallel")]
 
-use silens_scan::{Rule, ScanSort, Scanner, Severity};
+use cribra::{Rule, ScanSort, Scanner, Severity};
 
 fn scanner() -> Scanner {
     Scanner::builder()

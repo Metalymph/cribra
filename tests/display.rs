@@ -1,4 +1,4 @@
-use silens_scan::{
+use cribra::{
     Confidence, Remediation, Rule, Scanner, Severity,
     transform::{ShareBundle, ShareMode, ShareModeKind},
 };

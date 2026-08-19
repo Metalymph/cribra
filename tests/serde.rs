@@ -1,6 +1,6 @@
 #![cfg(feature = "serde")]
 
-use silens_scan::{
+use cribra::{
     Confidence, Remediation, Rule, ScanResults, Scanner, Severity,
     transform::{ShareBundle, ShareMode, ShareModeKind},
 };

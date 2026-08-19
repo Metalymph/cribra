@@ -6,7 +6,7 @@
 //! remains `MatcherOnly`; it does not gain access to private built-in
 //! validators.
 
-use silens_scan::{
+use cribra::{
     DetectionMode, Explanation, Remediation, Rule, RuleKind, Scanner, ScannerBuildError, Severity,
 };
 
@@ -121,7 +121,7 @@ fn multiple_custom_rules_compose_without_private_validator_access() {
 #[test]
 fn custom_rules_can_be_combined_with_borrowed_builtin_catalog() {
     let scanner = Scanner::builder()
-        .builtins(silens_scan::builtins::CURRENT)
+        .builtins(cribra::builtins::CURRENT)
         .rule(Rule::literal(
             "acme.recovery-code",
             RECOVERY_LIKE,
@@ -159,7 +159,7 @@ fn duplicate_custom_rule_ids_are_rejected_deterministically() {
 
 #[test]
 fn custom_rule_cannot_shadow_builtin_rule_identity() {
-    let builtin = silens_scan::builtins::CURRENT[0];
+    let builtin = cribra::builtins::CURRENT[0];
 
     let error = Scanner::builder()
         .builtin(builtin)
@@ -220,7 +220,7 @@ fn custom_pattern_rejects_all_zero_length_capable_forms() {
         let error = Rule::pattern("acme.zero-length", pattern, Severity::High)
             .expect_err("zero-length-capable custom pattern should fail");
 
-        assert!(matches!(error, silens_scan::RuleError::PatternMatchesEmpty));
+        assert!(matches!(error, cribra::RuleError::PatternMatchesEmpty));
         assert!(error.to_string().contains("zero-length match"));
     }
 }

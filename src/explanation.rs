@@ -1,6 +1,6 @@
 //! Typed, presentation-agnostic explanation facts.
 //!
-//! Explainability in Silens Scan projects existing detection authorities into a
+//! Explainability in Cribra projects existing detection authorities into a
 //! small public contract. It does not introduce a second classification system,
 //! human-facing copy, source snippets, or matched sensitive values.
 

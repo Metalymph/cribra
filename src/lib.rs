@@ -1,6 +1,6 @@
 //! Privacy-first scanning core for secrets and sensitive data.
 //!
-//! `silens-scan` provides deterministic detection, reporting, querying and
+//! `cribra` provides deterministic detection, reporting, querying and
 //! share-safe transformation of UTF-8 text. Applications own I/O and storage;
 //! the crate operates on caller-provided text and does not retain matched
 //! secret values inside public [`Finding`] values.
@@ -8,7 +8,7 @@
 //! # Quick start
 //!
 //! ```
-//! use silens_scan::Scanner;
+//! use cribra::Scanner;
 //!
 //! let scanner = Scanner::default();
 //! let results = scanner.scan([
@@ -64,7 +64,7 @@
 //! [`SortedScanQuery`].
 //!
 //! ```
-//! use silens_scan::{ScanSort, Scanner, Severity};
+//! use cribra::{ScanSort, Scanner, Severity};
 //!
 //! let scanner = Scanner::default();
 //! let results = scanner.scan([("config.env", "TOKEN=example")]);
@@ -91,7 +91,7 @@
 //!   metadata.
 //!
 //! ```
-//! use silens_scan::{Rule, Scanner, Severity, transform::redact};
+//! use cribra::{Rule, Scanner, Severity, transform::redact};
 //!
 //! let scanner = Scanner::builder()
 //!     .rule(Rule::literal("credential", "SECRET", Severity::High))
@@ -124,14 +124,14 @@
 #![warn(missing_docs)]
 //! Privacy-first Rust engine for detecting secrets and sensitive data.
 //!
-//! Silens Scan is a deterministic, local-first scanning core. It accepts UTF-8
+//! Cribrais a deterministic, local-first scanning core. It accepts UTF-8
 //! text and returns structured findings without filesystem, network, terminal,
 //! browser or cloud responsibilities.
 //!
 //! # Example
 //!
 //! ```
-//! use silens_scan::{Rule, Scanner, Severity};
+//! use cribra::{Rule, Scanner, Severity};
 //!
 //! let scanner = Scanner::builder()
 //!     .rule(Rule::prefix(
@@ -148,7 +148,7 @@
 //! let report = results.single_report().expect("one source was scanned");
 //! assert_eq!(report.len(), 1);
 //!
-//! # Ok::<(), silens_scan::ScannerBuildError>(())
+//! # Ok::<(), cribra::ScannerBuildError>(())
 //! ```
 //!
 //! With the optional `parallel` feature, the same batch can be scanned with

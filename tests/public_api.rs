@@ -1,12 +1,12 @@
 //! Integration tests for the public batch API.
 
-use silens_scan::{Rule, ScanSort, Scanner, Severity};
+use cribra::{Rule, ScanSort, Scanner, Severity};
 
 fn report_for<'a>(
     scanner: &Scanner,
     key: &'a str,
     source: &'a str,
-) -> silens_scan::ScanResults<&'a str> {
+) -> cribra::ScanResults<&'a str> {
     scanner.scan([(key, source)])
 }
 

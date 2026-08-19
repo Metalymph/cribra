@@ -1,6 +1,6 @@
 //! Public ShareBundle orchestration tests.
 
-use silens_scan::{
+use cribra::{
     Rule, Scanner, Severity,
     transform::{PseudonymizationOptions, ShareBundle, ShareMode, ShareModeKind, SynthesisOptions},
 };

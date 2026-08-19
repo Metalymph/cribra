@@ -1,12 +1,12 @@
-# Canonical Silens Scan fixture corpus
+# Canonical Cribra fixture corpus
 
-This directory is the canonical, committed example corpus used by Silens Scan
+This directory is the canonical, committed example corpus used by Cribra
 documentation and golden tests.
 
 ## Safety
 
 Every sensitive-looking value in `inputs/` is deliberately synthetic and uses
-Silens-specific demo token families. These files must never contain real
+Cribra-specific demo token families. These files must never contain real
 provider credentials.
 
 The corpus is designed to demonstrate engine behaviour without relying on live

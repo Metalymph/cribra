@@ -160,6 +160,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "cribra"
+version = "0.1.0"
+dependencies = [
+ "aho-corasick",
+ "blake3",
+ "criterion",
+ "rayon",
+ "regex",
+ "regex-syntax",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "criterion"
 version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -505,20 +519,6 @@ name = "shlex"
 version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8fadd59c855ef2080decdef8ff161eb6661b86933c9d82e5ba29dc602a55aba"
-
-[[package]]
-name = "silens-scan"
-version = "0.1.0"
-dependencies = [
- "aho-corasick",
- "blake3",
- "criterion",
- "rayon",
- "regex",
- "regex-syntax",
- "serde",
- "serde_json",
-]
 
 [[package]]
 name = "slab"

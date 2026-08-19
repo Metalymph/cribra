@@ -13,7 +13,7 @@
 //! - neither path exposes source text or matched sensitive values;
 //! - ambiguity never acquires finding severity, confidence or remediation.
 
-use silens_scan::{
+use cribra::{
     CandidateEvidence, DetectionMode, Explanation, Rule, Scanner, SensitiveCandidateKind, Severity,
 };
 

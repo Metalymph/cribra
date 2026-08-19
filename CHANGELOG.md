@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to Silens Scan are documented in this file.
+All notable changes to Cribra are documented in this file.
 
 The project follows semantic versioning from the first public release.
 
@@ -141,14 +141,14 @@ privacy-first, application-agnostic core architecture introduced in `0.1.0`.
   explainability.
 - Clarified that explainability provides typed facts to presentation layers
   rather than human-facing copy.
-- Clarified the application boundary: Silens Scan itself performs no network
+- Clarified the application boundary: Cribra itself performs no network
   access and operates exclusively on caller-provided input.
 - Expanded regression and corpus documentation for contextual and ambiguous
   detection behavior.
 
 ## [0.1.0] - 2026-08-10
 
-First public release of the reusable Silens Scan core.
+First public release of the reusable Cribra core.
 
 ### Added
 

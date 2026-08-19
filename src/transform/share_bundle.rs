@@ -24,7 +24,7 @@ use super::{
 pub enum ShareMode {
     /// Replace all detected spans with `[REDACTED]`.
     Redact,
-    /// Replace each independent finding with a semantic `<SILENS:rule-id>` placeholder.
+    /// Replace each independent finding with a semantic `<CRIBRA:rule-id>` placeholder.
     Template,
     /// Replace findings with stable keyed pseudonyms.
     Pseudonymize(PseudonymizationOptions),
@@ -399,7 +399,7 @@ mod tests {
             .build(&results, [source])
             .unwrap();
 
-        assert_eq!(bundle.sources()[0].content(), "TOKEN=<SILENS:secret>",);
+        assert_eq!(bundle.sources()[0].content(), "TOKEN=<CRIBRA:secret>",);
         assert_eq!(bundle.manifest().mode(), ShareModeKind::Template);
     }
 
@@ -419,7 +419,7 @@ mod tests {
         assert!(
             bundle.sources()[0]
                 .content()
-                .starts_with("TOKEN=silens_pseudo_")
+                .starts_with("TOKEN=cribra_pseudo_")
         );
         assert_eq!(bundle.manifest().mode(), ShareModeKind::Pseudonymize,);
     }

@@ -1,6 +1,6 @@
 //! Custom-rule example for application/domain knowledge.
 
-use silens_scan::{DetectionMode, Explanation, Remediation, Rule, Scanner, Severity, builtins};
+use cribra::{DetectionMode, Explanation, Remediation, Rule, Scanner, Severity, builtins};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let scanner = Scanner::builder()

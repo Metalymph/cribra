@@ -1,6 +1,6 @@
 //! Regression tests for public scanner invariants.
 
-use silens_scan::{Rule, Scanner, Severity};
+use cribra::{Rule, Scanner, Severity};
 
 #[test]
 fn distinct_rule_ids_with_identical_needles_remain_distinct() {

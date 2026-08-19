@@ -16,7 +16,7 @@ use crate::ScanReport;
 
 use super::{TransformError, ensure_non_overlapping, validated_spans};
 
-const DEFAULT_PREFIX: &str = "silens_pseudo_";
+const DEFAULT_PREFIX: &str = "cribra_pseudo_";
 const DEFAULT_DIGEST_BYTES: usize = 16;
 const MIN_DIGEST_BYTES: usize = 8;
 const MAX_DIGEST_BYTES: usize = 32;
@@ -99,7 +99,7 @@ impl PseudonymizationOptions {
 /// # Examples
 ///
 /// ```
-/// use silens_scan::{
+/// use cribra::{
 ///     Rule, Scanner, Severity,
 ///     transform::{PseudonymizationOptions, pseudonymize},
 /// };
@@ -317,7 +317,7 @@ mod tests {
         let output = pseudonymize(source, &report, &options).unwrap();
 
         assert!(!output.contains("SUPER_SECRET_VALUE"));
-        assert!(output.starts_with("TOKEN=silens_pseudo_"));
+        assert!(output.starts_with("TOKEN=cribra_pseudo_"));
     }
 
     #[test]
@@ -333,6 +333,6 @@ mod tests {
         let output = pseudonymize(source, &report, &options).unwrap();
 
         assert!(!output.contains("pässwörd😀"));
-        assert!(output.starts_with("PASSWORD=silens_pseudo_"));
+        assert!(output.starts_with("PASSWORD=cribra_pseudo_"));
     }
 }

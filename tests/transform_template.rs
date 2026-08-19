@@ -1,6 +1,6 @@
 //! Public semantic-template transformation tests.
 
-use silens_scan::{
+use cribra::{
     Rule, Scanner, Severity,
     transform::{TemplateOptions, template, template_with},
 };
@@ -22,7 +22,7 @@ fn public_template_uses_rule_identity_not_secret_value() {
 
     let transformed = template(source, report).unwrap();
 
-    assert_eq!(transformed, "TOKEN=<SILENS:example.credential>",);
+    assert_eq!(transformed, "TOKEN=<CRIBRA:example.credential>",);
     assert!(!transformed.contains("SECRET"));
 }
 
@@ -40,7 +40,7 @@ fn public_template_can_number_repeated_semantic_findings() {
 
     assert_eq!(
         template_with(source, report, &options).unwrap(),
-        "A=<SILENS:secret:1> B=<SILENS:secret:2>",
+        "A=<CRIBRA:secret:1> B=<CRIBRA:secret:2>",
     );
 }
 

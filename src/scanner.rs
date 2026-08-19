@@ -115,7 +115,7 @@ impl Scanner {
     /// A single source is represented by a one-element collection:
     ///
     /// ```
-    /// # use silens_scan::Scanner;
+    /// # use cribra::Scanner;
     /// let scanner = Scanner::default();
     /// let results = scanner.scan([("memory", "ordinary text")]);
     ///

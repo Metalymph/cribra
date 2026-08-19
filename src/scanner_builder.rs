@@ -111,7 +111,7 @@ impl From<RuleError> for ScannerBuildError {
 /// # Examples
 ///
 /// ```
-/// use silens_scan::{Rule, Scanner, Severity};
+/// use cribra::{Rule, Scanner, Severity};
 ///
 /// let scanner = Scanner::builder()
 ///     .rule(Rule::literal(
@@ -127,7 +127,7 @@ impl From<RuleError> for ScannerBuildError {
 ///     .build()?;
 ///
 /// assert_eq!(scanner.rules_count(), 2);
-/// # Ok::<(), silens_scan::ScannerBuildError>(())
+/// # Ok::<(), cribra::ScannerBuildError>(())
 /// ```
 #[derive(Debug, Default)]
 pub struct ScannerBuilder {

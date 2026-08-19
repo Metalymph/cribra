@@ -15,7 +15,7 @@ use crate::ScanReport;
 
 use super::{TransformError, ensure_non_overlapping, validated_spans};
 
-const DEFAULT_NAMESPACE: &str = "SILENS";
+const DEFAULT_NAMESPACE: &str = "CRIBRA";
 
 /// Configuration for semantic template placeholders.
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -34,7 +34,7 @@ impl Default for TemplateOptions {
 }
 
 impl TemplateOptions {
-    /// Creates options using the default `SILENS` namespace.
+    /// Creates options using the default `CRIBRA` namespace.
     #[must_use]
     pub fn new() -> Self {
         Self::default()
@@ -43,7 +43,7 @@ impl TemplateOptions {
     /// Sets the placeholder namespace.
     ///
     /// Unsafe placeholder characters are normalized when output is produced.
-    /// An empty or fully unsupported namespace falls back to `SILENS`.
+    /// An empty or fully unsupported namespace falls back to `CRIBRA`.
     #[must_use]
     pub fn namespace(mut self, namespace: impl Into<String>) -> Self {
         self.namespace = namespace.into();
@@ -55,8 +55,8 @@ impl TemplateOptions {
     /// With numbering enabled, repeated findings for the same rule become:
     ///
     /// ```text
-    /// <SILENS:secret:1>
-    /// <SILENS:secret:2>
+    /// <CRIBRA:secret:1>
+    /// <CRIBRA:secret:2>
     /// ```
     #[must_use]
     pub const fn numbered(mut self, numbered: bool) -> Self {
@@ -76,7 +76,7 @@ impl TemplateOptions {
 /// A finding produced by rule `stripe.live-secret-key`, for example, becomes:
 ///
 /// ```text
-/// <SILENS:stripe.live-secret-key>
+/// <CRIBRA:stripe.live-secret-key>
 /// ```
 ///
 /// Rule identifiers and the namespace are normalized to a conservative ASCII
@@ -91,7 +91,7 @@ impl TemplateOptions {
 /// # Examples
 ///
 /// ```
-/// use silens_scan::{Rule, Scanner, Severity, transform::template};
+/// use cribra::{Rule, Scanner, Severity, transform::template};
 ///
 /// let scanner = Scanner::builder()
 ///     .rule(Rule::literal("credential", "SECRET", Severity::High))
@@ -103,7 +103,7 @@ impl TemplateOptions {
 ///
 /// assert_eq!(
 ///     template(source, report)?,
-///     "TOKEN=<SILENS:credential>",
+///     "TOKEN=<CRIBRA:credential>",
 /// );
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -216,7 +216,7 @@ mod tests {
 
         assert_eq!(
             template("TOKEN=SECRET", &report).unwrap(),
-            "TOKEN=<SILENS:stripe.secret>",
+            "TOKEN=<CRIBRA:stripe.secret>",
         );
     }
 
@@ -230,7 +230,7 @@ mod tests {
 
         assert_eq!(
             template(source, &report).unwrap(),
-            "A=<SILENS:api-key> B=<SILENS:password> C=public",
+            "A=<CRIBRA:api-key> B=<CRIBRA:password> C=public",
         );
     }
 
@@ -260,13 +260,13 @@ mod tests {
     }
 
     #[test]
-    fn empty_namespace_falls_back_to_silens() {
+    fn empty_namespace_falls_back_to_cribra() {
         let report = ScanReport::new_with_candidates(vec![finding("secret", 6, 12)], Vec::new());
         let options = TemplateOptions::new().namespace("!!!");
 
         assert_eq!(
             template_with("TOKEN=SECRET", &report, &options).unwrap(),
-            "TOKEN=<SILENS:secret>",
+            "TOKEN=<CRIBRA:secret>",
         );
     }
 
@@ -285,7 +285,7 @@ mod tests {
 
         assert_eq!(
             template_with(source, &report, &options).unwrap(),
-            "<SILENS:secret:1> x <SILENS:secret:2> y <SILENS:other:1>",
+            "<CRIBRA:secret:1> x <CRIBRA:secret:2> y <CRIBRA:other:1>",
         );
     }
 
@@ -318,7 +318,7 @@ mod tests {
 
         assert_eq!(
             template("ABCDEF", &report).unwrap(),
-            "<SILENS:left><SILENS:right>",
+            "<CRIBRA:left><CRIBRA:right>",
         );
     }
 
@@ -333,7 +333,7 @@ mod tests {
 
         let output = template(source, &report).unwrap();
 
-        assert_eq!(output, "TOKEN=<SILENS:credential>");
+        assert_eq!(output, "TOKEN=<CRIBRA:credential>");
         assert!(!output.contains("SUPER_SECRET_VALUE"));
     }
 }

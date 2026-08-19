@@ -9,27 +9,27 @@
 
 use std::collections::BTreeSet;
 
-use silens_scan::{Confidence, Scanner, builtins};
+use cribra::{Confidence, Scanner, builtins};
 
-fn scanner_for(rules: impl IntoIterator<Item = silens_scan::RuleSpec>) -> Scanner {
+fn scanner_for(rules: impl IntoIterator<Item = cribra::RuleSpec>) -> Scanner {
     Scanner::builder()
         .builtins(rules)
         .build()
         .expect("built-in rules must compile")
 }
 
-fn scan_one(scanner: &Scanner, source: &str) -> silens_scan::ScanResults<&'static str> {
+fn scan_one(scanner: &Scanner, source: &str) -> cribra::ScanResults<&'static str> {
     scanner.scan([("fixture", source)])
 }
 
-fn rule_ids(report: &silens_scan::ScanReport) -> BTreeSet<&str> {
+fn rule_ids(report: &cribra::ScanReport) -> BTreeSet<&str> {
     report
         .iter()
         .map(|finding| finding.rule_id().as_str())
         .collect()
 }
 
-fn matched<'a>(source: &'a str, finding: &silens_scan::Finding) -> &'a str {
+fn matched<'a>(source: &'a str, finding: &cribra::Finding) -> &'a str {
     let location = finding.location();
     &source[location.start()..location.end()]
 }

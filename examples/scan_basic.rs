@@ -6,7 +6,7 @@
 //! cargo run --example scan_basic
 //! ```
 
-use silens_scan::{Remediation, Rule, Scanner, Severity};
+use cribra::{Remediation, Rule, Scanner, Severity};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let scanner = Scanner::builder()

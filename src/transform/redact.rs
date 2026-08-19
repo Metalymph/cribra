@@ -24,7 +24,7 @@ use super::{TransformError, TransformSpan, validated_spans};
 /// # Examples
 ///
 /// ```
-/// use silens_scan::{Rule, Scanner, Severity, transform::redact};
+/// use cribra::{Rule, Scanner, Severity, transform::redact};
 ///
 /// let scanner = Scanner::builder()
 ///     .rule(Rule::literal("secret", "SECRET", Severity::High))

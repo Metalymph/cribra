@@ -1,6 +1,6 @@
 # Contributing
 
-Silens Scan is in its initial design and implementation stage.
+Cribra is in its initial design and implementation stage.
 
 Before opening a substantial pull request, open an issue describing:
 

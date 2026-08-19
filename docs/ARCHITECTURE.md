@@ -2,7 +2,7 @@
 
 ## Scope
 
-`silens-scan` is a reusable Rust library.
+`cribra` is a reusable Rust library.
 
 It owns:
 
@@ -25,14 +25,14 @@ It does not own:
 ## Consumers
 
 ```text
-silens-scan
-├── Silens CLI: `silens scan`
-├── Silens Scan WASM/PWA
-└── Silens Studio: Scan+
+Cribra
+├── Generic consumers: Rust apps, middleware, services, custom tooling
+├── Silens Scan / Scan+: WASM/PWA
+└── Silens Studio: desktop application
 ```
 
 ## Dependency direction
 
-Consumers may depend on `silens-scan`.
+Consumers may depend on `cribra`.
 
-The scanner must not depend on those consumers or on Silens Siren.
+Cribra must not depend on those consumers or on Silens Siren.

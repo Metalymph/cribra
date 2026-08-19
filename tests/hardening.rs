@@ -9,7 +9,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use silens_scan::{
+use cribra::{
     Remediation, Rule, ScanSort, Scanner, Severity,
     transform::{
         PseudonymizationOptions, SynthesisOptions, pseudonymize, redact, synthesize, template,
@@ -310,7 +310,7 @@ fn canonical_batch_round_trips_through_json_without_behavioral_loss() {
     );
 
     let json = serde_json::to_string(&original).unwrap();
-    let decoded: silens_scan::ScanResults<String> = serde_json::from_str(&json).unwrap();
+    let decoded: cribra::ScanResults<String> = serde_json::from_str(&json).unwrap();
 
     assert_eq!(decoded, original);
     assert_eq!(decoded.summary(), original.summary());

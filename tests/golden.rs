@@ -10,7 +10,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use silens_scan::{
+use cribra::{
     Scanner,
     transform::{
         PseudonymizationOptions, SynthesisOptions, pseudonymize, redact, synthesize, template,

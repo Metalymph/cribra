@@ -1,7 +1,7 @@
 use std::{hint::black_box, time::Duration};
 
+use cribra::{Rule, Scanner, Severity, builtins};
 use criterion::{BatchSize, BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
-use silens_scan::{Rule, Scanner, Severity, builtins};
 
 const SMALL: usize = 1_024;
 const MEDIUM: usize = 64 * 1_024;
@@ -9,7 +9,7 @@ const LARGE: usize = 1_024 * 1_024;
 
 const BENCH_SOURCE_ID: &str = "benchmark";
 
-fn scan_one(scanner: &Scanner, source: &str) -> silens_scan::ScanResults<&'static str> {
+fn scan_one(scanner: &Scanner, source: &str) -> cribra::ScanResults<&'static str> {
     scanner.scan([(BENCH_SOURCE_ID, source)])
 }
 
@@ -33,7 +33,7 @@ fn build_custom_scanner(rule_count: usize) -> Scanner {
     for index in 0..rule_count {
         builder = builder.rule(Rule::literal(
             format!("custom.literal.{index}"),
-            format!("silens_custom_literal_{index:04}"),
+            format!("cribra_custom_literal_{index:04}"),
             Severity::High,
         ));
     }
@@ -48,22 +48,22 @@ fn build_mixed_scanner(rule_count: usize) -> Scanner {
         let rule = match index % 4 {
             0 => Rule::literal(
                 format!("mixed.literal.{index}"),
-                format!("silens_literal_{index:04}_"),
+                format!("cribra_literal_{index:04}_"),
                 Severity::High,
             ),
             1 => Rule::prefix(
                 format!("mixed.prefix.{index}"),
-                format!("silens_prefix_{index:04}_"),
+                format!("cribra_prefix_{index:04}_"),
                 Severity::High,
             ),
             2 => Rule::suffix(
                 format!("mixed.suffix.{index}"),
-                format!("_silens_suffix_{index:04}"),
+                format!("_cribra_suffix_{index:04}"),
                 Severity::High,
             ),
             _ => Rule::pattern(
                 format!("mixed.pattern.{index}"),
-                format!(r"\bsilens_pattern_{index:04}_[A-Za-z0-9]{{16}}\b"),
+                format!(r"\bcribra_pattern_{index:04}_[A-Za-z0-9]{{16}}\b"),
                 Severity::High,
             )
             .expect("benchmark pattern must compile"),
@@ -95,7 +95,7 @@ fn no_match_source(size: usize) -> String {
 
 fn realistic_sparse_source(size: usize) -> String {
     const BLOCK: &str = concat!(
-        "application_name=silens-demo\n",
+        "application_name=cribra-demo\n",
         "log_level=info\n",
         "feature_flag=true\n",
         "database_host=localhost\n",
@@ -136,7 +136,7 @@ fn custom_sparse_source(size: usize) -> String {
     let mut source = no_match_source(size);
 
     for index in [0_usize, 4, 16, 63] {
-        let marker = format!(" silens_custom_literal_{index:04} ");
+        let marker = format!(" cribra_custom_literal_{index:04} ");
         let position = ((index + 1) * source.len() / 80).min(source.len());
         source.insert_str(position, &marker);
     }
@@ -148,10 +148,10 @@ fn mixed_sparse_source(size: usize) -> String {
     let mut source = no_match_source(size);
 
     let markers = [
-        " silens_literal_0000_ ",
-        " silens_prefix_0001_VALUE1234567890 ",
-        " value_silens_suffix_0002 ",
-        " silens_pattern_0003_ABCDEF1234567890 ",
+        " cribra_literal_0000_ ",
+        " cribra_prefix_0001_VALUE1234567890 ",
+        " value_cribra_suffix_0002 ",
+        " cribra_pattern_0003_ABCDEF1234567890 ",
     ];
 
     for (index, marker) in markers.iter().enumerate() {

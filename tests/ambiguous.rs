@@ -9,7 +9,7 @@
 //! - transformations continue to consume findings only;
 //! - serialized candidates expose metadata, never the source value.
 
-use silens_scan::{
+use cribra::{
     CandidateEvidence, Rule, Scanner, SensitiveCandidateKind, Severity, transform::redact,
 };
 

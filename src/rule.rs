@@ -28,7 +28,7 @@ use crate::{
 /// # Examples
 ///
 /// ```
-/// use silens_scan::RuleId;
+/// use cribra::RuleId;
 ///
 /// let id = RuleId::from("github-personal-access-token");
 /// assert_eq!(id.as_str(), "github-personal-access-token");

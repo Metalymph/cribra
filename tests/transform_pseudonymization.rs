@@ -1,6 +1,6 @@
 //! Public deterministic pseudonymization tests.
 
-use silens_scan::{
+use cribra::{
     Rule, Scanner, Severity,
     transform::{PseudonymizationOptions, pseudonymize},
 };
@@ -79,5 +79,5 @@ fn pseudonymization_does_not_embed_rule_or_secret() {
 
     assert!(!output.contains("SECRET"));
     assert!(!output.contains("provider.secret.rule"));
-    assert!(output.contains("silens_pseudo_"));
+    assert!(output.contains("cribra_pseudo_"));
 }

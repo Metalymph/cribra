@@ -1,6 +1,6 @@
 //! Public transformation tests.
 
-use silens_scan::{
+use cribra::{
     Redaction, Rule, Scanner, Severity,
     transform::{redact, redact_with},
 };

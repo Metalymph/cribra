@@ -1,6 +1,6 @@
 //! Public provider-aware synthesis tests.
 
-use silens_scan::{
+use cribra::{
     Rule, Scanner, Severity,
     transform::{SynthesisOptions, synthesize},
 };

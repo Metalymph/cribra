@@ -1,6 +1,6 @@
 application:
-  name: silens-fixture
+  name: cribra-fixture
   environment: test
 security:
-  recovery_token: <SILENS:demo.secret>
-  signing_material: <SILENS:demo.private-key>
+  recovery_token: <CRIBRA:demo.secret>
+  signing_material: <CRIBRA:demo.private-key>

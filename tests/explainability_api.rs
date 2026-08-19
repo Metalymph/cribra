@@ -9,7 +9,7 @@
 //! - classified and ambiguous explanation variants remain distinct;
 //! - no source or matched sensitive value enters explanation payloads.
 
-use silens_scan::{CandidateEvidence, DetectionMode, Explanation, Rule, Scanner, Severity};
+use cribra::{CandidateEvidence, DetectionMode, Explanation, Rule, Scanner, Severity};
 
 const SECRET: &str = "KNOWN_SECRET_VALUE";
 const AMBIGUOUS: &str = "ABCD-EFGH-IJKL-MNOP";
@@ -157,7 +157,7 @@ mod serde_contract {
             .candidates()[0];
 
         let json = serde_json::to_string(candidate).expect("serialize candidate");
-        let decoded: silens_scan::SensitiveCandidate =
+        let decoded: cribra::SensitiveCandidate =
             serde_json::from_str(&json).expect("deserialize candidate");
 
         assert_eq!(
@@ -184,8 +184,7 @@ mod serde_contract {
             .findings()[0];
 
         let json = serde_json::to_string(finding).expect("serialize finding");
-        let decoded: silens_scan::Finding =
-            serde_json::from_str(&json).expect("deserialize finding");
+        let decoded: cribra::Finding = serde_json::from_str(&json).expect("deserialize finding");
 
         assert_eq!(
             decoded.explanation(&scanner),

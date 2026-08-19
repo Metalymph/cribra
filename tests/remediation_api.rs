@@ -1,4 +1,4 @@
-use silens_scan::{Remediation, Rule, Scanner, Severity, builtins};
+use cribra::{Remediation, Rule, Scanner, Severity, builtins};
 
 #[test]
 fn custom_rules_have_no_remediation_by_default() {

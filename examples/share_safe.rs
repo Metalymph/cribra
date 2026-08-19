@@ -6,7 +6,7 @@
 //! cargo run --example share_safe
 //! ```
 
-use silens_scan::{
+use cribra::{
     Rule, Scanner, Severity,
     transform::{ShareBundle, ShareMode},
 };

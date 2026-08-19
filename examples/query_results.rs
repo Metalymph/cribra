@@ -6,7 +6,7 @@
 //! cargo run --example query_results
 //! ```
 
-use silens_scan::{Rule, ScanSort, Scanner, Severity};
+use cribra::{Rule, ScanSort, Scanner, Severity};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let scanner = Scanner::builder()

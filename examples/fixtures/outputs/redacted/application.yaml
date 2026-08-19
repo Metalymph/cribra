@@ -1,5 +1,5 @@
 application:
-  name: silens-fixture
+  name: cribra-fixture
   environment: test
 security:
   recovery_token: [REDACTED]

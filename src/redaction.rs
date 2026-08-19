@@ -1,4 +1,4 @@
-//! Safe redaction marker used by Silens Scan consumers.
+//! Safe redaction marker used by Cribra consumers.
 //!
 //! A [`Redaction`] stores only replacement text. It never stores the original
 //! matched source or secret.
@@ -16,7 +16,7 @@ use std::fmt;
 /// # Examples
 ///
 /// ```
-/// use silens_scan::Redaction;
+/// use cribra::Redaction;
 ///
 /// let redaction = Redaction::hidden();
 /// assert_eq!(redaction.as_str(), "[REDACTED]");
