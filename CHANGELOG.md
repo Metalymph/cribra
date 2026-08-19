@@ -6,6 +6,10 @@ The project follows semantic versioning from the first public release.
 
 ## [Unreleased]
 
+No user-facing changes yet.
+
+## [0.2.0] - 2026-08-19
+
 Development toward `0.2.0` focuses on detection quality, explicit ambiguity
 handling and presentation-agnostic explainability while preserving the
 privacy-first, application-agnostic core architecture introduced in `0.1.0`.

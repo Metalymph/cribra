@@ -926,6 +926,29 @@ classification, ambiguous sensitive-value review, explainability and stronger
 public metadata while preserving the local-first privacy boundary and the
 separation between confirmed findings and review-only candidates.
 
+## Development
+
+Cribra ships both a `justfile` and an equivalent `Makefile`. `just` is the
+preferred local interface; Make is provided for contributors, CI-like
+environments, and automation that already standardizes on it.
+
+| Command | Purpose |
+| --- | --- |
+| `just gate` | Normal local quality gate |
+| `just release-gate` | MSRV + security + package + publication dry run |
+| `just test-all` | Test all native features |
+| `just wasm` | Check the default browser/WASM contract |
+| `just wasm-serde` | Check browser/WASM with Serde |
+| `just audit` | Run RustSec with `cargo audit` |
+| `just bench-all` | Run maintained benchmark suites |
+| `just clean` | Remove Cargo build artifacts |
+
+Equivalent targets are available as `make gate`, `make release-gate`,
+`make wasm`, and so on.
+
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the complete development,
+validation, and pull-request workflow.
+
 ## License
 
 MIT
