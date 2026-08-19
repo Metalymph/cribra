@@ -8,27 +8,80 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: "1"
+
 jobs:
-  validate:
+  linux-gate:
+    name: Linux full gate
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
-      - name: Install Rust
+      - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
 
       - name: Cache Rust artifacts
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@v2.9.1
 
       - name: Check formatting
-        run: cargo fmt --all --check
+        run: cargo fmt --all -- --check
 
-      - name: Test
-        run: cargo test --all-targets
+      - name: Check all features
+        run: cargo check --all-features
+
+      - name: Test default features
+        run: cargo test
+
+      - name: Test serde
+        run: cargo test --features serde
+
+      - name: Test all features
+        run: cargo test --all-features
+
+      - name: Test rustdoc
+        run: cargo test --doc
 
       - name: Clippy
-        run: cargo clippy --all-targets -- -D warnings
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+      - name: Package dry run
+        run: cargo package --allow-dirty
+
+  cross-platform:
+    name: Test ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - macos-latest
+          - windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust artifacts
+        uses: Swatinem/rust-cache@v2.9.1
+
+      - name: Check
+        run: cargo check --all-features
+
+      - name: Test default features
+        run: cargo test
+
+      - name: Test all features
+        run: cargo test --all-features

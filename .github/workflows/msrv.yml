@@ -1,0 +1,56 @@
+name: MSRV
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "src/**"
+      - "tests/**"
+      - "examples/**"
+      - ".github/workflows/msrv.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: msrv-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: "1"
+
+jobs:
+  msrv:
+    name: Rust 1.97
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install Rust 1.97
+        uses: dtolnay/rust-toolchain@1.97.0
+
+      - name: Cache Rust artifacts
+        uses: Swatinem/rust-cache@v2.9.1
+        with:
+          key: msrv-1.97
+
+      - name: Verify rustc version
+        run: rustc --version
+
+      - name: Check default features
+        run: cargo check
+
+      - name: Check all features
+        run: cargo check --all-features
+
+      - name: Test default features
+        run: cargo test
+
+      - name: Test all features
+        run: cargo test --all-features
