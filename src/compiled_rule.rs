@@ -334,10 +334,62 @@ fn compile_pattern_prefilter(
     validator: ValidatorKind,
 ) -> Result<Option<AhoCorasick>, ScannerBuildError> {
     let needles: &[&str] = match (rule_id, validator) {
+        ("aws.secret-access-key", ValidatorKind::Aws) => &[
+            "aws_secret_access_key",
+            "secret_access_key",
+            "aws_secret_key",
+        ],
+        ("aws.session-token", ValidatorKind::Aws) => {
+            &["aws_session_token", "session_token", "aws_security_token"]
+        }
+        ("azure.client-secret", ValidatorKind::Azure) => &[
+            "azure_client_secret",
+            "client_secret",
+            "clientsecret",
+            "client_secret_value",
+            "microsoft_provider_authentication_secret",
+        ],
+        ("azure.storage-account-key", ValidatorKind::Azure) => {
+            &["account_key", "storage_account_key", "azure_storage_key"]
+        }
+        ("azure.shared-access-signature", ValidatorKind::Azure) => {
+            &["shared_access_signature", "sas_token", "azure_sas_token"]
+        }
+        ("gcp.private-key-id", ValidatorKind::Gcp) => &["private_key_id"],
+        ("gcp.client-secret", ValidatorKind::Gcp) => &["client_secret"],
+        ("gcp.private-key", ValidatorKind::Gcp) => &["private_key"],
+        ("generic.password-field", ValidatorKind::Password) => &[
+            "password",
+            "passwd",
+            "pwd",
+            "admin_password",
+            "root_password",
+        ],
+        ("generic.database-password-field", ValidatorKind::Password) => &[
+            "database_password",
+            "db_password",
+            "postgres_password",
+            "mysql_password",
+            "redis_password",
+        ],
+        ("generic.passphrase-field", ValidatorKind::Password) => {
+            &["passphrase", "private_key_passphrase"]
+        }
+        ("generic.sensitive-hash", ValidatorKind::SensitiveHash) => &[
+            "password_hash",
+            "passwd_hash",
+            "secret_hash",
+            "credential_hash",
+            "api_key_hash",
+            "token_hash",
+        ],
         ("generic.api-key", ValidatorKind::GenericCredential) => {
             &["api_key", "apikey", "api_token", "access_key"]
         }
         ("generic.auth-token", ValidatorKind::GenericCredential) => &["token"],
+        ("generic.secret", ValidatorKind::GenericCredential) => {
+            &["secret", "secret_key", "signing_secret", "webhook_secret"]
+        }
         _ => return Ok(None),
     };
 
