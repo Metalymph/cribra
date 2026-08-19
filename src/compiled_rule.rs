@@ -14,7 +14,6 @@ use crate::{
 ///
 /// Findings carry this index while scanning instead of cloning a `RuleId` and
 /// copying rule metadata for every match.
-
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub(crate) struct RuleIndex(u32);
 
@@ -188,10 +187,19 @@ struct PatternRule {
     rule_index: RuleIndex,
     pattern: Regex,
     capture: Option<usize>,
+    prefilter: Option<AhoCorasick>,
 }
 
 impl PatternRule {
     fn scan(&self, source: &str, findings: &mut Vec<InternalFinding>) {
+        if self
+            .prefilter
+            .as_ref()
+            .is_some_and(|prefilter| !prefilter.is_match(source))
+        {
+            return;
+        }
+
         match self.capture {
             None => findings.extend(self.pattern.find_iter(source).map(|matched| {
                 InternalFinding::new(self.rule_index, matched.start(), matched.end())
@@ -229,8 +237,8 @@ impl CompiledRuleSet {
 
         for (index, rule) in rules.into_iter().enumerate() {
             validate_rule(&rule)?;
-            let kind = rule.kind();
 
+            let kind = rule.kind();
             let Rule {
                 id,
                 severity,
@@ -238,7 +246,9 @@ impl CompiledRuleSet {
                 matcher,
                 remediation,
             } = rule;
+
             let rule_index = RuleIndex::new(index as u32);
+            let pattern_prefilter = compile_pattern_prefilter(id.as_str(), validator)?;
 
             metadata.push(CompiledRuleMetadata {
                 id,
@@ -265,6 +275,7 @@ impl CompiledRuleSet {
                     rule_index,
                     pattern: regex,
                     capture,
+                    prefilter: pattern_prefilter,
                 }),
             }
         }
@@ -316,6 +327,25 @@ impl CompiledRuleSet {
     pub(crate) fn is_empty(&self) -> bool {
         self.metadata.is_empty()
     }
+}
+
+fn compile_pattern_prefilter(
+    rule_id: &str,
+    validator: ValidatorKind,
+) -> Result<Option<AhoCorasick>, ScannerBuildError> {
+    let needles: &[&str] = match (rule_id, validator) {
+        ("generic.api-key", ValidatorKind::GenericCredential) => {
+            &["api_key", "apikey", "api_token", "access_key"]
+        }
+        ("generic.auth-token", ValidatorKind::GenericCredential) => &["token"],
+        _ => return Ok(None),
+    };
+
+    AhoCorasickBuilder::new()
+        .ascii_case_insensitive(true)
+        .build(needles)
+        .map(Some)
+        .map_err(ScannerBuildError::AutomatonBuild)
 }
 
 fn validate_rule(rule: &Rule) -> Result<(), ScannerBuildError> {
