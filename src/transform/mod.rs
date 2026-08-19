@@ -2,7 +2,7 @@
 //!
 //! Transformation APIs operate on caller-provided UTF-8 source text together
 //! with a [`ScanReport`]. Source text is never retained by
-//! [`ScanResults`], reports, findings, or transformation
+//! [`ScanResults`](crate::RuleSpec), reports, findings, or transformation
 //! metadata.
 //!
 //! Transformations validate every finding span before reading or replacing it.

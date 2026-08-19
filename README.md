@@ -193,13 +193,13 @@ variants, and malformed or extended grouped values.
 
 ``` toml
 [dependencies]
-cribra = "0.1"
+cribra = "0.2"
 ```
 
 Optional features are deliberately independent:
 
 ``` toml
-cribra = { version = "0.1", features = ["serde", "parallel"] }
+cribra = { version = "0.2", features = ["serde", "parallel"] }
 ```
 
   Feature      Default   Purpose
@@ -767,7 +767,7 @@ and literal rules plus remediation metadata.
 Enable `parallel` to scan independent sources concurrently:
 
 ``` toml
-cribra = { version = "0.1", features = ["parallel"] }
+cribra = { version = "0.2", features = ["parallel"] }
 ```
 
 ``` rust
@@ -791,7 +791,7 @@ Enable `serde` when results need to cross an application boundary or be
 persisted/serialized:
 
 ``` toml
-cribra = { version = "0.1", features = ["serde"] }
+cribra = { version = "0.2", features = ["serde"] }
 ```
 
 ``` rust
@@ -851,71 +851,28 @@ application.
 
 ## Performance
 
-Criterion benchmarks below were measured with Rust 1.97.1. They are
-workload- and machine-specific engineering baselines, not portable
-performance guarantees.
+Criterion results are machine- and workload-specific engineering baselines, not
+portable performance guarantees. The final v0.2 regression baseline was
+measured with Rust 1.97.1.
 
-### Core scanning
+| Representative workload | Median time | Throughput |
+| --- | ---: | ---: |
+| Built-ins, 64 KiB | 535.27 µs | 117.47 MiB/s |
+| Built-ins, 1 MiB | 8.0754 ms | 123.88 MiB/s |
+| No findings, 64 KiB | 212.41 µs | 294.24 MiB/s |
+| Realistic v0.2 mixed source, 64 KiB | 268.29 µs | 233.39 MiB/s |
+| 64 custom literal rules | 75.227 µs | 830.82 MiB/s |
+| 512 custom literal rules | 74.567 µs | 839.61 MiB/s |
 
-  Workload                     Median time         Throughput
-  -------------------------- ------------- ------------------
-  Built-ins, 1 KiB                20.25 µs        66.81 MiB/s
-  Built-ins, 64 KiB              253.90 µs       247.64 MiB/s
-  Built-ins, 1 MiB                3.759 ms   **266.13 MiB/s**
-  64 custom literal rules         48.09 µs     **1.27 GiB/s**
-  512 custom literal rules        48.93 µs     **1.25 GiB/s**
-  64 custom mixed rules          151.32 µs   **413.04 MiB/s**
-  Full built-in pipeline         253.94 µs   **246.12 MiB/s**
+v0.2 performs substantially more semantic work than v0.1, including expanded
+contextual classification and a separate ambiguous-candidate channel. The final
+performance pass uses conservative contextual prefiltering and a shared
+contextual gate so clean-path cost does not scale linearly with the contextual
+regex portfolio. Prefilters only eliminate impossible work; rule matching and
+validation remain authoritative.
 
-### Match density
-
-For a 64 KiB input:
-
-  Density     Findings   Median time             Throughput
-  --------- ---------- ------------- ----------------------
-  None               0     211.97 µs       **294.85 MiB/s**
-  Sparse             7      \~255 µs   **\~246--248 MiB/s**
-  Dense           1496     \~2.85 ms         **\~22 MiB/s**
-
-The dense fixture intentionally produces roughly one final finding every
-43 bytes, making result production and validation a substantial part of
-the workload.
-
-### Parallel batch scanning
-
-The benchmark scans 32 independent sources.
-
-  Source size        Serial    Parallel   Approx. speedup
-  ------------- ----------- ----------- -----------------
-  4 KiB × 32       1.027 ms   244.49 µs             4.20×
-  64 KiB × 32      8.161 ms    1.307 ms             6.24×
-  1 MiB × 32      121.16 ms    18.24 ms             6.64×
-
-Parallel throughput reaches approximately:
-
--   **563 MiB/s** for 4 KiB sources
--   **1.50 GiB/s** for 64 KiB sources
--   **1.71 GiB/s** for 1 MiB sources
-
-### Build cost
-
-  Ruleset                         Median build time
-  ----------------------------- -------------------
-  Built-in pack, cold compile              49.69 ms
-  4 custom literal rules                   15.58 µs
-  64 custom literal rules                  60.95 µs
-  512 custom literal rules                299.24 µs
-
-The default built-in scanner uses a shared compiled cache, so the cold
-built-in compile cost is paid once per process and reused afterward.
-
-### Performance policy
-
-The `0.1.0` engine is performance-frozen unless a correctness issue is
-found. Manual SIMD has deliberately not been introduced: current
-workloads do not justify the extra architecture-specific complexity. It
-can be reconsidered if real-world profiling exposes a concrete
-bottleneck.
+See [`docs/PERFORMANCE.md`](docs/PERFORMANCE.md) for benchmark policy,
+diagnostic suites, the complete v0.2 baseline and interpretation.
 
 ## Testing and hardening
 

@@ -1,7 +1,7 @@
 //! Built-in detection contracts.
 //!
 //! Built-ins combine candidate discovery, severity and validator selection into
-//! reusable [`RuleSpec`](crate::RuleSpec) values.
+//! reusable [`RuleSpec`] values.
 
 mod contextual;
 mod deterministic;

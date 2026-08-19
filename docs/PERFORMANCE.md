@@ -23,6 +23,11 @@ during v0.2:
 - typed explainability projection for findings and candidates;
 - ambiguity promotion through explicit custom domain knowledge.
 
+`benches/contextual_tail.rs` isolates the contextual-pattern tail and measures
+individual and incremental contextual rule costs. Together with
+`benches/isolation.rs`, it is diagnostic tooling rather than a portable
+performance promise.
+
 ## Policy
 
 Performance work follows measurement rather than intuition.
@@ -102,3 +107,82 @@ cargo bench --bench isolation --all-features
 
 The purpose is to identify the concrete family responsible for a regression
 before changing scanner internals.
+
+## v0.2 final regression baseline
+
+The v0.2 regression investigation ended after replacing repeated full-source
+contextual-pattern gating with a shared contextual prefilter gate while
+retaining rule-local authoritative validation. Prefilters only skip impossible
+work; normal matcher and validator semantics remain authoritative.
+
+Final measurements below were recorded with Rust 1.97.1 on the same development
+machine used throughout the regression investigation. They are local engineering
+baselines, not portable guarantees.
+
+### Historical `scan` suite
+
+| Workload | Median time | Throughput |
+| --- | ---: | ---: |
+| built-ins, 1 KiB | 34.586 µs | 39.127 MiB/s |
+| built-ins, 64 KiB | 535.27 µs | 117.47 MiB/s |
+| built-ins, 1 MiB | 8.0754 ms | 123.88 MiB/s |
+| match density: none, 64 KiB | 212.41 µs | 294.24 MiB/s |
+| match density: sparse, 64 KiB | 528.82 µs | 118.90 MiB/s |
+| match density: dense, 64 KiB | 4.5399 ms | 13.767 MiB/s |
+| custom literal-only, 64 rules | 75.227 µs | 830.82 MiB/s |
+| custom mixed, 64 rules | 177.81 µs | 351.50 MiB/s |
+| full built-in pipeline | 529.28 µs | 118.09 MiB/s |
+| custom rule count: 512 | 74.567 µs | 839.61 MiB/s |
+
+Cold construction of `builtins::CURRENT` measured 49.266 ms. The default
+built-in scanner remains cached, so this is a construction cost rather than a
+per-scan cost.
+
+### v0.2 semantic-path suite
+
+| Workload | Median time | Throughput |
+| --- | ---: | ---: |
+| candidate path: none, 64 KiB | 216.62 µs | 288.53 MiB/s |
+| candidate path: sparse, 64 KiB | 247.75 µs | 252.27 MiB/s |
+| candidate path: dense, 64 KiB | 262.86 µs | 237.77 MiB/s |
+| candidate path: sparse, 1 MiB | 4.0086 ms | 249.47 MiB/s |
+| realistic mixed source, 64 KiB | 268.29 µs | 233.39 MiB/s |
+| ambiguity promotion: generic candidate | 284.60 µs | 219.61 MiB/s |
+| ambiguity promotion: custom finding | 637.07 µs | 98.105 MiB/s |
+
+Typed explainability projection remained nanosecond/sub-nanosecond scale and
+was not a scanning bottleneck.
+
+### Contextual isolation
+
+| Matcher family, clean 64 KiB | Median time | Throughput |
+| --- | ---: | ---: |
+| empty scanner | 35.629 µs | 1.7131 GiB/s |
+| deterministic prefixes | 123.33 µs | 506.76 MiB/s |
+| deterministic patterns | 40.000 µs | 1.5259 GiB/s |
+| contextual prefixes | 37.518 µs | 1.6268 GiB/s |
+| contextual patterns | 124.36 µs | 502.58 MiB/s |
+| all contextual built-ins | 125.34 µs | 498.66 MiB/s |
+| complete `builtins::CURRENT` | 217.73 µs | 287.06 MiB/s |
+
+The contextual-pattern count diagnostic measured about 126 µs at 4, 8 and 15
+contextual patterns on the clean 64 KiB fixture. This confirms that the shared
+gate prevents clean-path cost from scaling linearly with the contextual regex
+portfolio.
+
+### Interpretation
+
+v0.2 deliberately performs more semantic work than v0.1: the built-in
+portfolio is broader, contextual classification is stronger, ambiguous values
+have a separate review channel, and findings/candidates support typed
+explainability and stricter normalization contracts.
+
+The final optimization pass removed the pathological repeated full-source
+contextual scans observed during development. Clean match-density performance
+returned to approximately the historical v0.1 level, while the complete
+built-in input-size workload retains the cost of the expanded v0.2 semantic
+portfolio.
+
+Further low-level optimization is deferred until real-world profiling identifies
+a concrete bottleneck. Detection quality, semantic correctness and
+maintainability remain higher priority than synthetic benchmark parity.
