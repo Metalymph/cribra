@@ -12,6 +12,22 @@ privacy-first, application-agnostic core architecture introduced in `0.1.0`.
 
 ### Added
 
+#### Detection regression hardening
+
+- Added a v0.2 corpus spanning representative positive detections, isolated
+  contextual values, ambiguous review-only values and known false-positive
+  families.
+- Added adversarial coverage for malformed provider-shaped values, punctuation
+  boundaries, opaque infrastructure identifiers and mixed contextual layouts.
+- Added application-agnostic cross-format coverage across ENV, JSON, YAML,
+  TOML, plain text and explicit CRLF input.
+- Added regression coverage for source boundaries, Unicode surroundings,
+  adjacent findings, deterministic collision ordering, partial overlaps and
+  finding/candidate suppression semantics.
+- Added collision-heavy serial/parallel equivalence coverage.
+- Corpus expectations are treated as semantic contracts rather than generated
+  snapshots.
+
 #### Rule metadata and detection semantics
 
 - Public `RuleMetadata` for presentation-safe rule introspection.

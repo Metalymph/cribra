@@ -1,8 +1,8 @@
 //! Safe source transformations driven by scan findings.
 //!
 //! Transformation APIs operate on caller-provided UTF-8 source text together
-//! with a [`ScanReport`](crate::ScanReport). Source text is never retained by
-//! [`ScanResults`](crate::ScanResults), reports, findings, or transformation
+//! with a [`ScanReport`]. Source text is never retained by
+//! [`ScanResults`], reports, findings, or transformation
 //! metadata.
 //!
 //! Transformations validate every finding span before reading or replacing it.

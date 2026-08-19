@@ -1,0 +1,7 @@
+# Values that become findings only with recognized surrounding keys.
+
+wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+AbCdEfGhIjKlMnOpQrStUvWxYz0123456789
+CorrectHorseBatteryStaple!
+AbCdEfGhIjKlMnOpQrStUvWx
+0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef

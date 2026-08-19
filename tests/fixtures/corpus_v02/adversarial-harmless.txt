@@ -1,0 +1,14 @@
+# Adversarial opaque values that must remain clean.
+
+homepage=https://example.invalid/path?ref=AbCdEfGhIjKlMnOpQrStUvWx
+asset=https://cdn.example.invalid/pkg/0123456789abcdef0123456789abcdef01234567.js
+etag=W/"686897696a7c876b7e"
+traceparent=00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01
+ulid=01J61M3Q7JVKJ8C0P7BZ6M5Z2X
+snowflake=123456789012345678
+ipv6=2001:db8:85a3::8a2e:370:7334
+digest=sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+git_ref=refs/heads/feature/ABCDEF0123456789
+filename=backup-2026-08-19T160000Z.tar.zst
+locale=en-US
+unicode_id=cliente-秘密-данные-αβγ

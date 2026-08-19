@@ -1,0 +1,71 @@
+# Cribra v0.2 detection corpus
+
+This directory contains corpus-level fixtures added for Cribra `0.2.7`.
+
+The focused regression suites under `tests/` remain authoritative for individual
+detector semantics. This corpus exercises broader boundaries across the complete
+default scanner.
+
+## Categories
+
+- `positive.env` — representative deterministic and contextual detections.
+- `contextual-isolated.txt` — credential-shaped values without recognized
+  surrounding keys; these must not become contextual findings.
+- `ambiguous.txt` — recovery-like grouped values that must remain review-only
+  `SensitiveCandidate` values.
+- `false-positives.txt` — UUIDs, hashes, package integrity values, build/request
+  identifiers, dates, versions, placeholders and Unicode text that must remain
+  clean.
+
+All credential-looking values are synthetic and intentionally unusable.
+
+## Policy
+
+Corpus changes are semantic changes.
+
+A failing corpus test must be reviewed before changing either a detector or an
+expected fixture. Do not regenerate/relax expectations merely to make the suite
+green.
+
+## Adversarial extension
+
+`0.2.7b` adds boundary-oriented fixtures:
+
+- `adversarial-truncated.txt` — malformed/truncated provider-shaped values;
+- `adversarial-punctuation.txt` — recovery-like candidate boundary behavior;
+- `adversarial-harmless.txt` — opaque infrastructure identifiers, URLs,
+  digests, tracing IDs and Unicode identifiers;
+- `adversarial-context.txt` — contextual values in mixed compact/config
+  layouts.
+
+These fixtures intentionally combine cases that are individually plausible but
+easy to misclassify as detector coverage expands.
+
+## Cross-format corpus
+
+`0.2.7c` adds equivalent sensitive content represented as ENV, JSON, YAML,
+TOML, plain text and explicit CRLF input.
+
+These fixtures freeze an important architectural property: Cribra receives
+caller-owned UTF-8 text and is not coupled to an application-level file-format
+parser. Equivalent evidence should therefore preserve equivalent detection and
+review semantics across textual representations.
+
+The cross-format suite also covers:
+
+- LF/CRLF equivalence;
+- source-start/source-end boundaries;
+- Unicode surrounding text;
+- adjacent deterministic findings;
+- stable multi-source input ordering.
+
+## Collision and final v0.2 gate
+
+`0.2.7d`/`0.2.7e` complete the detection-quality corpus with exact-span
+collision ordering, partial-overlap preservation, ambiguity promotion,
+nearby finding/candidate separation, same-line ordering and optional
+serial/parallel equivalence.
+
+The final gate for this phase is the complete normal and all-features test
+surface plus Clippy and documentation checks. Detector or fixture changes after
+this point should be treated as deliberate semantic changes.

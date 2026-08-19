@@ -5,3 +5,4 @@ examples/fixtures/outputs/redacted/crlf.env text eol=crlf
 examples/fixtures/outputs/templates/crlf.env text eol=crlf
 examples/fixtures/outputs/pseudonymized/crlf.env text eol=crlf
 examples/fixtures/outputs/synthesized/crlf.env text eol=crlf
+tests/fixtures/corpus_v02/formats/sample-crlf.env text eol=crlf

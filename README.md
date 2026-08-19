@@ -937,6 +937,20 @@ The release test surface includes:
 The canonical corpus is intended to remain part of the public
 documentation as the crate evolves.
 
+### Detection regression corpus
+
+The v0.2 regression corpus freezes detector behavior beyond isolated unit tests.
+It covers representative positive detections, contextual values without semantic
+keys, ambiguous review-only values, known false-positive families, adversarial
+opaque identifiers, malformed provider-shaped values, punctuation boundaries,
+common ENV/JSON/YAML/TOML/plain-text representations, LF/CRLF equivalence,
+Unicode coordinates, exact-span collisions, partial overlaps and
+finding/candidate interaction.
+
+Corpus failures are reviewed as semantic changes. Expectations are not relaxed
+or regenerated merely to make the suite pass.
+
+
 ## Scope
 
 Cribra intentionally stops at the reusable scanning core.
