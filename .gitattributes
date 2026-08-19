@@ -1,4 +1,4 @@
-* text=auto
+* text=auto eol=lf
 
 examples/fixtures/inputs/crlf.env text eol=crlf
 examples/fixtures/outputs/redacted/crlf.env text eol=crlf
