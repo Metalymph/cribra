@@ -192,24 +192,85 @@ struct PatternRule {
 
 impl PatternRule {
     fn scan(&self, source: &str, findings: &mut Vec<InternalFinding>) {
-        if self
-            .prefilter
-            .as_ref()
-            .is_some_and(|prefilter| !prefilter.is_match(source))
-        {
-            return;
-        }
-
-        match self.capture {
-            None => findings.extend(self.pattern.find_iter(source).map(|matched| {
+        match (&self.prefilter, self.capture) {
+            (Some(prefilter), Some(capture)) => {
+                self.scan_prefiltered_captures(source, findings, prefilter, capture);
+            }
+            (Some(prefilter), None) => {
+                self.scan_prefiltered_matches(source, findings, prefilter);
+            }
+            (None, None) => findings.extend(self.pattern.find_iter(source).map(|matched| {
                 InternalFinding::new(self.rule_index, matched.start(), matched.end())
             })),
-            Some(capture) => {
+            (None, Some(capture)) => {
                 findings.extend(self.pattern.captures_iter(source).filter_map(|captures| {
                     captures.get(capture).map(|matched| {
                         InternalFinding::new(self.rule_index, matched.start(), matched.end())
                     })
                 }));
+            }
+        }
+    }
+
+    fn scan_prefiltered_captures(
+        &self,
+        source: &str,
+        findings: &mut Vec<InternalFinding>,
+        prefilter: &AhoCorasick,
+        capture: usize,
+    ) {
+        let bytes = source.as_bytes();
+
+        for key_match in prefilter.find_iter(source) {
+            let key_start = key_match.start();
+            let search_start = optional_quote_start(bytes, key_start);
+
+            let Some(captures) = self.pattern.captures_at(source, search_start) else {
+                continue;
+            };
+
+            let Some(complete) = captures.get(0) else {
+                continue;
+            };
+
+            // `captures_at` searches at or after the supplied offset. A
+            // prefilter hit is only authoritative as a starting hint, so reject
+            // any later regex match and let its own key occurrence trigger it.
+            if complete.start() != search_start && complete.start() != key_start {
+                continue;
+            }
+
+            if let Some(matched) = captures.get(capture) {
+                findings.push(InternalFinding::new(
+                    self.rule_index,
+                    matched.start(),
+                    matched.end(),
+                ));
+            }
+        }
+    }
+
+    fn scan_prefiltered_matches(
+        &self,
+        source: &str,
+        findings: &mut Vec<InternalFinding>,
+        prefilter: &AhoCorasick,
+    ) {
+        let bytes = source.as_bytes();
+
+        for key_match in prefilter.find_iter(source) {
+            let search_start = optional_quote_start(bytes, key_match.start());
+
+            let Some(matched) = self.pattern.find_at(source, search_start) else {
+                continue;
+            };
+
+            if matched.start() == search_start {
+                findings.push(InternalFinding::new(
+                    self.rule_index,
+                    matched.start(),
+                    matched.end(),
+                ));
             }
         }
     }
@@ -340,64 +401,76 @@ fn compile_pattern_prefilter(
             "aws_secret_key",
         ],
         ("aws.session-token", ValidatorKind::Aws) => {
-            &["aws_session_token", "session_token", "aws_security_token"]
+            &["aws_session_token", "aws_security_token", "session_token"]
         }
         ("azure.client-secret", ValidatorKind::Azure) => &[
-            "azure_client_secret",
-            "client_secret",
-            "clientsecret",
-            "client_secret_value",
             "microsoft_provider_authentication_secret",
+            "azure_client_secret",
+            "client_secret_value",
+            "clientsecret",
+            "client_secret",
         ],
         ("azure.storage-account-key", ValidatorKind::Azure) => {
-            &["account_key", "storage_account_key", "azure_storage_key"]
+            &["storage_account_key", "azure_storage_key", "account_key"]
         }
         ("azure.shared-access-signature", ValidatorKind::Azure) => {
-            &["shared_access_signature", "sas_token", "azure_sas_token"]
+            &["shared_access_signature", "azure_sas_token", "sas_token"]
         }
         ("gcp.private-key-id", ValidatorKind::Gcp) => &["private_key_id"],
         ("gcp.client-secret", ValidatorKind::Gcp) => &["client_secret"],
         ("gcp.private-key", ValidatorKind::Gcp) => &["private_key"],
         ("generic.password-field", ValidatorKind::Password) => &[
+            "admin_password",
+            "root_password",
             "password",
             "passwd",
             "pwd",
-            "admin_password",
-            "root_password",
         ],
         ("generic.database-password-field", ValidatorKind::Password) => &[
             "database_password",
-            "db_password",
             "postgres_password",
             "mysql_password",
             "redis_password",
+            "db_password",
         ],
         ("generic.passphrase-field", ValidatorKind::Password) => {
-            &["passphrase", "private_key_passphrase"]
+            &["private_key_passphrase", "passphrase"]
         }
         ("generic.sensitive-hash", ValidatorKind::SensitiveHash) => &[
+            "credential_hash",
             "password_hash",
             "passwd_hash",
-            "secret_hash",
-            "credential_hash",
             "api_key_hash",
+            "secret_hash",
             "token_hash",
         ],
         ("generic.api-key", ValidatorKind::GenericCredential) => {
-            &["api_key", "apikey", "api_token", "access_key"]
+            &["access_key", "api_token", "api_key", "apikey"]
         }
-        ("generic.auth-token", ValidatorKind::GenericCredential) => &["token"],
+        ("generic.auth-token", ValidatorKind::GenericCredential) => {
+            &["access_token", "bearer_token", "auth_token", "token"]
+        }
         ("generic.secret", ValidatorKind::GenericCredential) => {
-            &["secret", "secret_key", "signing_secret", "webhook_secret"]
+            &["signing_secret", "webhook_secret", "secret_key", "secret"]
         }
         _ => return Ok(None),
     };
 
     AhoCorasickBuilder::new()
         .ascii_case_insensitive(true)
+        .match_kind(MatchKind::LeftmostFirst)
         .build(needles)
         .map(Some)
         .map_err(ScannerBuildError::AutomatonBuild)
+}
+
+#[inline]
+fn optional_quote_start(bytes: &[u8], key_start: usize) -> usize {
+    if key_start > 0 && matches!(bytes[key_start - 1], b'\'' | b'"') {
+        key_start - 1
+    } else {
+        key_start
+    }
 }
 
 fn validate_rule(rule: &Rule) -> Result<(), ScannerBuildError> {
