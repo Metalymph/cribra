@@ -1,0 +1,6 @@
+# Provider-shaped values intentionally too short or malformed.
+# None should become a classified finding when isolated.
+
+ghp_AbCdEf0123
+sk_live_AbCdEf0123
+wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLE

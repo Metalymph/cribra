@@ -26,3 +26,17 @@ Corpus changes are semantic changes.
 A failing corpus test must be reviewed before changing either a detector or an
 expected fixture. Do not regenerate/relax expectations merely to make the suite
 green.
+
+## Adversarial extension
+
+`0.2.7b` adds boundary-oriented fixtures:
+
+- `adversarial-truncated.txt` — malformed/truncated provider-shaped values;
+- `adversarial-punctuation.txt` — recovery-like candidate boundary behavior;
+- `adversarial-harmless.txt` — opaque infrastructure identifiers, URLs,
+  digests, tracing IDs and Unicode identifiers;
+- `adversarial-context.txt` — contextual values in mixed compact/config
+  layouts.
+
+These fixtures intentionally combine cases that are individually plausible but
+easy to misclassify as detector coverage expands.

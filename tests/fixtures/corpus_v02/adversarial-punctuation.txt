@@ -1,0 +1,7 @@
+# Recovery-like values around punctuation and unsafe boundaries.
+
+safe_parens=(ABCD-EFGH-IJKL-MNOP),
+safe_quotes="QRST-UVWX-YZ12-3456";
+embedded_left=XASDF-GHJK-LMNP-QWER
+embedded_right=ZXCV-BNMQ-WER7-TYUI9
+extended=POIU-YTRE-WQAS-DFGH-JKLM

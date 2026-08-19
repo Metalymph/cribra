@@ -1,0 +1,7 @@
+# Same contextual semantics in awkward but common layouts.
+
+{"api_key":"AbCdEfGhIjKlMnOpQrStUvWx","enabled":true}
+database_password = 'CorrectHorseBatteryStaple!'
+nested:
+  credential_hash: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+AZURE_CLIENT_SECRET = "AbCdEfGhIjKlMnOpQrStUvWxYz0123456789" # synthetic
