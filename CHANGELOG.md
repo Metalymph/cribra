@@ -6,6 +6,10 @@ The project follows semantic versioning from the first public release.
 
 ## [Unreleased]
 
+No user-facing changes yet.
+
+## [0.2.0] - 2026-08-19
+
 Development toward `0.2.0` focuses on detection quality, explicit ambiguity
 handling and presentation-agnostic explainability while preserving the
 privacy-first, application-agnostic core architecture introduced in `0.1.0`.
@@ -114,6 +118,22 @@ privacy-first, application-agnostic core architecture introduced in `0.1.0`.
   distinct.
 - Custom rules remain `MatcherOnly` and cannot select private built-in
   validators.
+
+#### Performance regression hardening
+- Added v0.2-specific Criterion coverage for candidate density, realistic mixed
+  sources, typed explainability and ambiguity promotion.
+- Added diagnostic isolation suites for matcher families, contextual-pattern
+  scaling and the contextual rule tail.
+- Profiled the expanded v0.2 built-in portfolio and isolated repeated
+  full-source contextual regex work as the dominant regression.
+- Added conservative contextual prefilters and localized contextual regex
+  execution without changing matcher/validator authority.
+- Added a shared contextual prefilter gate so clean-path cost no longer scales
+  linearly with the contextual-pattern portfolio.
+- Preserved rule-local authoritative validation after prefilter dispatch.
+- Restored the clean 64 KiB no-finding path to approximately the historical
+  v0.1 baseline while retaining the expanded v0.2 detection model.
+- Recorded the final v0.2 engineering baseline in `docs/PERFORMANCE.md`.
 
 ### Changed
 
