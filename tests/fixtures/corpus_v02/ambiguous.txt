@@ -1,0 +1,7 @@
+# Cribra v0.2 ambiguous review corpus.
+# These are intentionally not classified findings.
+
+ABCD-EFGH-IJKL-MNOP
+QRST-UVWX-YZ12-3456
+prefix: ZXCV-BNMQ-WER7-TYUI
+recovery backup: ASDF-GHJK-LMNP-QWER

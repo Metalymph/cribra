@@ -1,0 +1,22 @@
+# Cribra v0.2 false-positive corpus.
+# These values may look opaque or high-entropy but are not credentials.
+
+uuid = 550e8400-e29b-41d4-a716-446655440000
+commit_sha = 0123456789abcdef0123456789abcdef01234567
+sha256 = 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+sha512 = 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+integrity = sha512-AbCdEfGhIjKlMnOpQrStUvWxYz0123456789AbCdEfGhIjKlMnOpQrStUvWxYz==
+version = 2026.08.19
+semver = 1.97.1
+date = 2026-08-19
+build_id = BUILD-20260819-ARM64
+request_id = req_01JABCDEFGHJKMNPQRSTUVWX
+display_name = AbCdEfGhIjKlMnOpQrStUvWx
+coupon = SAVE-2026-SUMMER-NOW
+license_example = XXXX-XXXX-XXXX-XXXX
+numeric_groups = 1234-5678-9012-3456
+hex_groups = ABCD-EF12-3456-7890
+lowercase_groups = abcd-efgh-ijkl-mnop
+mixed_case_groups = AbCD-EfGH-IjKL-MnOP
+url = https://example.invalid/download?id=AbCdEfGhIjKlMnOpQrStUvWx
+unicode = configurazione-αβγ-秘密-данные
