@@ -28,6 +28,10 @@ serde = { version = "1.0", features = ["derive", "rc"], optional = true }
 name = "scan"
 harness = false
 
+[[bench]]
+name = "v02"
+harness = false
+
 [dev-dependencies]
 criterion = "0.8.2"
 serde_json = "1.0"
