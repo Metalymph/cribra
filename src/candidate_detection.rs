@@ -41,27 +41,50 @@ const RECOVERY_LIKE_LEN: usize = GROUP_LEN * GROUP_COUNT + SEPARATOR_COUNT;
 /// presented as both a confirmed finding and an ambiguous candidate.
 pub(crate) fn detect_sensitive_candidates(source: &str) -> Vec<SensitiveCandidate> {
     let bytes = source.as_bytes();
-    let mut candidates = Vec::new();
-    let mut start = 0;
+    let mut spans = Vec::new();
 
-    while start + RECOVERY_LIKE_LEN <= bytes.len() {
-        if is_recovery_like_at(bytes, start) {
-            let end = start + RECOVERY_LIKE_LEN;
-            let mut location = Location::from_span(start, end);
-            let (line, column) = source_position(source, start);
-            location.set_position(line, column);
-
-            candidates.push(SensitiveCandidate::new(
-                SensitiveCandidateKind::RecoveryLikeCode,
-                location,
-                CandidateEvidence::Structural,
-            ));
-
-            // A valid token cannot start inside the span we just accepted.
-            start = end;
-        } else {
-            start += 1;
+    // A valid recovery-like token has its first separator exactly four bytes
+    // after the token start. Anchor the scan on `-` bytes instead of running
+    // the complete structural predicate at every byte of the source.
+    let mut separator = GROUP_LEN;
+    while separator < bytes.len() {
+        if bytes[separator] != b'-' {
+            separator += 1;
+            continue;
         }
+
+        let start = separator - GROUP_LEN;
+        if start + RECOVERY_LIKE_LEN <= bytes.len() && is_recovery_like_at(bytes, start) {
+            let end = start + RECOVERY_LIKE_LEN;
+            spans.push((start, end));
+
+            // A valid token cannot start inside the accepted span. Resume at
+            // the first possible separator of a following candidate.
+            separator = end.saturating_add(GROUP_LEN);
+        } else {
+            separator += 1;
+        }
+    }
+
+    materialize_candidates(source, spans)
+}
+
+fn materialize_candidates(source: &str, spans: Vec<(usize, usize)>) -> Vec<SensitiveCandidate> {
+    let mut candidates = Vec::with_capacity(spans.len());
+    let mut cursor = 0;
+    let mut line = 1;
+    let mut column = 1;
+
+    for (start, end) in spans {
+        advance_position(source, &mut cursor, start, &mut line, &mut column);
+
+        let mut location = Location::from_span(start, end);
+        location.set_position(line, column);
+        candidates.push(SensitiveCandidate::new(
+            SensitiveCandidateKind::RecoveryLikeCode,
+            location,
+            CandidateEvidence::Structural,
+        ));
     }
 
     candidates
@@ -130,22 +153,27 @@ fn has_token_boundaries(bytes: &[u8], start: usize, end: usize) -> bool {
     before_is_clear && after_is_clear
 }
 
-fn source_position(source: &str, target: usize) -> (usize, usize) {
+fn advance_position(
+    source: &str,
+    cursor: &mut usize,
+    target: usize,
+    line: &mut usize,
+    column: &mut usize,
+) {
+    debug_assert!(*cursor <= target);
+    debug_assert!(source.is_char_boundary(*cursor));
     debug_assert!(source.is_char_boundary(target));
 
-    let mut line = 1;
-    let mut column = 1;
-
-    for character in source[..target].chars() {
+    for character in source[*cursor..target].chars() {
         if character == '\n' {
-            line += 1;
-            column = 1;
+            *line += 1;
+            *column = 1;
         } else {
-            column += 1;
+            *column += 1;
         }
     }
 
-    (line, column)
+    *cursor = target;
 }
 
 #[cfg(test)]
@@ -237,6 +265,26 @@ mod tests {
 
         assert_eq!(candidates.len(), 1);
         assert_eq!(candidates[0].location().byte_range(), 1..20);
+    }
+
+    #[test]
+    fn preserves_positions_for_multiple_candidates_after_unicode_and_newlines() {
+        let source = "😀 header\nABCD-EFGH-IJKL-MNOP\nαβγ QRST-UVWX-YZ12-3456\n";
+
+        let candidates = detect_sensitive_candidates(source);
+
+        assert_eq!(candidates.len(), 2);
+        assert_eq!(candidates[0].location().line(), 2);
+        assert_eq!(candidates[0].location().column(), 1);
+        assert_eq!(candidates[1].location().line(), 3);
+        assert_eq!(candidates[1].location().column(), 5);
+    }
+
+    #[test]
+    fn hyphen_heavy_non_candidates_remain_rejected() {
+        let source = "ordinary-value-with-many-hyphens---still-not-a-recovery-code\n".repeat(256);
+
+        assert!(detect_sensitive_candidates(&source).is_empty());
     }
 
     #[test]
