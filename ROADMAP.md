@@ -88,13 +88,13 @@ The interoperability architecture is specified in `docs/INTEROP.md`.
 
 ### 0.3.8 — Batch API and optional parallel execution contract
 
-- [ ] Define stable batch input/key representation.
-- [ ] Define batch result ownership and partial-failure semantics.
-- [ ] Preserve input order.
-- [ ] Add an explicit amortization path for small inputs.
-- [ ] Keep Rayon an implementation detail rather than an ABI concept.
-- [ ] Preserve serial/parallel semantic equivalence.
-- [ ] Project `ShareBundle` only after the batch ownership model exists; do not invent a single-source substitute.
+- [x] Define stable batch input/key representation.
+- [x] Define batch result ownership and partial-failure semantics.
+- [x] Preserve input order.
+- [x] Add an explicit amortization path for small inputs.
+- [x] Keep Rayon an implementation detail rather than an ABI concept.
+- [x] Preserve serial/parallel semantic equivalence.
+- [x] Project `ShareBundle` only after the batch ownership model exists; do not invent a single-source substitute.
 
 ### 0.3.9 — Ownership, error, panic and thread hardening
 

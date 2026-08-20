@@ -238,3 +238,161 @@ pub struct CribraSynthesizeConfig {
     /// Marker used by contextual and generic synthetic values.
     pub marker: CribraStringView,
 }
+
+/// One borrowed native batch input descriptor.
+///
+/// Both views are borrowed only for the duration of
+/// [`crate::cribra_scanner_scan_batch`]. `key` is copied into Rust-owned result
+/// storage; `source` is scanned in place and is never retained.
+#[repr(C)]
+#[derive(Debug, Copy, Clone, Default)]
+pub struct CribraBatchInput {
+    /// Caller-defined UTF-8 source identifier.
+    pub key: CribraStringView,
+    /// UTF-8 source material to scan.
+    pub source: CribraStringView,
+}
+
+/// Borrowed projection of one ordered batch entry.
+///
+/// `key` borrows storage owned by the parent [`crate::CribraBatchResults`].
+/// No source text is exposed.
+#[repr(C)]
+#[derive(Debug, Copy, Clone, Default)]
+pub struct CribraBatchEntryView {
+    /// Caller-defined UTF-8 source identifier copied into batch-owned storage.
+    pub key: CribraStringView,
+    /// Original source length in bytes.
+    pub source_bytes: usize,
+    /// Number of classified findings for this source.
+    pub finding_count: usize,
+    /// Number of ambiguous sensitive candidates for this source.
+    pub candidate_count: usize,
+}
+
+/// Aggregate metadata for ordered batch results.
+#[repr(C)]
+#[derive(Debug, Copy, Clone, Default)]
+pub struct CribraBatchSummary {
+    /// Number of scanned sources.
+    pub sources: usize,
+    /// Sum of source lengths in bytes.
+    pub source_bytes: usize,
+    /// Total number of classified findings.
+    pub findings: usize,
+    /// Total number of ambiguous sensitive candidates.
+    pub candidates: usize,
+}
+
+/// Stable ABI batch-execution policy.
+pub type CribraBatchExecution = u32;
+/// Let Cribra select the available execution strategy.
+///
+/// Without the `cribra-capi/parallel` feature this is serial. With that feature
+/// enabled, Cribra may use its parallel batch implementation while preserving
+/// ordered, semantically equivalent results.
+pub const CRIBRA_BATCH_EXECUTION_AUTO: CribraBatchExecution = 0;
+/// Force serial batch execution.
+pub const CRIBRA_BATCH_EXECUTION_SERIAL: CribraBatchExecution = 1;
+
+/// Stable ABI share-bundle transformation mode.
+pub type CribraShareMode = u32;
+/// Conservative `[REDACTED]` replacement.
+pub const CRIBRA_SHARE_MODE_REDACT: CribraShareMode = 0;
+/// Semantic `<CRIBRA:rule-id>` placeholder generation.
+pub const CRIBRA_SHARE_MODE_TEMPLATE: CribraShareMode = 1;
+/// Deterministic keyed pseudonymization.
+pub const CRIBRA_SHARE_MODE_PSEUDONYMIZE: CribraShareMode = 2;
+/// Deterministic synthetic-value generation.
+pub const CRIBRA_SHARE_MODE_SYNTHESIZE: CribraShareMode = 3;
+/// A manifest mode is newer than this ABI projection understands.
+pub const CRIBRA_SHARE_MODE_UNKNOWN: CribraShareMode = u32::MAX;
+
+/// Configuration used to build one share-safe batch.
+///
+/// `key` is required only for pseudonymization and synthesis and must contain
+/// exactly 32 readable bytes. `text` is the pseudonym prefix for
+/// pseudonymization and the synthesis marker for synthesis. An empty `text`
+/// selects the core default for those modes. `digest_bytes == 0` selects the
+/// pseudonymization default; otherwise the value is passed to the core, which
+/// clamps it to its supported range.
+///
+/// Redact and Template ignore the keyed configuration fields.
+#[repr(C)]
+#[derive(Debug, Copy, Clone, Default)]
+pub struct CribraShareBundleConfig {
+    /// ABI-defined share transformation mode.
+    pub mode: CribraShareMode,
+    /// Pointer to caller-owned key bytes for keyed modes.
+    pub key: *const u8,
+    /// Number of key bytes. Keyed modes require exactly 32.
+    pub key_len: usize,
+    /// Optional mode-specific UTF-8 configuration.
+    pub text: CribraStringView,
+    /// Optional pseudonym digest length in bytes; zero selects the core default.
+    pub digest_bytes: usize,
+}
+
+/// Borrowed projection of one transformed share-bundle source.
+///
+/// Both `key` and `content` borrow storage owned by the parent
+/// [`crate::CribraShareBundle`].
+#[repr(C)]
+#[derive(Debug, Copy, Clone, Default)]
+pub struct CribraShareEntryView {
+    /// Copied caller-defined source identifier.
+    pub key: CribraStringView,
+    /// Share-safe transformed UTF-8 content.
+    pub content: CribraStringView,
+}
+
+/// Full share-safe projection of [`cribra::ScanSummary`].
+///
+/// The value contains counters only and never exposes source text, finding
+/// values, source keys, or transform keys.
+#[repr(C)]
+#[derive(Debug, Copy, Clone, Default)]
+pub struct CribraScanSummaryView {
+    /// Number of scanned sources.
+    pub scanned_sources: usize,
+    /// Total number of UTF-8 source bytes scanned.
+    pub scanned_bytes: usize,
+    /// Reports containing at least one finding.
+    pub reports_with_findings: usize,
+    /// Reports containing no findings.
+    pub reports_without_findings: usize,
+    /// Total classified findings.
+    pub total_findings: usize,
+    /// Total ambiguous candidates.
+    pub total_candidates: usize,
+    /// Reports containing at least one ambiguous candidate.
+    pub reports_with_candidates: usize,
+    /// Critical findings.
+    pub critical: usize,
+    /// High-severity findings.
+    pub high: usize,
+    /// Medium-severity findings.
+    pub medium: usize,
+    /// Low-severity findings.
+    pub low: usize,
+    /// Informational findings.
+    pub info: usize,
+}
+
+/// Share-safe manifest projection.
+///
+/// Generation time is represented as seconds and nanoseconds since the Unix
+/// epoch. No pseudonymization/synthesis key or original source material is
+/// represented.
+#[repr(C)]
+#[derive(Debug, Copy, Clone, Default)]
+pub struct CribraShareManifestView {
+    /// ABI-defined transformation mode.
+    pub mode: CribraShareMode,
+    /// Original scan summary copied into the manifest.
+    pub summary: CribraScanSummaryView,
+    /// Whole seconds since the Unix epoch.
+    pub generated_at_secs: u64,
+    /// Additional nanoseconds within the generated second.
+    pub generated_at_nanos: u32,
+}

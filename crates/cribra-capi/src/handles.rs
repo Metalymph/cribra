@@ -1,6 +1,6 @@
 //! Opaque Rust-owned objects used by the native ABI.
 
-use cribra::{ScanReport, Scanner, ScannerBuilder};
+use cribra::{ScanReport, ScanResults, Scanner, ScannerBuilder, transform::ShareBundle};
 
 /// Opaque native scanner-builder handle.
 pub struct CribraBuilder {
@@ -53,6 +53,34 @@ pub struct CribraOutput {
 
 impl CribraOutput {
     pub(crate) fn new(inner: String) -> Self {
+        Self { inner }
+    }
+}
+
+/// Opaque Rust-owned ordered batch results.
+///
+/// Keys are copied into Rust-owned `String` values. Reports retain metadata only;
+/// original source text is never stored.
+pub struct CribraBatchResults {
+    pub(crate) inner: ScanResults<String>,
+}
+
+impl CribraBatchResults {
+    pub(crate) fn new(inner: ScanResults<String>) -> Self {
+        Self { inner }
+    }
+}
+
+/// Opaque Rust-owned share-safe transformed batch.
+///
+/// The bundle owns cloned source keys, transformed UTF-8 content, and
+/// share-safe manifest metadata. It never retains original source text.
+pub struct CribraShareBundle {
+    pub(crate) inner: ShareBundle<String>,
+}
+
+impl CribraShareBundle {
+    pub(crate) fn new(inner: ShareBundle<String>) -> Self {
         Self { inner }
     }
 }

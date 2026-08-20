@@ -8,6 +8,10 @@ repository = "https://github.com/Metalymph/cribra"
 rust-version = "1.97"
 publish = false
 
+[features]
+default = []
+parallel = ["cribra/parallel"]
+
 [lib]
 crate-type = ["staticlib", "cdylib"]
 

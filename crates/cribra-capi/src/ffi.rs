@@ -3,19 +3,21 @@
 use std::{
     panic::{AssertUnwindSafe, catch_unwind},
     ptr, slice, str,
+    time::UNIX_EPOCH,
 };
 
 use cribra::{
     CandidateEvidence, Confidence, DetectionMode, Explanation, Redaction, Remediation, Rule,
     Scanner, SensitiveCandidateKind, Severity, builtins,
     transform::{
-        PseudonymizationOptions, SynthesisOptions, TemplateOptions, pseudonymize, redact,
-        redact_with, synthesize, template, template_with,
+        PseudonymizationOptions, ShareBundle, ShareMode, ShareModeKind, SynthesisOptions,
+        TemplateOptions, pseudonymize, redact, redact_with, synthesize, template, template_with,
     },
 };
 
 use crate::{
-    CRIBRA_BUILD_ERROR, CRIBRA_CANDIDATE_EVIDENCE_NONE, CRIBRA_CANDIDATE_EVIDENCE_STRUCTURAL,
+    CRIBRA_BATCH_EXECUTION_AUTO, CRIBRA_BATCH_EXECUTION_SERIAL, CRIBRA_BUILD_ERROR,
+    CRIBRA_CANDIDATE_EVIDENCE_NONE, CRIBRA_CANDIDATE_EVIDENCE_STRUCTURAL,
     CRIBRA_CANDIDATE_EVIDENCE_UNKNOWN, CRIBRA_CANDIDATE_KIND_RECOVERY_LIKE_CODE,
     CRIBRA_CANDIDATE_KIND_UNKNOWN, CRIBRA_CONFIDENCE_HIGH, CRIBRA_CONFIDENCE_LOW,
     CRIBRA_CONFIDENCE_MEDIUM, CRIBRA_DETECTION_MODE_CONTEXTUAL,
@@ -29,11 +31,16 @@ use crate::{
     CRIBRA_REMEDIATION_ROTATE_PASSWORD, CRIBRA_REMEDIATION_UNKNOWN, CRIBRA_RULE_KIND_LITERAL,
     CRIBRA_RULE_KIND_PATTERN, CRIBRA_RULE_KIND_PREFIX, CRIBRA_RULE_KIND_SUFFIX,
     CRIBRA_SEVERITY_CRITICAL, CRIBRA_SEVERITY_HIGH, CRIBRA_SEVERITY_INFO, CRIBRA_SEVERITY_LOW,
-    CRIBRA_SEVERITY_MEDIUM, CRIBRA_TRANSFORM_ERROR, CribraBuilder, CribraCandidateEvidence,
+    CRIBRA_SEVERITY_MEDIUM, CRIBRA_SHARE_MODE_PSEUDONYMIZE, CRIBRA_SHARE_MODE_REDACT,
+    CRIBRA_SHARE_MODE_SYNTHESIZE, CRIBRA_SHARE_MODE_TEMPLATE, CRIBRA_SHARE_MODE_UNKNOWN,
+    CRIBRA_TRANSFORM_ERROR, CribraBatchEntryView, CribraBatchExecution, CribraBatchInput,
+    CribraBatchResults, CribraBatchSummary, CribraBuilder, CribraCandidateEvidence,
     CribraCandidateKind, CribraCandidateView, CribraConfidence, CribraDetectionMode,
     CribraExplanationView, CribraFindingView, CribraOutput, CribraPseudonymizeConfig,
-    CribraRemediation, CribraReport, CribraRuleConfig, CribraScanner, CribraSeverity, CribraStatus,
-    CribraStringView, CribraSynthesizeConfig, CribraTemplateConfig,
+    CribraRemediation, CribraReport, CribraRuleConfig, CribraScanSummaryView, CribraScanner,
+    CribraSeverity, CribraShareBundle, CribraShareBundleConfig, CribraShareEntryView,
+    CribraShareManifestView, CribraShareMode, CribraStatus, CribraStringView,
+    CribraSynthesizeConfig, CribraTemplateConfig,
 };
 
 /// Experimental native ABI major version.
@@ -240,6 +247,80 @@ unsafe fn write_output(
     // SAFETY: caller supplied a validated writable out-pointer.
     unsafe { ptr::write(out_output, Box::into_raw(output)) };
     CRIBRA_OK
+}
+
+unsafe fn share_mode_from_config(
+    config: &CribraShareBundleConfig,
+) -> Result<ShareMode, CribraStatus> {
+    match config.mode {
+        CRIBRA_SHARE_MODE_REDACT => Ok(ShareMode::Redact),
+        CRIBRA_SHARE_MODE_TEMPLATE => Ok(ShareMode::Template),
+        CRIBRA_SHARE_MODE_PSEUDONYMIZE => {
+            let key = unsafe { key32_from_raw(config.key, config.key_len) }?;
+            let text = unsafe { utf8_from_raw(config.text.ptr, config.text.len) }?;
+            let mut options = PseudonymizationOptions::new(key);
+            if !text.is_empty() {
+                options = options.prefix(text);
+            }
+            if config.digest_bytes != 0 {
+                options = options.digest_bytes(config.digest_bytes);
+            }
+            Ok(ShareMode::Pseudonymize(options))
+        }
+        CRIBRA_SHARE_MODE_SYNTHESIZE => {
+            let key = unsafe { key32_from_raw(config.key, config.key_len) }?;
+            let text = unsafe { utf8_from_raw(config.text.ptr, config.text.len) }?;
+            let mut options = SynthesisOptions::new(key);
+            if !text.is_empty() {
+                options = options.marker(text);
+            }
+            Ok(ShareMode::Synthesize(options))
+        }
+        _ => Err(CRIBRA_INVALID_ARGUMENT),
+    }
+}
+
+fn share_mode_code(value: ShareModeKind) -> CribraShareMode {
+    match value {
+        ShareModeKind::Redact => CRIBRA_SHARE_MODE_REDACT,
+        ShareModeKind::Template => CRIBRA_SHARE_MODE_TEMPLATE,
+        ShareModeKind::Pseudonymize => CRIBRA_SHARE_MODE_PSEUDONYMIZE,
+        ShareModeKind::Synthesize => CRIBRA_SHARE_MODE_SYNTHESIZE,
+        _ => CRIBRA_SHARE_MODE_UNKNOWN,
+    }
+}
+
+fn scan_summary_view(summary: cribra::ScanSummary) -> CribraScanSummaryView {
+    CribraScanSummaryView {
+        scanned_sources: summary.scanned_sources(),
+        scanned_bytes: summary.scanned_bytes(),
+        reports_with_findings: summary.reports_with_findings(),
+        reports_without_findings: summary.reports_without_findings(),
+        total_findings: summary.total_findings(),
+        total_candidates: summary.total_candidates(),
+        reports_with_candidates: summary.reports_with_candidates(),
+        critical: summary.critical(),
+        high: summary.high(),
+        medium: summary.medium(),
+        low: summary.low(),
+        info: summary.info(),
+    }
+}
+
+fn share_manifest_view(
+    manifest: &cribra::transform::ShareManifest,
+) -> Result<CribraShareManifestView, CribraStatus> {
+    let generated = manifest
+        .generated_at()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|_| CRIBRA_INTERNAL_ERROR)?;
+
+    Ok(CribraShareManifestView {
+        mode: share_mode_code(manifest.mode()),
+        summary: scan_summary_view(manifest.summary()),
+        generated_at_secs: generated.as_secs(),
+        generated_at_nanos: generated.subsec_nanos(),
+    })
 }
 
 /// Returns the native ABI major version.
@@ -492,6 +573,317 @@ pub unsafe extern "C" fn cribra_scanner_scan(
         unsafe { ptr::write(out_report, Box::into_raw(report)) };
         CRIBRA_OK
     })
+}
+
+/// Scans an ordered batch of caller-owned UTF-8 sources.
+///
+/// The input descriptor array and all pointed-to bytes are borrowed only for
+/// this call. Keys are copied into Rust-owned result storage. Source text is
+/// never retained. Successful results preserve input order exactly.
+///
+/// If any descriptor contains invalid pointer/UTF-8 input, the whole call fails
+/// before scanning and `out_results` remains null; partial results are never
+/// returned.
+///
+/// `execution` accepts [`CRIBRA_BATCH_EXECUTION_AUTO`] or
+/// [`CRIBRA_BATCH_EXECUTION_SERIAL`]. AUTO remains semantically identical to
+/// SERIAL and may use Cribra's parallel implementation only when the adapter is
+/// built with its optional `parallel` feature.
+///
+/// `inputs == NULL` with `input_count == 0` is accepted as an empty batch.
+///
+/// # Safety
+///
+/// `scanner` must be a live scanner handle. When `input_count > 0`, `inputs`
+/// must reference at least `input_count` readable [`CribraBatchInput`] values.
+/// Every non-empty string view must reference readable bytes for the duration of
+/// this call. `out_results` must point to writable memory for one batch-results
+/// pointer.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cribra_scanner_scan_batch(
+    scanner: *const CribraScanner,
+    inputs: *const CribraBatchInput,
+    input_count: usize,
+    execution: CribraBatchExecution,
+    out_results: *mut *mut CribraBatchResults,
+) -> CribraStatus {
+    contain_status(|| {
+        if let Err(status) = unsafe { clear_out(out_results) } {
+            return status;
+        }
+        if scanner.is_null() {
+            return CRIBRA_INVALID_ARGUMENT;
+        }
+        if input_count > 0 && inputs.is_null() {
+            return CRIBRA_INVALID_ARGUMENT;
+        }
+
+        let descriptors = if input_count == 0 {
+            &[][..]
+        } else {
+            // SAFETY: caller guarantees `input_count` readable descriptors.
+            unsafe { slice::from_raw_parts(inputs, input_count) }
+        };
+
+        // Validate the complete boundary before scanning so failures are atomic.
+        let mut prepared = Vec::with_capacity(descriptors.len());
+        for descriptor in descriptors {
+            let key = match unsafe { utf8_from_raw(descriptor.key.ptr, descriptor.key.len) } {
+                Ok(value) => value.to_owned(),
+                Err(status) => return status,
+            };
+            let source =
+                match unsafe { utf8_from_raw(descriptor.source.ptr, descriptor.source.len) } {
+                    Ok(value) => value,
+                    Err(status) => return status,
+                };
+            prepared.push((key, source));
+        }
+
+        // SAFETY: caller guarantees a live immutable scanner handle.
+        let scanner = unsafe { &*scanner };
+
+        let results = match execution {
+            CRIBRA_BATCH_EXECUTION_SERIAL => scanner.inner.scan(prepared),
+            CRIBRA_BATCH_EXECUTION_AUTO => {
+                #[cfg(feature = "parallel")]
+                {
+                    scanner.inner.parallel_scan(prepared)
+                }
+                #[cfg(not(feature = "parallel"))]
+                {
+                    scanner.inner.scan(prepared)
+                }
+            }
+            _ => return CRIBRA_INVALID_ARGUMENT,
+        };
+
+        let results = Box::new(CribraBatchResults::new(results));
+
+        // SAFETY: `clear_out` validated the out-pointer.
+        unsafe { ptr::write(out_results, Box::into_raw(results)) };
+        CRIBRA_OK
+    })
+}
+
+/// Returns the number of source entries in ordered batch results.
+///
+/// # Safety
+///
+/// `results` must be a live batch-results handle. `out_count` must point to
+/// writable memory for one `size_t`-compatible value.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cribra_batch_results_count(
+    results: *const CribraBatchResults,
+    out_count: *mut usize,
+) -> CribraStatus {
+    contain_status(|| {
+        if let Err(status) = unsafe { clear_value(out_count) } {
+            return status;
+        }
+        if results.is_null() {
+            return CRIBRA_INVALID_ARGUMENT;
+        }
+
+        // SAFETY: caller guarantees a live immutable batch-results handle.
+        let results = unsafe { &*results };
+        // SAFETY: `clear_value` validated the out-pointer.
+        unsafe { ptr::write(out_count, results.inner.len()) };
+        CRIBRA_OK
+    })
+}
+
+/// Returns a borrowed metadata projection for one ordered batch entry.
+///
+/// The returned key view borrows storage owned by `results` and remains valid
+/// only while that parent handle remains alive.
+///
+/// # Safety
+///
+/// `results` must be a live batch-results handle. `out_entry` must point to
+/// writable memory for one [`CribraBatchEntryView`].
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cribra_batch_results_entry_at(
+    results: *const CribraBatchResults,
+    index: usize,
+    out_entry: *mut CribraBatchEntryView,
+) -> CribraStatus {
+    contain_status(|| {
+        if let Err(status) = unsafe { clear_value(out_entry) } {
+            return status;
+        }
+        if results.is_null() {
+            return CRIBRA_INVALID_ARGUMENT;
+        }
+
+        // SAFETY: caller guarantees a live immutable batch-results handle.
+        let results = unsafe { &*results };
+        let Some(entry) = results.inner.as_slice().get(index) else {
+            return CRIBRA_OUT_OF_RANGE;
+        };
+
+        let view = CribraBatchEntryView {
+            key: string_view(entry.key()),
+            source_bytes: entry.source_bytes(),
+            finding_count: entry.report().len(),
+            candidate_count: entry.report().candidate_len(),
+        };
+
+        // SAFETY: `clear_value` validated the out-pointer.
+        unsafe { ptr::write(out_entry, view) };
+        CRIBRA_OK
+    })
+}
+
+/// Returns one classified finding from an ordered batch entry.
+///
+/// No child report handle is created; the returned view remains subordinate to
+/// the parent batch-results lifetime.
+///
+/// # Safety
+///
+/// `results` must be a live batch-results handle. `out_finding` must point to
+/// writable memory for one [`CribraFindingView`].
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cribra_batch_results_finding_at(
+    results: *const CribraBatchResults,
+    entry_index: usize,
+    finding_index: usize,
+    out_finding: *mut CribraFindingView,
+) -> CribraStatus {
+    contain_status(|| {
+        if let Err(status) = unsafe { clear_value(out_finding) } {
+            return status;
+        }
+        if results.is_null() {
+            return CRIBRA_INVALID_ARGUMENT;
+        }
+
+        // SAFETY: caller guarantees a live immutable batch-results handle.
+        let results = unsafe { &*results };
+        let Some(entry) = results.inner.as_slice().get(entry_index) else {
+            return CRIBRA_OUT_OF_RANGE;
+        };
+        let Some(finding) = entry.report().findings().get(finding_index) else {
+            return CRIBRA_OUT_OF_RANGE;
+        };
+
+        let location = finding.location();
+        let view = CribraFindingView {
+            rule_id: string_view(finding.rule_id().as_str()),
+            start: location.start(),
+            end: location.end(),
+            line: location.line(),
+            column: location.column(),
+            severity: severity_code(finding.severity()),
+            confidence: confidence_code(finding.confidence()),
+            remediation: remediation_code(finding.remediation()),
+        };
+
+        // SAFETY: `clear_value` validated the out-pointer.
+        unsafe { ptr::write(out_finding, view) };
+        CRIBRA_OK
+    })
+}
+
+/// Returns one ambiguous candidate from an ordered batch entry.
+///
+/// No child report handle is created.
+///
+/// # Safety
+///
+/// `results` must be a live batch-results handle. `out_candidate` must point to
+/// writable memory for one [`CribraCandidateView`].
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cribra_batch_results_candidate_at(
+    results: *const CribraBatchResults,
+    entry_index: usize,
+    candidate_index: usize,
+    out_candidate: *mut CribraCandidateView,
+) -> CribraStatus {
+    contain_status(|| {
+        if let Err(status) = unsafe { clear_value(out_candidate) } {
+            return status;
+        }
+        if results.is_null() {
+            return CRIBRA_INVALID_ARGUMENT;
+        }
+
+        // SAFETY: caller guarantees a live immutable batch-results handle.
+        let results = unsafe { &*results };
+        let Some(entry) = results.inner.as_slice().get(entry_index) else {
+            return CRIBRA_OUT_OF_RANGE;
+        };
+        let Some(candidate) = entry.report().candidates().get(candidate_index) else {
+            return CRIBRA_OUT_OF_RANGE;
+        };
+
+        let location = candidate.location();
+        let view = CribraCandidateView {
+            kind: candidate_kind_code(candidate.kind()),
+            start: location.start(),
+            end: location.end(),
+            line: location.line(),
+            column: location.column(),
+            evidence: candidate_evidence_code(candidate.evidence()),
+        };
+
+        // SAFETY: `clear_value` validated the out-pointer.
+        unsafe { ptr::write(out_candidate, view) };
+        CRIBRA_OK
+    })
+}
+
+/// Returns aggregate metadata for ordered batch results.
+///
+/// # Safety
+///
+/// `results` must be a live batch-results handle. `out_summary` must point to
+/// writable memory for one [`CribraBatchSummary`].
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cribra_batch_results_summary(
+    results: *const CribraBatchResults,
+    out_summary: *mut CribraBatchSummary,
+) -> CribraStatus {
+    contain_status(|| {
+        if let Err(status) = unsafe { clear_value(out_summary) } {
+            return status;
+        }
+        if results.is_null() {
+            return CRIBRA_INVALID_ARGUMENT;
+        }
+
+        // SAFETY: caller guarantees a live immutable batch-results handle.
+        let results = unsafe { &*results };
+        let view = CribraBatchSummary {
+            sources: results.inner.len(),
+            source_bytes: results.inner.total_bytes(),
+            findings: results.inner.total_findings(),
+            candidates: results.inner.total_candidates(),
+        };
+
+        // SAFETY: `clear_value` validated the out-pointer.
+        unsafe { ptr::write(out_summary, view) };
+        CRIBRA_OK
+    })
+}
+
+/// Releases ordered batch results. Passing null is a no-op.
+///
+/// # Safety
+///
+/// A non-null `results` must be a live batch-results handle that has not already
+/// been freed.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cribra_batch_results_free(results: *mut CribraBatchResults) {
+    if results.is_null() {
+        return;
+    }
+
+    contain_drop(|| {
+        // SAFETY: caller transfers ownership of one live handle.
+        drop(unsafe { Box::from_raw(results) });
+    });
 }
 
 /// Returns the number of classified findings in a report.
@@ -973,6 +1365,204 @@ pub unsafe extern "C" fn cribra_transform_synthesize(
     })
 }
 
+/// Builds a share-safe transformed batch from ordered scan results.
+///
+/// `sources` must contain the same logical UTF-8 sources, in the same order,
+/// that produced `results`. The core validates source count and byte lengths
+/// before transformation. Source text is borrowed only for this call and is
+/// never retained.
+///
+/// On success, the returned bundle owns cloned source keys, transformed content,
+/// and share-safe manifest metadata. It must eventually be released with
+/// [`cribra_share_bundle_free`].
+///
+/// # Safety
+///
+/// `results` must be a live batch-results handle. `config` must point to a
+/// readable [`CribraShareBundleConfig`]. When `source_count > 0`, `sources` must
+/// reference at least `source_count` readable [`CribraStringView`] values. Every
+/// non-empty source/config text view must reference readable bytes for the
+/// duration of this call. `out_bundle` must point to writable memory for one
+/// share-bundle pointer.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cribra_share_bundle_build(
+    results: *const CribraBatchResults,
+    sources: *const CribraStringView,
+    source_count: usize,
+    config: *const CribraShareBundleConfig,
+    out_bundle: *mut *mut CribraShareBundle,
+) -> CribraStatus {
+    contain_status(|| {
+        if let Err(status) = unsafe { clear_out(out_bundle) } {
+            return status;
+        }
+        if results.is_null() || config.is_null() {
+            return CRIBRA_INVALID_ARGUMENT;
+        }
+        if source_count > 0 && sources.is_null() {
+            return CRIBRA_INVALID_ARGUMENT;
+        }
+
+        // SAFETY: caller guarantees live/readable values for this call.
+        let results = unsafe { &*results };
+        // SAFETY: caller guarantees a readable configuration value.
+        let config = unsafe { &*config };
+
+        let mode = match unsafe { share_mode_from_config(config) } {
+            Ok(mode) => mode,
+            Err(status) => return status,
+        };
+
+        let source_views = if source_count == 0 {
+            &[][..]
+        } else {
+            // SAFETY: caller guarantees `source_count` readable views.
+            unsafe { slice::from_raw_parts(sources, source_count) }
+        };
+
+        let mut prepared = Vec::with_capacity(source_views.len());
+        for source in source_views {
+            let source = match unsafe { utf8_from_raw(source.ptr, source.len) } {
+                Ok(source) => source,
+                Err(status) => return status,
+            };
+            prepared.push(source);
+        }
+
+        let bundle = match ShareBundle::builder()
+            .mode(mode)
+            .build(&results.inner, prepared)
+        {
+            Ok(bundle) => bundle,
+            Err(_) => return CRIBRA_TRANSFORM_ERROR,
+        };
+
+        let bundle = Box::new(CribraShareBundle::new(bundle));
+        // SAFETY: `clear_out` validated the out-pointer.
+        unsafe { ptr::write(out_bundle, Box::into_raw(bundle)) };
+        CRIBRA_OK
+    })
+}
+
+/// Returns the number of transformed sources in a share bundle.
+///
+/// # Safety
+///
+/// `bundle` must be a live share-bundle handle. `out_count` must point to
+/// writable memory for one `size_t`-compatible value.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cribra_share_bundle_count(
+    bundle: *const CribraShareBundle,
+    out_count: *mut usize,
+) -> CribraStatus {
+    contain_status(|| {
+        if let Err(status) = unsafe { clear_value(out_count) } {
+            return status;
+        }
+        if bundle.is_null() {
+            return CRIBRA_INVALID_ARGUMENT;
+        }
+
+        // SAFETY: caller guarantees a live immutable share-bundle handle.
+        let bundle = unsafe { &*bundle };
+        // SAFETY: `clear_value` validated the out-pointer.
+        unsafe { ptr::write(out_count, bundle.inner.len()) };
+        CRIBRA_OK
+    })
+}
+
+/// Returns one borrowed transformed-source projection.
+///
+/// Both returned string views remain valid only while `bundle` remains alive.
+///
+/// # Safety
+///
+/// `bundle` must be a live share-bundle handle. `out_entry` must point to
+/// writable memory for one [`CribraShareEntryView`].
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cribra_share_bundle_entry_at(
+    bundle: *const CribraShareBundle,
+    index: usize,
+    out_entry: *mut CribraShareEntryView,
+) -> CribraStatus {
+    contain_status(|| {
+        if let Err(status) = unsafe { clear_value(out_entry) } {
+            return status;
+        }
+        if bundle.is_null() {
+            return CRIBRA_INVALID_ARGUMENT;
+        }
+
+        // SAFETY: caller guarantees a live immutable share-bundle handle.
+        let bundle = unsafe { &*bundle };
+        let Some(entry) = bundle.inner.sources().get(index) else {
+            return CRIBRA_OUT_OF_RANGE;
+        };
+
+        let view = CribraShareEntryView {
+            key: string_view(entry.key()),
+            content: string_view(entry.content()),
+        };
+
+        // SAFETY: `clear_value` validated the out-pointer.
+        unsafe { ptr::write(out_entry, view) };
+        CRIBRA_OK
+    })
+}
+
+/// Returns the share-safe bundle manifest.
+///
+/// The projection contains only transformation kind, aggregate counters, and
+/// generation time. It never contains source text or keyed-transform secrets.
+///
+/// # Safety
+///
+/// `bundle` must be a live share-bundle handle. `out_manifest` must point to
+/// writable memory for one [`CribraShareManifestView`].
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cribra_share_bundle_manifest(
+    bundle: *const CribraShareBundle,
+    out_manifest: *mut CribraShareManifestView,
+) -> CribraStatus {
+    contain_status(|| {
+        if let Err(status) = unsafe { clear_value(out_manifest) } {
+            return status;
+        }
+        if bundle.is_null() {
+            return CRIBRA_INVALID_ARGUMENT;
+        }
+
+        // SAFETY: caller guarantees a live immutable share-bundle handle.
+        let bundle = unsafe { &*bundle };
+        let manifest = match share_manifest_view(bundle.inner.manifest()) {
+            Ok(manifest) => manifest,
+            Err(status) => return status,
+        };
+
+        // SAFETY: `clear_value` validated the out-pointer.
+        unsafe { ptr::write(out_manifest, manifest) };
+        CRIBRA_OK
+    })
+}
+
+/// Releases a share bundle. Passing null is a no-op.
+///
+/// # Safety
+///
+/// A non-null `bundle` must be a live share-bundle handle that has not already
+/// been freed.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cribra_share_bundle_free(bundle: *mut CribraShareBundle) {
+    if bundle.is_null() {
+        return;
+    }
+
+    contain_drop(|| {
+        // SAFETY: caller transfers ownership of one live handle.
+        drop(unsafe { Box::from_raw(bundle) });
+    });
+}
+
 /// Borrows the UTF-8 bytes owned by a transformed output handle.
 ///
 /// The returned view remains valid only until [`cribra_output_free`] is called.
@@ -1146,6 +1736,345 @@ mod tests {
                 CRIBRA_INVALID_ARGUMENT
             );
             assert!(report.is_null());
+            cribra_scanner_free(scanner);
+        }
+    }
+
+    #[test]
+    fn batch_scan_preserves_input_order_and_owns_keys() {
+        let mut scanner = ptr::null_mut();
+        let mut results = ptr::null_mut();
+
+        let first_key = String::from("first");
+        let second_key = String::from("second");
+        let first_source = String::from("clean source");
+        let second_source = String::from("GITHUB_TOKEN=ghp_AbCdEf0123456789_AbCdEf0123456789");
+        let inputs = [
+            CribraBatchInput {
+                key: string_input(&first_key),
+                source: string_input(&first_source),
+            },
+            CribraBatchInput {
+                key: string_input(&second_key),
+                source: string_input(&second_source),
+            },
+        ];
+
+        unsafe {
+            assert_eq!(cribra_scanner_new_current(&mut scanner), CRIBRA_OK);
+            assert_eq!(
+                cribra_scanner_scan_batch(
+                    scanner,
+                    inputs.as_ptr(),
+                    inputs.len(),
+                    CRIBRA_BATCH_EXECUTION_AUTO,
+                    &mut results,
+                ),
+                CRIBRA_OK
+            );
+        }
+
+        drop(first_key);
+        drop(second_key);
+        drop(first_source);
+        drop(second_source);
+
+        unsafe {
+            let mut count = usize::MAX;
+            assert_eq!(cribra_batch_results_count(results, &mut count), CRIBRA_OK);
+            assert_eq!(count, 2);
+
+            let entries = (*results).inner.as_slice();
+            assert_eq!(entries[0].key(), "first");
+            assert_eq!(entries[1].key(), "second");
+            assert!(entries[0].report().is_empty());
+            assert!(!entries[1].report().is_empty());
+
+            cribra_batch_results_free(results);
+            cribra_scanner_free(scanner);
+        }
+    }
+
+    #[test]
+    fn invalid_batch_execution_is_rejected_without_results() {
+        let mut scanner = ptr::null_mut();
+        let mut results = ptr::dangling_mut::<CribraBatchResults>();
+
+        unsafe {
+            assert_eq!(cribra_scanner_new_current(&mut scanner), CRIBRA_OK);
+            assert_eq!(
+                cribra_scanner_scan_batch(scanner, ptr::null(), 0, u32::MAX, &mut results,),
+                CRIBRA_INVALID_ARGUMENT
+            );
+            assert!(results.is_null());
+            cribra_scanner_free(scanner);
+        }
+    }
+
+    #[test]
+    fn auto_and_serial_batch_results_are_semantically_equivalent() {
+        let mut scanner = ptr::null_mut();
+        let mut auto_results = ptr::null_mut();
+        let mut serial_results = ptr::null_mut();
+
+        let inputs = [
+            CribraBatchInput {
+                key: string_input("classified"),
+                source: string_input("GITHUB_TOKEN=ghp_AbCdEf0123456789_AbCdEf0123456789"),
+            },
+            CribraBatchInput {
+                key: string_input("ambiguous"),
+                source: string_input("backup=ABCD-EFGH-IJKL-MNOP"),
+            },
+            CribraBatchInput {
+                key: string_input("clean"),
+                source: string_input("ordinary text"),
+            },
+        ];
+
+        unsafe {
+            assert_eq!(cribra_scanner_new_current(&mut scanner), CRIBRA_OK);
+
+            assert_eq!(
+                cribra_scanner_scan_batch(
+                    scanner,
+                    inputs.as_ptr(),
+                    inputs.len(),
+                    CRIBRA_BATCH_EXECUTION_AUTO,
+                    &mut auto_results,
+                ),
+                CRIBRA_OK
+            );
+            assert_eq!(
+                cribra_scanner_scan_batch(
+                    scanner,
+                    inputs.as_ptr(),
+                    inputs.len(),
+                    CRIBRA_BATCH_EXECUTION_SERIAL,
+                    &mut serial_results,
+                ),
+                CRIBRA_OK
+            );
+
+            let auto_entries = (*auto_results).inner.as_slice();
+            let serial_entries = (*serial_results).inner.as_slice();
+
+            assert_eq!(auto_entries.len(), serial_entries.len());
+            for (auto, serial) in auto_entries.iter().zip(serial_entries) {
+                assert_eq!(auto.key(), serial.key());
+                assert_eq!(auto.source_bytes(), serial.source_bytes());
+                assert_eq!(auto.report().findings(), serial.report().findings());
+                assert_eq!(auto.report().candidates(), serial.report().candidates());
+            }
+
+            cribra_batch_results_free(auto_results);
+            cribra_batch_results_free(serial_results);
+            cribra_scanner_free(scanner);
+        }
+    }
+
+    #[test]
+    fn batch_traversal_exposes_entries_findings_candidates_and_summary() {
+        let mut scanner = ptr::null_mut();
+        let mut results = ptr::null_mut();
+
+        let first_key = "classified";
+        let second_key = "ambiguous";
+        let first_source = "GITHUB_TOKEN=ghp_AbCdEf0123456789_AbCdEf0123456789";
+        let second_source = "backup=ABCD-EFGH-IJKL-MNOP";
+        let inputs = [
+            CribraBatchInput {
+                key: string_input(first_key),
+                source: string_input(first_source),
+            },
+            CribraBatchInput {
+                key: string_input(second_key),
+                source: string_input(second_source),
+            },
+        ];
+
+        unsafe {
+            assert_eq!(cribra_scanner_new_current(&mut scanner), CRIBRA_OK);
+            assert_eq!(
+                cribra_scanner_scan_batch(
+                    scanner,
+                    inputs.as_ptr(),
+                    inputs.len(),
+                    CRIBRA_BATCH_EXECUTION_AUTO,
+                    &mut results,
+                ),
+                CRIBRA_OK
+            );
+
+            let mut first = CribraBatchEntryView::default();
+            assert_eq!(
+                cribra_batch_results_entry_at(results, 0, &mut first),
+                CRIBRA_OK
+            );
+            let first_key_bytes = slice::from_raw_parts(first.key.ptr, first.key.len);
+            assert_eq!(str::from_utf8(first_key_bytes).unwrap(), "classified");
+            assert_eq!(first.source_bytes, first_source.len());
+            assert!(first.finding_count >= 1);
+            assert_eq!(first.candidate_count, 0);
+
+            let mut finding = CribraFindingView::default();
+            assert_eq!(
+                cribra_batch_results_finding_at(results, 0, 0, &mut finding),
+                CRIBRA_OK
+            );
+            assert!(finding.start < finding.end);
+
+            let mut second = CribraBatchEntryView::default();
+            assert_eq!(
+                cribra_batch_results_entry_at(results, 1, &mut second),
+                CRIBRA_OK
+            );
+            assert_eq!(second.source_bytes, second_source.len());
+            assert_eq!(second.finding_count, 0);
+            assert_eq!(second.candidate_count, 1);
+
+            let mut candidate = CribraCandidateView::default();
+            assert_eq!(
+                cribra_batch_results_candidate_at(results, 1, 0, &mut candidate),
+                CRIBRA_OK
+            );
+            assert_eq!(candidate.kind, CRIBRA_CANDIDATE_KIND_RECOVERY_LIKE_CODE);
+
+            let mut summary = CribraBatchSummary::default();
+            assert_eq!(
+                cribra_batch_results_summary(results, &mut summary),
+                CRIBRA_OK
+            );
+            assert_eq!(summary.sources, 2);
+            assert_eq!(
+                summary.source_bytes,
+                first_source.len() + second_source.len()
+            );
+            assert!(summary.findings >= 1);
+            assert_eq!(summary.candidates, 1);
+
+            cribra_batch_results_free(results);
+            cribra_scanner_free(scanner);
+        }
+    }
+
+    #[test]
+    fn batch_nested_out_of_range_fails_closed() {
+        let mut scanner = ptr::null_mut();
+        let mut results = ptr::null_mut();
+        let input = CribraBatchInput {
+            key: string_input("clean"),
+            source: string_input("clean source"),
+        };
+
+        unsafe {
+            assert_eq!(cribra_scanner_new_current(&mut scanner), CRIBRA_OK);
+            assert_eq!(
+                cribra_scanner_scan_batch(
+                    scanner,
+                    &input,
+                    1,
+                    CRIBRA_BATCH_EXECUTION_AUTO,
+                    &mut results,
+                ),
+                CRIBRA_OK
+            );
+
+            let mut entry = CribraBatchEntryView {
+                key: CribraStringView {
+                    ptr: ptr::dangling(),
+                    len: usize::MAX,
+                },
+                source_bytes: usize::MAX,
+                finding_count: usize::MAX,
+                candidate_count: usize::MAX,
+            };
+            assert_eq!(
+                cribra_batch_results_entry_at(results, 1, &mut entry),
+                CRIBRA_OUT_OF_RANGE
+            );
+            assert!(entry.key.ptr.is_null());
+            assert_eq!(entry.source_bytes, 0);
+
+            let mut finding = CribraFindingView::default();
+            assert_eq!(
+                cribra_batch_results_finding_at(results, 0, 0, &mut finding),
+                CRIBRA_OUT_OF_RANGE
+            );
+
+            let mut candidate = CribraCandidateView::default();
+            assert_eq!(
+                cribra_batch_results_candidate_at(results, 0, 0, &mut candidate),
+                CRIBRA_OUT_OF_RANGE
+            );
+
+            cribra_batch_results_free(results);
+            cribra_scanner_free(scanner);
+        }
+    }
+
+    #[test]
+    fn empty_batch_is_valid() {
+        let mut scanner = ptr::null_mut();
+        let mut results = ptr::null_mut();
+
+        unsafe {
+            assert_eq!(cribra_scanner_new_current(&mut scanner), CRIBRA_OK);
+            assert_eq!(
+                cribra_scanner_scan_batch(
+                    scanner,
+                    ptr::null(),
+                    0,
+                    CRIBRA_BATCH_EXECUTION_AUTO,
+                    &mut results,
+                ),
+                CRIBRA_OK
+            );
+
+            let mut count = usize::MAX;
+            assert_eq!(cribra_batch_results_count(results, &mut count), CRIBRA_OK);
+            assert_eq!(count, 0);
+
+            cribra_batch_results_free(results);
+            cribra_scanner_free(scanner);
+        }
+    }
+
+    #[test]
+    fn invalid_batch_input_fails_atomically() {
+        let mut scanner = ptr::null_mut();
+        let mut results = ptr::dangling_mut::<CribraBatchResults>();
+        let valid_key = "valid";
+        let valid_source = "clean";
+        let invalid_utf8 = [0xff_u8];
+
+        let inputs = [
+            CribraBatchInput {
+                key: string_input(valid_key),
+                source: string_input(valid_source),
+            },
+            CribraBatchInput {
+                key: string_input("invalid"),
+                source: CribraStringView {
+                    ptr: invalid_utf8.as_ptr(),
+                    len: invalid_utf8.len(),
+                },
+            },
+        ];
+
+        unsafe {
+            assert_eq!(cribra_scanner_new_current(&mut scanner), CRIBRA_OK);
+            assert_eq!(
+                cribra_scanner_scan_batch(
+                    scanner,
+                    inputs.as_ptr(),
+                    inputs.len(),
+                    CRIBRA_BATCH_EXECUTION_AUTO,
+                    &mut results,
+                ),
+                CRIBRA_INVALID_UTF8
+            );
+            assert!(results.is_null());
             cribra_scanner_free(scanner);
         }
     }
@@ -1532,6 +2461,277 @@ mod tests {
             );
         }
         (scanner, report, source)
+    }
+
+    fn share_entry_text(entry: CribraShareEntryView) -> (String, String) {
+        unsafe {
+            let key = slice::from_raw_parts(entry.key.ptr, entry.key.len);
+            let content = slice::from_raw_parts(entry.content.ptr, entry.content.len);
+            (
+                str::from_utf8(key).unwrap().to_owned(),
+                str::from_utf8(content).unwrap().to_owned(),
+            )
+        }
+    }
+
+    #[test]
+    fn share_bundle_redaction_preserves_order_keys_and_manifest_summary() {
+        let mut builder = ptr::null_mut();
+        let mut scanner = ptr::null_mut();
+        let mut results = ptr::null_mut();
+        let mut bundle = ptr::null_mut();
+
+        let rule = rule_config(
+            CRIBRA_RULE_KIND_LITERAL,
+            "secret",
+            "SECRET",
+            CRIBRA_SEVERITY_CRITICAL,
+        );
+        let first_source = "A=SECRET";
+        let second_source = "clean";
+        let inputs = [
+            CribraBatchInput {
+                key: string_input("a.env"),
+                source: string_input(first_source),
+            },
+            CribraBatchInput {
+                key: string_input("b.env"),
+                source: string_input(second_source),
+            },
+        ];
+        let sources = [string_input(first_source), string_input(second_source)];
+        let config = CribraShareBundleConfig {
+            mode: CRIBRA_SHARE_MODE_REDACT,
+            ..CribraShareBundleConfig::default()
+        };
+
+        unsafe {
+            assert_eq!(cribra_builder_new(&mut builder), CRIBRA_OK);
+            assert_eq!(cribra_builder_add_rule(builder, &rule), CRIBRA_OK);
+            assert_eq!(cribra_builder_build(builder, &mut scanner), CRIBRA_OK);
+            assert_eq!(
+                cribra_scanner_scan_batch(
+                    scanner,
+                    inputs.as_ptr(),
+                    inputs.len(),
+                    CRIBRA_BATCH_EXECUTION_SERIAL,
+                    &mut results,
+                ),
+                CRIBRA_OK
+            );
+
+            assert_eq!(
+                cribra_share_bundle_build(
+                    results,
+                    sources.as_ptr(),
+                    sources.len(),
+                    &config,
+                    &mut bundle,
+                ),
+                CRIBRA_OK
+            );
+
+            let mut count = usize::MAX;
+            assert_eq!(cribra_share_bundle_count(bundle, &mut count), CRIBRA_OK);
+            assert_eq!(count, 2);
+
+            let mut first = CribraShareEntryView::default();
+            assert_eq!(
+                cribra_share_bundle_entry_at(bundle, 0, &mut first),
+                CRIBRA_OK
+            );
+            assert_eq!(
+                share_entry_text(first),
+                ("a.env".to_owned(), "A=[REDACTED]".to_owned())
+            );
+
+            let mut second = CribraShareEntryView::default();
+            assert_eq!(
+                cribra_share_bundle_entry_at(bundle, 1, &mut second),
+                CRIBRA_OK
+            );
+            assert_eq!(
+                share_entry_text(second),
+                ("b.env".to_owned(), "clean".to_owned())
+            );
+
+            let mut manifest = CribraShareManifestView::default();
+            assert_eq!(
+                cribra_share_bundle_manifest(bundle, &mut manifest),
+                CRIBRA_OK
+            );
+            assert_eq!(manifest.mode, CRIBRA_SHARE_MODE_REDACT);
+            assert_eq!(manifest.summary.scanned_sources, 2);
+            assert_eq!(
+                manifest.summary.scanned_bytes,
+                first_source.len() + second_source.len()
+            );
+            assert_eq!(manifest.summary.total_findings, 1);
+            assert_eq!(manifest.summary.critical, 1);
+            assert!(manifest.generated_at_secs > 0);
+            assert!(manifest.generated_at_nanos < 1_000_000_000);
+
+            cribra_share_bundle_free(bundle);
+            cribra_batch_results_free(results);
+            cribra_scanner_free(scanner);
+        }
+    }
+
+    #[test]
+    fn share_bundle_source_count_and_length_mismatch_fail_closed() {
+        let mut builder = ptr::null_mut();
+        let mut scanner = ptr::null_mut();
+        let mut results = ptr::null_mut();
+        let mut bundle = ptr::dangling_mut::<CribraShareBundle>();
+
+        let rule = rule_config(
+            CRIBRA_RULE_KIND_LITERAL,
+            "secret",
+            "SECRET",
+            CRIBRA_SEVERITY_HIGH,
+        );
+        let input = CribraBatchInput {
+            key: string_input("memory"),
+            source: string_input("A=SECRET"),
+        };
+        let config = CribraShareBundleConfig {
+            mode: CRIBRA_SHARE_MODE_REDACT,
+            ..CribraShareBundleConfig::default()
+        };
+
+        unsafe {
+            assert_eq!(cribra_builder_new(&mut builder), CRIBRA_OK);
+            assert_eq!(cribra_builder_add_rule(builder, &rule), CRIBRA_OK);
+            assert_eq!(cribra_builder_build(builder, &mut scanner), CRIBRA_OK);
+            assert_eq!(
+                cribra_scanner_scan_batch(
+                    scanner,
+                    &input,
+                    1,
+                    CRIBRA_BATCH_EXECUTION_SERIAL,
+                    &mut results,
+                ),
+                CRIBRA_OK
+            );
+
+            assert_eq!(
+                cribra_share_bundle_build(results, ptr::null(), 0, &config, &mut bundle,),
+                CRIBRA_TRANSFORM_ERROR
+            );
+            assert!(bundle.is_null());
+
+            let changed = [string_input("A=CHANGED_SECRET")];
+            bundle = ptr::dangling_mut();
+            assert_eq!(
+                cribra_share_bundle_build(
+                    results,
+                    changed.as_ptr(),
+                    changed.len(),
+                    &config,
+                    &mut bundle,
+                ),
+                CRIBRA_TRANSFORM_ERROR
+            );
+            assert!(bundle.is_null());
+
+            cribra_batch_results_free(results);
+            cribra_scanner_free(scanner);
+        }
+    }
+
+    #[test]
+    fn keyed_share_modes_require_32_byte_key_and_do_not_expose_it() {
+        let mut builder = ptr::null_mut();
+        let mut scanner = ptr::null_mut();
+        let mut results = ptr::null_mut();
+        let mut bundle = ptr::null_mut();
+
+        let rule = rule_config(
+            CRIBRA_RULE_KIND_LITERAL,
+            "secret",
+            "SECRET",
+            CRIBRA_SEVERITY_HIGH,
+        );
+        let source = "TOKEN=SECRET";
+        let input = CribraBatchInput {
+            key: string_input("memory"),
+            source: string_input(source),
+        };
+        let sources = [string_input(source)];
+
+        unsafe {
+            assert_eq!(cribra_builder_new(&mut builder), CRIBRA_OK);
+            assert_eq!(cribra_builder_add_rule(builder, &rule), CRIBRA_OK);
+            assert_eq!(cribra_builder_build(builder, &mut scanner), CRIBRA_OK);
+            assert_eq!(
+                cribra_scanner_scan_batch(
+                    scanner,
+                    &input,
+                    1,
+                    CRIBRA_BATCH_EXECUTION_SERIAL,
+                    &mut results,
+                ),
+                CRIBRA_OK
+            );
+
+            let bad_key = [7_u8; 31];
+            let bad = CribraShareBundleConfig {
+                mode: CRIBRA_SHARE_MODE_PSEUDONYMIZE,
+                key: bad_key.as_ptr(),
+                key_len: bad_key.len(),
+                ..CribraShareBundleConfig::default()
+            };
+            assert_eq!(
+                cribra_share_bundle_build(
+                    results,
+                    sources.as_ptr(),
+                    sources.len(),
+                    &bad,
+                    &mut bundle,
+                ),
+                CRIBRA_INVALID_ARGUMENT
+            );
+            assert!(bundle.is_null());
+
+            let key = [7_u8; 32];
+            let good = CribraShareBundleConfig {
+                mode: CRIBRA_SHARE_MODE_PSEUDONYMIZE,
+                key: key.as_ptr(),
+                key_len: key.len(),
+                text: string_input("native_pseudo_"),
+                digest_bytes: 8,
+            };
+            assert_eq!(
+                cribra_share_bundle_build(
+                    results,
+                    sources.as_ptr(),
+                    sources.len(),
+                    &good,
+                    &mut bundle,
+                ),
+                CRIBRA_OK
+            );
+
+            let mut entry = CribraShareEntryView::default();
+            assert_eq!(
+                cribra_share_bundle_entry_at(bundle, 0, &mut entry),
+                CRIBRA_OK
+            );
+            let (_, content) = share_entry_text(entry);
+            assert!(content.starts_with("TOKEN=native_pseudo_"));
+            assert!(!content.contains("SECRET"));
+
+            let mut manifest = CribraShareManifestView::default();
+            assert_eq!(
+                cribra_share_bundle_manifest(bundle, &mut manifest),
+                CRIBRA_OK
+            );
+            assert_eq!(manifest.mode, CRIBRA_SHARE_MODE_PSEUDONYMIZE);
+
+            cribra_share_bundle_free(bundle);
+            cribra_batch_results_free(results);
+            cribra_scanner_free(scanner);
+        }
     }
 
     unsafe fn output_text(output: *const CribraOutput) -> String {
