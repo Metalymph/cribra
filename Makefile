@@ -1,7 +1,7 @@
 # Cribra contributor/development commands.
 # `just` is preferred locally; this Makefile mirrors the common recipes.
 
-.PHONY: help fmt fmt-check check check-all test test-serde test-all test-doc \
+.PHONY: help fmt fmt-check check check-all capi test test-serde test-all test-doc \
 	clippy doc doc-all wasm wasm-serde msrv audit package package-dirty \
 	publish-dry-run publish-dry-run-dirty gate release-gate bench bench-v02 \
 	bench-diagnostics bench-all clean
@@ -11,7 +11,8 @@ help:
 	  'Common Cribra targets:' \
 	  '  make gate              Local quality gate' \
 	  '  make release-gate      Full release gate (requires cargo-audit)' \
-	  '  make test-all          Test all native features' \
+	  '  make capi              Check/lint/build native C adapter' \
+	  '  make test-all          Test all native core features' \
 	  '  make wasm              Check default WASM contract' \
 	  '  make wasm-serde        Check WASM + Serde contract' \
 	  '  make msrv              Check/test Rust 1.97.0' \
@@ -32,6 +33,11 @@ check:
 
 check-all:
 	cargo check --all-features
+
+capi:
+	cargo check -p cribra-capi
+	cargo clippy -p cribra-capi --all-targets -- -D warnings
+	cargo build -p cribra-capi
 
 test:
 	cargo test
@@ -81,7 +87,7 @@ publish-dry-run:
 publish-dry-run-dirty:
 	cargo publish --dry-run --allow-dirty
 
-gate: fmt-check check-all test test-serde test-all test-doc clippy doc doc-all wasm wasm-serde
+gate: fmt-check check-all capi test test-serde test-all test-doc clippy doc doc-all wasm wasm-serde
 	git diff --check
 
 release-gate: gate msrv audit package publish-dry-run

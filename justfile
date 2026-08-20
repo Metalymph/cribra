@@ -20,13 +20,19 @@ fmt:
 fmt-check:
     cargo fmt --all -- --check
 
-# Check the default build.
+# Check the default core build.
 check:
     cargo check
 
-# Check every optional feature.
+# Check every optional core feature.
 check-all:
     cargo check --all-features
+
+# Check, lint, and build the native C adapter artifact skeleton.
+capi:
+    cargo check -p cribra-capi
+    cargo clippy -p cribra-capi --all-targets -- -D warnings
+    cargo build -p cribra-capi
 
 # Run the default test surface.
 test:
@@ -92,7 +98,7 @@ publish-dry-run-dirty:
     cargo publish --dry-run --allow-dirty
 
 # Run the fast local quality gate used during normal development.
-gate: fmt-check check-all test test-serde test-all test-doc clippy doc doc-all wasm wasm-serde
+gate: fmt-check check-all capi test test-serde test-all test-doc clippy doc doc-all wasm wasm-serde
     git diff --check
 
 # Run the release-oriented local gate. Requires `cargo-audit`.
