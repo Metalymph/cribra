@@ -171,3 +171,34 @@ pub struct CribraExplanationView {
     /// Ambiguous candidate evidence, or [`CRIBRA_CANDIDATE_EVIDENCE_NONE`].
     pub candidate_evidence: CribraCandidateEvidence,
 }
+
+/// Stable ABI custom-rule family representation.
+pub type CribraRuleKind = u32;
+/// Exact literal matching.
+pub const CRIBRA_RULE_KIND_LITERAL: CribraRuleKind = 0;
+/// Token-prefix matching.
+pub const CRIBRA_RULE_KIND_PREFIX: CribraRuleKind = 1;
+/// Token-suffix matching.
+pub const CRIBRA_RULE_KIND_SUFFIX: CribraRuleKind = 2;
+/// Full regex-match span projection.
+pub const CRIBRA_RULE_KIND_PATTERN: CribraRuleKind = 3;
+
+/// Borrowed configuration used to add one public custom rule.
+///
+/// `id` and `value` are copied by [`crate::cribra_builder_add_rule`] before the
+/// call returns. Internal validators and capture projection are deliberately not
+/// represented here.
+#[repr(C)]
+#[derive(Debug, Copy, Clone, Default)]
+pub struct CribraRuleConfig {
+    /// ABI-defined public rule family.
+    pub kind: CribraRuleKind,
+    /// Stable rule identifier.
+    pub id: CribraStringView,
+    /// Literal, prefix, suffix, or regex source according to `kind`.
+    pub value: CribraStringView,
+    /// ABI-defined severity assigned to findings.
+    pub severity: CribraSeverity,
+    /// Optional ABI-defined remediation, or [`CRIBRA_REMEDIATION_NONE`].
+    pub remediation: CribraRemediation,
+}

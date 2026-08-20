@@ -6,8 +6,8 @@ use std::{
 };
 
 use cribra::{
-    CandidateEvidence, Confidence, DetectionMode, Explanation, Remediation, Scanner,
-    SensitiveCandidateKind, Severity,
+    CandidateEvidence, Confidence, DetectionMode, Explanation, Remediation, Rule, Scanner,
+    SensitiveCandidateKind, Severity, builtins,
 };
 
 use crate::{
@@ -22,11 +22,13 @@ use crate::{
     CRIBRA_REMEDIATION_NONE, CRIBRA_REMEDIATION_REMOVE_SENSITIVE_VALUE,
     CRIBRA_REMEDIATION_REPLACE_PRIVATE_KEY, CRIBRA_REMEDIATION_REVIEW_SENSITIVE_HASH,
     CRIBRA_REMEDIATION_REVOKE_AND_ROTATE_CREDENTIAL, CRIBRA_REMEDIATION_ROTATE_CREDENTIAL,
-    CRIBRA_REMEDIATION_ROTATE_PASSWORD, CRIBRA_REMEDIATION_UNKNOWN, CRIBRA_SEVERITY_CRITICAL,
-    CRIBRA_SEVERITY_HIGH, CRIBRA_SEVERITY_INFO, CRIBRA_SEVERITY_LOW, CRIBRA_SEVERITY_MEDIUM,
-    CribraBuilder, CribraCandidateEvidence, CribraCandidateKind, CribraCandidateView,
-    CribraConfidence, CribraDetectionMode, CribraExplanationView, CribraFindingView,
-    CribraRemediation, CribraReport, CribraScanner, CribraSeverity, CribraStatus, CribraStringView,
+    CRIBRA_REMEDIATION_ROTATE_PASSWORD, CRIBRA_REMEDIATION_UNKNOWN, CRIBRA_RULE_KIND_LITERAL,
+    CRIBRA_RULE_KIND_PATTERN, CRIBRA_RULE_KIND_PREFIX, CRIBRA_RULE_KIND_SUFFIX,
+    CRIBRA_SEVERITY_CRITICAL, CRIBRA_SEVERITY_HIGH, CRIBRA_SEVERITY_INFO, CRIBRA_SEVERITY_LOW,
+    CRIBRA_SEVERITY_MEDIUM, CribraBuilder, CribraCandidateEvidence, CribraCandidateKind,
+    CribraCandidateView, CribraConfidence, CribraDetectionMode, CribraExplanationView,
+    CribraFindingView, CribraRemediation, CribraReport, CribraRuleConfig, CribraScanner,
+    CribraSeverity, CribraStatus, CribraStringView,
 };
 
 /// Experimental native ABI major version.
@@ -62,10 +64,7 @@ unsafe fn clear_value<T: Default>(out: *mut T) -> Result<(), CribraStatus> {
     Ok(())
 }
 
-unsafe fn source_from_raw<'a>(
-    source: *const u8,
-    source_len: usize,
-) -> Result<&'a str, CribraStatus> {
+unsafe fn utf8_from_raw<'a>(source: *const u8, source_len: usize) -> Result<&'a str, CribraStatus> {
     if source_len == 0 {
         return Ok("");
     }
@@ -160,6 +159,55 @@ fn explanation_view(value: Explanation) -> CribraExplanationView {
     }
 }
 
+fn severity_from_code(value: CribraSeverity) -> Result<Severity, CribraStatus> {
+    match value {
+        CRIBRA_SEVERITY_INFO => Ok(Severity::Info),
+        CRIBRA_SEVERITY_LOW => Ok(Severity::Low),
+        CRIBRA_SEVERITY_MEDIUM => Ok(Severity::Medium),
+        CRIBRA_SEVERITY_HIGH => Ok(Severity::High),
+        CRIBRA_SEVERITY_CRITICAL => Ok(Severity::Critical),
+        _ => Err(CRIBRA_INVALID_ARGUMENT),
+    }
+}
+
+fn remediation_from_code(value: CribraRemediation) -> Result<Option<Remediation>, CribraStatus> {
+    match value {
+        CRIBRA_REMEDIATION_NONE => Ok(None),
+        CRIBRA_REMEDIATION_REVOKE_AND_ROTATE_CREDENTIAL => {
+            Ok(Some(Remediation::RevokeAndRotateCredential))
+        }
+        CRIBRA_REMEDIATION_ROTATE_CREDENTIAL => Ok(Some(Remediation::RotateCredential)),
+        CRIBRA_REMEDIATION_ROTATE_PASSWORD => Ok(Some(Remediation::RotatePassword)),
+        CRIBRA_REMEDIATION_REPLACE_PRIVATE_KEY => Ok(Some(Remediation::ReplacePrivateKey)),
+        CRIBRA_REMEDIATION_REMOVE_SENSITIVE_VALUE => Ok(Some(Remediation::RemoveSensitiveValue)),
+        CRIBRA_REMEDIATION_REVIEW_SENSITIVE_HASH => Ok(Some(Remediation::ReviewSensitiveHash)),
+        _ => Err(CRIBRA_INVALID_ARGUMENT),
+    }
+}
+
+fn configured_rule(
+    kind: u32,
+    id: &str,
+    value: &str,
+    severity: Severity,
+    remediation: Option<Remediation>,
+) -> Result<Rule, CribraStatus> {
+    let rule = match kind {
+        CRIBRA_RULE_KIND_LITERAL => Rule::literal(id, value, severity),
+        CRIBRA_RULE_KIND_PREFIX => Rule::prefix(id, value, severity),
+        CRIBRA_RULE_KIND_SUFFIX => Rule::suffix(id, value, severity),
+        CRIBRA_RULE_KIND_PATTERN => {
+            Rule::pattern(id, value, severity).map_err(|_| CRIBRA_BUILD_ERROR)?
+        }
+        _ => return Err(CRIBRA_INVALID_ARGUMENT),
+    };
+
+    Ok(match remediation {
+        Some(remediation) => rule.with_remediation(remediation),
+        None => rule,
+    })
+}
+
 /// Returns the native ABI major version.
 #[unsafe(no_mangle)]
 pub extern "C" fn cribra_abi_version_major() -> u32 {
@@ -195,6 +243,92 @@ pub unsafe extern "C" fn cribra_builder_new(out_builder: *mut *mut CribraBuilder
         let builder = Box::new(CribraBuilder::empty());
         // SAFETY: `clear_out` established a non-null writable out-pointer.
         unsafe { ptr::write(out_builder, Box::into_raw(builder)) };
+        CRIBRA_OK
+    })
+}
+
+/// Adds Cribra's current canonical built-in catalog to a builder.
+///
+/// This allows native consumers to combine the standard catalog with custom
+/// rules while preserving scanner-wide rule-ID validation.
+///
+/// # Safety
+///
+/// `builder` must be a live builder handle returned by [`cribra_builder_new`].
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cribra_builder_add_current_builtins(
+    builder: *mut CribraBuilder,
+) -> CribraStatus {
+    contain_status(|| {
+        if builder.is_null() {
+            return CRIBRA_INVALID_ARGUMENT;
+        }
+
+        // SAFETY: caller guarantees unique access to a live builder handle.
+        let builder = unsafe { &mut *builder };
+        let Some(inner) = builder.inner.take() else {
+            return CRIBRA_INVALID_ARGUMENT;
+        };
+        builder.inner = Some(inner.builtins(builtins::CURRENT));
+        CRIBRA_OK
+    })
+}
+
+/// Adds one public custom rule to a scanner builder.
+///
+/// `id` and `value` are copied into Rust-owned rule storage before this function
+/// returns. Literal, prefix and suffix rules retain the core's existing deferred
+/// empty-value validation. Pattern syntax and zero-length-capable patterns are
+/// rejected while constructing the rule.
+///
+/// Internal validators and capture projection are intentionally unavailable
+/// through this ABI.
+///
+/// # Safety
+///
+/// `builder` must be a live builder handle. `config` must point to a readable
+/// [`CribraRuleConfig`]. Each non-empty string view in `config` must reference
+/// readable bytes for the duration of this call.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cribra_builder_add_rule(
+    builder: *mut CribraBuilder,
+    config: *const CribraRuleConfig,
+) -> CribraStatus {
+    contain_status(|| {
+        if builder.is_null() || config.is_null() {
+            return CRIBRA_INVALID_ARGUMENT;
+        }
+
+        // SAFETY: caller guarantees a readable configuration value.
+        let config = unsafe { &*config };
+
+        let id = match unsafe { utf8_from_raw(config.id.ptr, config.id.len) } {
+            Ok(value) => value,
+            Err(status) => return status,
+        };
+        let value = match unsafe { utf8_from_raw(config.value.ptr, config.value.len) } {
+            Ok(value) => value,
+            Err(status) => return status,
+        };
+        let severity = match severity_from_code(config.severity) {
+            Ok(value) => value,
+            Err(status) => return status,
+        };
+        let remediation = match remediation_from_code(config.remediation) {
+            Ok(value) => value,
+            Err(status) => return status,
+        };
+        let rule = match configured_rule(config.kind, id, value, severity, remediation) {
+            Ok(rule) => rule,
+            Err(status) => return status,
+        };
+
+        // SAFETY: caller guarantees unique access to a live builder handle.
+        let builder = unsafe { &mut *builder };
+        let Some(inner) = builder.inner.take() else {
+            return CRIBRA_INVALID_ARGUMENT;
+        };
+        builder.inner = Some(inner.rule(rule));
         CRIBRA_OK
     })
 }
@@ -304,7 +438,7 @@ pub unsafe extern "C" fn cribra_scanner_scan(
             return CRIBRA_INVALID_ARGUMENT;
         }
 
-        let source = match unsafe { source_from_raw(source, source_len) } {
+        let source = match unsafe { utf8_from_raw(source, source_len) } {
             Ok(source) => source,
             Err(status) => return status,
         };
@@ -754,6 +888,199 @@ mod tests {
             assert_eq!(finding.rule_id.len, 0);
             assert_eq!(finding.start, 0);
             assert_eq!(finding.end, 0);
+
+            cribra_report_free(report);
+            cribra_scanner_free(scanner);
+        }
+    }
+
+    fn string_input(value: &str) -> CribraStringView {
+        CribraStringView {
+            ptr: value.as_ptr(),
+            len: value.len(),
+        }
+    }
+
+    fn rule_config<'a>(
+        kind: u32,
+        id: &'a str,
+        value: &'a str,
+        severity: CribraSeverity,
+    ) -> CribraRuleConfig {
+        CribraRuleConfig {
+            kind,
+            id: string_input(id),
+            value: string_input(value),
+            severity,
+            remediation: CRIBRA_REMEDIATION_NONE,
+        }
+    }
+
+    #[test]
+    fn native_builder_supports_all_public_custom_rule_families() {
+        let cases = [
+            (
+                CRIBRA_RULE_KIND_LITERAL,
+                "native.literal",
+                "EXACT_SECRET",
+                "before EXACT_SECRET after",
+            ),
+            (
+                CRIBRA_RULE_KIND_PREFIX,
+                "native.prefix",
+                "native_live_",
+                "token=native_live_ABC123",
+            ),
+            (
+                CRIBRA_RULE_KIND_SUFFIX,
+                "native.suffix",
+                "_native_secret",
+                "token=ABC123_native_secret",
+            ),
+            (
+                CRIBRA_RULE_KIND_PATTERN,
+                "native.pattern",
+                r"NATIVE-[A-Z0-9]{8}",
+                "token=NATIVE-AB12CD34",
+            ),
+        ];
+
+        for (kind, id, value, source) in cases {
+            let mut builder = ptr::null_mut();
+            let mut scanner = ptr::null_mut();
+            let mut report = ptr::null_mut();
+            let config = rule_config(kind, id, value, CRIBRA_SEVERITY_HIGH);
+
+            unsafe {
+                assert_eq!(cribra_builder_new(&mut builder), CRIBRA_OK);
+                assert_eq!(cribra_builder_add_rule(builder, &config), CRIBRA_OK);
+                assert_eq!(cribra_builder_build(builder, &mut scanner), CRIBRA_OK);
+                assert_eq!(
+                    cribra_scanner_scan(scanner, source.as_ptr(), source.len(), &mut report),
+                    CRIBRA_OK
+                );
+
+                let mut count = 0;
+                assert_eq!(cribra_report_finding_count(report, &mut count), CRIBRA_OK);
+                assert_eq!(count, 1, "{id}");
+
+                let mut finding = CribraFindingView::default();
+                assert_eq!(cribra_report_finding_at(report, 0, &mut finding), CRIBRA_OK);
+                let rule_id = slice::from_raw_parts(finding.rule_id.ptr, finding.rule_id.len);
+                assert_eq!(str::from_utf8(rule_id).unwrap(), id);
+
+                cribra_report_free(report);
+                cribra_scanner_free(scanner);
+            }
+        }
+    }
+
+    #[test]
+    fn custom_rule_input_is_copied_before_return() {
+        let mut builder = ptr::null_mut();
+        let mut scanner = ptr::null_mut();
+        let id = String::from("native.owned");
+        let value = String::from("OWNED_SECRET");
+        let config = rule_config(CRIBRA_RULE_KIND_LITERAL, &id, &value, CRIBRA_SEVERITY_HIGH);
+
+        unsafe {
+            assert_eq!(cribra_builder_new(&mut builder), CRIBRA_OK);
+            assert_eq!(cribra_builder_add_rule(builder, &config), CRIBRA_OK);
+        }
+
+        drop(id);
+        drop(value);
+
+        unsafe {
+            assert_eq!(cribra_builder_build(builder, &mut scanner), CRIBRA_OK);
+            cribra_scanner_free(scanner);
+        }
+    }
+
+    #[test]
+    fn invalid_pattern_is_rejected_without_consuming_builder() {
+        let mut builder = ptr::null_mut();
+        let mut scanner = ptr::null_mut();
+        let invalid = rule_config(
+            CRIBRA_RULE_KIND_PATTERN,
+            "native.invalid-pattern",
+            "(",
+            CRIBRA_SEVERITY_HIGH,
+        );
+        let valid = rule_config(
+            CRIBRA_RULE_KIND_LITERAL,
+            "native.valid",
+            "VALID_SECRET",
+            CRIBRA_SEVERITY_HIGH,
+        );
+
+        unsafe {
+            assert_eq!(cribra_builder_new(&mut builder), CRIBRA_OK);
+            assert_eq!(
+                cribra_builder_add_rule(builder, &invalid),
+                CRIBRA_BUILD_ERROR
+            );
+            assert_eq!(cribra_builder_add_rule(builder, &valid), CRIBRA_OK);
+            assert_eq!(cribra_builder_build(builder, &mut scanner), CRIBRA_OK);
+            cribra_scanner_free(scanner);
+        }
+    }
+
+    #[test]
+    fn duplicate_rule_ids_remain_scanner_build_errors() {
+        let mut builder = ptr::null_mut();
+        let mut scanner = ptr::dangling_mut::<CribraScanner>();
+        let first = rule_config(
+            CRIBRA_RULE_KIND_LITERAL,
+            "native.duplicate",
+            "FIRST_SECRET",
+            CRIBRA_SEVERITY_HIGH,
+        );
+        let second = rule_config(
+            CRIBRA_RULE_KIND_LITERAL,
+            "native.duplicate",
+            "SECOND_SECRET",
+            CRIBRA_SEVERITY_CRITICAL,
+        );
+
+        unsafe {
+            assert_eq!(cribra_builder_new(&mut builder), CRIBRA_OK);
+            assert_eq!(cribra_builder_add_rule(builder, &first), CRIBRA_OK);
+            assert_eq!(cribra_builder_add_rule(builder, &second), CRIBRA_OK);
+            assert_eq!(
+                cribra_builder_build(builder, &mut scanner),
+                CRIBRA_BUILD_ERROR
+            );
+            assert!(scanner.is_null());
+        }
+    }
+
+    #[test]
+    fn current_builtins_can_be_combined_with_custom_rules() {
+        let mut builder = ptr::null_mut();
+        let mut scanner = ptr::null_mut();
+        let mut report = ptr::null_mut();
+        let custom = rule_config(
+            CRIBRA_RULE_KIND_LITERAL,
+            "native.extra",
+            "NATIVE_EXTRA_SECRET",
+            CRIBRA_SEVERITY_HIGH,
+        );
+        let source = b"GITHUB_TOKEN=ghp_AbCdEf0123456789_AbCdEf0123456789 NATIVE_EXTRA_SECRET";
+
+        unsafe {
+            assert_eq!(cribra_builder_new(&mut builder), CRIBRA_OK);
+            assert_eq!(cribra_builder_add_current_builtins(builder), CRIBRA_OK);
+            assert_eq!(cribra_builder_add_rule(builder, &custom), CRIBRA_OK);
+            assert_eq!(cribra_builder_build(builder, &mut scanner), CRIBRA_OK);
+            assert_eq!(
+                cribra_scanner_scan(scanner, source.as_ptr(), source.len(), &mut report),
+                CRIBRA_OK
+            );
+
+            let mut count = 0;
+            assert_eq!(cribra_report_finding_count(report, &mut count), CRIBRA_OK);
+            assert!(count >= 2);
 
             cribra_report_free(report);
             cribra_scanner_free(scanner);

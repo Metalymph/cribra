@@ -112,62 +112,62 @@ The interoperability architecture is specified in `docs/INTEROP.md`.
 
 ### 0.3.1 — Interop specification
 
-- [ ] Define scope and non-goals.
-- [ ] Freeze core-authority and adapter-separation rules.
-- [ ] Define ownership and lifetime model.
-- [ ] Define native input and stable primitive representation rules.
-- [ ] Define status/error model and panic containment.
-- [ ] Define scanner lifecycle and single-source boundary.
-- [ ] Define report/finding/candidate projection rules.
-- [ ] Define explainability and custom-rule authority boundaries.
-- [ ] Define transform ownership and source/report consistency.
-- [ ] Define batch/parallel design constraints.
-- [ ] Define thread-safety contract targets.
-- [ ] Define ABI versioning and symbol namespace policy.
-- [ ] Define native artifact/header/consumer validation requirements.
-- [ ] Define ABI performance policy.
-- [ ] Define existing-WASM audit scope.
-- [ ] Define privacy/threat model and semantic parity gate.
+- [x] Define scope and non-goals.
+- [x] Freeze core-authority and adapter-separation rules.
+- [x] Define ownership and lifetime model.
+- [x] Define native input and stable primitive representation rules.
+- [x] Define status/error model and panic containment.
+- [x] Define scanner lifecycle and single-source boundary.
+- [x] Define report/finding/candidate projection rules.
+- [x] Define explainability and custom-rule authority boundaries.
+- [x] Define transform ownership and source/report consistency.
+- [x] Define batch/parallel design constraints.
+- [x] Define thread-safety contract targets.
+- [x] Define ABI versioning and symbol namespace policy.
+- [x] Define native artifact/header/consumer validation requirements.
+- [x] Define ABI performance policy.
+- [x] Define existing-WASM audit scope.
+- [x] Define privacy/threat model and semantic parity gate.
 
 ### 0.3.2 — `cribra-capi` skeleton and artifact model
 
-- [ ] Convert the repository root to an appropriate Cargo workspace form while preserving the published root `cribra` crate unless evidence justifies moving it.
-- [ ] Add `crates/cribra-capi/` as a dedicated native adapter crate.
-- [ ] Preserve `#![forbid(unsafe_code)]` in the core; confine required FFI `unsafe` to the adapter.
-- [ ] Configure native static/dynamic artifact production.
-- [ ] Establish initial adapter module boundaries without exposing public ABI functionality prematurely.
+- [x] Convert the repository root to an appropriate Cargo workspace form while preserving the published root `cribra` crate unless evidence justifies moving it.
+- [x] Add `crates/cribra-capi/` as a dedicated native adapter crate.
+- [x] Preserve `#![forbid(unsafe_code)]` in the core; confine required FFI `unsafe` to the adapter.
+- [x] Configure native static/dynamic artifact production.
+- [x] Establish initial adapter module boundaries without exposing public ABI functionality prematurely.
 
 ### 0.3.3 — ABI version, scanner lifecycle and single-source scan
 
-- [ ] Add explicit ABI protocol version querying independent from crate SemVer.
-- [ ] Add builder/scanner opaque lifecycle.
-- [ ] Preserve empty-builder versus current-builtins semantics.
-- [ ] Add UTF-8 validated pointer-plus-length single-source scan boundary.
-- [ ] Return an owned report handle.
-- [ ] Contain panics at exported FFI boundaries.
+- [x] Add explicit ABI protocol version querying independent from crate SemVer.
+- [x] Add builder/scanner opaque lifecycle.
+- [x] Preserve empty-builder versus current-builtins semantics.
+- [x] Add UTF-8 validated pointer-plus-length single-source scan boundary.
+- [x] Return an owned report handle.
+- [x] Contain panics at exported FFI boundaries.
 
 ### 0.3.4 — Report and finding traversal
 
-- [ ] Add finding count and indexed traversal.
-- [ ] Project stable finding metadata without exposing Rust layout.
-- [ ] Preserve byte-span and Unicode coordinate semantics.
-- [ ] Preserve remediation optionality.
-- [ ] Keep matched source values outside the ABI result model.
+- [x] Add finding count and indexed traversal.
+- [x] Project stable finding metadata without exposing Rust layout.
+- [x] Preserve byte-span and Unicode coordinate semantics.
+- [x] Preserve remediation optionality.
+- [x] Keep matched source values outside the ABI result model.
 
 ### 0.3.5 — Ambiguity and explainability
 
-- [ ] Add candidate count and indexed candidate projection.
-- [ ] Preserve `SensitiveCandidate` as semantically distinct from `Finding`.
-- [ ] Project candidate evidence without inventing severity/confidence/remediation.
-- [ ] Add finding explanation resolution through scanner-owned metadata.
-- [ ] Preserve candidate explanation as evidence-derived.
+- [x] Add candidate count and indexed candidate projection.
+- [x] Preserve `SensitiveCandidate` as semantically distinct from `Finding`.
+- [x] Project candidate evidence without inventing severity/confidence/remediation.
+- [x] Add finding explanation resolution through scanner-owned metadata.
+- [x] Preserve candidate explanation as evidence-derived.
 
 ### 0.3.6 — Custom-rule/configuration ABI
 
-- [ ] Configure rules through the native builder rather than exposing Rust `Rule` layout.
-- [ ] Support public literal, prefix, suffix and full-match pattern rule semantics.
-- [ ] Preserve rule-ID uniqueness and existing scanner-build validation.
-- [ ] Do not expose internal capture-projection capability as a custom-rule feature.
+- [x] Configure rules through the native builder rather than exposing Rust `Rule` layout.
+- [x] Support public literal, prefix, suffix and full-match pattern rule semantics.
+- [x] Preserve rule-ID uniqueness and existing scanner-build validation.
+- [x] Do not expose internal capture-projection capability as a custom-rule feature.
 
 ### 0.3.7 — Transform ABI and owned output buffers
 
