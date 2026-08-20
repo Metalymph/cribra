@@ -1,96 +1,5 @@
 # Cribra Roadmap
 
-Cribra evolves as a small, privacy-first, embeddable Rust engine. Released
-capabilities remain documented here at milestone level; detailed release history
-and user-visible changes remain authoritative in `CHANGELOG.md`.
-
-## Released
-
-### v0.1.0 — Core foundation — released 2026-08-10
-
-The first public Cribra core release established the reusable engine model.
-
-Completed foundation:
-
-- deterministic UTF-8 scanning;
-- compiled literal, prefix, suffix and regex rules;
-- capture-aware regex projection;
-- public custom rules and selectable built-ins;
-- deterministic and contextual validators;
-- immutable per-source reports and ordered keyed batch results;
-- lazy querying, sorting and summaries;
-- remediation metadata;
-- redaction, templating, pseudonymization, synthesis and share bundles;
-- strict transformation span validation;
-- metadata-only public findings with Unicode-aware coordinates;
-- optional Serde;
-- optional Rayon-backed parallel batch scanning with stable ordering;
-- canonical/golden fixtures, hardening tests and Criterion benchmarks;
-- serial core suitable for native and WASM/PWA consumers.
-
-The `0.1.x` line was published under the previous `silens-scan` package name.
-Starting with `0.2.0`, the reusable engine is named **Cribra**.
-
-### v0.2.0 — Detection quality, ambiguity and explainability — released 2026-08-19
-
-v0.2 expanded detection quality and result semantics without changing Cribra's
-privacy-first, application-agnostic architecture.
-
-Completed work:
-
-#### Detection and validation
-
-- expanded deterministic and contextual built-in portfolio;
-- cross-format contextual detection hardening;
-- shared placeholder and false-positive rejection;
-- authoritative `DetectionMode` metadata derived from validator behavior;
-- richer public `RuleMetadata`;
-- scanner-wide `RuleId` uniqueness;
-- public custom literal, prefix, suffix and full-match pattern semantics;
-- zero-length custom-pattern rejection;
-- internal-only capture projection preserved for built-ins.
-
-#### Sensitive-candidate model
-
-- public `SensitiveCandidate`;
-- public candidate kind and evidence contracts;
-- separate immutable candidate channel in each report;
-- candidate-aware batch iteration, summaries and review helpers;
-- overlap suppression where accepted findings take precedence;
-- regression corpus for ambiguous recovery-like values and false positives;
-- candidate metadata-only Serde support.
-
-#### Explainability
-
-- public typed `Explanation`;
-- classified explanations tied to `DetectionMode`;
-- ambiguous explanations tied to `CandidateEvidence`;
-- scanner-owned metadata retained as finding explanation authority;
-- fail-closed explanation resolution when scanner authority does not match;
-- no duplicated derived explanation state in reports/results.
-
-#### Result, privacy and transform semantics
-
-- findings and ambiguous candidates remain separate result channels;
-- failed, review-only and clean source semantics are distinct;
-- candidates never gain finding severity, confidence or remediation semantics;
-- candidates remain excluded from automatic share-safe transformations;
-- matched sensitive values remain absent from findings, candidates and
-  explanation payloads;
-- serialization remains metadata-only.
-
-#### Quality and performance
-
-- expanded detection, format, adversarial, collision, ambiguity and regression
-  corpora;
-- contextual performance isolation and fast-path work;
-- conservative prefilters without changing matcher/validator authority;
-- serial/parallel equivalence retained;
-- final v0.2 performance baseline recorded in `docs/PERFORMANCE.md`;
-- full release gates completed and v0.2.0 published.
-
----
-
 ## v0.3 — Native Interoperability
 
 Cribra v0.3 focuses on making the existing privacy-first Rust core universally embeddable without expanding detection intelligence.
@@ -171,11 +80,11 @@ The interoperability architecture is specified in `docs/INTEROP.md`.
 
 ### 0.3.7 — Transform ABI and owned output buffers
 
-- [ ] Add explicit caller-source + report transform boundary.
-- [ ] Add Rust-owned output buffer handles with one destruction path.
-- [ ] Preserve redaction/template/pseudonymization/synthesis semantics where exposed.
-- [ ] Preserve overlap/span validation.
-- [ ] Define and test source/report consistency behavior.
+- [x] Add explicit caller-source + report transform boundary.
+- [x] Add Rust-owned output buffer handles with one destruction path.
+- [x] Preserve redaction/template/pseudonymization/synthesis semantics where exposed.
+- [x] Preserve overlap/span validation.
+- [x] Define and test source/report consistency behavior.
 
 ### 0.3.8 — Batch API and optional parallel execution contract
 
@@ -185,6 +94,7 @@ The interoperability architecture is specified in `docs/INTEROP.md`.
 - [ ] Add an explicit amortization path for small inputs.
 - [ ] Keep Rayon an implementation detail rather than an ABI concept.
 - [ ] Preserve serial/parallel semantic equivalence.
+- [ ] Project `ShareBundle` only after the batch ownership model exists; do not invent a single-source substitute.
 
 ### 0.3.9 — Ownership, error, panic and thread hardening
 
@@ -267,14 +177,7 @@ Do not add during this release solely as part of interoperability work:
 
 ---
 
----
-
-## Historical engineering backlog
-
-The following block is preserved verbatim from the pre-v0.2 repository roadmap.
-It records the original benchmark-foundation backlog; later v0.2 performance
-work and final measurements are documented in `CHANGELOG.md` and
-`docs/PERFORMANCE.md`.
+## Historical benchmark foundation
 
 ### S1.3.1 — Benchmark foundation
 
