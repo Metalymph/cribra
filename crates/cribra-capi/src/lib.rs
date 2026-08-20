@@ -19,15 +19,17 @@ pub use ffi::{
     ABI_VERSION_MAJOR, ABI_VERSION_MINOR, ABI_VERSION_PATCH, cribra_abi_version_major,
     cribra_abi_version_minor, cribra_abi_version_patch, cribra_builder_add_current_builtins,
     cribra_builder_add_rule, cribra_builder_build, cribra_builder_free, cribra_builder_new,
-    cribra_report_candidate_at, cribra_report_candidate_count, cribra_report_explain_candidate,
-    cribra_report_finding_at, cribra_report_finding_count, cribra_report_free,
-    cribra_scanner_explain_finding, cribra_scanner_free, cribra_scanner_new_current,
-    cribra_scanner_scan,
+    cribra_output_free, cribra_output_view, cribra_report_candidate_at,
+    cribra_report_candidate_count, cribra_report_explain_candidate, cribra_report_finding_at,
+    cribra_report_finding_count, cribra_report_free, cribra_scanner_explain_finding,
+    cribra_scanner_free, cribra_scanner_new_current, cribra_scanner_scan,
+    cribra_transform_pseudonymize, cribra_transform_redact, cribra_transform_redact_with,
+    cribra_transform_synthesize, cribra_transform_template, cribra_transform_template_with,
 };
-pub use handles::{CribraBuilder, CribraReport, CribraScanner};
+pub use handles::{CribraBuilder, CribraOutput, CribraReport, CribraScanner};
 pub use status::{
     CRIBRA_BUILD_ERROR, CRIBRA_INTERNAL_ERROR, CRIBRA_INVALID_ARGUMENT, CRIBRA_INVALID_UTF8,
-    CRIBRA_OK, CRIBRA_OUT_OF_RANGE, CribraStatus,
+    CRIBRA_OK, CRIBRA_OUT_OF_RANGE, CRIBRA_TRANSFORM_ERROR, CribraStatus,
 };
 pub use types::{
     CRIBRA_CANDIDATE_EVIDENCE_NONE, CRIBRA_CANDIDATE_EVIDENCE_STRUCTURAL,
@@ -45,6 +47,6 @@ pub use types::{
     CRIBRA_SEVERITY_CRITICAL, CRIBRA_SEVERITY_HIGH, CRIBRA_SEVERITY_INFO, CRIBRA_SEVERITY_LOW,
     CRIBRA_SEVERITY_MEDIUM, CribraCandidateEvidence, CribraCandidateKind, CribraCandidateView,
     CribraConfidence, CribraDetectionMode, CribraExplanationKind, CribraExplanationView,
-    CribraFindingView, CribraRemediation, CribraRuleConfig, CribraRuleKind, CribraSeverity,
-    CribraStringView,
+    CribraFindingView, CribraPseudonymizeConfig, CribraRemediation, CribraRuleConfig,
+    CribraRuleKind, CribraSeverity, CribraStringView, CribraSynthesizeConfig, CribraTemplateConfig,
 };

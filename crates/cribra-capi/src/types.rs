@@ -202,3 +202,39 @@ pub struct CribraRuleConfig {
     /// Optional ABI-defined remediation, or [`CRIBRA_REMEDIATION_NONE`].
     pub remediation: CribraRemediation,
 }
+
+/// Configuration for semantic template generation.
+#[repr(C)]
+#[derive(Debug, Copy, Clone, Default)]
+pub struct CribraTemplateConfig {
+    /// Placeholder namespace.
+    pub namespace: CribraStringView,
+    /// `0` disables numbering; `1` enables deterministic per-rule numbering.
+    pub numbered: u8,
+}
+
+/// Configuration for deterministic keyed pseudonymization.
+#[repr(C)]
+#[derive(Debug, Copy, Clone, Default)]
+pub struct CribraPseudonymizeConfig {
+    /// Pointer to exactly 32 caller-owned key bytes.
+    pub key: *const u8,
+    /// Number of key bytes. Must be exactly 32.
+    pub key_len: usize,
+    /// Verbatim pseudonym prefix.
+    pub prefix: CribraStringView,
+    /// Digest bytes requested from the core; the core clamps this to its supported range.
+    pub digest_bytes: usize,
+}
+
+/// Configuration for deterministic synthetic-value generation.
+#[repr(C)]
+#[derive(Debug, Copy, Clone, Default)]
+pub struct CribraSynthesizeConfig {
+    /// Pointer to exactly 32 caller-owned key bytes.
+    pub key: *const u8,
+    /// Number of key bytes. Must be exactly 32.
+    pub key_len: usize,
+    /// Marker used by contextual and generic synthetic values.
+    pub marker: CribraStringView,
+}

@@ -31,12 +31,28 @@ impl CribraScanner {
 /// v0.3.3 deliberately establishes report ownership only. The report read
 /// surface is introduced by v0.3.4.
 pub struct CribraReport {
-    #[allow(dead_code)] // Read by the report traversal surface introduced in v0.3.4.
     pub(crate) inner: ScanReport,
+    pub(crate) source_bytes: usize,
 }
 
 impl CribraReport {
-    pub(crate) fn new(inner: ScanReport) -> Self {
+    pub(crate) fn new(inner: ScanReport, source_bytes: usize) -> Self {
+        Self {
+            inner,
+            source_bytes,
+        }
+    }
+}
+
+/// Opaque Rust-owned transformed UTF-8 output.
+///
+/// Content is owned by Cribra until [`crate::cribra_output_free`] is called.
+pub struct CribraOutput {
+    pub(crate) inner: String,
+}
+
+impl CribraOutput {
+    pub(crate) fn new(inner: String) -> Self {
         Self { inner }
     }
 }

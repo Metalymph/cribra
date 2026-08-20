@@ -6,28 +6,34 @@ use std::{
 };
 
 use cribra::{
-    CandidateEvidence, Confidence, DetectionMode, Explanation, Remediation, Rule, Scanner,
-    SensitiveCandidateKind, Severity, builtins,
+    CandidateEvidence, Confidence, DetectionMode, Explanation, Redaction, Remediation, Rule,
+    Scanner, SensitiveCandidateKind, Severity, builtins,
+    transform::{
+        PseudonymizationOptions, SynthesisOptions, TemplateOptions, pseudonymize, redact,
+        redact_with, synthesize, template, template_with,
+    },
 };
 
 use crate::{
-    CRIBRA_BUILD_ERROR, CRIBRA_CONFIDENCE_HIGH, CRIBRA_CONFIDENCE_LOW, CRIBRA_CONFIDENCE_MEDIUM,
-    CRIBRA_INTERNAL_ERROR, CRIBRA_INVALID_ARGUMENT, CRIBRA_INVALID_UTF8, CRIBRA_OK,
-    CRIBRA_OUT_OF_RANGE, CRIBRA_REMEDIATION_NONE, CRIBRA_REMEDIATION_REMOVE_SENSITIVE_VALUE,
-    CRIBRA_REMEDIATION_REPLACE_PRIVATE_KEY, CRIBRA_REMEDIATION_REVIEW_SENSITIVE_HASH,
-    CRIBRA_REMEDIATION_REVOKE_AND_ROTATE_CREDENTIAL, CRIBRA_REMEDIATION_ROTATE_CREDENTIAL,
-    CRIBRA_REMEDIATION_ROTATE_PASSWORD, CRIBRA_REMEDIATION_UNKNOWN, CRIBRA_SEVERITY_CRITICAL,
-    CRIBRA_SEVERITY_HIGH, CRIBRA_SEVERITY_INFO, CRIBRA_SEVERITY_LOW, CRIBRA_SEVERITY_MEDIUM,
-    CRIBRA_CANDIDATE_EVIDENCE_NONE, CRIBRA_CANDIDATE_EVIDENCE_STRUCTURAL,
+    CRIBRA_BUILD_ERROR, CRIBRA_CANDIDATE_EVIDENCE_NONE, CRIBRA_CANDIDATE_EVIDENCE_STRUCTURAL,
     CRIBRA_CANDIDATE_EVIDENCE_UNKNOWN, CRIBRA_CANDIDATE_KIND_RECOVERY_LIKE_CODE,
-    CRIBRA_CANDIDATE_KIND_UNKNOWN, CRIBRA_DETECTION_MODE_CONTEXTUAL,
+    CRIBRA_CANDIDATE_KIND_UNKNOWN, CRIBRA_CONFIDENCE_HIGH, CRIBRA_CONFIDENCE_LOW,
+    CRIBRA_CONFIDENCE_MEDIUM, CRIBRA_DETECTION_MODE_CONTEXTUAL,
     CRIBRA_DETECTION_MODE_DETERMINISTIC, CRIBRA_DETECTION_MODE_MATCHER_ONLY,
     CRIBRA_DETECTION_MODE_NONE, CRIBRA_DETECTION_MODE_UNKNOWN, CRIBRA_EXPLANATION_AMBIGUOUS,
-    CRIBRA_EXPLANATION_CLASSIFIED, CRIBRA_EXPLANATION_UNKNOWN, CRIBRA_RULE_KIND_LITERAL,
-    CRIBRA_RULE_KIND_PATTERN, CRIBRA_RULE_KIND_PREFIX, CRIBRA_RULE_KIND_SUFFIX, CribraBuilder,
-    CribraCandidateEvidence, CribraCandidateKind, CribraCandidateView, CribraConfidence,
-    CribraDetectionMode, CribraExplanationView, CribraFindingView, CribraRemediation,
-    CribraReport, CribraRuleConfig, CribraScanner, CribraSeverity, CribraStatus, CribraStringView,
+    CRIBRA_EXPLANATION_CLASSIFIED, CRIBRA_EXPLANATION_UNKNOWN, CRIBRA_INTERNAL_ERROR,
+    CRIBRA_INVALID_ARGUMENT, CRIBRA_INVALID_UTF8, CRIBRA_OK, CRIBRA_OUT_OF_RANGE,
+    CRIBRA_REMEDIATION_NONE, CRIBRA_REMEDIATION_REMOVE_SENSITIVE_VALUE,
+    CRIBRA_REMEDIATION_REPLACE_PRIVATE_KEY, CRIBRA_REMEDIATION_REVIEW_SENSITIVE_HASH,
+    CRIBRA_REMEDIATION_REVOKE_AND_ROTATE_CREDENTIAL, CRIBRA_REMEDIATION_ROTATE_CREDENTIAL,
+    CRIBRA_REMEDIATION_ROTATE_PASSWORD, CRIBRA_REMEDIATION_UNKNOWN, CRIBRA_RULE_KIND_LITERAL,
+    CRIBRA_RULE_KIND_PATTERN, CRIBRA_RULE_KIND_PREFIX, CRIBRA_RULE_KIND_SUFFIX,
+    CRIBRA_SEVERITY_CRITICAL, CRIBRA_SEVERITY_HIGH, CRIBRA_SEVERITY_INFO, CRIBRA_SEVERITY_LOW,
+    CRIBRA_SEVERITY_MEDIUM, CRIBRA_TRANSFORM_ERROR, CribraBuilder, CribraCandidateEvidence,
+    CribraCandidateKind, CribraCandidateView, CribraConfidence, CribraDetectionMode,
+    CribraExplanationView, CribraFindingView, CribraOutput, CribraPseudonymizeConfig,
+    CribraRemediation, CribraReport, CribraRuleConfig, CribraScanner, CribraSeverity, CribraStatus,
+    CribraStringView, CribraSynthesizeConfig, CribraTemplateConfig,
 };
 
 /// Experimental native ABI major version.
@@ -63,10 +69,7 @@ unsafe fn clear_value<T: Default>(out: *mut T) -> Result<(), CribraStatus> {
     Ok(())
 }
 
-unsafe fn utf8_from_raw<'a>(
-    source: *const u8,
-    source_len: usize,
-) -> Result<&'a str, CribraStatus> {
+unsafe fn utf8_from_raw<'a>(source: *const u8, source_len: usize) -> Result<&'a str, CribraStatus> {
     if source_len == 0 {
         return Ok("");
     }
@@ -208,6 +211,35 @@ fn configured_rule(
         Some(remediation) => rule.with_remediation(remediation),
         None => rule,
     })
+}
+
+unsafe fn key32_from_raw(key: *const u8, key_len: usize) -> Result<[u8; 32], CribraStatus> {
+    if key.is_null() || key_len != 32 {
+        return Err(CRIBRA_INVALID_ARGUMENT);
+    }
+    // SAFETY: caller guarantees exactly `key_len` readable bytes for this call.
+    let bytes = unsafe { slice::from_raw_parts(key, key_len) };
+    let mut output = [0_u8; 32];
+    output.copy_from_slice(bytes);
+    Ok(output)
+}
+
+fn source_matches_report(source_len: usize, report: &CribraReport) -> bool {
+    source_len == report.source_bytes
+}
+
+unsafe fn write_output(
+    output: Result<String, cribra::transform::TransformError>,
+    out_output: *mut *mut CribraOutput,
+) -> CribraStatus {
+    let output = match output {
+        Ok(output) => output,
+        Err(_) => return CRIBRA_TRANSFORM_ERROR,
+    };
+    let output = Box::new(CribraOutput::new(output));
+    // SAFETY: caller supplied a validated writable out-pointer.
+    unsafe { ptr::write(out_output, Box::into_raw(output)) };
+    CRIBRA_OK
 }
 
 /// Returns the native ABI major version.
@@ -455,7 +487,7 @@ pub unsafe extern "C" fn cribra_scanner_scan(
             .into_parts();
         debug_assert!(entries.is_empty());
 
-        let report = Box::new(CribraReport::new(report));
+        let report = Box::new(CribraReport::new(report, source_len));
         // SAFETY: `clear_out` validated the out-pointer.
         unsafe { ptr::write(out_report, Box::into_raw(report)) };
         CRIBRA_OK
@@ -683,6 +715,306 @@ pub unsafe extern "C" fn cribra_report_explain_candidate(
         unsafe { ptr::write(out_explanation, explanation_view(candidate.explanation())) };
         CRIBRA_OK
     })
+}
+
+/// Redacts all classified finding spans using Cribra's standard marker.
+///
+/// The returned output is Rust-owned and must be released exactly once with
+/// [`cribra_output_free`].
+///
+/// # Safety
+///
+/// `report` must be live. `source` follows the same UTF-8 buffer contract as
+/// [`cribra_scanner_scan`]. `out_output` must be writable.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cribra_transform_redact(
+    source: *const u8,
+    source_len: usize,
+    report: *const CribraReport,
+    out_output: *mut *mut CribraOutput,
+) -> CribraStatus {
+    contain_status(|| {
+        if let Err(status) = unsafe { clear_out(out_output) } {
+            return status;
+        }
+        if report.is_null() {
+            return CRIBRA_INVALID_ARGUMENT;
+        }
+        let source = match unsafe { utf8_from_raw(source, source_len) } {
+            Ok(value) => value,
+            Err(status) => return status,
+        };
+        // SAFETY: caller guarantees a live immutable report.
+        let report = unsafe { &*report };
+        if !source_matches_report(source.len(), report) {
+            return CRIBRA_TRANSFORM_ERROR;
+        }
+        // SAFETY: `clear_out` validated the output pointer.
+        unsafe { write_output(redact(source, &report.inner), out_output) }
+    })
+}
+
+/// Redacts findings using a caller-selected UTF-8 replacement.
+///
+/// # Safety
+///
+/// Pointer contracts are identical to [`cribra_transform_redact`]. `replacement`
+/// is borrowed only for this call.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cribra_transform_redact_with(
+    source: *const u8,
+    source_len: usize,
+    report: *const CribraReport,
+    replacement: *const u8,
+    replacement_len: usize,
+    out_output: *mut *mut CribraOutput,
+) -> CribraStatus {
+    contain_status(|| {
+        if let Err(status) = unsafe { clear_out(out_output) } {
+            return status;
+        }
+        if report.is_null() {
+            return CRIBRA_INVALID_ARGUMENT;
+        }
+        let source = match unsafe { utf8_from_raw(source, source_len) } {
+            Ok(value) => value,
+            Err(status) => return status,
+        };
+        let replacement = match unsafe { utf8_from_raw(replacement, replacement_len) } {
+            Ok(value) => value,
+            Err(status) => return status,
+        };
+        // SAFETY: caller guarantees a live immutable report.
+        let report = unsafe { &*report };
+        if !source_matches_report(source.len(), report) {
+            return CRIBRA_TRANSFORM_ERROR;
+        }
+        let redaction = Redaction::new(replacement);
+        // SAFETY: `clear_out` validated the output pointer.
+        unsafe { write_output(redact_with(source, &report.inner, &redaction), out_output) }
+    })
+}
+
+/// Generates semantic placeholders using default template options.
+///
+/// # Safety
+///
+/// Pointer contracts are identical to [`cribra_transform_redact`].
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cribra_transform_template(
+    source: *const u8,
+    source_len: usize,
+    report: *const CribraReport,
+    out_output: *mut *mut CribraOutput,
+) -> CribraStatus {
+    contain_status(|| {
+        if let Err(status) = unsafe { clear_out(out_output) } {
+            return status;
+        }
+        if report.is_null() {
+            return CRIBRA_INVALID_ARGUMENT;
+        }
+        let source = match unsafe { utf8_from_raw(source, source_len) } {
+            Ok(value) => value,
+            Err(status) => return status,
+        };
+        // SAFETY: caller guarantees a live immutable report.
+        let report = unsafe { &*report };
+        if !source_matches_report(source.len(), report) {
+            return CRIBRA_TRANSFORM_ERROR;
+        }
+        // SAFETY: `clear_out` validated the output pointer.
+        unsafe { write_output(template(source, &report.inner), out_output) }
+    })
+}
+
+/// Generates semantic placeholders using explicit configuration.
+///
+/// `numbered` accepts only `0` or `1`.
+///
+/// # Safety
+///
+/// `config` must be readable for this call. Its namespace view is borrowed only
+/// for this call. Other pointer contracts match [`cribra_transform_redact`].
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cribra_transform_template_with(
+    source: *const u8,
+    source_len: usize,
+    report: *const CribraReport,
+    config: *const CribraTemplateConfig,
+    out_output: *mut *mut CribraOutput,
+) -> CribraStatus {
+    contain_status(|| {
+        if let Err(status) = unsafe { clear_out(out_output) } {
+            return status;
+        }
+        if report.is_null() || config.is_null() {
+            return CRIBRA_INVALID_ARGUMENT;
+        }
+        let source = match unsafe { utf8_from_raw(source, source_len) } {
+            Ok(value) => value,
+            Err(status) => return status,
+        };
+        // SAFETY: caller guarantees a readable configuration.
+        let config = unsafe { &*config };
+        let namespace = match unsafe { utf8_from_raw(config.namespace.ptr, config.namespace.len) } {
+            Ok(value) => value,
+            Err(status) => return status,
+        };
+        let numbered = match config.numbered {
+            0 => false,
+            1 => true,
+            _ => return CRIBRA_INVALID_ARGUMENT,
+        };
+        let options = TemplateOptions::new()
+            .namespace(namespace)
+            .numbered(numbered);
+        // SAFETY: caller guarantees a live immutable report.
+        let report = unsafe { &*report };
+        if !source_matches_report(source.len(), report) {
+            return CRIBRA_TRANSFORM_ERROR;
+        }
+        // SAFETY: `clear_out` validated the output pointer.
+        unsafe { write_output(template_with(source, &report.inner, &options), out_output) }
+    })
+}
+
+/// Pseudonymizes findings with a mandatory caller-provided 32-byte key.
+///
+/// # Safety
+///
+/// `config` and its referenced key/prefix bytes must remain readable for this
+/// call. Other pointer contracts match [`cribra_transform_redact`].
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cribra_transform_pseudonymize(
+    source: *const u8,
+    source_len: usize,
+    report: *const CribraReport,
+    config: *const CribraPseudonymizeConfig,
+    out_output: *mut *mut CribraOutput,
+) -> CribraStatus {
+    contain_status(|| {
+        if let Err(status) = unsafe { clear_out(out_output) } {
+            return status;
+        }
+        if report.is_null() || config.is_null() {
+            return CRIBRA_INVALID_ARGUMENT;
+        }
+        let source = match unsafe { utf8_from_raw(source, source_len) } {
+            Ok(value) => value,
+            Err(status) => return status,
+        };
+        // SAFETY: caller guarantees a readable configuration.
+        let config = unsafe { &*config };
+        let key = match unsafe { key32_from_raw(config.key, config.key_len) } {
+            Ok(value) => value,
+            Err(status) => return status,
+        };
+        let prefix = match unsafe { utf8_from_raw(config.prefix.ptr, config.prefix.len) } {
+            Ok(value) => value,
+            Err(status) => return status,
+        };
+        let options = PseudonymizationOptions::new(key)
+            .prefix(prefix)
+            .digest_bytes(config.digest_bytes);
+        // SAFETY: caller guarantees a live immutable report.
+        let report = unsafe { &*report };
+        if !source_matches_report(source.len(), report) {
+            return CRIBRA_TRANSFORM_ERROR;
+        }
+        // SAFETY: `clear_out` validated the output pointer.
+        unsafe { write_output(pseudonymize(source, &report.inner, &options), out_output) }
+    })
+}
+
+/// Synthesizes deterministic share-safe values with a caller-provided key.
+///
+/// # Safety
+///
+/// `config` and its referenced key/marker bytes must remain readable for this
+/// call. Other pointer contracts match [`cribra_transform_redact`].
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cribra_transform_synthesize(
+    source: *const u8,
+    source_len: usize,
+    report: *const CribraReport,
+    config: *const CribraSynthesizeConfig,
+    out_output: *mut *mut CribraOutput,
+) -> CribraStatus {
+    contain_status(|| {
+        if let Err(status) = unsafe { clear_out(out_output) } {
+            return status;
+        }
+        if report.is_null() || config.is_null() {
+            return CRIBRA_INVALID_ARGUMENT;
+        }
+        let source = match unsafe { utf8_from_raw(source, source_len) } {
+            Ok(value) => value,
+            Err(status) => return status,
+        };
+        // SAFETY: caller guarantees a readable configuration.
+        let config = unsafe { &*config };
+        let key = match unsafe { key32_from_raw(config.key, config.key_len) } {
+            Ok(value) => value,
+            Err(status) => return status,
+        };
+        let marker = match unsafe { utf8_from_raw(config.marker.ptr, config.marker.len) } {
+            Ok(value) => value,
+            Err(status) => return status,
+        };
+        let options = SynthesisOptions::new(key).marker(marker);
+        // SAFETY: caller guarantees a live immutable report.
+        let report = unsafe { &*report };
+        if !source_matches_report(source.len(), report) {
+            return CRIBRA_TRANSFORM_ERROR;
+        }
+        // SAFETY: `clear_out` validated the output pointer.
+        unsafe { write_output(synthesize(source, &report.inner, &options), out_output) }
+    })
+}
+
+/// Borrows the UTF-8 bytes owned by a transformed output handle.
+///
+/// The returned view remains valid only until [`cribra_output_free`] is called.
+///
+/// # Safety
+///
+/// `output` must be live and `out_view` must be writable.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cribra_output_view(
+    output: *const CribraOutput,
+    out_view: *mut CribraStringView,
+) -> CribraStatus {
+    contain_status(|| {
+        if let Err(status) = unsafe { clear_value(out_view) } {
+            return status;
+        }
+        if output.is_null() {
+            return CRIBRA_INVALID_ARGUMENT;
+        }
+        // SAFETY: caller guarantees a live immutable output handle.
+        let output = unsafe { &*output };
+        // SAFETY: `clear_value` validated the output pointer.
+        unsafe { ptr::write(out_view, string_view(&output.inner)) };
+        CRIBRA_OK
+    })
+}
+
+/// Releases one Rust-owned transformed output. Passing null is a no-op.
+///
+/// # Safety
+///
+/// A non-null `output` must be a live handle returned by a transform function
+/// and must not already have been freed.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cribra_output_free(output: *mut CribraOutput) {
+    if output.is_null() {
+        return;
+    }
+    contain_drop(|| {
+        // SAFETY: caller transfers ownership of one live output handle.
+        drop(unsafe { Box::from_raw(output) });
+    });
 }
 
 /// Releases an immutable scanner. Passing null is a no-op.
@@ -958,12 +1290,7 @@ mod tests {
                 assert_eq!(cribra_builder_add_rule(builder, &config), CRIBRA_OK);
                 assert_eq!(cribra_builder_build(builder, &mut scanner), CRIBRA_OK);
                 assert_eq!(
-                    cribra_scanner_scan(
-                        scanner,
-                        source.as_ptr(),
-                        source.len(),
-                        &mut report
-                    ),
+                    cribra_scanner_scan(scanner, source.as_ptr(), source.len(), &mut report),
                     CRIBRA_OK
                 );
 
@@ -972,12 +1299,8 @@ mod tests {
                 assert_eq!(count, 1, "{id}");
 
                 let mut finding = CribraFindingView::default();
-                assert_eq!(
-                    cribra_report_finding_at(report, 0, &mut finding),
-                    CRIBRA_OK
-                );
-                let rule_id =
-                    slice::from_raw_parts(finding.rule_id.ptr, finding.rule_id.len);
+                assert_eq!(cribra_report_finding_at(report, 0, &mut finding), CRIBRA_OK);
+                let rule_id = slice::from_raw_parts(finding.rule_id.ptr, finding.rule_id.len);
                 assert_eq!(str::from_utf8(rule_id).unwrap(), id);
 
                 cribra_report_free(report);
@@ -992,12 +1315,7 @@ mod tests {
         let mut scanner = ptr::null_mut();
         let id = String::from("native.owned");
         let value = String::from("OWNED_SECRET");
-        let config = rule_config(
-            CRIBRA_RULE_KIND_LITERAL,
-            &id,
-            &value,
-            CRIBRA_SEVERITY_HIGH,
-        );
+        let config = rule_config(CRIBRA_RULE_KIND_LITERAL, &id, &value, CRIBRA_SEVERITY_HIGH);
 
         unsafe {
             assert_eq!(cribra_builder_new(&mut builder), CRIBRA_OK);
@@ -1086,19 +1404,11 @@ mod tests {
 
         unsafe {
             assert_eq!(cribra_builder_new(&mut builder), CRIBRA_OK);
-            assert_eq!(
-                cribra_builder_add_current_builtins(builder),
-                CRIBRA_OK
-            );
+            assert_eq!(cribra_builder_add_current_builtins(builder), CRIBRA_OK);
             assert_eq!(cribra_builder_add_rule(builder, &custom), CRIBRA_OK);
             assert_eq!(cribra_builder_build(builder, &mut scanner), CRIBRA_OK);
             assert_eq!(
-                cribra_scanner_scan(
-                    scanner,
-                    source.as_ptr(),
-                    source.len(),
-                    &mut report
-                ),
+                cribra_scanner_scan(scanner, source.as_ptr(), source.len(), &mut report),
                 CRIBRA_OK
             );
 
@@ -1125,20 +1435,35 @@ mod tests {
             );
             let mut finding_count = usize::MAX;
             let mut candidate_count = usize::MAX;
-            assert_eq!(cribra_report_finding_count(report, &mut finding_count), CRIBRA_OK);
-            assert_eq!(cribra_report_candidate_count(report, &mut candidate_count), CRIBRA_OK);
+            assert_eq!(
+                cribra_report_finding_count(report, &mut finding_count),
+                CRIBRA_OK
+            );
+            assert_eq!(
+                cribra_report_candidate_count(report, &mut candidate_count),
+                CRIBRA_OK
+            );
             assert_eq!(finding_count, 0);
             assert_eq!(candidate_count, 1);
             let mut candidate = CribraCandidateView::default();
-            assert_eq!(cribra_report_candidate_at(report, 0, &mut candidate), CRIBRA_OK);
+            assert_eq!(
+                cribra_report_candidate_at(report, 0, &mut candidate),
+                CRIBRA_OK
+            );
             assert_eq!(candidate.kind, CRIBRA_CANDIDATE_KIND_RECOVERY_LIKE_CODE);
             assert_eq!(candidate.evidence, CRIBRA_CANDIDATE_EVIDENCE_STRUCTURAL);
             assert!(candidate.start < candidate.end);
             let mut explanation = CribraExplanationView::default();
-            assert_eq!(cribra_report_explain_candidate(report, 0, &mut explanation), CRIBRA_OK);
+            assert_eq!(
+                cribra_report_explain_candidate(report, 0, &mut explanation),
+                CRIBRA_OK
+            );
             assert_eq!(explanation.kind, CRIBRA_EXPLANATION_AMBIGUOUS);
             assert_eq!(explanation.detection_mode, CRIBRA_DETECTION_MODE_NONE);
-            assert_eq!(explanation.candidate_evidence, CRIBRA_CANDIDATE_EVIDENCE_STRUCTURAL);
+            assert_eq!(
+                explanation.candidate_evidence,
+                CRIBRA_CANDIDATE_EVIDENCE_STRUCTURAL
+            );
             cribra_report_free(report);
             cribra_scanner_free(scanner);
         }
@@ -1151,12 +1476,24 @@ mod tests {
         let source = b"GITHUB_TOKEN=ghp_AbCdEf0123456789_AbCdEf0123456789";
         unsafe {
             assert_eq!(cribra_scanner_new_current(&mut scanner), CRIBRA_OK);
-            assert_eq!(cribra_scanner_scan(scanner, source.as_ptr(), source.len(), &mut report), CRIBRA_OK);
+            assert_eq!(
+                cribra_scanner_scan(scanner, source.as_ptr(), source.len(), &mut report),
+                CRIBRA_OK
+            );
             let mut explanation = CribraExplanationView::default();
-            assert_eq!(cribra_scanner_explain_finding(scanner, report, 0, &mut explanation), CRIBRA_OK);
+            assert_eq!(
+                cribra_scanner_explain_finding(scanner, report, 0, &mut explanation),
+                CRIBRA_OK
+            );
             assert_eq!(explanation.kind, CRIBRA_EXPLANATION_CLASSIFIED);
-            assert_eq!(explanation.detection_mode, CRIBRA_DETECTION_MODE_DETERMINISTIC);
-            assert_eq!(explanation.candidate_evidence, CRIBRA_CANDIDATE_EVIDENCE_NONE);
+            assert_eq!(
+                explanation.detection_mode,
+                CRIBRA_DETECTION_MODE_DETERMINISTIC
+            );
+            assert_eq!(
+                explanation.candidate_evidence,
+                CRIBRA_CANDIDATE_EVIDENCE_NONE
+            );
             cribra_report_free(report);
             cribra_scanner_free(scanner);
         }
@@ -1173,5 +1510,213 @@ mod tests {
             remediation_code(Some(Remediation::RemoveSensitiveValue)),
             CRIBRA_REMEDIATION_REMOVE_SENSITIVE_VALUE
         );
+    }
+    fn transform_fixture() -> (*mut CribraScanner, *mut CribraReport, &'static [u8]) {
+        let source = b"TOKEN=SECRET";
+        let mut builder = ptr::null_mut();
+        let mut scanner = ptr::null_mut();
+        let mut report = ptr::null_mut();
+        let config = rule_config(
+            CRIBRA_RULE_KIND_LITERAL,
+            "secret",
+            "SECRET",
+            CRIBRA_SEVERITY_HIGH,
+        );
+        unsafe {
+            assert_eq!(cribra_builder_new(&mut builder), CRIBRA_OK);
+            assert_eq!(cribra_builder_add_rule(builder, &config), CRIBRA_OK);
+            assert_eq!(cribra_builder_build(builder, &mut scanner), CRIBRA_OK);
+            assert_eq!(
+                cribra_scanner_scan(scanner, source.as_ptr(), source.len(), &mut report),
+                CRIBRA_OK
+            );
+        }
+        (scanner, report, source)
+    }
+
+    unsafe fn output_text(output: *const CribraOutput) -> String {
+        let mut view = CribraStringView::default();
+        assert_eq!(unsafe { cribra_output_view(output, &mut view) }, CRIBRA_OK);
+        // SAFETY: the output handle remains alive while the returned view is read.
+        let bytes = unsafe { slice::from_raw_parts(view.ptr, view.len) };
+        str::from_utf8(bytes).unwrap().to_owned()
+    }
+
+    #[test]
+    fn transform_outputs_are_owned_and_explicitly_freed() {
+        let (scanner, report, source) = transform_fixture();
+        let mut output = ptr::null_mut();
+
+        unsafe {
+            assert_eq!(
+                cribra_transform_redact(source.as_ptr(), source.len(), report, &mut output),
+                CRIBRA_OK
+            );
+            assert_eq!(output_text(output), "TOKEN=[REDACTED]");
+            cribra_output_free(output);
+            cribra_report_free(report);
+            cribra_scanner_free(scanner);
+        }
+    }
+
+    #[test]
+    fn template_and_custom_redaction_preserve_core_semantics() {
+        let (scanner, report, source) = transform_fixture();
+        let mut output = ptr::null_mut();
+        let replacement = b"***";
+
+        unsafe {
+            assert_eq!(
+                cribra_transform_redact_with(
+                    source.as_ptr(),
+                    source.len(),
+                    report,
+                    replacement.as_ptr(),
+                    replacement.len(),
+                    &mut output
+                ),
+                CRIBRA_OK
+            );
+            assert_eq!(output_text(output), "TOKEN=***");
+            cribra_output_free(output);
+
+            let namespace = b"EXAMPLE";
+            let config = CribraTemplateConfig {
+                namespace: CribraStringView {
+                    ptr: namespace.as_ptr(),
+                    len: namespace.len(),
+                },
+                numbered: 1,
+            };
+            output = ptr::null_mut();
+            assert_eq!(
+                cribra_transform_template_with(
+                    source.as_ptr(),
+                    source.len(),
+                    report,
+                    &config,
+                    &mut output
+                ),
+                CRIBRA_OK
+            );
+            assert_eq!(output_text(output), "TOKEN=<EXAMPLE:secret:1>");
+            cribra_output_free(output);
+            cribra_report_free(report);
+            cribra_scanner_free(scanner);
+        }
+    }
+
+    #[test]
+    fn keyed_transforms_require_exactly_32_key_bytes() {
+        let (scanner, report, source) = transform_fixture();
+        let key = [7_u8; 31];
+        let prefix = b"p_";
+        let config = CribraPseudonymizeConfig {
+            key: key.as_ptr(),
+            key_len: key.len(),
+            prefix: CribraStringView {
+                ptr: prefix.as_ptr(),
+                len: prefix.len(),
+            },
+            digest_bytes: 16,
+        };
+        let mut output = ptr::dangling_mut::<CribraOutput>();
+
+        unsafe {
+            assert_eq!(
+                cribra_transform_pseudonymize(
+                    source.as_ptr(),
+                    source.len(),
+                    report,
+                    &config,
+                    &mut output
+                ),
+                CRIBRA_INVALID_ARGUMENT
+            );
+            assert!(output.is_null());
+            cribra_report_free(report);
+            cribra_scanner_free(scanner);
+        }
+    }
+
+    #[test]
+    fn pseudonymize_and_synthesize_return_rust_owned_outputs() {
+        let (scanner, report, source) = transform_fixture();
+        let key = [9_u8; 32];
+        let prefix = b"native_";
+        let pseudo = CribraPseudonymizeConfig {
+            key: key.as_ptr(),
+            key_len: key.len(),
+            prefix: CribraStringView {
+                ptr: prefix.as_ptr(),
+                len: prefix.len(),
+            },
+            digest_bytes: 16,
+        };
+        let marker = b"ffi_synthetic";
+        let synth = CribraSynthesizeConfig {
+            key: key.as_ptr(),
+            key_len: key.len(),
+            marker: CribraStringView {
+                ptr: marker.as_ptr(),
+                len: marker.len(),
+            },
+        };
+
+        unsafe {
+            let mut output = ptr::null_mut();
+            assert_eq!(
+                cribra_transform_pseudonymize(
+                    source.as_ptr(),
+                    source.len(),
+                    report,
+                    &pseudo,
+                    &mut output
+                ),
+                CRIBRA_OK
+            );
+            let text = output_text(output);
+            assert!(text.starts_with("TOKEN=native_"));
+            assert!(!text.contains("SECRET"));
+            cribra_output_free(output);
+
+            output = ptr::null_mut();
+            assert_eq!(
+                cribra_transform_synthesize(
+                    source.as_ptr(),
+                    source.len(),
+                    report,
+                    &synth,
+                    &mut output
+                ),
+                CRIBRA_OK
+            );
+            assert!(!output_text(output).contains("SECRET"));
+            cribra_output_free(output);
+            cribra_report_free(report);
+            cribra_scanner_free(scanner);
+        }
+    }
+
+    #[test]
+    fn transform_rejects_obvious_source_report_length_mismatch() {
+        let (scanner, report, _) = transform_fixture();
+        let wrong_source = b"TOKEN=SECRET-extra";
+        let mut output = ptr::dangling_mut::<CribraOutput>();
+
+        unsafe {
+            assert_eq!(
+                cribra_transform_redact(
+                    wrong_source.as_ptr(),
+                    wrong_source.len(),
+                    report,
+                    &mut output
+                ),
+                CRIBRA_TRANSFORM_ERROR
+            );
+            assert!(output.is_null());
+            cribra_report_free(report);
+            cribra_scanner_free(scanner);
+        }
     }
 }
