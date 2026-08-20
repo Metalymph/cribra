@@ -11,24 +11,23 @@ use cribra::{
 };
 
 use crate::{
-    CRIBRA_BUILD_ERROR, CRIBRA_CANDIDATE_EVIDENCE_NONE, CRIBRA_CANDIDATE_EVIDENCE_STRUCTURAL,
-    CRIBRA_CANDIDATE_EVIDENCE_UNKNOWN, CRIBRA_CANDIDATE_KIND_RECOVERY_LIKE_CODE,
-    CRIBRA_CANDIDATE_KIND_UNKNOWN, CRIBRA_CONFIDENCE_HIGH, CRIBRA_CONFIDENCE_LOW,
-    CRIBRA_CONFIDENCE_MEDIUM, CRIBRA_DETECTION_MODE_CONTEXTUAL,
-    CRIBRA_DETECTION_MODE_DETERMINISTIC, CRIBRA_DETECTION_MODE_MATCHER_ONLY,
-    CRIBRA_DETECTION_MODE_NONE, CRIBRA_DETECTION_MODE_UNKNOWN, CRIBRA_EXPLANATION_AMBIGUOUS,
-    CRIBRA_EXPLANATION_CLASSIFIED, CRIBRA_EXPLANATION_UNKNOWN, CRIBRA_INTERNAL_ERROR,
-    CRIBRA_INVALID_ARGUMENT, CRIBRA_INVALID_UTF8, CRIBRA_OK, CRIBRA_OUT_OF_RANGE,
-    CRIBRA_REMEDIATION_NONE, CRIBRA_REMEDIATION_REMOVE_SENSITIVE_VALUE,
+    CRIBRA_BUILD_ERROR, CRIBRA_CONFIDENCE_HIGH, CRIBRA_CONFIDENCE_LOW, CRIBRA_CONFIDENCE_MEDIUM,
+    CRIBRA_INTERNAL_ERROR, CRIBRA_INVALID_ARGUMENT, CRIBRA_INVALID_UTF8, CRIBRA_OK,
+    CRIBRA_OUT_OF_RANGE, CRIBRA_REMEDIATION_NONE, CRIBRA_REMEDIATION_REMOVE_SENSITIVE_VALUE,
     CRIBRA_REMEDIATION_REPLACE_PRIVATE_KEY, CRIBRA_REMEDIATION_REVIEW_SENSITIVE_HASH,
     CRIBRA_REMEDIATION_REVOKE_AND_ROTATE_CREDENTIAL, CRIBRA_REMEDIATION_ROTATE_CREDENTIAL,
-    CRIBRA_REMEDIATION_ROTATE_PASSWORD, CRIBRA_REMEDIATION_UNKNOWN, CRIBRA_RULE_KIND_LITERAL,
-    CRIBRA_RULE_KIND_PATTERN, CRIBRA_RULE_KIND_PREFIX, CRIBRA_RULE_KIND_SUFFIX,
-    CRIBRA_SEVERITY_CRITICAL, CRIBRA_SEVERITY_HIGH, CRIBRA_SEVERITY_INFO, CRIBRA_SEVERITY_LOW,
-    CRIBRA_SEVERITY_MEDIUM, CribraBuilder, CribraCandidateEvidence, CribraCandidateKind,
-    CribraCandidateView, CribraConfidence, CribraDetectionMode, CribraExplanationView,
-    CribraFindingView, CribraRemediation, CribraReport, CribraRuleConfig, CribraScanner,
-    CribraSeverity, CribraStatus, CribraStringView,
+    CRIBRA_REMEDIATION_ROTATE_PASSWORD, CRIBRA_REMEDIATION_UNKNOWN, CRIBRA_SEVERITY_CRITICAL,
+    CRIBRA_SEVERITY_HIGH, CRIBRA_SEVERITY_INFO, CRIBRA_SEVERITY_LOW, CRIBRA_SEVERITY_MEDIUM,
+    CRIBRA_CANDIDATE_EVIDENCE_NONE, CRIBRA_CANDIDATE_EVIDENCE_STRUCTURAL,
+    CRIBRA_CANDIDATE_EVIDENCE_UNKNOWN, CRIBRA_CANDIDATE_KIND_RECOVERY_LIKE_CODE,
+    CRIBRA_CANDIDATE_KIND_UNKNOWN, CRIBRA_DETECTION_MODE_CONTEXTUAL,
+    CRIBRA_DETECTION_MODE_DETERMINISTIC, CRIBRA_DETECTION_MODE_MATCHER_ONLY,
+    CRIBRA_DETECTION_MODE_NONE, CRIBRA_DETECTION_MODE_UNKNOWN, CRIBRA_EXPLANATION_AMBIGUOUS,
+    CRIBRA_EXPLANATION_CLASSIFIED, CRIBRA_EXPLANATION_UNKNOWN, CRIBRA_RULE_KIND_LITERAL,
+    CRIBRA_RULE_KIND_PATTERN, CRIBRA_RULE_KIND_PREFIX, CRIBRA_RULE_KIND_SUFFIX, CribraBuilder,
+    CribraCandidateEvidence, CribraCandidateKind, CribraCandidateView, CribraConfidence,
+    CribraDetectionMode, CribraExplanationView, CribraFindingView, CribraRemediation,
+    CribraReport, CribraRuleConfig, CribraScanner, CribraSeverity, CribraStatus, CribraStringView,
 };
 
 /// Experimental native ABI major version.
@@ -64,7 +63,10 @@ unsafe fn clear_value<T: Default>(out: *mut T) -> Result<(), CribraStatus> {
     Ok(())
 }
 
-unsafe fn utf8_from_raw<'a>(source: *const u8, source_len: usize) -> Result<&'a str, CribraStatus> {
+unsafe fn utf8_from_raw<'a>(
+    source: *const u8,
+    source_len: usize,
+) -> Result<&'a str, CribraStatus> {
     if source_len == 0 {
         return Ok("");
     }
@@ -956,7 +958,12 @@ mod tests {
                 assert_eq!(cribra_builder_add_rule(builder, &config), CRIBRA_OK);
                 assert_eq!(cribra_builder_build(builder, &mut scanner), CRIBRA_OK);
                 assert_eq!(
-                    cribra_scanner_scan(scanner, source.as_ptr(), source.len(), &mut report),
+                    cribra_scanner_scan(
+                        scanner,
+                        source.as_ptr(),
+                        source.len(),
+                        &mut report
+                    ),
                     CRIBRA_OK
                 );
 
@@ -965,8 +972,12 @@ mod tests {
                 assert_eq!(count, 1, "{id}");
 
                 let mut finding = CribraFindingView::default();
-                assert_eq!(cribra_report_finding_at(report, 0, &mut finding), CRIBRA_OK);
-                let rule_id = slice::from_raw_parts(finding.rule_id.ptr, finding.rule_id.len);
+                assert_eq!(
+                    cribra_report_finding_at(report, 0, &mut finding),
+                    CRIBRA_OK
+                );
+                let rule_id =
+                    slice::from_raw_parts(finding.rule_id.ptr, finding.rule_id.len);
                 assert_eq!(str::from_utf8(rule_id).unwrap(), id);
 
                 cribra_report_free(report);
@@ -981,7 +992,12 @@ mod tests {
         let mut scanner = ptr::null_mut();
         let id = String::from("native.owned");
         let value = String::from("OWNED_SECRET");
-        let config = rule_config(CRIBRA_RULE_KIND_LITERAL, &id, &value, CRIBRA_SEVERITY_HIGH);
+        let config = rule_config(
+            CRIBRA_RULE_KIND_LITERAL,
+            &id,
+            &value,
+            CRIBRA_SEVERITY_HIGH,
+        );
 
         unsafe {
             assert_eq!(cribra_builder_new(&mut builder), CRIBRA_OK);
@@ -1070,11 +1086,19 @@ mod tests {
 
         unsafe {
             assert_eq!(cribra_builder_new(&mut builder), CRIBRA_OK);
-            assert_eq!(cribra_builder_add_current_builtins(builder), CRIBRA_OK);
+            assert_eq!(
+                cribra_builder_add_current_builtins(builder),
+                CRIBRA_OK
+            );
             assert_eq!(cribra_builder_add_rule(builder, &custom), CRIBRA_OK);
             assert_eq!(cribra_builder_build(builder, &mut scanner), CRIBRA_OK);
             assert_eq!(
-                cribra_scanner_scan(scanner, source.as_ptr(), source.len(), &mut report),
+                cribra_scanner_scan(
+                    scanner,
+                    source.as_ptr(),
+                    source.len(),
+                    &mut report
+                ),
                 CRIBRA_OK
             );
 
@@ -1101,35 +1125,20 @@ mod tests {
             );
             let mut finding_count = usize::MAX;
             let mut candidate_count = usize::MAX;
-            assert_eq!(
-                cribra_report_finding_count(report, &mut finding_count),
-                CRIBRA_OK
-            );
-            assert_eq!(
-                cribra_report_candidate_count(report, &mut candidate_count),
-                CRIBRA_OK
-            );
+            assert_eq!(cribra_report_finding_count(report, &mut finding_count), CRIBRA_OK);
+            assert_eq!(cribra_report_candidate_count(report, &mut candidate_count), CRIBRA_OK);
             assert_eq!(finding_count, 0);
             assert_eq!(candidate_count, 1);
             let mut candidate = CribraCandidateView::default();
-            assert_eq!(
-                cribra_report_candidate_at(report, 0, &mut candidate),
-                CRIBRA_OK
-            );
+            assert_eq!(cribra_report_candidate_at(report, 0, &mut candidate), CRIBRA_OK);
             assert_eq!(candidate.kind, CRIBRA_CANDIDATE_KIND_RECOVERY_LIKE_CODE);
             assert_eq!(candidate.evidence, CRIBRA_CANDIDATE_EVIDENCE_STRUCTURAL);
             assert!(candidate.start < candidate.end);
             let mut explanation = CribraExplanationView::default();
-            assert_eq!(
-                cribra_report_explain_candidate(report, 0, &mut explanation),
-                CRIBRA_OK
-            );
+            assert_eq!(cribra_report_explain_candidate(report, 0, &mut explanation), CRIBRA_OK);
             assert_eq!(explanation.kind, CRIBRA_EXPLANATION_AMBIGUOUS);
             assert_eq!(explanation.detection_mode, CRIBRA_DETECTION_MODE_NONE);
-            assert_eq!(
-                explanation.candidate_evidence,
-                CRIBRA_CANDIDATE_EVIDENCE_STRUCTURAL
-            );
+            assert_eq!(explanation.candidate_evidence, CRIBRA_CANDIDATE_EVIDENCE_STRUCTURAL);
             cribra_report_free(report);
             cribra_scanner_free(scanner);
         }
@@ -1142,24 +1151,12 @@ mod tests {
         let source = b"GITHUB_TOKEN=ghp_AbCdEf0123456789_AbCdEf0123456789";
         unsafe {
             assert_eq!(cribra_scanner_new_current(&mut scanner), CRIBRA_OK);
-            assert_eq!(
-                cribra_scanner_scan(scanner, source.as_ptr(), source.len(), &mut report),
-                CRIBRA_OK
-            );
+            assert_eq!(cribra_scanner_scan(scanner, source.as_ptr(), source.len(), &mut report), CRIBRA_OK);
             let mut explanation = CribraExplanationView::default();
-            assert_eq!(
-                cribra_scanner_explain_finding(scanner, report, 0, &mut explanation),
-                CRIBRA_OK
-            );
+            assert_eq!(cribra_scanner_explain_finding(scanner, report, 0, &mut explanation), CRIBRA_OK);
             assert_eq!(explanation.kind, CRIBRA_EXPLANATION_CLASSIFIED);
-            assert_eq!(
-                explanation.detection_mode,
-                CRIBRA_DETECTION_MODE_DETERMINISTIC
-            );
-            assert_eq!(
-                explanation.candidate_evidence,
-                CRIBRA_CANDIDATE_EVIDENCE_NONE
-            );
+            assert_eq!(explanation.detection_mode, CRIBRA_DETECTION_MODE_DETERMINISTIC);
+            assert_eq!(explanation.candidate_evidence, CRIBRA_CANDIDATE_EVIDENCE_NONE);
             cribra_report_free(report);
             cribra_scanner_free(scanner);
         }
