@@ -1,6 +1,8 @@
 //! Stable-sized status values returned by the native ABI.
 
 /// Native ABI status representation.
+///
+/// Numeric assignments become part of the C ABI contract once released.
 pub type CribraStatus = u32;
 
 /// Operation completed successfully.
@@ -11,5 +13,7 @@ pub const CRIBRA_INVALID_ARGUMENT: CribraStatus = 1;
 pub const CRIBRA_INVALID_UTF8: CribraStatus = 2;
 /// Scanner construction failed.
 pub const CRIBRA_BUILD_ERROR: CribraStatus = 4;
+/// An index was outside the bounds of the requested report collection.
+pub const CRIBRA_OUT_OF_RANGE: CribraStatus = 6;
 /// An unexpected panic was contained inside the native adapter.
 pub const CRIBRA_INTERNAL_ERROR: CribraStatus = 255;

@@ -1,15 +1,22 @@
-//! Initial native ABI entry points.
+//! Native ABI entry points.
 
 use std::{
     panic::{AssertUnwindSafe, catch_unwind},
     ptr, slice, str,
 };
 
-use cribra::Scanner;
+use cribra::{Confidence, Remediation, Scanner, Severity};
 
 use crate::{
-    CRIBRA_BUILD_ERROR, CRIBRA_INTERNAL_ERROR, CRIBRA_INVALID_ARGUMENT, CRIBRA_INVALID_UTF8,
-    CRIBRA_OK, CribraBuilder, CribraReport, CribraScanner, CribraStatus,
+    CRIBRA_BUILD_ERROR, CRIBRA_CONFIDENCE_HIGH, CRIBRA_CONFIDENCE_LOW, CRIBRA_CONFIDENCE_MEDIUM,
+    CRIBRA_INTERNAL_ERROR, CRIBRA_INVALID_ARGUMENT, CRIBRA_INVALID_UTF8, CRIBRA_OK,
+    CRIBRA_OUT_OF_RANGE, CRIBRA_REMEDIATION_NONE, CRIBRA_REMEDIATION_REMOVE_SENSITIVE_VALUE,
+    CRIBRA_REMEDIATION_REPLACE_PRIVATE_KEY, CRIBRA_REMEDIATION_REVIEW_SENSITIVE_HASH,
+    CRIBRA_REMEDIATION_REVOKE_AND_ROTATE_CREDENTIAL, CRIBRA_REMEDIATION_ROTATE_CREDENTIAL,
+    CRIBRA_REMEDIATION_ROTATE_PASSWORD, CRIBRA_REMEDIATION_UNKNOWN, CRIBRA_SEVERITY_CRITICAL,
+    CRIBRA_SEVERITY_HIGH, CRIBRA_SEVERITY_INFO, CRIBRA_SEVERITY_LOW, CRIBRA_SEVERITY_MEDIUM,
+    CribraBuilder, CribraConfidence, CribraFindingView, CribraRemediation, CribraReport,
+    CribraScanner, CribraSeverity, CribraStatus, CribraStringView,
 };
 
 /// Experimental native ABI major version.
@@ -36,6 +43,15 @@ unsafe fn clear_out<T>(out: *mut *mut T) -> Result<(), CribraStatus> {
     Ok(())
 }
 
+unsafe fn clear_value<T: Default>(out: *mut T) -> Result<(), CribraStatus> {
+    if out.is_null() {
+        return Err(CRIBRA_INVALID_ARGUMENT);
+    }
+    // SAFETY: the caller contract requires `out` to reference writable memory.
+    unsafe { ptr::write(out, T::default()) };
+    Ok(())
+}
+
 unsafe fn source_from_raw<'a>(
     source: *const u8,
     source_len: usize,
@@ -50,6 +66,46 @@ unsafe fn source_from_raw<'a>(
     // SAFETY: caller guarantees `source_len` readable bytes for this call.
     let bytes = unsafe { slice::from_raw_parts(source, source_len) };
     str::from_utf8(bytes).map_err(|_| CRIBRA_INVALID_UTF8)
+}
+
+fn string_view(value: &str) -> CribraStringView {
+    CribraStringView {
+        ptr: value.as_ptr(),
+        len: value.len(),
+    }
+}
+
+fn severity_code(value: Severity) -> CribraSeverity {
+    match value {
+        Severity::Info => CRIBRA_SEVERITY_INFO,
+        Severity::Low => CRIBRA_SEVERITY_LOW,
+        Severity::Medium => CRIBRA_SEVERITY_MEDIUM,
+        Severity::High => CRIBRA_SEVERITY_HIGH,
+        Severity::Critical => CRIBRA_SEVERITY_CRITICAL,
+    }
+}
+
+fn confidence_code(value: Confidence) -> CribraConfidence {
+    match value {
+        Confidence::Low => CRIBRA_CONFIDENCE_LOW,
+        Confidence::Medium => CRIBRA_CONFIDENCE_MEDIUM,
+        Confidence::High => CRIBRA_CONFIDENCE_HIGH,
+    }
+}
+
+fn remediation_code(value: Option<Remediation>) -> CribraRemediation {
+    match value {
+        None => CRIBRA_REMEDIATION_NONE,
+        Some(Remediation::RevokeAndRotateCredential) => {
+            CRIBRA_REMEDIATION_REVOKE_AND_ROTATE_CREDENTIAL
+        }
+        Some(Remediation::RotateCredential) => CRIBRA_REMEDIATION_ROTATE_CREDENTIAL,
+        Some(Remediation::RotatePassword) => CRIBRA_REMEDIATION_ROTATE_PASSWORD,
+        Some(Remediation::ReplacePrivateKey) => CRIBRA_REMEDIATION_REPLACE_PRIVATE_KEY,
+        Some(Remediation::RemoveSensitiveValue) => CRIBRA_REMEDIATION_REMOVE_SENSITIVE_VALUE,
+        Some(Remediation::ReviewSensitiveHash) => CRIBRA_REMEDIATION_REVIEW_SENSITIVE_HASH,
+        Some(_) => CRIBRA_REMEDIATION_UNKNOWN,
+    }
 }
 
 /// Returns the native ABI major version.
@@ -218,6 +274,84 @@ pub unsafe extern "C" fn cribra_scanner_scan(
     })
 }
 
+/// Returns the number of classified findings in a report.
+///
+/// Candidates are intentionally excluded from this count and receive their own
+/// API in v0.3.5.
+///
+/// # Safety
+///
+/// `report` must be a live report handle. `out_count` must point to writable
+/// memory for one `size_t`-compatible value.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cribra_report_finding_count(
+    report: *const CribraReport,
+    out_count: *mut usize,
+) -> CribraStatus {
+    contain_status(|| {
+        if let Err(status) = unsafe { clear_value(out_count) } {
+            return status;
+        }
+        if report.is_null() {
+            return CRIBRA_INVALID_ARGUMENT;
+        }
+
+        // SAFETY: caller guarantees a live immutable report handle.
+        let report = unsafe { &*report };
+
+        // SAFETY: `clear_value` validated the out-pointer.
+        unsafe { ptr::write(out_count, report.inner.len()) };
+        CRIBRA_OK
+    })
+}
+
+/// Returns a borrowed projection of one classified finding by index.
+///
+/// The returned `rule_id` view borrows report-owned storage and remains valid
+/// only while `report` remains alive and unmodified. Reports are immutable.
+///
+/// # Safety
+///
+/// `report` must be a live report handle. `out_finding` must point to writable
+/// memory for one [`CribraFindingView`].
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cribra_report_finding_at(
+    report: *const CribraReport,
+    index: usize,
+    out_finding: *mut CribraFindingView,
+) -> CribraStatus {
+    contain_status(|| {
+        if let Err(status) = unsafe { clear_value(out_finding) } {
+            return status;
+        }
+        if report.is_null() {
+            return CRIBRA_INVALID_ARGUMENT;
+        }
+
+        // SAFETY: caller guarantees a live immutable report handle.
+        let report = unsafe { &*report };
+        let Some(finding) = report.inner.findings().get(index) else {
+            return CRIBRA_OUT_OF_RANGE;
+        };
+
+        let location = finding.location();
+        let view = CribraFindingView {
+            rule_id: string_view(finding.rule_id().as_str()),
+            start: location.start(),
+            end: location.end(),
+            line: location.line(),
+            column: location.column(),
+            severity: severity_code(finding.severity()),
+            confidence: confidence_code(finding.confidence()),
+            remediation: remediation_code(finding.remediation()),
+        };
+
+        // SAFETY: `clear_value` validated the out-pointer.
+        unsafe { ptr::write(out_finding, view) };
+        CRIBRA_OK
+    })
+}
+
 /// Releases an immutable scanner. Passing null is a no-op.
 ///
 /// # Safety
@@ -304,7 +438,7 @@ mod tests {
     #[test]
     fn invalid_utf8_is_rejected_without_a_report() {
         let mut scanner = ptr::null_mut();
-        let mut report = std::ptr::dangling_mut::<CribraReport>();
+        let mut report = ptr::dangling_mut::<CribraReport>();
         let source = [0xff_u8];
 
         unsafe {
@@ -338,7 +472,7 @@ mod tests {
     #[test]
     fn null_nonempty_source_is_rejected() {
         let mut scanner = ptr::null_mut();
-        let mut report = std::ptr::dangling_mut::<CribraReport>();
+        let mut report = ptr::dangling_mut::<CribraReport>();
 
         unsafe {
             assert_eq!(cribra_scanner_new_current(&mut scanner), CRIBRA_OK);
@@ -349,5 +483,96 @@ mod tests {
             assert!(report.is_null());
             cribra_scanner_free(scanner);
         }
+    }
+
+    #[test]
+    fn report_exposes_count_and_borrowed_finding_view() {
+        let mut scanner = ptr::null_mut();
+        let mut report = ptr::null_mut();
+        let source = concat!(
+            "alpha before\n",
+            "STRIPE_SECRET_KEY=sk_live_AbCdEf0123456789_AbCdEf0123456789\n",
+            "GITHUB_TOKEN=ghp_AbCdEf0123456789_AbCdEf0123456789\n",
+        )
+        .as_bytes();
+
+        unsafe {
+            assert_eq!(cribra_scanner_new_current(&mut scanner), CRIBRA_OK);
+            assert_eq!(
+                cribra_scanner_scan(scanner, source.as_ptr(), source.len(), &mut report),
+                CRIBRA_OK
+            );
+
+            let mut count = usize::MAX;
+            assert_eq!(cribra_report_finding_count(report, &mut count), CRIBRA_OK);
+            assert!(count >= 2);
+
+            let mut finding = CribraFindingView::default();
+            assert_eq!(cribra_report_finding_at(report, 0, &mut finding), CRIBRA_OK);
+            assert!(!finding.rule_id.ptr.is_null());
+            assert!(finding.rule_id.len > 0);
+            assert!(finding.start < finding.end);
+            assert!(finding.line >= 1);
+            assert!(finding.column >= 1);
+
+            let id_bytes = slice::from_raw_parts(finding.rule_id.ptr, finding.rule_id.len);
+            assert_eq!(str::from_utf8(id_bytes).unwrap(), "stripe.live-secret-key");
+
+            cribra_report_free(report);
+            cribra_scanner_free(scanner);
+        }
+    }
+
+    #[test]
+    fn report_out_of_range_fails_closed() {
+        let mut scanner = ptr::null_mut();
+        let mut report = ptr::null_mut();
+
+        unsafe {
+            assert_eq!(cribra_scanner_new_current(&mut scanner), CRIBRA_OK);
+            assert_eq!(
+                cribra_scanner_scan(scanner, ptr::null(), 0, &mut report),
+                CRIBRA_OK
+            );
+
+            let mut finding = CribraFindingView {
+                rule_id: CribraStringView {
+                    ptr: ptr::dangling::<u8>(),
+                    len: usize::MAX,
+                },
+                start: usize::MAX,
+                end: usize::MAX,
+                line: usize::MAX,
+                column: usize::MAX,
+                severity: u32::MAX,
+                confidence: u32::MAX,
+                remediation: u32::MAX,
+            };
+
+            assert_eq!(
+                cribra_report_finding_at(report, 0, &mut finding),
+                CRIBRA_OUT_OF_RANGE
+            );
+            assert!(finding.rule_id.ptr.is_null());
+            assert_eq!(finding.rule_id.len, 0);
+            assert_eq!(finding.start, 0);
+            assert_eq!(finding.end, 0);
+
+            cribra_report_free(report);
+            cribra_scanner_free(scanner);
+        }
+    }
+
+    #[test]
+    fn stable_value_mappings_cover_current_core_variants() {
+        assert_eq!(severity_code(Severity::Info), CRIBRA_SEVERITY_INFO);
+        assert_eq!(severity_code(Severity::Critical), CRIBRA_SEVERITY_CRITICAL);
+        assert_eq!(confidence_code(Confidence::Low), CRIBRA_CONFIDENCE_LOW);
+        assert_eq!(confidence_code(Confidence::High), CRIBRA_CONFIDENCE_HIGH);
+        assert_eq!(remediation_code(None), CRIBRA_REMEDIATION_NONE);
+        assert_eq!(
+            remediation_code(Some(Remediation::RemoveSensitiveValue)),
+            CRIBRA_REMEDIATION_REMOVE_SENSITIVE_VALUE
+        );
     }
 }

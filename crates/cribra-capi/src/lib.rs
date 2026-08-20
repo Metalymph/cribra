@@ -13,15 +13,25 @@
 mod ffi;
 mod handles;
 mod status;
+mod types;
 
 pub use ffi::{
     ABI_VERSION_MAJOR, ABI_VERSION_MINOR, ABI_VERSION_PATCH, cribra_abi_version_major,
     cribra_abi_version_minor, cribra_abi_version_patch, cribra_builder_build, cribra_builder_free,
-    cribra_builder_new, cribra_report_free, cribra_scanner_free, cribra_scanner_new_current,
-    cribra_scanner_scan,
+    cribra_builder_new, cribra_report_finding_at, cribra_report_finding_count, cribra_report_free,
+    cribra_scanner_free, cribra_scanner_new_current, cribra_scanner_scan,
 };
 pub use handles::{CribraBuilder, CribraReport, CribraScanner};
 pub use status::{
     CRIBRA_BUILD_ERROR, CRIBRA_INTERNAL_ERROR, CRIBRA_INVALID_ARGUMENT, CRIBRA_INVALID_UTF8,
-    CRIBRA_OK, CribraStatus,
+    CRIBRA_OK, CRIBRA_OUT_OF_RANGE, CribraStatus,
+};
+pub use types::{
+    CRIBRA_CONFIDENCE_HIGH, CRIBRA_CONFIDENCE_LOW, CRIBRA_CONFIDENCE_MEDIUM,
+    CRIBRA_REMEDIATION_NONE, CRIBRA_REMEDIATION_REMOVE_SENSITIVE_VALUE,
+    CRIBRA_REMEDIATION_REPLACE_PRIVATE_KEY, CRIBRA_REMEDIATION_REVIEW_SENSITIVE_HASH,
+    CRIBRA_REMEDIATION_REVOKE_AND_ROTATE_CREDENTIAL, CRIBRA_REMEDIATION_ROTATE_CREDENTIAL,
+    CRIBRA_REMEDIATION_ROTATE_PASSWORD, CRIBRA_REMEDIATION_UNKNOWN, CRIBRA_SEVERITY_CRITICAL,
+    CRIBRA_SEVERITY_HIGH, CRIBRA_SEVERITY_INFO, CRIBRA_SEVERITY_LOW, CRIBRA_SEVERITY_MEDIUM,
+    CribraConfidence, CribraFindingView, CribraRemediation, CribraSeverity, CribraStringView,
 };
