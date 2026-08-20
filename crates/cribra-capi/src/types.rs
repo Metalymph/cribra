@@ -89,3 +89,85 @@ pub struct CribraFindingView {
     /// ABI-defined remediation code, or [`CRIBRA_REMEDIATION_NONE`].
     pub remediation: CribraRemediation,
 }
+
+/// Stable ABI sensitive-candidate kind representation.
+pub type CribraCandidateKind = u32;
+/// No candidate kind is present.
+pub const CRIBRA_CANDIDATE_KIND_NONE: CribraCandidateKind = 0;
+/// Structurally plausible recovery or backup code.
+pub const CRIBRA_CANDIDATE_KIND_RECOVERY_LIKE_CODE: CribraCandidateKind = 1;
+/// A candidate kind is newer than this ABI projection understands.
+pub const CRIBRA_CANDIDATE_KIND_UNKNOWN: CribraCandidateKind = u32::MAX;
+
+/// Stable ABI candidate-evidence representation.
+pub type CribraCandidateEvidence = u32;
+/// No candidate evidence is present.
+pub const CRIBRA_CANDIDATE_EVIDENCE_NONE: CribraCandidateEvidence = 0;
+/// Structural evidence without enough semantic context for a finding.
+pub const CRIBRA_CANDIDATE_EVIDENCE_STRUCTURAL: CribraCandidateEvidence = 1;
+/// Candidate evidence is newer than this ABI projection understands.
+pub const CRIBRA_CANDIDATE_EVIDENCE_UNKNOWN: CribraCandidateEvidence = u32::MAX;
+
+/// Projection of one report-owned ambiguous sensitive candidate.
+///
+/// Candidates remain review-only observations. This view deliberately contains
+/// no finding severity, finding confidence, remediation, or source value.
+#[repr(C)]
+#[derive(Debug, Copy, Clone, Default)]
+pub struct CribraCandidateView {
+    /// ABI-defined candidate family.
+    pub kind: CribraCandidateKind,
+    /// Zero-based byte offset at which the candidate begins.
+    pub start: usize,
+    /// Zero-based exclusive byte offset at which the candidate ends.
+    pub end: usize,
+    /// One-based source line.
+    pub line: usize,
+    /// One-based Unicode-scalar column.
+    pub column: usize,
+    /// ABI-defined evidence that caused this value to be surfaced for review.
+    pub evidence: CribraCandidateEvidence,
+}
+
+/// Stable ABI detection-mode representation.
+pub type CribraDetectionMode = u32;
+/// No classified detection mode is present.
+pub const CRIBRA_DETECTION_MODE_NONE: CribraDetectionMode = 0;
+/// The matcher itself is authoritative.
+pub const CRIBRA_DETECTION_MODE_MATCHER_ONLY: CribraDetectionMode = 1;
+/// Validation depends only on the candidate's own structure.
+pub const CRIBRA_DETECTION_MODE_DETERMINISTIC: CribraDetectionMode = 2;
+/// Validation also depends on surrounding source context.
+pub const CRIBRA_DETECTION_MODE_CONTEXTUAL: CribraDetectionMode = 3;
+/// A detection mode is newer than this ABI projection understands.
+pub const CRIBRA_DETECTION_MODE_UNKNOWN: CribraDetectionMode = u32::MAX;
+
+/// Stable ABI explanation-kind representation.
+pub type CribraExplanationKind = u32;
+/// No explanation is present.
+pub const CRIBRA_EXPLANATION_NONE: CribraExplanationKind = 0;
+/// Explanation for a classified rule-backed finding.
+pub const CRIBRA_EXPLANATION_CLASSIFIED: CribraExplanationKind = 1;
+/// Explanation for an ambiguous review-only candidate.
+pub const CRIBRA_EXPLANATION_AMBIGUOUS: CribraExplanationKind = 2;
+/// An explanation kind is newer than this ABI projection understands.
+pub const CRIBRA_EXPLANATION_UNKNOWN: CribraExplanationKind = u32::MAX;
+
+/// Stable typed explanation projection.
+///
+/// Exactly one authority-specific payload is meaningful:
+///
+/// - classified explanations set `detection_mode`;
+/// - ambiguous explanations set `candidate_evidence`.
+///
+/// The unused payload remains its corresponding `*_NONE` value.
+#[repr(C)]
+#[derive(Debug, Copy, Clone, Default)]
+pub struct CribraExplanationView {
+    /// ABI-defined explanation family.
+    pub kind: CribraExplanationKind,
+    /// Classified detection mode, or [`CRIBRA_DETECTION_MODE_NONE`].
+    pub detection_mode: CribraDetectionMode,
+    /// Ambiguous candidate evidence, or [`CRIBRA_CANDIDATE_EVIDENCE_NONE`].
+    pub candidate_evidence: CribraCandidateEvidence,
+}

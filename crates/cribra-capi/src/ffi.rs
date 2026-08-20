@@ -5,18 +5,28 @@ use std::{
     ptr, slice, str,
 };
 
-use cribra::{Confidence, Remediation, Scanner, Severity};
+use cribra::{
+    CandidateEvidence, Confidence, DetectionMode, Explanation, Remediation, Scanner,
+    SensitiveCandidateKind, Severity,
+};
 
 use crate::{
-    CRIBRA_BUILD_ERROR, CRIBRA_CONFIDENCE_HIGH, CRIBRA_CONFIDENCE_LOW, CRIBRA_CONFIDENCE_MEDIUM,
-    CRIBRA_INTERNAL_ERROR, CRIBRA_INVALID_ARGUMENT, CRIBRA_INVALID_UTF8, CRIBRA_OK,
-    CRIBRA_OUT_OF_RANGE, CRIBRA_REMEDIATION_NONE, CRIBRA_REMEDIATION_REMOVE_SENSITIVE_VALUE,
+    CRIBRA_BUILD_ERROR, CRIBRA_CANDIDATE_EVIDENCE_NONE, CRIBRA_CANDIDATE_EVIDENCE_STRUCTURAL,
+    CRIBRA_CANDIDATE_EVIDENCE_UNKNOWN, CRIBRA_CANDIDATE_KIND_RECOVERY_LIKE_CODE,
+    CRIBRA_CANDIDATE_KIND_UNKNOWN, CRIBRA_CONFIDENCE_HIGH, CRIBRA_CONFIDENCE_LOW,
+    CRIBRA_CONFIDENCE_MEDIUM, CRIBRA_DETECTION_MODE_CONTEXTUAL,
+    CRIBRA_DETECTION_MODE_DETERMINISTIC, CRIBRA_DETECTION_MODE_MATCHER_ONLY,
+    CRIBRA_DETECTION_MODE_NONE, CRIBRA_DETECTION_MODE_UNKNOWN, CRIBRA_EXPLANATION_AMBIGUOUS,
+    CRIBRA_EXPLANATION_CLASSIFIED, CRIBRA_EXPLANATION_UNKNOWN, CRIBRA_INTERNAL_ERROR,
+    CRIBRA_INVALID_ARGUMENT, CRIBRA_INVALID_UTF8, CRIBRA_OK, CRIBRA_OUT_OF_RANGE,
+    CRIBRA_REMEDIATION_NONE, CRIBRA_REMEDIATION_REMOVE_SENSITIVE_VALUE,
     CRIBRA_REMEDIATION_REPLACE_PRIVATE_KEY, CRIBRA_REMEDIATION_REVIEW_SENSITIVE_HASH,
     CRIBRA_REMEDIATION_REVOKE_AND_ROTATE_CREDENTIAL, CRIBRA_REMEDIATION_ROTATE_CREDENTIAL,
     CRIBRA_REMEDIATION_ROTATE_PASSWORD, CRIBRA_REMEDIATION_UNKNOWN, CRIBRA_SEVERITY_CRITICAL,
     CRIBRA_SEVERITY_HIGH, CRIBRA_SEVERITY_INFO, CRIBRA_SEVERITY_LOW, CRIBRA_SEVERITY_MEDIUM,
-    CribraBuilder, CribraConfidence, CribraFindingView, CribraRemediation, CribraReport,
-    CribraScanner, CribraSeverity, CribraStatus, CribraStringView,
+    CribraBuilder, CribraCandidateEvidence, CribraCandidateKind, CribraCandidateView,
+    CribraConfidence, CribraDetectionMode, CribraExplanationView, CribraFindingView,
+    CribraRemediation, CribraReport, CribraScanner, CribraSeverity, CribraStatus, CribraStringView,
 };
 
 /// Experimental native ABI major version.
@@ -105,6 +115,48 @@ fn remediation_code(value: Option<Remediation>) -> CribraRemediation {
         Some(Remediation::RemoveSensitiveValue) => CRIBRA_REMEDIATION_REMOVE_SENSITIVE_VALUE,
         Some(Remediation::ReviewSensitiveHash) => CRIBRA_REMEDIATION_REVIEW_SENSITIVE_HASH,
         Some(_) => CRIBRA_REMEDIATION_UNKNOWN,
+    }
+}
+
+fn candidate_kind_code(value: SensitiveCandidateKind) -> CribraCandidateKind {
+    match value {
+        SensitiveCandidateKind::RecoveryLikeCode => CRIBRA_CANDIDATE_KIND_RECOVERY_LIKE_CODE,
+        _ => CRIBRA_CANDIDATE_KIND_UNKNOWN,
+    }
+}
+
+fn candidate_evidence_code(value: CandidateEvidence) -> CribraCandidateEvidence {
+    match value {
+        CandidateEvidence::Structural => CRIBRA_CANDIDATE_EVIDENCE_STRUCTURAL,
+        _ => CRIBRA_CANDIDATE_EVIDENCE_UNKNOWN,
+    }
+}
+
+fn detection_mode_code(value: DetectionMode) -> CribraDetectionMode {
+    match value {
+        DetectionMode::MatcherOnly => CRIBRA_DETECTION_MODE_MATCHER_ONLY,
+        DetectionMode::Deterministic => CRIBRA_DETECTION_MODE_DETERMINISTIC,
+        DetectionMode::Contextual => CRIBRA_DETECTION_MODE_CONTEXTUAL,
+    }
+}
+
+fn explanation_view(value: Explanation) -> CribraExplanationView {
+    match value {
+        Explanation::Classified(mode) => CribraExplanationView {
+            kind: CRIBRA_EXPLANATION_CLASSIFIED,
+            detection_mode: detection_mode_code(mode),
+            candidate_evidence: CRIBRA_CANDIDATE_EVIDENCE_NONE,
+        },
+        Explanation::Ambiguous(evidence) => CribraExplanationView {
+            kind: CRIBRA_EXPLANATION_AMBIGUOUS,
+            detection_mode: CRIBRA_DETECTION_MODE_NONE,
+            candidate_evidence: candidate_evidence_code(evidence),
+        },
+        _ => CribraExplanationView {
+            kind: CRIBRA_EXPLANATION_UNKNOWN,
+            detection_mode: CRIBRA_DETECTION_MODE_UNKNOWN,
+            candidate_evidence: CRIBRA_CANDIDATE_EVIDENCE_UNKNOWN,
+        },
     }
 }
 
@@ -352,6 +404,151 @@ pub unsafe extern "C" fn cribra_report_finding_at(
     })
 }
 
+/// Returns the number of ambiguous sensitive candidates in a report.
+///
+/// Candidates are distinct from classified findings and do not contribute to
+/// [`cribra_report_finding_count`].
+///
+/// # Safety
+///
+/// `report` must be a live report handle. `out_count` must point to writable
+/// memory for one `size_t`-compatible value.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cribra_report_candidate_count(
+    report: *const CribraReport,
+    out_count: *mut usize,
+) -> CribraStatus {
+    contain_status(|| {
+        if let Err(status) = unsafe { clear_value(out_count) } {
+            return status;
+        }
+        if report.is_null() {
+            return CRIBRA_INVALID_ARGUMENT;
+        }
+        // SAFETY: caller guarantees a live immutable report handle.
+        let report = unsafe { &*report };
+        // SAFETY: `clear_value` validated the out-pointer.
+        unsafe { ptr::write(out_count, report.inner.candidate_len()) };
+        CRIBRA_OK
+    })
+}
+
+/// Returns a projection of one ambiguous sensitive candidate by index.
+///
+/// The candidate view contains presentation-safe metadata only and never
+/// contains the candidate's source value.
+///
+/// # Safety
+///
+/// `report` must be a live report handle. `out_candidate` must point to writable
+/// memory for one [`CribraCandidateView`].
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cribra_report_candidate_at(
+    report: *const CribraReport,
+    index: usize,
+    out_candidate: *mut CribraCandidateView,
+) -> CribraStatus {
+    contain_status(|| {
+        if let Err(status) = unsafe { clear_value(out_candidate) } {
+            return status;
+        }
+        if report.is_null() {
+            return CRIBRA_INVALID_ARGUMENT;
+        }
+        // SAFETY: caller guarantees a live immutable report handle.
+        let report = unsafe { &*report };
+        let Some(candidate) = report.inner.candidates().get(index) else {
+            return CRIBRA_OUT_OF_RANGE;
+        };
+        let location = candidate.location();
+        let view = CribraCandidateView {
+            kind: candidate_kind_code(candidate.kind()),
+            start: location.start(),
+            end: location.end(),
+            line: location.line(),
+            column: location.column(),
+            evidence: candidate_evidence_code(candidate.evidence()),
+        };
+        // SAFETY: `clear_value` validated the out-pointer.
+        unsafe { ptr::write(out_candidate, view) };
+        CRIBRA_OK
+    })
+}
+
+/// Resolves typed explanation facts for one classified finding.
+///
+/// Explanation authority remains scanner-owned. If `scanner` cannot resolve
+/// metadata compatible with the selected finding, this function fails closed
+/// with [`CRIBRA_INVALID_ARGUMENT`] and leaves `out_explanation` empty.
+///
+/// # Safety
+///
+/// `scanner` and `report` must be live immutable handles. `out_explanation`
+/// must point to writable memory for one [`CribraExplanationView`].
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cribra_scanner_explain_finding(
+    scanner: *const CribraScanner,
+    report: *const CribraReport,
+    index: usize,
+    out_explanation: *mut CribraExplanationView,
+) -> CribraStatus {
+    contain_status(|| {
+        if let Err(status) = unsafe { clear_value(out_explanation) } {
+            return status;
+        }
+        if scanner.is_null() || report.is_null() {
+            return CRIBRA_INVALID_ARGUMENT;
+        }
+        // SAFETY: caller guarantees a live immutable scanner handle.
+        let scanner = unsafe { &*scanner };
+        // SAFETY: caller guarantees a live immutable report handle.
+        let report = unsafe { &*report };
+        let Some(finding) = report.inner.findings().get(index) else {
+            return CRIBRA_OUT_OF_RANGE;
+        };
+        let Some(explanation) = Explanation::for_finding(&scanner.inner, finding) else {
+            return CRIBRA_INVALID_ARGUMENT;
+        };
+        // SAFETY: `clear_value` validated the out-pointer.
+        unsafe { ptr::write(out_explanation, explanation_view(explanation)) };
+        CRIBRA_OK
+    })
+}
+
+/// Returns typed explanation facts for one ambiguous candidate.
+///
+/// Candidate explanation is derived directly from the candidate's existing
+/// evidence. It never acquires finding severity, confidence, remediation, or
+/// source content.
+///
+/// # Safety
+///
+/// `report` must be a live immutable report handle. `out_explanation` must point
+/// to writable memory for one [`CribraExplanationView`].
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cribra_report_explain_candidate(
+    report: *const CribraReport,
+    index: usize,
+    out_explanation: *mut CribraExplanationView,
+) -> CribraStatus {
+    contain_status(|| {
+        if let Err(status) = unsafe { clear_value(out_explanation) } {
+            return status;
+        }
+        if report.is_null() {
+            return CRIBRA_INVALID_ARGUMENT;
+        }
+        // SAFETY: caller guarantees a live immutable report handle.
+        let report = unsafe { &*report };
+        let Some(candidate) = report.inner.candidates().get(index) else {
+            return CRIBRA_OUT_OF_RANGE;
+        };
+        // SAFETY: `clear_value` validated the out-pointer.
+        unsafe { ptr::write(out_explanation, explanation_view(candidate.explanation())) };
+        CRIBRA_OK
+    })
+}
+
 /// Releases an immutable scanner. Passing null is a no-op.
 ///
 /// # Safety
@@ -558,6 +755,84 @@ mod tests {
             assert_eq!(finding.start, 0);
             assert_eq!(finding.end, 0);
 
+            cribra_report_free(report);
+            cribra_scanner_free(scanner);
+        }
+    }
+
+    #[test]
+    fn report_exposes_ambiguous_candidate_without_finding_semantics() {
+        let mut scanner = ptr::null_mut();
+        let mut report = ptr::null_mut();
+        let source = b"backup=ABCD-EFGH-IJKL-MNOP";
+
+        unsafe {
+            assert_eq!(cribra_scanner_new_current(&mut scanner), CRIBRA_OK);
+            assert_eq!(
+                cribra_scanner_scan(scanner, source.as_ptr(), source.len(), &mut report),
+                CRIBRA_OK
+            );
+            let mut finding_count = usize::MAX;
+            let mut candidate_count = usize::MAX;
+            assert_eq!(
+                cribra_report_finding_count(report, &mut finding_count),
+                CRIBRA_OK
+            );
+            assert_eq!(
+                cribra_report_candidate_count(report, &mut candidate_count),
+                CRIBRA_OK
+            );
+            assert_eq!(finding_count, 0);
+            assert_eq!(candidate_count, 1);
+            let mut candidate = CribraCandidateView::default();
+            assert_eq!(
+                cribra_report_candidate_at(report, 0, &mut candidate),
+                CRIBRA_OK
+            );
+            assert_eq!(candidate.kind, CRIBRA_CANDIDATE_KIND_RECOVERY_LIKE_CODE);
+            assert_eq!(candidate.evidence, CRIBRA_CANDIDATE_EVIDENCE_STRUCTURAL);
+            assert!(candidate.start < candidate.end);
+            let mut explanation = CribraExplanationView::default();
+            assert_eq!(
+                cribra_report_explain_candidate(report, 0, &mut explanation),
+                CRIBRA_OK
+            );
+            assert_eq!(explanation.kind, CRIBRA_EXPLANATION_AMBIGUOUS);
+            assert_eq!(explanation.detection_mode, CRIBRA_DETECTION_MODE_NONE);
+            assert_eq!(
+                explanation.candidate_evidence,
+                CRIBRA_CANDIDATE_EVIDENCE_STRUCTURAL
+            );
+            cribra_report_free(report);
+            cribra_scanner_free(scanner);
+        }
+    }
+
+    #[test]
+    fn finding_explanation_uses_scanner_authority() {
+        let mut scanner = ptr::null_mut();
+        let mut report = ptr::null_mut();
+        let source = b"GITHUB_TOKEN=ghp_AbCdEf0123456789_AbCdEf0123456789";
+        unsafe {
+            assert_eq!(cribra_scanner_new_current(&mut scanner), CRIBRA_OK);
+            assert_eq!(
+                cribra_scanner_scan(scanner, source.as_ptr(), source.len(), &mut report),
+                CRIBRA_OK
+            );
+            let mut explanation = CribraExplanationView::default();
+            assert_eq!(
+                cribra_scanner_explain_finding(scanner, report, 0, &mut explanation),
+                CRIBRA_OK
+            );
+            assert_eq!(explanation.kind, CRIBRA_EXPLANATION_CLASSIFIED);
+            assert_eq!(
+                explanation.detection_mode,
+                CRIBRA_DETECTION_MODE_DETERMINISTIC
+            );
+            assert_eq!(
+                explanation.candidate_evidence,
+                CRIBRA_CANDIDATE_EVIDENCE_NONE
+            );
             cribra_report_free(report);
             cribra_scanner_free(scanner);
         }
