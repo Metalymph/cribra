@@ -1,3 +1,281 @@
+# Cribra Roadmap
+
+Cribra evolves as a small, privacy-first, embeddable Rust engine. Released
+capabilities remain documented here at milestone level; detailed release history
+and user-visible changes remain authoritative in `CHANGELOG.md`.
+
+## Released
+
+### v0.1.0 — Core foundation — released 2026-08-10
+
+The first public Cribra core release established the reusable engine model.
+
+Completed foundation:
+
+- deterministic UTF-8 scanning;
+- compiled literal, prefix, suffix and regex rules;
+- capture-aware regex projection;
+- public custom rules and selectable built-ins;
+- deterministic and contextual validators;
+- immutable per-source reports and ordered keyed batch results;
+- lazy querying, sorting and summaries;
+- remediation metadata;
+- redaction, templating, pseudonymization, synthesis and share bundles;
+- strict transformation span validation;
+- metadata-only public findings with Unicode-aware coordinates;
+- optional Serde;
+- optional Rayon-backed parallel batch scanning with stable ordering;
+- canonical/golden fixtures, hardening tests and Criterion benchmarks;
+- serial core suitable for native and WASM/PWA consumers.
+
+The `0.1.x` line was published under the previous `silens-scan` package name.
+Starting with `0.2.0`, the reusable engine is named **Cribra**.
+
+### v0.2.0 — Detection quality, ambiguity and explainability — released 2026-08-19
+
+v0.2 expanded detection quality and result semantics without changing Cribra's
+privacy-first, application-agnostic architecture.
+
+Completed work:
+
+#### Detection and validation
+
+- expanded deterministic and contextual built-in portfolio;
+- cross-format contextual detection hardening;
+- shared placeholder and false-positive rejection;
+- authoritative `DetectionMode` metadata derived from validator behavior;
+- richer public `RuleMetadata`;
+- scanner-wide `RuleId` uniqueness;
+- public custom literal, prefix, suffix and full-match pattern semantics;
+- zero-length custom-pattern rejection;
+- internal-only capture projection preserved for built-ins.
+
+#### Sensitive-candidate model
+
+- public `SensitiveCandidate`;
+- public candidate kind and evidence contracts;
+- separate immutable candidate channel in each report;
+- candidate-aware batch iteration, summaries and review helpers;
+- overlap suppression where accepted findings take precedence;
+- regression corpus for ambiguous recovery-like values and false positives;
+- candidate metadata-only Serde support.
+
+#### Explainability
+
+- public typed `Explanation`;
+- classified explanations tied to `DetectionMode`;
+- ambiguous explanations tied to `CandidateEvidence`;
+- scanner-owned metadata retained as finding explanation authority;
+- fail-closed explanation resolution when scanner authority does not match;
+- no duplicated derived explanation state in reports/results.
+
+#### Result, privacy and transform semantics
+
+- findings and ambiguous candidates remain separate result channels;
+- failed, review-only and clean source semantics are distinct;
+- candidates never gain finding severity, confidence or remediation semantics;
+- candidates remain excluded from automatic share-safe transformations;
+- matched sensitive values remain absent from findings, candidates and
+  explanation payloads;
+- serialization remains metadata-only.
+
+#### Quality and performance
+
+- expanded detection, format, adversarial, collision, ambiguity and regression
+  corpora;
+- contextual performance isolation and fast-path work;
+- conservative prefilters without changing matcher/validator authority;
+- serial/parallel equivalence retained;
+- final v0.2 performance baseline recorded in `docs/PERFORMANCE.md`;
+- full release gates completed and v0.2.0 published.
+
+---
+
+## v0.3 — Native Interoperability
+
+Cribra v0.3 focuses on making the existing privacy-first Rust core universally embeddable without expanding detection intelligence.
+
+Architectural target:
+
+```text
+Cribra Core
+    ├── Rust API
+    ├── stable-designed C ABI
+    └── existing WASM/PWA API
+```
+
+The C ABI is the universal native-language protocol. v0.3 does not ship complete language-specific wrappers.
+
+WASM already operates in the Silens Scan PWA. The v0.3 WASM work audits and refines that working boundary after Cribra v0.2 integration validation; WASM does not pass through the C ABI.
+
+The interoperability architecture is specified in `docs/INTEROP.md`.
+
+### 0.3.1 — Interop specification
+
+- [ ] Define scope and non-goals.
+- [ ] Freeze core-authority and adapter-separation rules.
+- [ ] Define ownership and lifetime model.
+- [ ] Define native input and stable primitive representation rules.
+- [ ] Define status/error model and panic containment.
+- [ ] Define scanner lifecycle and single-source boundary.
+- [ ] Define report/finding/candidate projection rules.
+- [ ] Define explainability and custom-rule authority boundaries.
+- [ ] Define transform ownership and source/report consistency.
+- [ ] Define batch/parallel design constraints.
+- [ ] Define thread-safety contract targets.
+- [ ] Define ABI versioning and symbol namespace policy.
+- [ ] Define native artifact/header/consumer validation requirements.
+- [ ] Define ABI performance policy.
+- [ ] Define existing-WASM audit scope.
+- [ ] Define privacy/threat model and semantic parity gate.
+
+### 0.3.2 — `cribra-capi` skeleton and artifact model
+
+- [ ] Convert the repository root to an appropriate Cargo workspace form while preserving the published root `cribra` crate unless evidence justifies moving it.
+- [ ] Add `crates/cribra-capi/` as a dedicated native adapter crate.
+- [ ] Preserve `#![forbid(unsafe_code)]` in the core; confine required FFI `unsafe` to the adapter.
+- [ ] Configure native static/dynamic artifact production.
+- [ ] Establish initial adapter module boundaries without exposing public ABI functionality prematurely.
+
+### 0.3.3 — ABI version, scanner lifecycle and single-source scan
+
+- [ ] Add explicit ABI protocol version querying independent from crate SemVer.
+- [ ] Add builder/scanner opaque lifecycle.
+- [ ] Preserve empty-builder versus current-builtins semantics.
+- [ ] Add UTF-8 validated pointer-plus-length single-source scan boundary.
+- [ ] Return an owned report handle.
+- [ ] Contain panics at exported FFI boundaries.
+
+### 0.3.4 — Report and finding traversal
+
+- [ ] Add finding count and indexed traversal.
+- [ ] Project stable finding metadata without exposing Rust layout.
+- [ ] Preserve byte-span and Unicode coordinate semantics.
+- [ ] Preserve remediation optionality.
+- [ ] Keep matched source values outside the ABI result model.
+
+### 0.3.5 — Ambiguity and explainability
+
+- [ ] Add candidate count and indexed candidate projection.
+- [ ] Preserve `SensitiveCandidate` as semantically distinct from `Finding`.
+- [ ] Project candidate evidence without inventing severity/confidence/remediation.
+- [ ] Add finding explanation resolution through scanner-owned metadata.
+- [ ] Preserve candidate explanation as evidence-derived.
+
+### 0.3.6 — Custom-rule/configuration ABI
+
+- [ ] Configure rules through the native builder rather than exposing Rust `Rule` layout.
+- [ ] Support public literal, prefix, suffix and full-match pattern rule semantics.
+- [ ] Preserve rule-ID uniqueness and existing scanner-build validation.
+- [ ] Do not expose internal capture-projection capability as a custom-rule feature.
+
+### 0.3.7 — Transform ABI and owned output buffers
+
+- [ ] Add explicit caller-source + report transform boundary.
+- [ ] Add Rust-owned output buffer handles with one destruction path.
+- [ ] Preserve redaction/template/pseudonymization/synthesis semantics where exposed.
+- [ ] Preserve overlap/span validation.
+- [ ] Define and test source/report consistency behavior.
+
+### 0.3.8 — Batch API and optional parallel execution contract
+
+- [ ] Define stable batch input/key representation.
+- [ ] Define batch result ownership and partial-failure semantics.
+- [ ] Preserve input order.
+- [ ] Add an explicit amortization path for small inputs.
+- [ ] Keep Rayon an implementation detail rather than an ABI concept.
+- [ ] Preserve serial/parallel semantic equivalence.
+
+### 0.3.9 — Ownership, error, panic and thread hardening
+
+- [ ] Finalize coarse status codes and explicit error-object diagnostics.
+- [ ] Validate null/invalid argument behavior.
+- [ ] Audit every allocation/destruction pair.
+- [ ] Audit borrowed-view lifetimes.
+- [ ] Verify panic containment.
+- [ ] Freeze thread-safety guarantees per handle type.
+- [ ] Document unavoidable caller-side C memory contract violations.
+
+### 0.3.10 — Generated C header, real consumer and cross-platform CI
+
+- [ ] Generate `include/cribra.h`, evaluating `cbindgen` as the default mechanism.
+- [ ] Compile and link a real C smoke consumer without Cargo knowledge.
+- [ ] Cover success and recoverable error paths.
+- [ ] Validate macOS.
+- [ ] Validate Linux.
+- [ ] Validate Windows.
+- [ ] Inspect public symbol/export hygiene where practical.
+- [ ] Add practical sanitizer/leak/native-memory validation.
+
+### 0.3.11 — ABI performance benchmarks
+
+- [ ] Benchmark minimal FFI call overhead.
+- [ ] Benchmark native scan versus equivalent Rust-native scan.
+- [ ] Benchmark report count/index traversal.
+- [ ] Benchmark complete report traversal.
+- [ ] Benchmark transform allocation/copy cost.
+- [ ] Benchmark batch amortization.
+- [ ] Document overhead policy without sacrificing semantics for micro-optimizations.
+
+### 0.3.12 — Existing WASM boundary audit and refinement
+
+- [ ] Validate Cribra v0.2 in the existing Silens Scan PWA before deeper adapter changes.
+- [ ] Audit exposed v0.2 capabilities.
+- [ ] Audit JS/WASM copy behavior and avoidable secondary copies.
+- [ ] Audit serialization overhead and typed projection opportunities.
+- [ ] Audit batch ergonomics and errors.
+- [ ] Audit TypeScript declarations and initialization.
+- [ ] Verify Web Worker friendliness.
+- [ ] Measure bundle size.
+- [ ] Document CSP/browser constraints.
+- [ ] Expose candidates, explanations, remediation, transforms and custom rules only where the working integration needs refinement.
+- [ ] Do not route WASM through the C ABI.
+
+### 0.3.13 — Rust/C/WASM semantic parity gate
+
+- [ ] Reuse canonical/golden fixtures where practical.
+- [ ] Compare finding count/order and rule IDs.
+- [ ] Compare spans and Unicode coordinates.
+- [ ] Compare severity/confidence/remediation.
+- [ ] Compare candidate count/order/kind/evidence.
+- [ ] Compare explanation facts.
+- [ ] Compare transformed output for equivalent supported operations.
+- [ ] Require semantic parity while allowing representation differences.
+
+### 0.3.14 — Documentation, examples, packaging and release gate
+
+- [ ] Finalize native integration documentation.
+- [ ] Finalize WASM integration documentation after audit results.
+- [ ] Provide minimal native C example.
+- [ ] Document ownership/lifetime/error/thread contracts prominently.
+- [ ] Document ABI experimental compatibility policy.
+- [ ] Validate package/release artifacts.
+- [ ] Run the complete test/feature/audit/package release gate.
+
+## v0.3 non-goals
+
+Do not add during this release solely as part of interoperability work:
+
+- new provider detectors;
+- new detector families;
+- plugin architecture;
+- CLI functionality;
+- complete language-specific wrapper ecosystems;
+- Rust ABI exposure;
+- WASM-through-C layering;
+- matched secret values in public result models.
+
+---
+
+---
+
+## Historical engineering backlog
+
+The following block is preserved verbatim from the pre-v0.2 repository roadmap.
+It records the original benchmark-foundation backlog; later v0.2 performance
+work and final measurements are documented in `CHANGELOG.md` and
+`docs/PERFORMANCE.md`.
+
 ### S1.3.1 — Benchmark foundation
 
 - [x] Add Criterion as a development dependency
