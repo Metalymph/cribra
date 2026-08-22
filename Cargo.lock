@@ -178,6 +178,7 @@ name = "cribra-capi"
 version = "0.3.0"
 dependencies = [
  "cribra",
+ "criterion",
 ]
 
 [[package]]

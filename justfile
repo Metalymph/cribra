@@ -34,6 +34,10 @@ capi:
     cargo clippy -p cribra-capi --all-targets -- -D warnings
     cargo build -p cribra-capi
 
+# Run benchmarks for the native C adapter.
+capi-bench:
+	cargo bench -p cribra-capi --bench abi
+
 # Generate the committed native C header from the Rust ABI adapter.
 capi-header:
     mkdir -p include

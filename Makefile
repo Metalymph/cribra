@@ -41,21 +41,30 @@ check:
 check-all:
 	cargo check --all-features
 
+# Check that the native C adapter can be statically linked.
+capi-static:
 capi:
 	cargo check -p cribra-capi
 	cargo clippy -p cribra-capi --all-targets -- -D warnings
 	cargo build -p cribra-capi
 
+# Run benchmarks for the native C adapter.
+capi-bench:
+	cargo bench -p cribra-capi --bench abi
+
+# Generate the committed native C header from the Rust ABI adapter.
 capi-header:
 	mkdir -p include
 	cbindgen --config crates/cribra-capi/cbindgen.toml --crate cribra-capi --output include/cribra.h
 
+# Check that the committed native C header matches the generated one.
 capi-header-check:
 	mkdir -p target/c-smoke
 	cp include/cribra.h target/c-smoke/cribra.h.expected
 	cbindgen --config crates/cribra-capi/cbindgen.toml --crate cribra-capi --output target/c-smoke/cribra.h.generated
 	diff -u target/c-smoke/cribra.h.expected target/c-smoke/cribra.h.generated
 
+# Smoke test the native C adapter.
 capi-smoke: capi-header
 	cargo build -p cribra-capi
 	mkdir -p target/c-smoke
@@ -77,10 +86,12 @@ capi-smoke: capi-header
 	fi
 	target/c-smoke/cribra-smoke
 
+# Check that the native C adapter exports the expected symbols.
 capi-symbols: capi-header
 	cargo build -p cribra-capi
 	sh crates/cribra-capi/tests/c/check-capi-symbols.sh
 
+# Check that the native C adapter can be statically linked.
 capi-static:
 	cargo build -p cribra-capi
 	test -f target/debug/libcribra_capi.a
@@ -108,12 +119,19 @@ doc:
 doc-all:
 	cargo doc --all-features --no-deps
 
+# Check that the WASM adapter exports the expected symbols.
 wasm:
 	cargo check --target wasm32-unknown-unknown --no-default-features
 
+# Check that the WASM adapter exports the expected symbols.
+wasm-symbols:
+	cargo check --target wasm32-unknown-unknown --no-default-features
+
+# Check that the WASM adapter can be used with serde.
 wasm-serde:
 	cargo check --target wasm32-unknown-unknown --no-default-features --features serde
 
+# Check that the MSRV requirements are met.
 msrv:
 	cargo +1.97.0 check
 	cargo +1.97.0 check --all-features
@@ -135,6 +153,7 @@ publish-dry-run:
 publish-dry-run-dirty:
 	cargo publish --dry-run --allow-dirty
 
+# Gate the release process.
 gate: fmt-check check-all capi test test-serde test-all test-doc clippy doc doc-all wasm wasm-serde
 	git diff --check
 

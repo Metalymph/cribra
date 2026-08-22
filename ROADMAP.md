@@ -119,13 +119,13 @@ The interoperability architecture is specified in `docs/INTEROP.md`.
 
 ### 0.3.11 — ABI performance benchmarks
 
-- [ ] Benchmark minimal FFI call overhead.
-- [ ] Benchmark native scan versus equivalent Rust-native scan.
-- [ ] Benchmark report count/index traversal.
-- [ ] Benchmark complete report traversal.
-- [ ] Benchmark transform allocation/copy cost.
-- [ ] Benchmark batch amortization.
-- [ ] Document overhead policy without sacrificing semantics for micro-optimizations.
+- [x] Benchmark minimal FFI call overhead.
+- [x] Benchmark native scan versus equivalent Rust-native scan.
+- [x] Benchmark report count/index traversal.
+- [x] Benchmark complete report traversal.
+- [x] Benchmark transform allocation/copy cost.
+- [x] Benchmark batch amortization.
+- [x] Document overhead policy without sacrificing semantics for micro-optimizations.
 
 ### 0.3.12 — Existing WASM boundary audit and refinement
 

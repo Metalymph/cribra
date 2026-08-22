@@ -13,7 +13,14 @@ default = []
 parallel = ["cribra/parallel"]
 
 [lib]
-crate-type = ["staticlib", "cdylib"]
+crate-type = ["rlib", "staticlib", "cdylib"]
 
 [dependencies]
 cribra = { path = "../.." }
+
+[dev-dependencies]
+criterion = "0.8.2"
+
+[[bench]]
+name = "abi"
+harness = false
