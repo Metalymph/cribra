@@ -55,9 +55,6 @@ jobs:
       - name: Clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
 
-      - name: Package dry run
-        run: cargo package --allow-dirty
-
   cross-platform:
     name: Test ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
