@@ -10,11 +10,13 @@
 #![warn(missing_docs)]
 #![deny(unsafe_op_in_unsafe_fn)]
 
+mod error;
 mod ffi;
 mod handles;
 mod status;
 mod types;
 
+pub use error::{CribraError, cribra_error_free, cribra_error_message, cribra_error_status};
 pub use ffi::{
     ABI_VERSION_MAJOR, ABI_VERSION_MINOR, ABI_VERSION_PATCH, cribra_abi_version_major,
     cribra_abi_version_minor, cribra_abi_version_patch, cribra_batch_results_candidate_at,
@@ -35,7 +37,7 @@ pub use handles::{
 };
 pub use status::{
     CRIBRA_BUILD_ERROR, CRIBRA_INTERNAL_ERROR, CRIBRA_INVALID_ARGUMENT, CRIBRA_INVALID_UTF8,
-    CRIBRA_OK, CRIBRA_OUT_OF_RANGE, CRIBRA_TRANSFORM_ERROR, CribraStatus,
+    CRIBRA_OK, CRIBRA_OUT_OF_RANGE, CRIBRA_RULE_ERROR, CRIBRA_TRANSFORM_ERROR, CribraStatus,
 };
 pub use types::{
     CRIBRA_BATCH_EXECUTION_AUTO, CRIBRA_BATCH_EXECUTION_SERIAL, CRIBRA_CANDIDATE_EVIDENCE_NONE,
