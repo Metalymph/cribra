@@ -16,6 +16,9 @@ mod handles;
 mod status;
 mod types;
 
+#[cfg(test)]
+mod hardening_tests;
+
 pub use error::{CribraError, cribra_error_free, cribra_error_message, cribra_error_status};
 pub use ffi::{
     ABI_VERSION_MAJOR, ABI_VERSION_MINOR, ABI_VERSION_PATCH, cribra_abi_version_major,

@@ -285,7 +285,14 @@ The adapter cannot make arbitrary foreign memory safe. The following remain call
 - use-after-free of an opaque handle;
 - double-free of an opaque handle;
 - passing a forged pointer as a Cribra handle;
-- concurrent destruction while another call uses the same object.
+- concurrent destruction while another call uses the same object;
+- concurrent destruction of an owner while another thread uses a borrowed view
+  derived from that owner;
+- concurrent mutation of a builder without caller-provided synchronization.
+
+These remain caller-side undefined-behavior boundaries even when the underlying
+immutable handle type is `Send + Sync`. The ABI does not provide automatic
+reference counting or synchronization for foreign handles.
 
 v0.3 SHOULD NOT introduce a global handle registry merely to simulate safety for these cases. Such a registry would add global mutable state, synchronization, lookup overhead, and lifecycle complexity without making arbitrary foreign memory trustworthy.
 
@@ -479,21 +486,42 @@ Cribra currently does not split one source into chunks for parallel scanning and
 
 ## 27. Thread safety
 
-The final ABI must explicitly document thread safety per handle type before release.
+The native ABI uses a per-handle thread contract. The immutable owned handle
+types listed below are verified by compile-time Rust assertions to satisfy
+`Send + Sync` in the adapter implementation.
 
-The intended starting contract is:
-
-| Handle | Intended concurrency |
+| Handle | Native concurrency contract |
 | --- | --- |
-| immutable scanner | concurrent read/scan use should be supported if implementation confirms the core contract |
-| report | concurrent read-only traversal should be supported if wrapper state remains immutable |
-| builder | externally synchronized; no concurrent mutation |
-| immutable output buffer | concurrent read-only access is safe while alive |
-| immutable error object | concurrent read-only access is safe while alive |
+| `CribraScanner` | concurrent immutable scan/read use is supported |
+| `CribraReport` | concurrent read-only traversal is supported |
+| `CribraBatchResults` | concurrent read-only traversal is supported |
+| `CribraOutput` | concurrent read-only view access is supported |
+| `CribraShareBundle` | concurrent read-only traversal is supported |
+| `CribraError` | concurrent read-only status/message access is supported |
+| `CribraBuilder` | mutable configuration is externally synchronized; concurrent mutation is not supported |
 
-The implementation must verify these guarantees against actual wrapper internals before they become normative.
+`Send + Sync` describes the implementation capability of the immutable owned
+handles; it does not create lifetime management for foreign callers. A caller
+must keep every handle alive for the full duration of every concurrent operation
+that uses it.
 
-No handle may be destroyed concurrently with another call that uses it.
+No handle may be destroyed while another thread is using that handle or a
+borrowed view whose lifetime depends on it. Destruction functions do not perform
+reference counting, locking, handle registration, or synchronization on behalf
+of the caller.
+
+Borrowed views inherit the concurrency and lifetime contract of their owner:
+
+- report finding/candidate views require the report to remain alive;
+- batch entry/finding/candidate views require the batch results to remain alive;
+- output string views require the output handle to remain alive;
+- share-bundle entry views require the share bundle to remain alive;
+- error message views require the error handle to remain alive.
+
+The adapter does not expose Rayon or a thread-pool contract.
+`CRIBRA_BATCH_EXECUTION_AUTO` may use the core parallel implementation when the
+adapter is built with the optional `parallel` feature, while preserving the same
+logical results and input ordering as serial execution.
 
 ## 28. ABI versioning
 
