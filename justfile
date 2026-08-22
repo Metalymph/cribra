@@ -34,6 +34,56 @@ capi:
     cargo clippy -p cribra-capi --all-targets -- -D warnings
     cargo build -p cribra-capi
 
+# Generate the committed native C header from the Rust ABI adapter.
+capi-header:
+    mkdir -p include
+    cbindgen --config crates/cribra-capi/cbindgen.toml --crate cribra-capi --output include/cribra.h
+
+# Verify that regenerating the native C header is deterministic and leaves the
+# committed header unchanged.
+capi-header-check:
+    mkdir -p target/c-smoke
+    cp include/cribra.h target/c-smoke/cribra.h.expected
+    cbindgen --config crates/cribra-capi/cbindgen.toml --crate cribra-capi --output target/c-smoke/cribra.h.generated
+    diff -u target/c-smoke/cribra.h.expected target/c-smoke/cribra.h.generated
+
+# Build and run the real C consumer against the native dynamic library.
+#
+# macOS and Linux use an executable rpath so the smoke test does not require
+# DYLD_LIBRARY_PATH / LD_LIBRARY_PATH. Windows is exercised by CI.
+capi-smoke: capi-header
+    cargo build -p cribra-capi
+    mkdir -p target/c-smoke
+    if [ "$(uname -s)" = "Darwin" ]; then \
+        clang -std=c11 -Wall -Wextra -Werror -Iinclude \
+          crates/cribra-capi/tests/c/smoke.c \
+          -Ltarget/debug -lcribra_capi \
+          -Wl,-rpath,@loader_path/../debug \
+          -o target/c-smoke/cribra-smoke; \
+    elif [ "$(uname -s)" = "Linux" ]; then \
+        cc -std=c11 -Wall -Wextra -Werror -Iinclude \
+          crates/cribra-capi/tests/c/smoke.c \
+          -Ltarget/debug -lcribra_capi \
+          -Wl,-rpath,'$ORIGIN/../debug' \
+          -o target/c-smoke/cribra-smoke; \
+    else \
+        echo "capi-smoke local recipe currently supports macOS and Linux; Windows is covered in CI"; \
+        exit 2; \
+    fi
+    target/c-smoke/cribra-smoke
+
+# Build the static ABI artifact and verify that it is produced.
+#
+# Full static linking is platform-specific because Rust staticlibs require
+# target-native system libraries at the final link step; cross-platform static
+# linking is therefore validated in CI rather than guessed here.
+capi-static:
+    cargo build -p cribra-capi
+    test -f target/debug/libcribra_capi.a
+
+# Run the complete local native-C interoperability smoke surface.
+capi-smoke-all: capi-header-check capi-smoke capi-static
+
 # Run the default test surface.
 test:
     cargo test

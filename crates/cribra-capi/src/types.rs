@@ -63,7 +63,7 @@ pub const CRIBRA_REMEDIATION_REMOVE_SENSITIVE_VALUE: CribraRemediation = 5;
 /// Review whether the hash is appropriate to expose.
 pub const CRIBRA_REMEDIATION_REVIEW_SENSITIVE_HASH: CribraRemediation = 6;
 /// A remediation variant is newer than this ABI projection understands.
-pub const CRIBRA_REMEDIATION_UNKNOWN: CribraRemediation = u32::MAX;
+pub const CRIBRA_REMEDIATION_UNKNOWN: CribraRemediation = 0xFFFF_FFFF;
 
 /// Borrowed projection of one report-owned finding.
 ///
@@ -97,7 +97,7 @@ pub const CRIBRA_CANDIDATE_KIND_NONE: CribraCandidateKind = 0;
 /// Structurally plausible recovery or backup code.
 pub const CRIBRA_CANDIDATE_KIND_RECOVERY_LIKE_CODE: CribraCandidateKind = 1;
 /// A candidate kind is newer than this ABI projection understands.
-pub const CRIBRA_CANDIDATE_KIND_UNKNOWN: CribraCandidateKind = u32::MAX;
+pub const CRIBRA_CANDIDATE_KIND_UNKNOWN: CribraCandidateKind = 0xFFFF_FFFF;
 
 /// Stable ABI candidate-evidence representation.
 pub type CribraCandidateEvidence = u32;
@@ -106,7 +106,7 @@ pub const CRIBRA_CANDIDATE_EVIDENCE_NONE: CribraCandidateEvidence = 0;
 /// Structural evidence without enough semantic context for a finding.
 pub const CRIBRA_CANDIDATE_EVIDENCE_STRUCTURAL: CribraCandidateEvidence = 1;
 /// Candidate evidence is newer than this ABI projection understands.
-pub const CRIBRA_CANDIDATE_EVIDENCE_UNKNOWN: CribraCandidateEvidence = u32::MAX;
+pub const CRIBRA_CANDIDATE_EVIDENCE_UNKNOWN: CribraCandidateEvidence = 0xFFFF_FFFF;
 
 /// Projection of one report-owned ambiguous sensitive candidate.
 ///
@@ -140,7 +140,7 @@ pub const CRIBRA_DETECTION_MODE_DETERMINISTIC: CribraDetectionMode = 2;
 /// Validation also depends on surrounding source context.
 pub const CRIBRA_DETECTION_MODE_CONTEXTUAL: CribraDetectionMode = 3;
 /// A detection mode is newer than this ABI projection understands.
-pub const CRIBRA_DETECTION_MODE_UNKNOWN: CribraDetectionMode = u32::MAX;
+pub const CRIBRA_DETECTION_MODE_UNKNOWN: CribraDetectionMode = 0xFFFF_FFFF;
 
 /// Stable ABI explanation-kind representation.
 pub type CribraExplanationKind = u32;
@@ -151,7 +151,7 @@ pub const CRIBRA_EXPLANATION_CLASSIFIED: CribraExplanationKind = 1;
 /// Explanation for an ambiguous review-only candidate.
 pub const CRIBRA_EXPLANATION_AMBIGUOUS: CribraExplanationKind = 2;
 /// An explanation kind is newer than this ABI projection understands.
-pub const CRIBRA_EXPLANATION_UNKNOWN: CribraExplanationKind = u32::MAX;
+pub const CRIBRA_EXPLANATION_UNKNOWN: CribraExplanationKind = 0xFFFF_FFFF;
 
 /// Stable typed explanation projection.
 ///
@@ -306,7 +306,7 @@ pub const CRIBRA_SHARE_MODE_PSEUDONYMIZE: CribraShareMode = 2;
 /// Deterministic synthetic-value generation.
 pub const CRIBRA_SHARE_MODE_SYNTHESIZE: CribraShareMode = 3;
 /// A manifest mode is newer than this ABI projection understands.
-pub const CRIBRA_SHARE_MODE_UNKNOWN: CribraShareMode = u32::MAX;
+pub const CRIBRA_SHARE_MODE_UNKNOWN: CribraShareMode = 0xFFFF_FFFF;
 
 /// Configuration used to build one share-safe batch.
 ///
