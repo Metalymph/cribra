@@ -113,15 +113,15 @@ The interoperability architecture is specified in `docs/INTEROP.md`.
 - [x] Document overhead policy without sacrificing semantics for micro-optimizations.
 ### 0.3.12 — Documentation, examples, packaging and release gate
 
-- [ ] Finalize native integration documentation.
-- [ ] Provide a minimal native C example.
-- [ ] Document ownership/lifetime/error/thread contracts prominently.
-- [ ] Document ABI experimental compatibility policy.
-- [ ] Link the native ABI performance reference from the primary documentation.
-- [ ] Validate generated header and native package/release artifacts.
-- [ ] Run formatting, lint, test, doctest, feature, MSRV, audit and package gates.
-- [ ] Confirm the cross-platform native C ABI CI matrix is green.
-- [ ] Finalize v0.3 release notes and versioning metadata.
+- [x] Finalize native integration documentation.
+- [x] Provide a minimal native C example.
+- [x] Document ownership/lifetime/error/thread contracts prominently.
+- [x] Document ABI experimental compatibility policy.
+- [x] Link the native ABI performance reference from the primary documentation.
+- [x] Validate generated header and native package/release artifacts.
+- [x] Run formatting, lint, test, doctest, feature, MSRV, audit and package gates.
+- [x] Confirm the cross-platform native C ABI CI matrix is green.
+- [x] Finalize v0.3 release notes and versioning metadata.
 
 ## v0.3 non-goals
 
