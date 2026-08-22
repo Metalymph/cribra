@@ -8,13 +8,15 @@ use std::{
 
 use cribra::{
     CandidateEvidence, Confidence, DetectionMode, Explanation, Redaction, Remediation, Rule,
-    Scanner, SensitiveCandidateKind, Severity, builtins,
+    RuleError, Scanner, ScannerBuildError, SensitiveCandidateKind, Severity, builtins,
     transform::{
         PseudonymizationOptions, ShareBundle, ShareMode, ShareModeKind, SynthesisOptions,
-        TemplateOptions, pseudonymize, redact, redact_with, synthesize, template, template_with,
+        TemplateOptions, TransformError, pseudonymize, redact, redact_with, synthesize, template,
+        template_with,
     },
 };
 
+use crate::error::{ErrorSlot, contain_status_with_error, set_error};
 use crate::{
     CRIBRA_BATCH_EXECUTION_AUTO, CRIBRA_BATCH_EXECUTION_SERIAL, CRIBRA_BUILD_ERROR,
     CRIBRA_CANDIDATE_EVIDENCE_NONE, CRIBRA_CANDIDATE_EVIDENCE_STRUCTURAL,
@@ -28,19 +30,19 @@ use crate::{
     CRIBRA_REMEDIATION_NONE, CRIBRA_REMEDIATION_REMOVE_SENSITIVE_VALUE,
     CRIBRA_REMEDIATION_REPLACE_PRIVATE_KEY, CRIBRA_REMEDIATION_REVIEW_SENSITIVE_HASH,
     CRIBRA_REMEDIATION_REVOKE_AND_ROTATE_CREDENTIAL, CRIBRA_REMEDIATION_ROTATE_CREDENTIAL,
-    CRIBRA_REMEDIATION_ROTATE_PASSWORD, CRIBRA_REMEDIATION_UNKNOWN, CRIBRA_RULE_KIND_LITERAL,
-    CRIBRA_RULE_KIND_PATTERN, CRIBRA_RULE_KIND_PREFIX, CRIBRA_RULE_KIND_SUFFIX,
-    CRIBRA_SEVERITY_CRITICAL, CRIBRA_SEVERITY_HIGH, CRIBRA_SEVERITY_INFO, CRIBRA_SEVERITY_LOW,
-    CRIBRA_SEVERITY_MEDIUM, CRIBRA_SHARE_MODE_PSEUDONYMIZE, CRIBRA_SHARE_MODE_REDACT,
-    CRIBRA_SHARE_MODE_SYNTHESIZE, CRIBRA_SHARE_MODE_TEMPLATE, CRIBRA_SHARE_MODE_UNKNOWN,
-    CRIBRA_TRANSFORM_ERROR, CribraBatchEntryView, CribraBatchExecution, CribraBatchInput,
-    CribraBatchResults, CribraBatchSummary, CribraBuilder, CribraCandidateEvidence,
-    CribraCandidateKind, CribraCandidateView, CribraConfidence, CribraDetectionMode,
-    CribraExplanationView, CribraFindingView, CribraOutput, CribraPseudonymizeConfig,
-    CribraRemediation, CribraReport, CribraRuleConfig, CribraScanSummaryView, CribraScanner,
-    CribraSeverity, CribraShareBundle, CribraShareBundleConfig, CribraShareEntryView,
-    CribraShareManifestView, CribraShareMode, CribraStatus, CribraStringView,
-    CribraSynthesizeConfig, CribraTemplateConfig,
+    CRIBRA_REMEDIATION_ROTATE_PASSWORD, CRIBRA_REMEDIATION_UNKNOWN, CRIBRA_RULE_ERROR,
+    CRIBRA_RULE_KIND_LITERAL, CRIBRA_RULE_KIND_PATTERN, CRIBRA_RULE_KIND_PREFIX,
+    CRIBRA_RULE_KIND_SUFFIX, CRIBRA_SEVERITY_CRITICAL, CRIBRA_SEVERITY_HIGH, CRIBRA_SEVERITY_INFO,
+    CRIBRA_SEVERITY_LOW, CRIBRA_SEVERITY_MEDIUM, CRIBRA_SHARE_MODE_PSEUDONYMIZE,
+    CRIBRA_SHARE_MODE_REDACT, CRIBRA_SHARE_MODE_SYNTHESIZE, CRIBRA_SHARE_MODE_TEMPLATE,
+    CRIBRA_SHARE_MODE_UNKNOWN, CRIBRA_TRANSFORM_ERROR, CribraBatchEntryView, CribraBatchExecution,
+    CribraBatchInput, CribraBatchResults, CribraBatchSummary, CribraBuilder,
+    CribraCandidateEvidence, CribraCandidateKind, CribraCandidateView, CribraConfidence,
+    CribraDetectionMode, CribraError, CribraExplanationView, CribraFindingView, CribraOutput,
+    CribraPseudonymizeConfig, CribraRemediation, CribraReport, CribraRuleConfig,
+    CribraScanSummaryView, CribraScanner, CribraSeverity, CribraShareBundle,
+    CribraShareBundleConfig, CribraShareEntryView, CribraShareManifestView, CribraShareMode,
+    CribraStatus, CribraStringView, CribraSynthesizeConfig, CribraTemplateConfig,
 };
 
 /// Experimental native ABI major version.
@@ -209,7 +211,7 @@ fn configured_rule(
         CRIBRA_RULE_KIND_PREFIX => Rule::prefix(id, value, severity),
         CRIBRA_RULE_KIND_SUFFIX => Rule::suffix(id, value, severity),
         CRIBRA_RULE_KIND_PATTERN => {
-            Rule::pattern(id, value, severity).map_err(|_| CRIBRA_BUILD_ERROR)?
+            Rule::pattern(id, value, severity).map_err(|_| CRIBRA_RULE_ERROR)?
         }
         _ => return Err(CRIBRA_INVALID_ARGUMENT),
     };
@@ -218,6 +220,45 @@ fn configured_rule(
         Some(remediation) => rule.with_remediation(remediation),
         None => rule,
     })
+}
+
+fn rule_error_message(error: &RuleError) -> &'static str {
+    match error {
+        RuleError::InvalidPattern(_) => "custom rule pattern is invalid",
+        RuleError::PatternMatchesEmpty => "custom rule pattern can match empty input",
+        RuleError::MissingCaptureGroup { .. } => "rule capture configuration is invalid",
+    }
+}
+
+fn scanner_build_error_message(error: &ScannerBuildError) -> &'static str {
+    match error {
+        ScannerBuildError::Rule(error) => rule_error_message(error),
+        ScannerBuildError::EmptyRuleId => "rule identifier cannot be empty",
+        ScannerBuildError::DuplicateRuleId { .. } => "duplicate rule identifier",
+        ScannerBuildError::EmptyMatcher { .. } => "rule matcher cannot be empty",
+        ScannerBuildError::TooManyRules => "configured rule count exceeds the scanner limit",
+        ScannerBuildError::AutomatonBuild(_) => "scanner matcher compilation failed",
+    }
+}
+
+fn transform_error_message(error: &TransformError) -> &'static str {
+    match error {
+        TransformError::InvalidSpan { .. } => "transform report contains an invalid source span",
+        TransformError::InvalidUtf8Boundary { .. } => {
+            "transform report span is not aligned to UTF-8 boundaries"
+        }
+        TransformError::OverlappingSpans { .. } => {
+            "transform requires non-overlapping finding spans"
+        }
+        TransformError::MissingShareMode => "share bundle transformation mode is not configured",
+        TransformError::SourceCountMismatch { .. } => {
+            "share bundle source count does not match scan results"
+        }
+        TransformError::SourceLengthMismatch { .. } => {
+            "share bundle source length does not match scan results"
+        }
+        _ => "source transformation could not be applied safely",
+    }
 }
 
 unsafe fn key32_from_raw(key: *const u8, key_len: usize) -> Result<[u8; 32], CribraStatus> {
@@ -236,12 +277,21 @@ fn source_matches_report(source_len: usize, report: &CribraReport) -> bool {
 }
 
 unsafe fn write_output(
-    output: Result<String, cribra::transform::TransformError>,
+    output: Result<String, TransformError>,
     out_output: *mut *mut CribraOutput,
+    out_error: *mut *mut CribraError,
 ) -> CribraStatus {
     let output = match output {
         Ok(output) => output,
-        Err(_) => return CRIBRA_TRANSFORM_ERROR,
+        Err(error) => {
+            unsafe {
+                set_error(
+                    out_error,
+                    CribraError::new(CRIBRA_TRANSFORM_ERROR, transform_error_message(&error)),
+                );
+            }
+            return CRIBRA_TRANSFORM_ERROR;
+        }
     };
     let output = Box::new(CribraOutput::new(output));
     // SAFETY: caller supplied a validated writable out-pointer.
@@ -408,8 +458,10 @@ pub unsafe extern "C" fn cribra_builder_add_current_builtins(
 pub unsafe extern "C" fn cribra_builder_add_rule(
     builder: *mut CribraBuilder,
     config: *const CribraRuleConfig,
+    out_error: *mut *mut CribraError,
 ) -> CribraStatus {
-    contain_status(|| {
+    let error_slot = unsafe { ErrorSlot::from_raw(out_error) };
+    contain_status_with_error(error_slot, || {
         if builder.is_null() || config.is_null() {
             return CRIBRA_INVALID_ARGUMENT;
         }
@@ -461,8 +513,10 @@ pub unsafe extern "C" fn cribra_builder_add_rule(
 pub unsafe extern "C" fn cribra_builder_build(
     builder: *mut CribraBuilder,
     out_scanner: *mut *mut CribraScanner,
+    out_error: *mut *mut CribraError,
 ) -> CribraStatus {
-    contain_status(|| {
+    let error_slot = unsafe { ErrorSlot::from_raw(out_error) };
+    contain_status_with_error(error_slot, || {
         if let Err(status) = unsafe { clear_out(out_scanner) } {
             return status;
         }
@@ -483,7 +537,15 @@ pub unsafe extern "C" fn cribra_builder_build(
                 unsafe { ptr::write(out_scanner, Box::into_raw(scanner)) };
                 CRIBRA_OK
             }
-            Err(_) => CRIBRA_BUILD_ERROR,
+            Err(error) => {
+                unsafe {
+                    set_error(
+                        out_error,
+                        CribraError::new(CRIBRA_BUILD_ERROR, scanner_build_error_message(&error)),
+                    );
+                }
+                CRIBRA_BUILD_ERROR
+            }
         }
     })
 }
@@ -544,8 +606,10 @@ pub unsafe extern "C" fn cribra_scanner_scan(
     source: *const u8,
     source_len: usize,
     out_report: *mut *mut CribraReport,
+    out_error: *mut *mut CribraError,
 ) -> CribraStatus {
-    contain_status(|| {
+    let error_slot = unsafe { ErrorSlot::from_raw(out_error) };
+    contain_status_with_error(error_slot, || {
         if let Err(status) = unsafe { clear_out(out_report) } {
             return status;
         }
@@ -606,8 +670,10 @@ pub unsafe extern "C" fn cribra_scanner_scan_batch(
     input_count: usize,
     execution: CribraBatchExecution,
     out_results: *mut *mut CribraBatchResults,
+    out_error: *mut *mut CribraError,
 ) -> CribraStatus {
-    contain_status(|| {
+    let error_slot = unsafe { ErrorSlot::from_raw(out_error) };
+    contain_status_with_error(error_slot, || {
         if let Err(status) = unsafe { clear_out(out_results) } {
             return status;
         }
@@ -1051,8 +1117,10 @@ pub unsafe extern "C" fn cribra_scanner_explain_finding(
     report: *const CribraReport,
     index: usize,
     out_explanation: *mut CribraExplanationView,
+    out_error: *mut *mut CribraError,
 ) -> CribraStatus {
-    contain_status(|| {
+    let error_slot = unsafe { ErrorSlot::from_raw(out_error) };
+    contain_status_with_error(error_slot, || {
         if let Err(status) = unsafe { clear_value(out_explanation) } {
             return status;
         }
@@ -1067,6 +1135,15 @@ pub unsafe extern "C" fn cribra_scanner_explain_finding(
             return CRIBRA_OUT_OF_RANGE;
         };
         let Some(explanation) = Explanation::for_finding(&scanner.inner, finding) else {
+            unsafe {
+                set_error(
+                    out_error,
+                    CribraError::new(
+                        CRIBRA_INVALID_ARGUMENT,
+                        "finding explanation authority does not match scanner",
+                    ),
+                );
+            }
             return CRIBRA_INVALID_ARGUMENT;
         };
         // SAFETY: `clear_value` validated the out-pointer.
@@ -1124,8 +1201,10 @@ pub unsafe extern "C" fn cribra_transform_redact(
     source_len: usize,
     report: *const CribraReport,
     out_output: *mut *mut CribraOutput,
+    out_error: *mut *mut CribraError,
 ) -> CribraStatus {
-    contain_status(|| {
+    let error_slot = unsafe { ErrorSlot::from_raw(out_error) };
+    contain_status_with_error(error_slot, || {
         if let Err(status) = unsafe { clear_out(out_output) } {
             return status;
         }
@@ -1139,10 +1218,19 @@ pub unsafe extern "C" fn cribra_transform_redact(
         // SAFETY: caller guarantees a live immutable report.
         let report = unsafe { &*report };
         if !source_matches_report(source.len(), report) {
+            unsafe {
+                set_error(
+                    out_error,
+                    CribraError::new(
+                        CRIBRA_TRANSFORM_ERROR,
+                        "transform source length does not match report",
+                    ),
+                );
+            }
             return CRIBRA_TRANSFORM_ERROR;
         }
         // SAFETY: `clear_out` validated the output pointer.
-        unsafe { write_output(redact(source, &report.inner), out_output) }
+        unsafe { write_output(redact(source, &report.inner), out_output, out_error) }
     })
 }
 
@@ -1160,8 +1248,10 @@ pub unsafe extern "C" fn cribra_transform_redact_with(
     replacement: *const u8,
     replacement_len: usize,
     out_output: *mut *mut CribraOutput,
+    out_error: *mut *mut CribraError,
 ) -> CribraStatus {
-    contain_status(|| {
+    let error_slot = unsafe { ErrorSlot::from_raw(out_error) };
+    contain_status_with_error(error_slot, || {
         if let Err(status) = unsafe { clear_out(out_output) } {
             return status;
         }
@@ -1179,11 +1269,26 @@ pub unsafe extern "C" fn cribra_transform_redact_with(
         // SAFETY: caller guarantees a live immutable report.
         let report = unsafe { &*report };
         if !source_matches_report(source.len(), report) {
+            unsafe {
+                set_error(
+                    out_error,
+                    CribraError::new(
+                        CRIBRA_TRANSFORM_ERROR,
+                        "transform source length does not match report",
+                    ),
+                );
+            }
             return CRIBRA_TRANSFORM_ERROR;
         }
         let redaction = Redaction::new(replacement);
         // SAFETY: `clear_out` validated the output pointer.
-        unsafe { write_output(redact_with(source, &report.inner, &redaction), out_output) }
+        unsafe {
+            write_output(
+                redact_with(source, &report.inner, &redaction),
+                out_output,
+                out_error,
+            )
+        }
     })
 }
 
@@ -1198,8 +1303,10 @@ pub unsafe extern "C" fn cribra_transform_template(
     source_len: usize,
     report: *const CribraReport,
     out_output: *mut *mut CribraOutput,
+    out_error: *mut *mut CribraError,
 ) -> CribraStatus {
-    contain_status(|| {
+    let error_slot = unsafe { ErrorSlot::from_raw(out_error) };
+    contain_status_with_error(error_slot, || {
         if let Err(status) = unsafe { clear_out(out_output) } {
             return status;
         }
@@ -1213,10 +1320,19 @@ pub unsafe extern "C" fn cribra_transform_template(
         // SAFETY: caller guarantees a live immutable report.
         let report = unsafe { &*report };
         if !source_matches_report(source.len(), report) {
+            unsafe {
+                set_error(
+                    out_error,
+                    CribraError::new(
+                        CRIBRA_TRANSFORM_ERROR,
+                        "transform source length does not match report",
+                    ),
+                );
+            }
             return CRIBRA_TRANSFORM_ERROR;
         }
         // SAFETY: `clear_out` validated the output pointer.
-        unsafe { write_output(template(source, &report.inner), out_output) }
+        unsafe { write_output(template(source, &report.inner), out_output, out_error) }
     })
 }
 
@@ -1235,8 +1351,10 @@ pub unsafe extern "C" fn cribra_transform_template_with(
     report: *const CribraReport,
     config: *const CribraTemplateConfig,
     out_output: *mut *mut CribraOutput,
+    out_error: *mut *mut CribraError,
 ) -> CribraStatus {
-    contain_status(|| {
+    let error_slot = unsafe { ErrorSlot::from_raw(out_error) };
+    contain_status_with_error(error_slot, || {
         if let Err(status) = unsafe { clear_out(out_output) } {
             return status;
         }
@@ -1264,10 +1382,25 @@ pub unsafe extern "C" fn cribra_transform_template_with(
         // SAFETY: caller guarantees a live immutable report.
         let report = unsafe { &*report };
         if !source_matches_report(source.len(), report) {
+            unsafe {
+                set_error(
+                    out_error,
+                    CribraError::new(
+                        CRIBRA_TRANSFORM_ERROR,
+                        "transform source length does not match report",
+                    ),
+                );
+            }
             return CRIBRA_TRANSFORM_ERROR;
         }
         // SAFETY: `clear_out` validated the output pointer.
-        unsafe { write_output(template_with(source, &report.inner, &options), out_output) }
+        unsafe {
+            write_output(
+                template_with(source, &report.inner, &options),
+                out_output,
+                out_error,
+            )
+        }
     })
 }
 
@@ -1284,8 +1417,10 @@ pub unsafe extern "C" fn cribra_transform_pseudonymize(
     report: *const CribraReport,
     config: *const CribraPseudonymizeConfig,
     out_output: *mut *mut CribraOutput,
+    out_error: *mut *mut CribraError,
 ) -> CribraStatus {
-    contain_status(|| {
+    let error_slot = unsafe { ErrorSlot::from_raw(out_error) };
+    contain_status_with_error(error_slot, || {
         if let Err(status) = unsafe { clear_out(out_output) } {
             return status;
         }
@@ -1312,10 +1447,25 @@ pub unsafe extern "C" fn cribra_transform_pseudonymize(
         // SAFETY: caller guarantees a live immutable report.
         let report = unsafe { &*report };
         if !source_matches_report(source.len(), report) {
+            unsafe {
+                set_error(
+                    out_error,
+                    CribraError::new(
+                        CRIBRA_TRANSFORM_ERROR,
+                        "transform source length does not match report",
+                    ),
+                );
+            }
             return CRIBRA_TRANSFORM_ERROR;
         }
         // SAFETY: `clear_out` validated the output pointer.
-        unsafe { write_output(pseudonymize(source, &report.inner, &options), out_output) }
+        unsafe {
+            write_output(
+                pseudonymize(source, &report.inner, &options),
+                out_output,
+                out_error,
+            )
+        }
     })
 }
 
@@ -1332,8 +1482,10 @@ pub unsafe extern "C" fn cribra_transform_synthesize(
     report: *const CribraReport,
     config: *const CribraSynthesizeConfig,
     out_output: *mut *mut CribraOutput,
+    out_error: *mut *mut CribraError,
 ) -> CribraStatus {
-    contain_status(|| {
+    let error_slot = unsafe { ErrorSlot::from_raw(out_error) };
+    contain_status_with_error(error_slot, || {
         if let Err(status) = unsafe { clear_out(out_output) } {
             return status;
         }
@@ -1358,10 +1510,25 @@ pub unsafe extern "C" fn cribra_transform_synthesize(
         // SAFETY: caller guarantees a live immutable report.
         let report = unsafe { &*report };
         if !source_matches_report(source.len(), report) {
+            unsafe {
+                set_error(
+                    out_error,
+                    CribraError::new(
+                        CRIBRA_TRANSFORM_ERROR,
+                        "transform source length does not match report",
+                    ),
+                );
+            }
             return CRIBRA_TRANSFORM_ERROR;
         }
         // SAFETY: `clear_out` validated the output pointer.
-        unsafe { write_output(synthesize(source, &report.inner, &options), out_output) }
+        unsafe {
+            write_output(
+                synthesize(source, &report.inner, &options),
+                out_output,
+                out_error,
+            )
+        }
     })
 }
 
@@ -1391,8 +1558,10 @@ pub unsafe extern "C" fn cribra_share_bundle_build(
     source_count: usize,
     config: *const CribraShareBundleConfig,
     out_bundle: *mut *mut CribraShareBundle,
+    out_error: *mut *mut CribraError,
 ) -> CribraStatus {
-    contain_status(|| {
+    let error_slot = unsafe { ErrorSlot::from_raw(out_error) };
+    contain_status_with_error(error_slot, || {
         if let Err(status) = unsafe { clear_out(out_bundle) } {
             return status;
         }
@@ -1434,7 +1603,15 @@ pub unsafe extern "C" fn cribra_share_bundle_build(
             .build(&results.inner, prepared)
         {
             Ok(bundle) => bundle,
-            Err(_) => return CRIBRA_TRANSFORM_ERROR,
+            Err(error) => {
+                unsafe {
+                    set_error(
+                        out_error,
+                        CribraError::new(CRIBRA_TRANSFORM_ERROR, transform_error_message(&error)),
+                    );
+                }
+                return CRIBRA_TRANSFORM_ERROR;
+            }
         };
 
         let bundle = Box::new(CribraShareBundle::new(bundle));
@@ -1668,7 +1845,13 @@ mod tests {
         unsafe {
             assert_eq!(cribra_scanner_new_current(&mut scanner), CRIBRA_OK);
             assert_eq!(
-                cribra_scanner_scan(scanner, source.as_ptr(), source.len(), &mut report),
+                cribra_scanner_scan(
+                    scanner,
+                    source.as_ptr(),
+                    source.len(),
+                    &mut report,
+                    ptr::null_mut()
+                ),
                 CRIBRA_OK
             );
             assert!(!report.is_null());
@@ -1684,7 +1867,10 @@ mod tests {
 
         unsafe {
             assert_eq!(cribra_builder_new(&mut builder), CRIBRA_OK);
-            assert_eq!(cribra_builder_build(builder, &mut scanner), CRIBRA_OK);
+            assert_eq!(
+                cribra_builder_build(builder, &mut scanner, ptr::null_mut()),
+                CRIBRA_OK
+            );
             assert!(!scanner.is_null());
             cribra_scanner_free(scanner);
         }
@@ -1699,7 +1885,13 @@ mod tests {
         unsafe {
             assert_eq!(cribra_scanner_new_current(&mut scanner), CRIBRA_OK);
             assert_eq!(
-                cribra_scanner_scan(scanner, source.as_ptr(), source.len(), &mut report),
+                cribra_scanner_scan(
+                    scanner,
+                    source.as_ptr(),
+                    source.len(),
+                    &mut report,
+                    ptr::null_mut()
+                ),
                 CRIBRA_INVALID_UTF8
             );
             assert!(report.is_null());
@@ -1715,7 +1907,7 @@ mod tests {
         unsafe {
             assert_eq!(cribra_scanner_new_current(&mut scanner), CRIBRA_OK);
             assert_eq!(
-                cribra_scanner_scan(scanner, ptr::null(), 0, &mut report),
+                cribra_scanner_scan(scanner, ptr::null(), 0, &mut report, ptr::null_mut()),
                 CRIBRA_OK
             );
             assert!(!report.is_null());
@@ -1732,7 +1924,7 @@ mod tests {
         unsafe {
             assert_eq!(cribra_scanner_new_current(&mut scanner), CRIBRA_OK);
             assert_eq!(
-                cribra_scanner_scan(scanner, ptr::null(), 1, &mut report),
+                cribra_scanner_scan(scanner, ptr::null(), 1, &mut report, ptr::null_mut()),
                 CRIBRA_INVALID_ARGUMENT
             );
             assert!(report.is_null());
@@ -1769,6 +1961,7 @@ mod tests {
                     inputs.len(),
                     CRIBRA_BATCH_EXECUTION_AUTO,
                     &mut results,
+                    ptr::null_mut(),
                 ),
                 CRIBRA_OK
             );
@@ -1803,7 +1996,14 @@ mod tests {
         unsafe {
             assert_eq!(cribra_scanner_new_current(&mut scanner), CRIBRA_OK);
             assert_eq!(
-                cribra_scanner_scan_batch(scanner, ptr::null(), 0, u32::MAX, &mut results,),
+                cribra_scanner_scan_batch(
+                    scanner,
+                    ptr::null(),
+                    0,
+                    u32::MAX,
+                    &mut results,
+                    ptr::null_mut(),
+                ),
                 CRIBRA_INVALID_ARGUMENT
             );
             assert!(results.is_null());
@@ -1842,6 +2042,7 @@ mod tests {
                     inputs.len(),
                     CRIBRA_BATCH_EXECUTION_AUTO,
                     &mut auto_results,
+                    ptr::null_mut(),
                 ),
                 CRIBRA_OK
             );
@@ -1852,6 +2053,7 @@ mod tests {
                     inputs.len(),
                     CRIBRA_BATCH_EXECUTION_SERIAL,
                     &mut serial_results,
+                    ptr::null_mut(),
                 ),
                 CRIBRA_OK
             );
@@ -1902,6 +2104,7 @@ mod tests {
                     inputs.len(),
                     CRIBRA_BATCH_EXECUTION_AUTO,
                     &mut results,
+                    ptr::null_mut(),
                 ),
                 CRIBRA_OK
             );
@@ -1976,6 +2179,7 @@ mod tests {
                     1,
                     CRIBRA_BATCH_EXECUTION_AUTO,
                     &mut results,
+                    ptr::null_mut(),
                 ),
                 CRIBRA_OK
             );
@@ -2027,6 +2231,7 @@ mod tests {
                     0,
                     CRIBRA_BATCH_EXECUTION_AUTO,
                     &mut results,
+                    ptr::null_mut(),
                 ),
                 CRIBRA_OK
             );
@@ -2071,6 +2276,7 @@ mod tests {
                     inputs.len(),
                     CRIBRA_BATCH_EXECUTION_AUTO,
                     &mut results,
+                    ptr::null_mut(),
                 ),
                 CRIBRA_INVALID_UTF8
             );
@@ -2093,7 +2299,13 @@ mod tests {
         unsafe {
             assert_eq!(cribra_scanner_new_current(&mut scanner), CRIBRA_OK);
             assert_eq!(
-                cribra_scanner_scan(scanner, source.as_ptr(), source.len(), &mut report),
+                cribra_scanner_scan(
+                    scanner,
+                    source.as_ptr(),
+                    source.len(),
+                    &mut report,
+                    ptr::null_mut()
+                ),
                 CRIBRA_OK
             );
 
@@ -2125,7 +2337,7 @@ mod tests {
         unsafe {
             assert_eq!(cribra_scanner_new_current(&mut scanner), CRIBRA_OK);
             assert_eq!(
-                cribra_scanner_scan(scanner, ptr::null(), 0, &mut report),
+                cribra_scanner_scan(scanner, ptr::null(), 0, &mut report, ptr::null_mut()),
                 CRIBRA_OK
             );
 
@@ -2216,10 +2428,22 @@ mod tests {
 
             unsafe {
                 assert_eq!(cribra_builder_new(&mut builder), CRIBRA_OK);
-                assert_eq!(cribra_builder_add_rule(builder, &config), CRIBRA_OK);
-                assert_eq!(cribra_builder_build(builder, &mut scanner), CRIBRA_OK);
                 assert_eq!(
-                    cribra_scanner_scan(scanner, source.as_ptr(), source.len(), &mut report),
+                    cribra_builder_add_rule(builder, &config, ptr::null_mut()),
+                    CRIBRA_OK
+                );
+                assert_eq!(
+                    cribra_builder_build(builder, &mut scanner, ptr::null_mut()),
+                    CRIBRA_OK
+                );
+                assert_eq!(
+                    cribra_scanner_scan(
+                        scanner,
+                        source.as_ptr(),
+                        source.len(),
+                        &mut report,
+                        ptr::null_mut()
+                    ),
                     CRIBRA_OK
                 );
 
@@ -2248,14 +2472,165 @@ mod tests {
 
         unsafe {
             assert_eq!(cribra_builder_new(&mut builder), CRIBRA_OK);
-            assert_eq!(cribra_builder_add_rule(builder, &config), CRIBRA_OK);
+            assert_eq!(
+                cribra_builder_add_rule(builder, &config, ptr::null_mut()),
+                CRIBRA_OK
+            );
         }
 
         drop(id);
         drop(value);
 
         unsafe {
-            assert_eq!(cribra_builder_build(builder, &mut scanner), CRIBRA_OK);
+            assert_eq!(
+                cribra_builder_build(builder, &mut scanner, ptr::null_mut()),
+                CRIBRA_OK
+            );
+            cribra_scanner_free(scanner);
+        }
+    }
+
+    unsafe fn ffi_error_text(error: *const CribraError) -> String {
+        let mut view = CribraStringView::default();
+        assert_eq!(
+            unsafe { crate::cribra_error_message(error, &mut view) },
+            CRIBRA_OK
+        );
+        let bytes = unsafe { slice::from_raw_parts(view.ptr, view.len) };
+        str::from_utf8(bytes).unwrap().to_owned()
+    }
+
+    #[test]
+    fn custom_rule_failure_returns_owned_diagnostic() {
+        let mut builder = ptr::null_mut();
+        let mut error = ptr::null_mut();
+        let invalid = rule_config(
+            CRIBRA_RULE_KIND_PATTERN,
+            "native.invalid-pattern",
+            "(",
+            CRIBRA_SEVERITY_HIGH,
+        );
+
+        unsafe {
+            assert_eq!(cribra_builder_new(&mut builder), CRIBRA_OK);
+            assert_eq!(
+                cribra_builder_add_rule(builder, &invalid, &mut error),
+                CRIBRA_RULE_ERROR
+            );
+            assert!(!error.is_null());
+
+            let mut status = u32::MAX;
+            assert_eq!(crate::cribra_error_status(error, &mut status), CRIBRA_OK);
+            assert_eq!(status, CRIBRA_RULE_ERROR);
+            assert_eq!(
+                ffi_error_text(error),
+                "custom rule configuration is invalid"
+            );
+
+            crate::cribra_error_free(error);
+            cribra_builder_free(builder);
+        }
+    }
+
+    #[test]
+    fn scanner_build_failure_returns_privacy_safe_diagnostic() {
+        let mut builder = ptr::null_mut();
+        let mut scanner = ptr::dangling_mut::<CribraScanner>();
+        let mut error = ptr::null_mut();
+        let first = rule_config(
+            CRIBRA_RULE_KIND_LITERAL,
+            "native.duplicate",
+            "FIRST_SECRET",
+            CRIBRA_SEVERITY_HIGH,
+        );
+        let second = rule_config(
+            CRIBRA_RULE_KIND_LITERAL,
+            "native.duplicate",
+            "SECOND_SECRET",
+            CRIBRA_SEVERITY_HIGH,
+        );
+
+        unsafe {
+            assert_eq!(cribra_builder_new(&mut builder), CRIBRA_OK);
+            assert_eq!(
+                cribra_builder_add_rule(builder, &first, ptr::null_mut()),
+                CRIBRA_OK
+            );
+            assert_eq!(
+                cribra_builder_add_rule(builder, &second, ptr::null_mut()),
+                CRIBRA_OK
+            );
+            assert_eq!(
+                cribra_builder_build(builder, &mut scanner, &mut error),
+                CRIBRA_BUILD_ERROR
+            );
+            assert!(scanner.is_null());
+            assert!(!error.is_null());
+
+            let message = ffi_error_text(error);
+            assert_eq!(message, "duplicate rule identifier");
+            assert!(!message.contains("FIRST_SECRET"));
+            assert!(!message.contains("SECOND_SECRET"));
+
+            crate::cribra_error_free(error);
+        }
+    }
+
+    #[test]
+    fn transform_mismatch_returns_owned_diagnostic() {
+        let mut builder = ptr::null_mut();
+        let mut scanner = ptr::null_mut();
+        let mut report = ptr::null_mut();
+        let mut output = ptr::dangling_mut::<CribraOutput>();
+        let mut error = ptr::null_mut();
+        let rule = rule_config(
+            CRIBRA_RULE_KIND_LITERAL,
+            "native.secret",
+            "SECRET",
+            CRIBRA_SEVERITY_HIGH,
+        );
+        let source = "A=SECRET";
+        let changed = "A=SECRET-extra";
+
+        unsafe {
+            assert_eq!(cribra_builder_new(&mut builder), CRIBRA_OK);
+            assert_eq!(
+                cribra_builder_add_rule(builder, &rule, ptr::null_mut()),
+                CRIBRA_OK
+            );
+            assert_eq!(
+                cribra_builder_build(builder, &mut scanner, ptr::null_mut()),
+                CRIBRA_OK
+            );
+            assert_eq!(
+                cribra_scanner_scan(
+                    scanner,
+                    source.as_ptr(),
+                    source.len(),
+                    &mut report,
+                    ptr::null_mut(),
+                ),
+                CRIBRA_OK
+            );
+            assert_eq!(
+                cribra_transform_redact(
+                    changed.as_ptr(),
+                    changed.len(),
+                    report,
+                    &mut output,
+                    &mut error,
+                ),
+                CRIBRA_TRANSFORM_ERROR
+            );
+            assert!(output.is_null());
+            assert!(!error.is_null());
+            assert_eq!(
+                ffi_error_text(error),
+                "transform source length does not match report"
+            );
+
+            crate::cribra_error_free(error);
+            cribra_report_free(report);
             cribra_scanner_free(scanner);
         }
     }
@@ -2280,11 +2655,17 @@ mod tests {
         unsafe {
             assert_eq!(cribra_builder_new(&mut builder), CRIBRA_OK);
             assert_eq!(
-                cribra_builder_add_rule(builder, &invalid),
-                CRIBRA_BUILD_ERROR
+                cribra_builder_add_rule(builder, &invalid, ptr::null_mut()),
+                CRIBRA_RULE_ERROR
             );
-            assert_eq!(cribra_builder_add_rule(builder, &valid), CRIBRA_OK);
-            assert_eq!(cribra_builder_build(builder, &mut scanner), CRIBRA_OK);
+            assert_eq!(
+                cribra_builder_add_rule(builder, &valid, ptr::null_mut()),
+                CRIBRA_OK
+            );
+            assert_eq!(
+                cribra_builder_build(builder, &mut scanner, ptr::null_mut()),
+                CRIBRA_OK
+            );
             cribra_scanner_free(scanner);
         }
     }
@@ -2308,10 +2689,16 @@ mod tests {
 
         unsafe {
             assert_eq!(cribra_builder_new(&mut builder), CRIBRA_OK);
-            assert_eq!(cribra_builder_add_rule(builder, &first), CRIBRA_OK);
-            assert_eq!(cribra_builder_add_rule(builder, &second), CRIBRA_OK);
             assert_eq!(
-                cribra_builder_build(builder, &mut scanner),
+                cribra_builder_add_rule(builder, &first, ptr::null_mut()),
+                CRIBRA_OK
+            );
+            assert_eq!(
+                cribra_builder_add_rule(builder, &second, ptr::null_mut()),
+                CRIBRA_OK
+            );
+            assert_eq!(
+                cribra_builder_build(builder, &mut scanner, ptr::null_mut()),
                 CRIBRA_BUILD_ERROR
             );
             assert!(scanner.is_null());
@@ -2334,10 +2721,22 @@ mod tests {
         unsafe {
             assert_eq!(cribra_builder_new(&mut builder), CRIBRA_OK);
             assert_eq!(cribra_builder_add_current_builtins(builder), CRIBRA_OK);
-            assert_eq!(cribra_builder_add_rule(builder, &custom), CRIBRA_OK);
-            assert_eq!(cribra_builder_build(builder, &mut scanner), CRIBRA_OK);
             assert_eq!(
-                cribra_scanner_scan(scanner, source.as_ptr(), source.len(), &mut report),
+                cribra_builder_add_rule(builder, &custom, ptr::null_mut()),
+                CRIBRA_OK
+            );
+            assert_eq!(
+                cribra_builder_build(builder, &mut scanner, ptr::null_mut()),
+                CRIBRA_OK
+            );
+            assert_eq!(
+                cribra_scanner_scan(
+                    scanner,
+                    source.as_ptr(),
+                    source.len(),
+                    &mut report,
+                    ptr::null_mut()
+                ),
                 CRIBRA_OK
             );
 
@@ -2359,7 +2758,13 @@ mod tests {
         unsafe {
             assert_eq!(cribra_scanner_new_current(&mut scanner), CRIBRA_OK);
             assert_eq!(
-                cribra_scanner_scan(scanner, source.as_ptr(), source.len(), &mut report),
+                cribra_scanner_scan(
+                    scanner,
+                    source.as_ptr(),
+                    source.len(),
+                    &mut report,
+                    ptr::null_mut()
+                ),
                 CRIBRA_OK
             );
             let mut finding_count = usize::MAX;
@@ -2406,12 +2811,24 @@ mod tests {
         unsafe {
             assert_eq!(cribra_scanner_new_current(&mut scanner), CRIBRA_OK);
             assert_eq!(
-                cribra_scanner_scan(scanner, source.as_ptr(), source.len(), &mut report),
+                cribra_scanner_scan(
+                    scanner,
+                    source.as_ptr(),
+                    source.len(),
+                    &mut report,
+                    ptr::null_mut()
+                ),
                 CRIBRA_OK
             );
             let mut explanation = CribraExplanationView::default();
             assert_eq!(
-                cribra_scanner_explain_finding(scanner, report, 0, &mut explanation),
+                cribra_scanner_explain_finding(
+                    scanner,
+                    report,
+                    0,
+                    &mut explanation,
+                    ptr::null_mut()
+                ),
                 CRIBRA_OK
             );
             assert_eq!(explanation.kind, CRIBRA_EXPLANATION_CLASSIFIED);
@@ -2453,10 +2870,22 @@ mod tests {
         );
         unsafe {
             assert_eq!(cribra_builder_new(&mut builder), CRIBRA_OK);
-            assert_eq!(cribra_builder_add_rule(builder, &config), CRIBRA_OK);
-            assert_eq!(cribra_builder_build(builder, &mut scanner), CRIBRA_OK);
             assert_eq!(
-                cribra_scanner_scan(scanner, source.as_ptr(), source.len(), &mut report),
+                cribra_builder_add_rule(builder, &config, ptr::null_mut()),
+                CRIBRA_OK
+            );
+            assert_eq!(
+                cribra_builder_build(builder, &mut scanner, ptr::null_mut()),
+                CRIBRA_OK
+            );
+            assert_eq!(
+                cribra_scanner_scan(
+                    scanner,
+                    source.as_ptr(),
+                    source.len(),
+                    &mut report,
+                    ptr::null_mut()
+                ),
                 CRIBRA_OK
             );
         }
@@ -2507,8 +2936,14 @@ mod tests {
 
         unsafe {
             assert_eq!(cribra_builder_new(&mut builder), CRIBRA_OK);
-            assert_eq!(cribra_builder_add_rule(builder, &rule), CRIBRA_OK);
-            assert_eq!(cribra_builder_build(builder, &mut scanner), CRIBRA_OK);
+            assert_eq!(
+                cribra_builder_add_rule(builder, &rule, ptr::null_mut()),
+                CRIBRA_OK
+            );
+            assert_eq!(
+                cribra_builder_build(builder, &mut scanner, ptr::null_mut()),
+                CRIBRA_OK
+            );
             assert_eq!(
                 cribra_scanner_scan_batch(
                     scanner,
@@ -2516,6 +2951,7 @@ mod tests {
                     inputs.len(),
                     CRIBRA_BATCH_EXECUTION_SERIAL,
                     &mut results,
+                    ptr::null_mut(),
                 ),
                 CRIBRA_OK
             );
@@ -2527,6 +2963,7 @@ mod tests {
                     sources.len(),
                     &config,
                     &mut bundle,
+                    ptr::null_mut(),
                 ),
                 CRIBRA_OK
             );
@@ -2601,8 +3038,14 @@ mod tests {
 
         unsafe {
             assert_eq!(cribra_builder_new(&mut builder), CRIBRA_OK);
-            assert_eq!(cribra_builder_add_rule(builder, &rule), CRIBRA_OK);
-            assert_eq!(cribra_builder_build(builder, &mut scanner), CRIBRA_OK);
+            assert_eq!(
+                cribra_builder_add_rule(builder, &rule, ptr::null_mut()),
+                CRIBRA_OK
+            );
+            assert_eq!(
+                cribra_builder_build(builder, &mut scanner, ptr::null_mut()),
+                CRIBRA_OK
+            );
             assert_eq!(
                 cribra_scanner_scan_batch(
                     scanner,
@@ -2610,12 +3053,20 @@ mod tests {
                     1,
                     CRIBRA_BATCH_EXECUTION_SERIAL,
                     &mut results,
+                    ptr::null_mut(),
                 ),
                 CRIBRA_OK
             );
 
             assert_eq!(
-                cribra_share_bundle_build(results, ptr::null(), 0, &config, &mut bundle,),
+                cribra_share_bundle_build(
+                    results,
+                    ptr::null(),
+                    0,
+                    &config,
+                    &mut bundle,
+                    ptr::null_mut(),
+                ),
                 CRIBRA_TRANSFORM_ERROR
             );
             assert!(bundle.is_null());
@@ -2629,6 +3080,7 @@ mod tests {
                     changed.len(),
                     &config,
                     &mut bundle,
+                    ptr::null_mut(),
                 ),
                 CRIBRA_TRANSFORM_ERROR
             );
@@ -2661,8 +3113,14 @@ mod tests {
 
         unsafe {
             assert_eq!(cribra_builder_new(&mut builder), CRIBRA_OK);
-            assert_eq!(cribra_builder_add_rule(builder, &rule), CRIBRA_OK);
-            assert_eq!(cribra_builder_build(builder, &mut scanner), CRIBRA_OK);
+            assert_eq!(
+                cribra_builder_add_rule(builder, &rule, ptr::null_mut()),
+                CRIBRA_OK
+            );
+            assert_eq!(
+                cribra_builder_build(builder, &mut scanner, ptr::null_mut()),
+                CRIBRA_OK
+            );
             assert_eq!(
                 cribra_scanner_scan_batch(
                     scanner,
@@ -2670,6 +3128,7 @@ mod tests {
                     1,
                     CRIBRA_BATCH_EXECUTION_SERIAL,
                     &mut results,
+                    ptr::null_mut(),
                 ),
                 CRIBRA_OK
             );
@@ -2688,6 +3147,7 @@ mod tests {
                     sources.len(),
                     &bad,
                     &mut bundle,
+                    ptr::null_mut(),
                 ),
                 CRIBRA_INVALID_ARGUMENT
             );
@@ -2708,6 +3168,7 @@ mod tests {
                     sources.len(),
                     &good,
                     &mut bundle,
+                    ptr::null_mut(),
                 ),
                 CRIBRA_OK
             );
@@ -2749,7 +3210,13 @@ mod tests {
 
         unsafe {
             assert_eq!(
-                cribra_transform_redact(source.as_ptr(), source.len(), report, &mut output),
+                cribra_transform_redact(
+                    source.as_ptr(),
+                    source.len(),
+                    report,
+                    &mut output,
+                    ptr::null_mut()
+                ),
                 CRIBRA_OK
             );
             assert_eq!(output_text(output), "TOKEN=[REDACTED]");
@@ -2773,7 +3240,8 @@ mod tests {
                     report,
                     replacement.as_ptr(),
                     replacement.len(),
-                    &mut output
+                    &mut output,
+                    ptr::null_mut()
                 ),
                 CRIBRA_OK
             );
@@ -2795,7 +3263,8 @@ mod tests {
                     source.len(),
                     report,
                     &config,
-                    &mut output
+                    &mut output,
+                    ptr::null_mut()
                 ),
                 CRIBRA_OK
             );
@@ -2829,7 +3298,8 @@ mod tests {
                     source.len(),
                     report,
                     &config,
-                    &mut output
+                    &mut output,
+                    ptr::null_mut()
                 ),
                 CRIBRA_INVALID_ARGUMENT
             );
@@ -2871,7 +3341,8 @@ mod tests {
                     source.len(),
                     report,
                     &pseudo,
-                    &mut output
+                    &mut output,
+                    ptr::null_mut()
                 ),
                 CRIBRA_OK
             );
@@ -2887,7 +3358,8 @@ mod tests {
                     source.len(),
                     report,
                     &synth,
-                    &mut output
+                    &mut output,
+                    ptr::null_mut()
                 ),
                 CRIBRA_OK
             );
@@ -2910,7 +3382,8 @@ mod tests {
                     wrong_source.as_ptr(),
                     wrong_source.len(),
                     report,
-                    &mut output
+                    &mut output,
+                    ptr::null_mut()
                 ),
                 CRIBRA_TRANSFORM_ERROR
             );
