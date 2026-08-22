@@ -15,6 +15,7 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: "1"
+  CBINDGEN_VERSION: "0.29.4"
 
 jobs:
   linux-gate:
@@ -85,3 +86,155 @@ jobs:
 
       - name: Test all features
         run: cargo test --all-features
+
+  native-c-abi:
+    name: Native C ABI (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+          - windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust artifacts
+        uses: Swatinem/rust-cache@v2.9.1
+
+      - name: Install cbindgen
+        shell: bash
+        run: cargo install cbindgen --version "$CBINDGEN_VERSION" --locked
+
+      - name: Regenerate C header
+        shell: bash
+        run: |
+          mkdir -p target/c-smoke
+          cbindgen \
+            --config crates/cribra-capi/cbindgen.toml \
+            --crate cribra-capi \
+            --output target/c-smoke/cribra.h.generated
+
+      - name: Verify committed header
+        shell: bash
+        run: diff -u include/cribra.h target/c-smoke/cribra.h.generated
+
+      - name: Build native ABI artifacts
+        run: cargo build -p cribra-capi
+
+      - name: Verify Unix native artifacts
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          test -f target/debug/libcribra_capi.a
+          if [[ "${{ runner.os }}" == "macOS" ]]; then
+            test -f target/debug/libcribra_capi.dylib
+          else
+            test -f target/debug/libcribra_capi.so
+          fi
+
+      - name: Configure MSVC
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Verify Windows native artifacts
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "target\debug\cribra_capi.dll")) {
+            throw "cribra_capi.dll was not produced"
+          }
+          if (-not (Test-Path "target\debug\cribra_capi.dll.lib")) {
+            throw "cribra_capi.dll.lib was not produced"
+          }
+          if (-not (Test-Path "target\debug\cribra_capi.lib")) {
+            throw "cribra_capi.lib static library was not produced"
+          }
+
+      - name: Verify exported ABI symbols (Linux/macOS)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: sh crates/cribra-capi/tests/c/check-capi-symbols.sh
+
+      - name: Verify exported ABI symbols (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          & ./crates/cribra-capi/tests/c/check-capi-symbols.ps1
+
+      - name: Install Valgrind
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes valgrind
+
+      - name: Compile C consumer (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          mkdir -p target/c-smoke
+          cc \
+            -std=c11 \
+            -Wall \
+            -Wextra \
+            -Werror \
+            -Iinclude \
+            crates/cribra-capi/tests/c/smoke.c \
+            -Ltarget/debug \
+            -lcribra_capi \
+            -Wl,-rpath,'$ORIGIN/../debug' \
+            -o target/c-smoke/cribra-smoke
+
+      - name: Compile C consumer (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          mkdir -p target/c-smoke
+          clang \
+            -std=c11 \
+            -Wall \
+            -Wextra \
+            -Werror \
+            -Iinclude \
+            crates/cribra-capi/tests/c/smoke.c \
+            -Ltarget/debug \
+            -lcribra_capi \
+            -Wl,-rpath,@loader_path/../debug \
+            -o target/c-smoke/cribra-smoke
+
+      - name: Compile C consumer (Windows)
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: |
+          if not exist target\c-smoke mkdir target\c-smoke
+          cl /nologo /std:c11 /W4 /WX /Iinclude crates\cribra-capi\tests\c\smoke.c /link /LIBPATH:target\debug cribra_capi.dll.lib /OUT:target\c-smoke\cribra-smoke.exe
+
+      - name: Run C consumer (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: target/c-smoke/cribra-smoke
+
+      - name: Run C consumer under Valgrind (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          valgrind \
+            --leak-check=full \
+            --show-leak-kinds=all \
+            --errors-for-leak-kinds=definite,indirect \
+            --error-exitcode=1 \
+            target/c-smoke/cribra-smoke
+
+      - name: Run C consumer (Windows)
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: |
+          set PATH=%CD%\target\debug;%PATH%
+          target\c-smoke\cribra-smoke.exe

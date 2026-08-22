@@ -1,0 +1,26 @@
+[package]
+name = "cribra-capi"
+version = "0.3.0"
+edition = "2024"
+description = "Native C ABI adapter for the Cribra sensitive-data engine"
+license = "MIT"
+repository = "https://github.com/Metalymph/cribra"
+rust-version = "1.97"
+publish = false
+
+[features]
+default = []
+parallel = ["cribra/parallel"]
+
+[lib]
+crate-type = ["rlib", "staticlib", "cdylib"]
+
+[dependencies]
+cribra = { path = "../.." }
+
+[dev-dependencies]
+criterion = "0.8.2"
+
+[[bench]]
+name = "abi"
+harness = false
