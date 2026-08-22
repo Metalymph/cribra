@@ -1,7 +1,6 @@
 # Cribra
 
-Privacy-first Rust core for detecting, querying and safely transforming
-secrets and sensitive data.
+Embeddable, local-first Rust engine for detecting, reviewing, and safely transforming secrets and sensitive data.
 
 Cribra is designed as a reusable engine rather than an application
 shell. Callers provide UTF-8 text and retain control of I/O, storage and

@@ -1,7 +1,6 @@
 # Security Policy
 
-Cribra is a privacy-first, local-first Rust engine for detecting, querying, and
-safely transforming secrets and sensitive data.
+Cribra is an embeddable, local-first Rust engine for detecting, reviewing, and safely transforming secrets and sensitive data.
 
 Security issues should be reported privately whenever possible.
 
