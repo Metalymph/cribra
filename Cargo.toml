@@ -1,6 +1,6 @@
 [package]
 name = "cribra"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2024"
 description = "Privacy-first Rust core for detecting, querying, and safely transforming secrets and sensitive data"
 license = "MIT"
