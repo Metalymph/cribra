@@ -2,7 +2,7 @@
 # `just` is preferred locally; this Makefile mirrors the common recipes.
 
 .PHONY: help fmt fmt-check check check-all capi capi-header capi-header-check \
-	capi-smoke capi-static capi-smoke-all test test-serde test-all test-doc \
+	capi-smoke capi-symbols capi-static capi-smoke-all test test-serde test-all test-doc \
 	clippy doc doc-all wasm wasm-serde msrv audit package package-dirty \
 	publish-dry-run publish-dry-run-dirty gate release-gate bench bench-v02 \
 	bench-diagnostics bench-all clean
@@ -16,6 +16,7 @@ help:
 	  '  make capi-header       Generate include/cribra.h with cbindgen' \
 	  '  make capi-header-check Verify committed C header is deterministic' \
 	  '  make capi-smoke        Build/run the real C ABI smoke consumer' \
+	  '  make capi-symbols      Verify generated/native ABI symbol parity' \
 	  '  make capi-static       Verify native static library artifact' \
 	  '  make capi-smoke-all    Run the complete local C ABI smoke surface' \
 	  '  make test-all          Test all native core features' \
@@ -76,11 +77,15 @@ capi-smoke: capi-header
 	fi
 	target/c-smoke/cribra-smoke
 
+capi-symbols: capi-header
+	cargo build -p cribra-capi
+	sh crates/cribra-capi/tests/c/check-capi-symbols.sh
+
 capi-static:
 	cargo build -p cribra-capi
 	test -f target/debug/libcribra_capi.a
 
-capi-smoke-all: capi-header-check capi-smoke capi-static
+capi-smoke-all: capi-header-check capi-smoke capi-symbols capi-static
 
 test:
 	cargo test

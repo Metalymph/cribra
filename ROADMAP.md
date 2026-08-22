@@ -98,24 +98,24 @@ The interoperability architecture is specified in `docs/INTEROP.md`.
 
 ### 0.3.9 — Ownership, error, panic and thread hardening
 
-- [ ] Finalize coarse status codes and explicit error-object diagnostics.
-- [ ] Validate null/invalid argument behavior.
-- [ ] Audit every allocation/destruction pair.
-- [ ] Audit borrowed-view lifetimes.
-- [ ] Verify panic containment.
-- [ ] Freeze thread-safety guarantees per handle type.
-- [ ] Document unavoidable caller-side C memory contract violations.
+- [x] Finalize coarse status codes and explicit error-object diagnostics.
+- [x] Validate null/invalid argument behavior.
+- [x] Audit every allocation/destruction pair.
+- [x] Audit borrowed-view lifetimes.
+- [x] Verify panic containment.
+- [x] Freeze thread-safety guarantees per handle type.
+- [x] Document unavoidable caller-side C memory contract violations.
 
 ### 0.3.10 — Generated C header, real consumer and cross-platform CI
 
-- [ ] Generate `include/cribra.h`, evaluating `cbindgen` as the default mechanism.
-- [ ] Compile and link a real C smoke consumer without Cargo knowledge.
-- [ ] Cover success and recoverable error paths.
-- [ ] Validate macOS.
-- [ ] Validate Linux.
-- [ ] Validate Windows.
-- [ ] Inspect public symbol/export hygiene where practical.
-- [ ] Add practical sanitizer/leak/native-memory validation.
+- [x] Generate `include/cribra.h`, evaluating `cbindgen` as the default mechanism.
+- [x] Compile and link a real C smoke consumer without Cargo knowledge.
+- [x] Cover success and recoverable error paths.
+- [x] Validate macOS.
+- [x] Validate Linux.
+- [x] Validate Windows.
+- [x] Inspect public symbol/export hygiene where practical.
+- [x] Add practical sanitizer/leak/native-memory validation.
 
 ### 0.3.11 — ABI performance benchmarks
 

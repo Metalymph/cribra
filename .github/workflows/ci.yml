@@ -157,6 +157,23 @@ jobs:
             throw "cribra_capi.lib static library was not produced"
           }
 
+      - name: Verify exported ABI symbols (Linux/macOS)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: sh crates/cribra-capi/tests/c/check-capi-symbols.sh
+
+      - name: Verify exported ABI symbols (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: crates/cribra-capi/tests/c/check-symbols.ps1
+
+      - name: Install Valgrind
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes valgrind
+
       - name: Compile C consumer (Linux)
         if: runner.os == 'Linux'
         shell: bash
@@ -198,10 +215,21 @@ jobs:
           if not exist target\c-smoke mkdir target\c-smoke
           cl /nologo /std:c11 /W4 /WX /Iinclude crates\cribra-capi\tests\c\smoke.c /link /LIBPATH:target\debug cribra_capi.dll.lib /OUT:target\c-smoke\cribra-smoke.exe
 
-      - name: Run C consumer (Linux/macOS)
-        if: runner.os != 'Windows'
+      - name: Run C consumer (macOS)
+        if: runner.os == 'macOS'
         shell: bash
         run: target/c-smoke/cribra-smoke
+
+      - name: Run C consumer under Valgrind (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          valgrind \
+            --leak-check=full \
+            --show-leak-kinds=all \
+            --errors-for-leak-kinds=definite,indirect \
+            --error-exitcode=1 \
+            target/c-smoke/cribra-smoke
 
       - name: Run C consumer (Windows)
         if: runner.os == 'Windows'

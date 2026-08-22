@@ -72,6 +72,12 @@ capi-smoke: capi-header
     fi
     target/c-smoke/cribra-smoke
 
+# Verify that the generated header and the native dynamic library expose the
+# same public `cribra_*` function set on macOS/Linux.
+capi-symbols: capi-header
+    cargo build -p cribra-capi
+    sh crates/cribra-capi/tests/c/check-capi-symbols.sh
+
 # Build the static ABI artifact and verify that it is produced.
 #
 # Full static linking is platform-specific because Rust staticlibs require
@@ -82,7 +88,7 @@ capi-static:
     test -f target/debug/libcribra_capi.a
 
 # Run the complete local native-C interoperability smoke surface.
-capi-smoke-all: capi-header-check capi-smoke capi-static
+capi-smoke-all: capi-header-check capi-smoke capi-symbols capi-static
 
 # Run the default test surface.
 test:
