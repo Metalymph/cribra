@@ -174,3 +174,82 @@ v0.4.1 is complete only when:
 - the team can decide whether Cribra needs a dedicated WASM adapter at all.
 
 Until then, no new `wasm-bindgen` API should be added to the core.
+
+## v0.4.1 measured baseline
+
+The initial reusable `cribra-wasm` adapter was built in release mode for
+`wasm32-unknown-unknown` and processed with `wasm-bindgen --target web`.
+
+The resulting baseline artifacts are:
+
+| Artifact | Size |
+| --- | ---: |
+| `cribra.js` | 5,937 bytes |
+| `cribra.d.ts` | 1,698 bytes |
+| `cribra_bg.wasm` | 1,335,066 bytes |
+| Total | 1,342,701 bytes |
+
+The initial WASM binary is therefore approximately 1.27 MiB before any
+WASM-specific size optimization such as `wasm-opt`.
+
+This is a structural baseline, not a final v0.4 size target. The adapter
+currently exposes only the minimal `ScanEngine` construction and
+`rulesCount()` contract, so bundle size must be re-measured after the justified
+scan, result-projection and transform surface has been added.
+
+### Generated TypeScript contract
+
+`wasm-bindgen` currently generates TypeScript declarations for the public
+adapter surface.
+
+The generated declaration includes:
+
+```ts
+export class ScanEngine {
+    rulesCount(): number;
+}
+```
+
+The generated JavaScript also exposes the corresponding ScanEngine lifecycle
+and rulesCount() binding.
+
+This establishes that Cribra can provide its browser-facing API as generated,
+typed ES-module artifacts without maintaining handwritten TypeScript
+declarations for the Rust-owned surface.
+
+Current copy and serialization baseline
+
+The initial cribra-wasm source contains no explicit use of:
+
+* serde_json;
+* JsValue;
+* JavaScript typed arrays;
+* js_sys;
+* web_sys;
+* explicit string serialization/deserialization;
+* adapter-level cloning.
+
+No application-level serialization layer or secondary adapter copy has
+therefore been introduced by the initial WASM boundary.
+
+The current API does not yet transfer source text or result projections across
+the JS/WASM boundary, so this finding must not be generalized to the future
+scan API. String-transfer, result-projection and transformation costs must be
+measured again when those capabilities are implemented.
+
+v0.4.1 outcome
+
+The audit establishes the following architecture:
+
+* cribra remains the semantic Rust authority and remains browser-agnostic;
+* cribra-wasm is a dedicated JS/WebAssembly projection layer;
+* cribra-wasm does not route through cribra-capi;
+* the adapter is DOM-independent and suitable for use inside a dedicated Web
+    Worker;
+* Worker ownership, service-worker integration, caching, CSP, source lifetime,
+    session lifetime and browser orchestration remain consumer responsibilities;
+* generated ES-module and TypeScript artifacts are viable;
+* the existing Silens Scan adapter is the reference consumer contract for
+    justified v0.4 capability parity;
+* performance, copy behavior and bundle size will be re-measured after the
+    substantive adapter surface exists.

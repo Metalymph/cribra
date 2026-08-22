@@ -182,6 +182,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "cribra-wasm"
+version = "0.4.0"
+dependencies = [
+ "cribra",
+ "serde",
+ "serde_json",
+ "wasm-bindgen",
+]
+
+[[package]]
 name = "criterion"
 version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"

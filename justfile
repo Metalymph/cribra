@@ -94,6 +94,25 @@ capi-static:
 # Run the complete local native-C interoperability smoke surface.
 capi-smoke-all: capi-header-check capi-smoke capi-symbols capi-static
 
+# Check the reusable JS/WASM adapter.
+wasm-adapter-check:
+    cargo check -p cribra-wasm --target wasm32-unknown-unknown
+    cargo clippy -p cribra-wasm --target wasm32-unknown-unknown --all-targets -- -D warnings
+
+# Build the reusable JS/WASM adapter.
+wasm-adapter-build:
+    cargo build -p cribra-wasm --target wasm32-unknown-unknown --release
+
+# Generate browser-native ES module glue and WASM.
+wasm-adapter-bindgen:
+    mkdir -p target/wasm
+    wasm-bindgen --target web --out-dir target/wasm --out-name cribra target/wasm32-unknown-unknown/release/cribra_wasm.wasm
+
+# Validate the complete reusable JS/WASM adapter artifact.
+wasm-adapter: wasm-adapter-check wasm-adapter-build wasm-adapter-bindgen
+    test -s target/wasm/cribra.js
+    test -s target/wasm/cribra_bg.wasm
+
 # Run the default test surface.
 test:
     cargo test

@@ -19,6 +19,10 @@ help:
 	  '  make capi-symbols      Verify generated/native ABI symbol parity' \
 	  '  make capi-static       Verify native static library artifact' \
 	  '  make capi-smoke-all    Run the complete local C ABI smoke surface' \
+	  '  make wasm             Check, build, and bind Cribra WASM' \
+	  '  make wasm-adapter       Check and lint the wasm32 adapter' \
+	  '  make wasm-adapter-build       Build the release wasm32 adapter' \
+	  '  make wasm-adapter-bindgen     Generate web JS/WASM artifacts' \
 	  '  make test-all          Test all native core features' \
 	  '  make wasm              Check default WASM contract' \
 	  '  make wasm-serde        Check WASM + Serde contract' \
@@ -97,6 +101,23 @@ capi-static:
 	test -f target/debug/libcribra_capi.a
 
 capi-smoke-all: capi-header-check capi-smoke capi-symbols capi-static
+
+.PHONY: wasm-adapter-check wasm-adapter-build wasm-adapter-bindgen wasm-adapter
+
+wasm-adapter-check:
+	cargo check -p cribra-wasm --target wasm32-unknown-unknown
+	cargo clippy -p cribra-wasm --target wasm32-unknown-unknown --all-targets -- -D warnings
+
+wasm-adapter-build:
+	cargo build -p cribra-wasm --target wasm32-unknown-unknown --release
+
+wasm-adapter-bindgen:
+	mkdir -p target/wasm
+	wasm-bindgen --target web --out-dir target/wasm --out-name cribra target/wasm32-unknown-unknown/release/cribra_wasm.wasm
+
+wasm-adapter: wasm-adapter-check wasm-adapter-build wasm-adapter-bindgen
+	test -s target/wasm/cribra.js
+	test -s target/wasm/cribra_bg.wasm
 
 test:
 	cargo test

@@ -155,17 +155,17 @@ The existing WASM integration already runs in Silens Scan. v0.4 therefore starts
 
 ### 0.4.1 — Existing WASM boundary audit
 
-- [ ] Validate the current Cribra WASM integration in the Silens Scan PWA.
-- [ ] Audit the currently exposed capabilities against the Rust core.
-- [ ] Audit initialization and error representation.
-- [ ] Audit TypeScript declarations.
-- [ ] Audit JS/WASM copy behavior and avoidable secondary copies.
-- [ ] Audit serialization overhead and typed projection opportunities.
-- [ ] Audit batch ergonomics.
-- [ ] Verify Web Worker friendliness.
-- [ ] Measure bundle size.
-- [ ] Document CSP/browser constraints.
-- [ ] Do not route WASM through the C ABI.
+- [x] Validate the current Cribra WASM integration in the Silens Scan PWA.
+- [x] Audit the currently exposed capabilities against the Rust core.
+- [x] Audit initialization and error representation.
+- [x] Audit TypeScript declarations.
+- [x] Audit JS/WASM copy behavior and avoidable secondary copies.
+- [x] Audit serialization overhead and typed projection opportunities.
+- [x] Audit batch ergonomics.
+- [x] Verify Web Worker friendliness.
+- [x] Measure bundle size.
+- [x] Document CSP/browser constraints.
+- [x] Do not route WASM through the C ABI.
 
 ### 0.4.2 — Capability parity and justified refinements
 
@@ -175,7 +175,7 @@ The existing WASM integration already runs in Silens Scan. v0.4 therefore starts
 - [ ] Expose transforms only where the working integration needs them.
 - [ ] Expose custom rules only where the working integration needs them.
 - [ ] Prefer typed projections over serialization when evidence shows a measurable benefit.
-- [ ] Avoid API churn when the existing boundary is already sufficient.
+- [x] Avoid API churn when the existing boundary is already sufficient.
 
 ### 0.4.3 — Rust/WASM semantic parity gate
 

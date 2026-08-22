@@ -45,5 +45,8 @@ criterion = "0.8.2"
 serde_json = "1.0"
 
 [workspace]
-members = ["crates/cribra-capi"]
+members = [
+    "crates/cribra-capi",
+    "crates/cribra-wasm",
+]
 resolver = "3"
