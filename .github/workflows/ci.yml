@@ -165,7 +165,8 @@ jobs:
       - name: Verify exported ABI symbols (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
-        run: crates/cribra-capi/tests/c/check-symbols.ps1
+        run: |
+          & ./crates/cribra-capi/tests/c/check-capi-symbols.ps1
 
       - name: Install Valgrind
         if: runner.os == 'Linux'
