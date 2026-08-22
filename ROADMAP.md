@@ -169,12 +169,12 @@ The existing WASM integration already runs in Silens Scan. v0.4 therefore starts
 
 ### 0.4.2 — Capability parity and justified refinements
 
-- [ ] Expose candidates only where the working integration needs them.
-- [ ] Expose explanations only where the working integration needs them.
-- [ ] Expose remediation only where the working integration needs it.
-- [ ] Expose transforms only where the working integration needs them.
-- [ ] Expose custom rules only where the working integration needs them.
-- [ ] Prefer typed projections over serialization when evidence shows a measurable benefit.
+- [x] Expose candidates only where the working integration needs them.
+- [x] Expose explanations only where the working integration needs them.
+- [x] Expose remediation only where the working integration needs it.
+- [x] Expose transforms only where the working integration needs them.
+- [x] Expose custom rules only where the working integration needs them.
+- [x] Prefer typed projections over serialization when evidence shows a measurable benefit.
 - [x] Avoid API churn when the existing boundary is already sufficient.
 
 ### 0.4.3 — Rust/WASM semantic parity gate

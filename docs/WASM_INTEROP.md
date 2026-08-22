@@ -253,3 +253,70 @@ The audit establishes the following architecture:
     justified v0.4 capability parity;
 * performance, copy behavior and bundle size will be re-measured after the
     substantive adapter surface exists.
+
+## v0.4.2 capability-parity outcome
+
+The reusable `cribra-wasm` adapter now exposes the justified browser-facing
+surface derived from the working Silens Scan integration while remaining
+independent from application policy, DOM APIs and the native C ABI.
+
+The typed WebAssembly surface now includes:
+
+- `ScanEngine` and metadata-only single-source scanning;
+- separate confirmed-finding and ambiguous-candidate projections;
+- typed severity, confidence, remediation, candidate-kind and candidate-evidence
+  values;
+- typed finding and candidate explanations;
+- redact, template, pseudonymize and synthesize transformations;
+- exact 32-byte `Uint8Array` keys for keyed transformations;
+- a generic `ScanEngineBuilder`;
+- literal, prefix, suffix and pattern custom rules;
+- optional composition of custom rules with the authoritative current built-ins.
+
+Application-specific concepts such as Silens policy IDs, revisions, entitlement
+semantics, Worker ownership, service workers, caching and browser UI remain
+outside `cribra-wasm`.
+
+### Typed projection decision
+
+The completed v0.4.2 adapter does not use `serde_json`, `JsValue`, JSON
+serialization or deserialization for scan/result transport.
+
+The only explicit owned-copy behavior found in the adapter is small boundary
+material such as owned rule identifiers. Rust error values are converted to
+strings only when crossing the JavaScript error boundary.
+
+The generated TypeScript declarations expose typed classes and enums for the
+public result model rather than serialized generic payloads. Keyed
+transformations use `Uint8Array`.
+
+This provides concrete evidence for retaining typed projections rather than
+introducing a JSON serialization layer.
+
+### Artifact size after capability parity
+
+Release artifacts produced with `wasm-bindgen --target web` after completing
+the v0.4.2 surface measure:
+
+| Artifact | v0.4.1 baseline | v0.4.2 |
+| --- | ---: | ---: |
+| `cribra.js` | 5,937 bytes | 30,668 bytes |
+| `cribra.d.ts` | 1,698 bytes | 11,501 bytes |
+| `cribra_bg.wasm` | 1,335,066 bytes | 1,502,228 bytes |
+| Total | 1,342,701 bytes | 1,544,397 bytes |
+
+The WASM binary grew by 167,162 bytes while adding the substantive scan,
+projection, explanation, transformation and custom-rule surface.
+
+These values remain unoptimized structural measurements. They are not final
+distribution-size targets and do not include a `wasm-opt` size pass.
+
+### Error and ownership boundary
+
+Rust validation remains independently testable on native targets. JavaScript
+error construction occurs only at the exported WASM boundary.
+
+The adapter retains scan metadata but does not retain source text or
+transformation keys. Transform operations require the source to be supplied
+explicitly for each call. Ambiguous candidates remain review-only and are
+never promoted to transform authority.
