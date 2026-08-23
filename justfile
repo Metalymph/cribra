@@ -180,10 +180,27 @@ wasm-production: wasm-adapter
     cp target/wasm/cribra.d.ts target/wasm-production/cribra.d.ts
     cp target/wasm/cribra_bg.wasm.d.ts target/wasm-production/cribra_bg.wasm.d.ts
     wasm-opt -Oz target/wasm/cribra_bg.wasm -o target/wasm-production/cribra_bg.wasm
+    printf '%s\n' '{"type":"module"}' > target/wasm-production/package.json
     test -s target/wasm-production/cribra.js
     test -s target/wasm-production/cribra.d.ts
     test -s target/wasm-production/cribra_bg.wasm
     test -s target/wasm-production/cribra_bg.wasm.d.ts
+
+# Generate the Rust-native semantic oracle for the WASM parity gate.
+wasm-parity-oracle:
+    rm -rf target/wasm-parity
+    mkdir -p target/wasm-parity
+    cargo run -p cribra-wasm --example parity_oracle
+
+# Prepare the production artifact and Rust semantic oracle.
+wasm-parity-prepare: wasm-production wasm-parity-oracle
+    test -s target/wasm-parity/oracle.json
+    test -s target/wasm-production/cribra.js
+    test -s target/wasm-production/cribra_bg.wasm
+
+# Compare the production Binaryen -Oz WASM adapter against the Rust oracle.
+wasm-parity: wasm-parity-prepare
+    node crates/cribra-wasm/tests/parity/parity.mjs
 
 # Prepare isolated base/-Os/-Oz/-O3 directories for the real-browser
 # regression benchmark harness.
@@ -213,7 +230,7 @@ wasm-opt-clean:
 # Remove all generated reusable WASM artifacts while preserving unrelated Cargo
 # outputs.
 wasm-clean:
-    rm -rf target/wasm target/wasm-opt target/wasm-production target/wasm-bench
+    rm -rf target/wasm target/wasm-opt target/wasm-production target/wasm-bench target/wasm-parity
 
 # Run the default test surface.
 test:

@@ -21,6 +21,9 @@ help:
 	  '  make wasm-adapter         Build reusable browser JS/WASM adapter' \
 	  '  make wasm-opt-prepare     Build/validate/measure base, -Os, -Oz, -O3' \
 	  '  make wasm-production      Build the production Binaryen -Oz artifact' \
+	  '  make wasm-parity          Compare production WASM adapter against Rust oracle' \
+	  '  make wasm-parity-oracle   Generate the Rust-native semantic oracle for the WASM parity gate' \
+	  '  make wasm-parity-prepare  Prepare the production artifact and Rust semantic oracle' \
 	  '  make wasm-bench-prepare   Prepare browser benchmark variant directories' \
 	  '  make wasm-bench-serve     Serve the real-browser benchmark with Node.js' \
 	  '  make wasm-opt-clean       Remove generated optimization/benchmark outputs' \
@@ -100,7 +103,7 @@ capi-static:
 
 capi-smoke-all: capi-header-check capi-smoke capi-symbols capi-static
 
-.PHONY: wasm-adapter-check wasm-adapter-build wasm-adapter-bindgen wasm-adapter
+.PHONY: wasm-adapter-check wasm-adapter-build wasm-adapter-bindgen wasm-adapter wasm-parity-oracle wasm-parity-prepare wasm-parity
 
 wasm-adapter-check:
 	cargo check -p cribra-wasm --target wasm32-unknown-unknown
@@ -174,10 +177,24 @@ wasm-production: wasm-adapter
 	cp target/wasm/cribra.d.ts target/wasm-production/cribra.d.ts
 	cp target/wasm/cribra_bg.wasm.d.ts target/wasm-production/cribra_bg.wasm.d.ts
 	wasm-opt -Oz target/wasm/cribra_bg.wasm -o target/wasm-production/cribra_bg.wasm
+	printf '%s\n' '{"type":"module"}' > target/wasm-production/package.json
 	test -s target/wasm-production/cribra.js
 	test -s target/wasm-production/cribra.d.ts
 	test -s target/wasm-production/cribra_bg.wasm
 	test -s target/wasm-production/cribra_bg.wasm.d.ts
+
+wasm-parity-oracle:
+	rm -rf target/wasm-parity
+	mkdir -p target/wasm-parity
+	cargo run -p cribra-wasm --example parity_oracle
+
+wasm-parity-prepare: wasm-production wasm-parity-oracle
+	test -s target/wasm-parity/oracle.json
+	test -s target/wasm-production/cribra.js
+	test -s target/wasm-production/cribra_bg.wasm
+
+wasm-parity: wasm-parity-prepare
+	node crates/cribra-wasm/tests/parity/parity.mjs
 
 wasm-bench-prepare: wasm-opt-build
 	rm -rf target/wasm-bench
@@ -197,7 +214,7 @@ wasm-opt-clean:
 	rm -rf target/wasm-opt target/wasm-production target/wasm-bench
 
 wasm-clean:
-	rm -rf target/wasm target/wasm-opt target/wasm-production target/wasm-bench
+	rm -rf target/wasm target/wasm-opt target/wasm-production target/wasm-bench target/wasm-parity
 
 test:
 	cargo test

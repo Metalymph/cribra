@@ -246,3 +246,19 @@ v0.4.2 is complete:
 - the comparison matrix is reproducible;
 - Safari/WebKit, Firefox/SpiderMonkey, and Chrome/V8 were exercised;
 - Binaryen `-Oz` is the single production optimization profile.
+
+## v0.4.3 parity gate outcome
+
+### Target-independent deterministic synthesis
+
+The Rust/WASM semantic parity gate identified a target-width dependency in
+deterministic synthesis. Span offsets were previously hashed as `usize`, which
+encoded them as 64-bit values on common native targets but as 32-bit values on
+`wasm32`.
+
+Span hashing is now normalized to `u64`. This preserves the existing output on
+64-bit native targets while making deterministic synthesis stable across native
+and WebAssembly builds.
+
+The parity gate verifies transformed output across both targets, including
+redaction, templating, pseudonymization, and deterministic synthesis.

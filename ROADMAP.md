@@ -179,14 +179,14 @@ The existing WASM integration already runs in Silens Scan. v0.4 therefore starts
 
 ### 0.4.3 — Rust/WASM semantic parity gate
 
-- [ ] Reuse canonical/golden fixtures where practical.
-- [ ] Compare finding count/order and rule IDs.
-- [ ] Compare spans and Unicode coordinates.
-- [ ] Compare severity/confidence/remediation.
-- [ ] Compare candidate count/order/kind/evidence where exposed.
-- [ ] Compare explanation facts where exposed.
-- [ ] Compare transformed output for equivalent supported operations.
-- [ ] Require semantic parity while allowing representation differences.
+- [x] Reuse canonical/golden fixtures where practical.
+- [x] Compare finding count/order and rule IDs.
+- [x] Compare spans and Unicode coordinates.
+- [x] Compare severity/confidence/remediation.
+- [x] Compare candidate count/order/kind/evidence where exposed.
+- [x] Compare explanation facts where exposed.
+- [x] Compare transformed output for equivalent supported operations.
+- [x] Require semantic parity while allowing representation differences.
 
 ### 0.4.4 — WASM performance and browser validation
 
