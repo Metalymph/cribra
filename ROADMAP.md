@@ -190,14 +190,14 @@ The existing WASM integration already runs in Silens Scan. v0.4 therefore starts
 
 ### 0.4.4 — WASM performance and browser validation
 
-- [ ] Measure boundary call overhead where meaningful.
-- [ ] Measure source copy behavior.
-- [ ] Measure serialization/projection overhead.
-- [ ] Measure batch amortization.
-- [ ] Validate representative browser execution.
-- [ ] Validate Web Worker execution.
-- [ ] Record bundle-size reference measurements.
-- [ ] Document the WASM performance policy without sacrificing semantics for micro-optimizations.
+- [x] Measure boundary call overhead where meaningful.
+- [x] Measure source copy behavior.
+- [x] Measure serialization/projection overhead.
+- [x] Measure batch amortization.
+- [x] Validate representative browser execution.
+- [x] Validate Web Worker execution.
+- [x] Record bundle-size reference measurements.
+- [x] Document the WASM performance policy without sacrificing semantics for micro-optimizations.
 
 ### 0.4.5 — Documentation, packaging and release gate
 

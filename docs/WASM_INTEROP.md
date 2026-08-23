@@ -262,3 +262,43 @@ and WebAssembly builds.
 
 The parity gate verifies transformed output across both targets, including
 redaction, templating, pseudonymization, and deterministic synthesis.
+
+### WASM performance policy
+
+Cribra treats semantic correctness, privacy, deterministic behavior, and a
+stable typed boundary as stronger requirements than isolated microbenchmark
+wins.
+
+The v0.4 browser benchmark establishes the following policy:
+
+- Binaryen `-Oz` is the single production WASM profile.
+- The unoptimized, `-Os`, `-Oz`, and `-O3` artifacts remain a regression
+  comparison matrix, not separate product variants.
+- Typed `wasm-bindgen` projections are retained. Their measured traversal and
+  explanation overhead is too small to justify JSON serialization or bulk
+  projection APIs.
+- JS string input has a material source-transfer/boundary cost for larger
+  inputs. A zero-rule scanner measures a practical boundary floor of roughly
+  0.185 ms for 64 KiB and 2.93 ms for 1 MiB in the recorded Chrome/V8
+  reference run.
+- Repeated 64 KiB scans show no meaningful per-source amortization between
+  one, eight, and thirty-two serial sources. A WASM `scanBatch()` API is
+  therefore not justified for performance in v0.4.
+- Cribra does not expose raw WASM memory, allocator handles, or alternate
+  byte-input APIs solely to avoid measured copies. Such an API requires
+  evidence from real workloads that the existing safe boundary is a product
+  bottleneck.
+- Browser benchmark results are interpreted as regression and architectural
+  evidence rather than absolute performance guarantees.
+- Semantics must never be changed to improve a microbenchmark.
+
+| Chrome/V8 reference (`-Oz`) | Median |
+| --- | ---: |
+| WASM initialization | 2.295 ms |
+| Worker to ready | 6.260 ms |
+| 64 KiB scan | 0.295 ms |
+| 1 MiB scan | 4.720 ms |
+| zero-rule 64 KiB boundary floor | 0.185 ms |
+| zero-rule 1 MiB boundary floor | 2.930 ms |
+| 256-finding typed traversal | 0.060 ms |
+| 256-finding explanation traversal | 0.025 ms |
