@@ -6,7 +6,28 @@ The project follows semantic versioning from the first public release.
 
 ## [Unreleased]
 
-No user-facing changes yet.
+## [cribra-wasm 0.4.1] - 2026-08-24
+
+Distribution-only release for the WebAssembly interoperability adapter.
+
+### Changed
+
+- Published `cribra-wasm` as an independently consumable crates.io package.
+- Added complete crates.io metadata and a dedicated adapter README.
+- Declared the published dependency on `cribra = "0.4"` while retaining the
+  local workspace path for development.
+- Added a dedicated `cribra-wasm-v*` release workflow with package, wasm32,
+  dry-run, Trusted Publishing, and GitHub Release validation.
+
+### Validation
+
+- Verified the packaged crate outside the Cribra workspace.
+- Verified that the packaged adapter resolves `cribra 0.4.0` from crates.io.
+- Verified native package checks, tests, clippy, and `wasm32-unknown-unknown`.
+- Verified that the packaged crate produces the documented `wasm-bindgen`
+  JavaScript, TypeScript, and WebAssembly boundary.
+
+This release does not change Cribra core detection or transformation semantics.
 
 ## [0.4.0] - 2026-08-24
 

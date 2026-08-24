@@ -1,0 +1,121 @@
+name: Release WASM
+
+on:
+  push:
+    tags:
+      - "cribra-wasm-v*"
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  validate:
+    name: Validate cribra-wasm release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout tagged source
+        uses: actions/checkout@v7
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Cache Rust artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Verify clean semantic version tag
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          tag="${GITHUB_REF_NAME}"
+          version="${tag#cribra-wasm-v}"
+
+          if [[ "$tag" == "$version" ]]; then
+            echo "::error::Invalid cribra-wasm release tag: $tag"
+            exit 1
+          fi
+
+          package_version="$(
+            cargo metadata --no-deps --format-version 1 |
+              python3 -c '
+          import json
+          import sys
+          
+          metadata = json.load(sys.stdin)
+          package = next(
+              package
+              for package in metadata["packages"]
+              if package["name"] == "cribra-wasm"
+          )
+          print(package["version"])
+          '
+          )"
+
+          if [[ "$version" != "$package_version" ]]; then
+            echo "::error::Tag $tag does not match cribra-wasm version $package_version"
+            exit 1
+          fi
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Check cribra-wasm
+        run: cargo check -p cribra-wasm
+
+      - name: Check wasm32 target
+        run: cargo check -p cribra-wasm --target wasm32-unknown-unknown
+
+      - name: Test cribra-wasm
+        run: cargo test -p cribra-wasm
+
+      - name: Clippy cribra-wasm
+        run: cargo clippy -p cribra-wasm --all-targets -- -D warnings
+
+      - name: Package
+        run: cargo package -p cribra-wasm
+
+      - name: Publish dry run
+        run: cargo publish -p cribra-wasm --dry-run
+
+  publish:
+    name: Publish cribra-wasm
+    needs: validate
+    runs-on: ubuntu-latest
+    environment: release
+
+    steps:
+      - name: Checkout tagged source
+        uses: actions/checkout@v7
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Authenticate to crates.io
+        id: crates-io-auth
+        uses: rust-lang/crates-io-auth-action@v1.0.5
+
+      - name: Publish cribra-wasm
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.crates-io-auth.outputs.token }}
+        run: cargo publish -p cribra-wasm
+
+  github-release:
+    name: GitHub Release
+    needs: publish
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout tagged source
+        uses: actions/checkout@v7
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            --title "cribra-wasm ${GITHUB_REF_NAME#cribra-wasm-v}" \
+            --generate-notes
