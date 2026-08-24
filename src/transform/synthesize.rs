@@ -323,8 +323,8 @@ impl SyntheticBytes {
         hasher.update(b"cribra:synthesis:v1\0");
         hasher.update(rule_id.as_bytes());
         hasher.update(b"\0");
-        hasher.update(&start.to_le_bytes());
-        hasher.update(&end.to_le_bytes());
+        hasher.update(&(start as u64).to_le_bytes());
+        hasher.update(&(end as u64).to_le_bytes());
 
         Self {
             reader: hasher.finalize_xof(),
@@ -517,5 +517,27 @@ mod tests {
             synthesize("0123456789", &report, &SynthesisOptions::new([10; 32]),),
             Err(TransformError::OverlappingSpans { .. }),
         ));
+    }
+
+    #[test]
+    fn synthesis_span_hashing_uses_target_independent_width() {
+        let key = [0x53; 32];
+
+        let mut hasher = blake3::Hasher::new_keyed(&key);
+        hasher.update(b"cribra:synthesis:v1\0");
+        hasher.update(b"demo.secret");
+        hasher.update(b"\0");
+        hasher.update(&10_u64.to_le_bytes());
+        hasher.update(&27_u64.to_le_bytes());
+
+        let mut expected_reader = hasher.finalize_xof();
+        let mut expected = [0_u8; 64];
+        expected_reader.fill(&mut expected);
+
+        let mut actual = SyntheticBytes::new(&key, "demo.secret", 10, 27);
+
+        for byte in expected {
+            assert_eq!(actual.next(), byte);
+        }
     }
 }

@@ -8,6 +8,95 @@ The project follows semantic versioning from the first public release.
 
 No user-facing changes yet.
 
+## [0.4.0] - 2026-08-24
+
+Cribra 0.4 completes the browser/WebAssembly interoperability layer while
+preserving the Rust core as the semantic authority and keeping WASM independent
+from the native C ABI.
+
+### Added
+
+- Added the dedicated non-published `cribra-wasm` workspace adapter.
+- Added typed `wasm-bindgen` projections for scanners, builders, scan results,
+  findings, review candidates, explanations, severity, confidence and
+  remediation.
+- Added browser-facing custom literal, prefix, suffix and pattern rules using
+  the existing Rust validation semantics.
+- Added browser access to supported redaction, templating, keyed
+  pseudonymization and deterministic synthesis operations.
+- Added a Rust/WASM semantic parity gate covering canonical fixtures, finding
+  ordering and IDs, byte spans, Unicode coordinates, severity, confidence,
+  remediation, candidates, explanations and transformed output.
+- Added production artifact validation for generated JavaScript, TypeScript
+  declarations and WebAssembly output.
+- Added reproducible Binaryen comparison tooling for baseline, `-Os`, `-Oz`
+  and `-O3` artifacts.
+- Added a dependency-free real-browser benchmark harness running in dedicated
+  Web Workers.
+- Added representative browser-engine validation across Chromium/V8,
+  Safari/WebKit and Firefox/SpiderMonkey.
+- Added WASM build, validation, optimization, benchmark, parity, package and
+  cleanup workflows to Just and Make.
+
+### Changed
+
+- Selected Binaryen `-Oz` as the single production browser/WASM optimization
+  profile.
+- Kept typed projections instead of introducing JSON transport after measured
+  projection overhead proved negligible.
+- Kept single-source scanning instead of adding a WASM batch API after measured
+  serial workloads showed no meaningful per-source amortization.
+- Documented the material JS string transfer/boundary cost while retaining the
+  safer typed boundary rather than exposing raw WASM memory or allocator APIs.
+- Moved Serde dependencies used only by the WASM parity oracle out of the
+  production adapter dependency surface.
+- Normalized deterministic synthesis span hashing to `u64`, preserving existing
+  64-bit native output while making synthesis deterministic across native and
+  wasm32 targets.
+
+### Performance and validation
+
+- Production `-Oz` artifact reference size: approximately 1.18 MB uncompressed
+  WASM before HTTP compression.
+- The earlier Binaryen comparison reduced the WASM binary from approximately
+  1.50 MB baseline to approximately 1.18 MB with `-Oz`.
+- Brotli reference transfer size was approximately 285 KB for optimized
+  variants.
+- Typed traversal of 256 findings measured at roughly 0.06 ms in the recorded
+  Chromium reference run.
+- The zero-rule boundary floor demonstrated that JS-to-WASM source transfer is
+  material for large inputs, but repeated scans showed no evidence that a
+  `scanBatch()` API would materially improve throughput.
+- Semantic correctness and privacy remain stronger requirements than isolated
+  microbenchmark improvements.
+
+## [0.3.0] - 2026-08-22
+
+Cribra 0.3 introduced the dedicated native C interoperability layer while
+keeping the Rust core free from FFI concerns.
+
+### Added
+
+- Added the `cribra-capi` native adapter crate.
+- Added stable-designed C representations for scanner lifecycle, findings,
+  candidates, explanations, custom rules, transforms, batch results and
+  share-safe bundles.
+- Added explicit ownership, error-object and panic-containment contracts.
+- Added generated `include/cribra.h` support with reproducibility validation.
+- Added native C smoke tests, symbol validation and static/dynamic artifact
+  checks across supported platforms.
+- Added serial batch interoperability with optional native parallel execution.
+- Added C ABI performance benchmarks comparing native Rust and FFI paths.
+
+### Changed
+
+- Converted the repository to a Cargo workspace while retaining the root
+  `cribra` package as the published Rust core.
+- Kept the C ABI as a dedicated adapter rather than exposing Rust layout or FFI
+  concerns from the core.
+- Explicitly kept browser/WASM interoperability independent from the native C
+  ABI.
+
 ## [0.2.0] - 2026-08-19
 
 Development toward `0.2.0` focuses on detection quality, explicit ambiguity

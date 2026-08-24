@@ -94,6 +94,154 @@ capi-static:
 # Run the complete local native-C interoperability smoke surface.
 capi-smoke-all: capi-header-check capi-smoke capi-symbols capi-static
 
+# Check the reusable JS/WASM adapter.
+wasm-adapter-check:
+    cargo check -p cribra-wasm --target wasm32-unknown-unknown
+    cargo clippy -p cribra-wasm --target wasm32-unknown-unknown --all-targets -- -D warnings
+
+# Build the reusable JS/WASM adapter.
+wasm-adapter-build:
+    cargo build -p cribra-wasm --target wasm32-unknown-unknown --release
+
+# Generate browser-native ES module glue, TypeScript declarations, and WASM.
+wasm-adapter-bindgen:
+    mkdir -p target/wasm
+    wasm-bindgen \
+      --target web \
+      --out-dir target/wasm \
+      --out-name cribra \
+      target/wasm32-unknown-unknown/release/cribra_wasm.wasm
+
+# Validate the complete reusable JS/WASM adapter artifact.
+wasm-adapter: wasm-adapter-check wasm-adapter-build wasm-adapter-bindgen
+    test -s target/wasm/cribra.js
+    test -s target/wasm/cribra.d.ts
+    test -s target/wasm/cribra_bg.wasm
+    test -s target/wasm/cribra_bg.wasm.d.ts
+
+# Produce the reproducible Binaryen comparison matrix from one identical
+# wasm-bindgen baseline. These are benchmark inputs, not release artifacts.
+wasm-opt-build: wasm-adapter
+    mkdir -p target/wasm-opt
+    cp target/wasm/cribra_bg.wasm target/wasm-opt/cribra_bg.base.wasm
+    wasm-opt -Os target/wasm/cribra_bg.wasm -o target/wasm-opt/cribra_bg.os.wasm
+    wasm-opt -Oz target/wasm/cribra_bg.wasm -o target/wasm-opt/cribra_bg.oz.wasm
+    wasm-opt -O3 target/wasm/cribra_bg.wasm -o target/wasm-opt/cribra_bg.o3.wasm
+
+# Validate every Binaryen comparison artifact. Prefer a linked WABT executable,
+# but support an unlinked Apple Silicon Homebrew installation when WABT and
+# Binaryen expose conflicting tool names.
+wasm-opt-validate: wasm-opt-build
+    validator="$(command -v wasm-validate || true)"; \
+    if [ -z "$validator" ] && [ -x /opt/homebrew/opt/wabt/bin/wasm-validate ]; then \
+      validator=/opt/homebrew/opt/wabt/bin/wasm-validate; \
+    fi; \
+    if [ -z "$validator" ]; then \
+      echo "wasm-validate not found; install WABT or expose wasm-validate in PATH"; \
+      exit 2; \
+    fi; \
+    for file in \
+      target/wasm-opt/cribra_bg.base.wasm \
+      target/wasm-opt/cribra_bg.os.wasm \
+      target/wasm-opt/cribra_bg.oz.wasm \
+      target/wasm-opt/cribra_bg.o3.wasm; do \
+        "$validator" "$file"; \
+    done
+
+# Print raw Binaryen comparison sizes.
+wasm-opt-size: wasm-opt-build
+    wc -c \
+      target/wasm-opt/cribra_bg.base.wasm \
+      target/wasm-opt/cribra_bg.os.wasm \
+      target/wasm-opt/cribra_bg.oz.wasm \
+      target/wasm-opt/cribra_bg.o3.wasm
+
+# Produce transfer-size evidence for the comparison matrix.
+wasm-opt-compress: wasm-opt-build
+    gzip -9 -c target/wasm-opt/cribra_bg.base.wasm > target/wasm-opt/cribra_bg.base.wasm.gz
+    gzip -9 -c target/wasm-opt/cribra_bg.os.wasm > target/wasm-opt/cribra_bg.os.wasm.gz
+    gzip -9 -c target/wasm-opt/cribra_bg.oz.wasm > target/wasm-opt/cribra_bg.oz.wasm.gz
+    gzip -9 -c target/wasm-opt/cribra_bg.o3.wasm > target/wasm-opt/cribra_bg.o3.wasm.gz
+    brotli -f -q 11 target/wasm-opt/cribra_bg.base.wasm -o target/wasm-opt/cribra_bg.base.wasm.br
+    brotli -f -q 11 target/wasm-opt/cribra_bg.os.wasm -o target/wasm-opt/cribra_bg.os.wasm.br
+    brotli -f -q 11 target/wasm-opt/cribra_bg.oz.wasm -o target/wasm-opt/cribra_bg.oz.wasm.br
+    brotli -f -q 11 target/wasm-opt/cribra_bg.o3.wasm -o target/wasm-opt/cribra_bg.o3.wasm.br
+    wc -c target/wasm-opt/*.wasm.gz
+    wc -c target/wasm-opt/*.wasm.br
+
+# Reproduce the complete Binaryen validation/size comparison surface.
+wasm-opt-prepare: wasm-opt-build wasm-opt-validate wasm-opt-size wasm-opt-compress
+
+# Validate the exact generated TypeScript/JS/WASM production artifact surface.
+wasm-package-check: wasm-production
+    node crates/cribra-wasm/tests/package/validate.mjs
+
+# Build the single production WASM profile selected by the v0.4.2 browser
+# benchmark gate: Binaryen -Oz.
+wasm-production: wasm-adapter
+    mkdir -p target/wasm-production
+    cp target/wasm/cribra.js target/wasm-production/cribra.js
+    cp target/wasm/cribra.d.ts target/wasm-production/cribra.d.ts
+    cp target/wasm/cribra_bg.wasm.d.ts target/wasm-production/cribra_bg.wasm.d.ts
+    wasm-opt -Oz target/wasm/cribra_bg.wasm -o target/wasm-production/cribra_bg.wasm
+    printf '%s\n' '{"type":"module"}' > target/wasm-production/package.json
+    test -s target/wasm-production/cribra.js
+    test -s target/wasm-production/cribra.d.ts
+    test -s target/wasm-production/cribra_bg.wasm
+    test -s target/wasm-production/cribra_bg.wasm.d.ts
+
+# Generate the Rust-native semantic oracle for the WASM parity gate.
+wasm-parity-oracle:
+    rm -rf target/wasm-parity
+    mkdir -p target/wasm-parity
+    cargo run -p cribra-wasm --example parity_oracle
+
+# Prepare the production artifact and Rust semantic oracle.
+wasm-parity-prepare: wasm-production wasm-parity-oracle
+    test -s target/wasm-parity/oracle.json
+    test -s target/wasm-production/cribra.js
+    test -s target/wasm-production/cribra_bg.wasm
+
+# Compare the production Binaryen -Oz WASM adapter against the Rust oracle.
+wasm-parity: wasm-parity-prepare
+    node crates/cribra-wasm/tests/parity/parity.mjs
+
+# Prepare isolated base/-Os/-Oz/-O3 directories for the real-browser
+# regression benchmark harness.
+wasm-bench-prepare: wasm-opt-build
+    rm -rf target/wasm-bench
+    mkdir -p \
+      target/wasm-bench/base \
+      target/wasm-bench/os \
+      target/wasm-bench/oz \
+      target/wasm-bench/o3
+    for variant in base os oz o3; do \
+      cp target/wasm/cribra.js "target/wasm-bench/$variant/cribra.js"; \
+    done
+    cp target/wasm-opt/cribra_bg.base.wasm target/wasm-bench/base/cribra_bg.wasm
+    cp target/wasm-opt/cribra_bg.os.wasm target/wasm-bench/os/cribra_bg.wasm
+    cp target/wasm-opt/cribra_bg.oz.wasm target/wasm-bench/oz/cribra_bg.wasm
+    cp target/wasm-opt/cribra_bg.o3.wasm target/wasm-bench/o3/cribra_bg.wasm
+
+# Serve the browser benchmark harness with dependency-free Node.js.
+wasm-bench-serve:
+    node crates/cribra-wasm/benches/web/serve.mjs
+
+# Remove Binaryen comparison, production, and browser-benchmark artifacts only.
+wasm-opt-clean:
+    rm -rf target/wasm-opt target/wasm-production target/wasm-bench
+
+# Remove all generated reusable WASM artifacts while preserving unrelated Cargo
+# outputs.
+wasm-clean:
+    rm -rf target/wasm target/wasm-opt target/wasm-production target/wasm-bench target/wasm-parity
+
+# Validate the complete reusable WASM release surface.
+wasm-release-gate:
+    just wasm-adapter
+    just wasm-parity
+    just wasm-package-check
+
 # Run the default test surface.
 test:
     cargo test

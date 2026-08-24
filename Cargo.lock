@@ -161,7 +161,7 @@ dependencies = [
 
 [[package]]
 name = "cribra"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "aho-corasick",
  "blake3",
@@ -179,6 +179,16 @@ version = "0.3.0"
 dependencies = [
  "cribra",
  "criterion",
+]
+
+[[package]]
+name = "cribra-wasm"
+version = "0.4.0"
+dependencies = [
+ "cribra",
+ "serde",
+ "serde_json",
+ "wasm-bindgen",
 ]
 
 [[package]]

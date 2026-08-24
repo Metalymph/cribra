@@ -113,15 +113,15 @@ The interoperability architecture is specified in `docs/INTEROP.md`.
 - [x] Document overhead policy without sacrificing semantics for micro-optimizations.
 ### 0.3.12 — Documentation, examples, packaging and release gate
 
-- [ ] Finalize native integration documentation.
-- [ ] Provide a minimal native C example.
-- [ ] Document ownership/lifetime/error/thread contracts prominently.
-- [ ] Document ABI experimental compatibility policy.
-- [ ] Link the native ABI performance reference from the primary documentation.
-- [ ] Validate generated header and native package/release artifacts.
-- [ ] Run formatting, lint, test, doctest, feature, MSRV, audit and package gates.
-- [ ] Confirm the cross-platform native C ABI CI matrix is green.
-- [ ] Finalize v0.3 release notes and versioning metadata.
+- [x] Finalize native integration documentation.
+- [x] Provide a minimal native C example.
+- [x] Document ownership/lifetime/error/thread contracts prominently.
+- [x] Document ABI experimental compatibility policy.
+- [x] Link the native ABI performance reference from the primary documentation.
+- [x] Validate generated header and native package/release artifacts.
+- [x] Run formatting, lint, test, doctest, feature, MSRV, audit and package gates.
+- [x] Confirm the cross-platform native C ABI CI matrix is green.
+- [x] Finalize v0.3 release notes and versioning metadata.
 
 ## v0.3 non-goals
 
@@ -155,58 +155,58 @@ The existing WASM integration already runs in Silens Scan. v0.4 therefore starts
 
 ### 0.4.1 — Existing WASM boundary audit
 
-- [ ] Validate the current Cribra WASM integration in the Silens Scan PWA.
-- [ ] Audit the currently exposed capabilities against the Rust core.
-- [ ] Audit initialization and error representation.
-- [ ] Audit TypeScript declarations.
-- [ ] Audit JS/WASM copy behavior and avoidable secondary copies.
-- [ ] Audit serialization overhead and typed projection opportunities.
-- [ ] Audit batch ergonomics.
-- [ ] Verify Web Worker friendliness.
-- [ ] Measure bundle size.
-- [ ] Document CSP/browser constraints.
-- [ ] Do not route WASM through the C ABI.
+- [x] Validate the current Cribra WASM integration in the Silens Scan PWA.
+- [x] Audit the currently exposed capabilities against the Rust core.
+- [x] Audit initialization and error representation.
+- [x] Audit TypeScript declarations.
+- [x] Audit JS/WASM copy behavior and avoidable secondary copies.
+- [x] Audit serialization overhead and typed projection opportunities.
+- [x] Audit batch ergonomics.
+- [x] Verify Web Worker friendliness.
+- [x] Measure bundle size.
+- [x] Document CSP/browser constraints.
+- [x] Do not route WASM through the C ABI.
 
 ### 0.4.2 — Capability parity and justified refinements
 
-- [ ] Expose candidates only where the working integration needs them.
-- [ ] Expose explanations only where the working integration needs them.
-- [ ] Expose remediation only where the working integration needs it.
-- [ ] Expose transforms only where the working integration needs them.
-- [ ] Expose custom rules only where the working integration needs them.
-- [ ] Prefer typed projections over serialization when evidence shows a measurable benefit.
-- [ ] Avoid API churn when the existing boundary is already sufficient.
+- [x] Expose candidates only where the working integration needs them.
+- [x] Expose explanations only where the working integration needs them.
+- [x] Expose remediation only where the working integration needs it.
+- [x] Expose transforms only where the working integration needs them.
+- [x] Expose custom rules only where the working integration needs them.
+- [x] Prefer typed projections over serialization when evidence shows a measurable benefit.
+- [x] Avoid API churn when the existing boundary is already sufficient.
 
 ### 0.4.3 — Rust/WASM semantic parity gate
 
-- [ ] Reuse canonical/golden fixtures where practical.
-- [ ] Compare finding count/order and rule IDs.
-- [ ] Compare spans and Unicode coordinates.
-- [ ] Compare severity/confidence/remediation.
-- [ ] Compare candidate count/order/kind/evidence where exposed.
-- [ ] Compare explanation facts where exposed.
-- [ ] Compare transformed output for equivalent supported operations.
-- [ ] Require semantic parity while allowing representation differences.
+- [x] Reuse canonical/golden fixtures where practical.
+- [x] Compare finding count/order and rule IDs.
+- [x] Compare spans and Unicode coordinates.
+- [x] Compare severity/confidence/remediation.
+- [x] Compare candidate count/order/kind/evidence where exposed.
+- [x] Compare explanation facts where exposed.
+- [x] Compare transformed output for equivalent supported operations.
+- [x] Require semantic parity while allowing representation differences.
 
 ### 0.4.4 — WASM performance and browser validation
 
-- [ ] Measure boundary call overhead where meaningful.
-- [ ] Measure source copy behavior.
-- [ ] Measure serialization/projection overhead.
-- [ ] Measure batch amortization.
-- [ ] Validate representative browser execution.
-- [ ] Validate Web Worker execution.
-- [ ] Record bundle-size reference measurements.
-- [ ] Document the WASM performance policy without sacrificing semantics for micro-optimizations.
+- [x] Measure boundary call overhead where meaningful.
+- [x] Measure source copy behavior.
+- [x] Measure serialization/projection overhead.
+- [x] Measure batch amortization.
+- [x] Validate representative browser execution.
+- [x] Validate Web Worker execution.
+- [x] Record bundle-size reference measurements.
+- [x] Document the WASM performance policy without sacrificing semantics for micro-optimizations.
 
 ### 0.4.5 — Documentation, packaging and release gate
 
-- [ ] Finalize WASM integration documentation.
-- [ ] Document initialization, errors, workers and browser constraints.
-- [ ] Document supported capability parity with the Rust core.
-- [ ] Validate generated TypeScript declarations and package artifacts.
-- [ ] Run the complete WASM/browser/test/package release gate.
-- [ ] Finalize v0.4 release notes and versioning metadata.
+- [x] Finalize WASM integration documentation.
+- [x] Document initialization, errors, workers and browser constraints.
+- [x] Document supported capability parity with the Rust core.
+- [x] Validate generated TypeScript declarations and package artifacts.
+- [x] Run the complete WASM/browser/test/package release gate.
+- [x] Finalize v0.4 release notes and versioning metadata.
 
 ## v0.4 non-goals
 

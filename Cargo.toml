@@ -1,8 +1,8 @@
 [package]
 name = "cribra"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2024"
-description = "Privacy-first Rust core for detecting, querying, and safely transforming secrets and sensitive data"
+description = "Embeddable, local-first Rust engine for detecting, reviewing, and safely transforming secrets and sensitive data."
 license = "MIT"
 readme = "README.md"
 repository = "https://github.com/Metalymph/cribra"
@@ -45,5 +45,8 @@ criterion = "0.8.2"
 serde_json = "1.0"
 
 [workspace]
-members = ["crates/cribra-capi"]
+members = [
+    "crates/cribra-capi",
+    "crates/cribra-wasm",
+]
 resolver = "3"
