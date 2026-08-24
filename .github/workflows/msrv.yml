@@ -11,6 +11,7 @@ on:
       - "tests/**"
       - "examples/**"
       - ".github/workflows/msrv.yml"
+      - ".github/workflows/release.yml"
 
 permissions:
   contents: read
