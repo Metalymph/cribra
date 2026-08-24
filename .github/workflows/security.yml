@@ -12,6 +12,7 @@ on:
       - "Cargo.toml"
       - "Cargo.lock"
       - ".github/workflows/security.yml"
+      - ".github/workflows/release.yml"
   schedule:
     - cron: "17 5 * * 1"
   workflow_dispatch:
