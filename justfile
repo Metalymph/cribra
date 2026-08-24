@@ -172,6 +172,10 @@ wasm-opt-compress: wasm-opt-build
 # Reproduce the complete Binaryen validation/size comparison surface.
 wasm-opt-prepare: wasm-opt-build wasm-opt-validate wasm-opt-size wasm-opt-compress
 
+# Validate the exact generated TypeScript/JS/WASM production artifact surface.
+wasm-package-check: wasm-production
+    node crates/cribra-wasm/tests/package/validate.mjs
+
 # Build the single production WASM profile selected by the v0.4.2 browser
 # benchmark gate: Binaryen -Oz.
 wasm-production: wasm-adapter
@@ -231,6 +235,12 @@ wasm-opt-clean:
 # outputs.
 wasm-clean:
     rm -rf target/wasm target/wasm-opt target/wasm-production target/wasm-bench target/wasm-parity
+
+# Validate the complete reusable WASM release surface.
+wasm-release-gate:
+    just wasm-adapter
+    just wasm-parity
+    just wasm-package-check
 
 # Run the default test surface.
 test:

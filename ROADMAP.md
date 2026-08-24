@@ -201,12 +201,12 @@ The existing WASM integration already runs in Silens Scan. v0.4 therefore starts
 
 ### 0.4.5 — Documentation, packaging and release gate
 
-- [ ] Finalize WASM integration documentation.
-- [ ] Document initialization, errors, workers and browser constraints.
-- [ ] Document supported capability parity with the Rust core.
-- [ ] Validate generated TypeScript declarations and package artifacts.
-- [ ] Run the complete WASM/browser/test/package release gate.
-- [ ] Finalize v0.4 release notes and versioning metadata.
+- [x] Finalize WASM integration documentation.
+- [x] Document initialization, errors, workers and browser constraints.
+- [x] Document supported capability parity with the Rust core.
+- [x] Validate generated TypeScript declarations and package artifacts.
+- [x] Run the complete WASM/browser/test/package release gate.
+- [x] Finalize v0.4 release notes and versioning metadata.
 
 ## v0.4 non-goals
 

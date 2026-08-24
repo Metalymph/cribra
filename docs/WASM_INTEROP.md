@@ -1,6 +1,6 @@
 # Cribra WASM Interoperability Audit
 
-Status: v0.4.2 capability parity and Binaryen production-profile decision
+Status: v0.4.5 release-hardening documentation and packaging gate
 Branch: `v0.4-wasm-interoperability`
 
 ## Purpose
@@ -107,6 +107,67 @@ transformation keys. Transform operations require the source to be supplied
 explicitly for each call. Ambiguous candidates remain review-only and are
 never promoted to transform authority.
 
+## Initialization, errors, Workers, and browser constraints
+
+`cribra-wasm` is generated with `wasm-bindgen --target web`. The generated ES
+module initializes the `.wasm` module explicitly before constructing
+`ScanEngine` or `ScanEngineBuilder` instances.
+
+The adapter maps validation and transformation failures to JavaScript errors at
+the exported boundary. Invalid regular expressions, zero-length-capable
+patterns, duplicate rule IDs, invalid transformation keys, out-of-range result
+indexes, and incompatible explanation lookups fail closed rather than
+returning partial semantic state.
+
+The reusable crate intentionally imports no DOM APIs. It can therefore execute
+inside a dedicated Web Worker. Worker creation, termination, crash recovery,
+session lifetime, service-worker integration, cache invalidation, and UI
+coordination remain application responsibilities. Silens Scan exercises this
+model by owning source text and transformation keys in a dedicated Worker while
+Cribra retains metadata-only scan results.
+
+Browser consumers must serve the generated `.wasm` with the
+`application/wasm` MIME type and use a CSP that permits the application-owned
+Worker and WASM execution path. The adapter itself requires no network access,
+remote storage, DOM access, or global browser state.
+
+The v0.4 validation matrix exercised current stable representatives of the three
+major browser-engine families:
+
+- Chrome / V8 / Chromium;
+- Safari / WebKit / JavaScriptCore;
+- Firefox / Gecko / SpiderMonkey.
+
+Browser-specific scheduler and JIT behavior can affect absolute benchmark
+numbers. Semantic parity is required across targets; performance measurements
+are interpreted as regression and architecture evidence.
+
+## Supported Rust/WASM capability parity
+
+The WASM surface is intentionally narrower than the complete generic Rust API,
+but every exposed capability delegates to the same Rust core semantics.
+
+| Capability | Rust core | `cribra-wasm` | v0.4 parity status |
+| --- | --- | --- | --- |
+| current built-ins | yes | yes | semantic parity verified |
+| literal/prefix/suffix/pattern custom rules | yes | yes | semantic parity verified |
+| finding count/order/rule ID | yes | yes | semantic parity verified |
+| byte spans and Unicode coordinates | yes | yes | semantic parity verified |
+| severity/confidence/remediation | yes | yes | semantic parity verified |
+| ambiguous candidate count/order/kind/evidence | yes | yes | semantic parity verified |
+| typed finding/candidate explanations | yes | yes | semantic parity verified |
+| redact / custom redaction | yes | yes | semantic parity verified where exposed |
+| template / custom template options | yes | yes | semantic parity verified where exposed |
+| keyed pseudonymization | yes | yes | semantic parity verified |
+| keyed deterministic synthesis | yes | yes | semantic parity verified |
+| generic ordered multi-source `ScanResults<K>` | yes | no | consumer performs repeated single-source scans |
+| Rayon parallel scan | optional native feature | no | not a browser/WASM contract |
+| Serde transport | optional | not used by adapter transport | typed projections retained |
+| raw WASM memory / allocator API | n/a | no | intentionally not exposed |
+
+Representation differences are allowed. Semantic differences in exposed
+capabilities are not.
+
 ## Binaryen production-profile gate
 
 The same 1,502,228-byte `wasm-bindgen` output was used as the sole input for
@@ -146,8 +207,10 @@ fresh-worker samples. Runtime measurements include clean 64 KiB and 1 MiB
 scans, 256-finding traversal, 256-finding redaction, and construction of a
 four-rule custom scanner.
 
-The 64-byte scan remains below the useful timer resolution of the current
-browser harness and is not used for optimization decisions.
+Micro-workloads such as the 64-byte scan are measured in repeated batches and
+normalized per operation so browser timer quantization does not collapse the
+median to zero. Larger scan, traversal, transform, and boundary-floor workloads
+remain the primary architectural evidence.
 
 The decision uses medians for startup and representative runtime comparisons;
 isolated scheduler outliers in startup p95 values are not treated as product
@@ -302,3 +365,19 @@ The v0.4 browser benchmark establishes the following policy:
 | zero-rule 1 MiB boundary floor | 2.930 ms |
 | 256-finding typed traversal | 0.060 ms |
 | 256-finding explanation traversal | 0.025 ms |
+
+## v0.4.5 release-hardening contract
+
+The final release gate treats the generated JavaScript glue, TypeScript
+declarations, optimized `.wasm` artifact, semantic parity oracle, browser
+benchmark harness, and Rust package contents as independently validated release
+surfaces.
+
+The root `cribra` crate remains the crates.io package. `cribra-wasm` is an
+internal workspace adapter (`publish = false`) for producing the browser
+artifact set; it is not a second crates.io package in v0.4.
+
+The release gate must verify that generated TypeScript declarations describe the
+same typed public classes/enums that were validated semantically, and that the
+production artifact is generated from the same release build before Binaryen
+`-Oz` optimization.

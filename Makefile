@@ -103,7 +103,7 @@ capi-static:
 
 capi-smoke-all: capi-header-check capi-smoke capi-symbols capi-static
 
-.PHONY: wasm-adapter-check wasm-adapter-build wasm-adapter-bindgen wasm-adapter wasm-parity-oracle wasm-parity-prepare wasm-parity
+.PHONY: wasm-adapter-check wasm-adapter-build wasm-adapter-bindgen wasm-adapter wasm-parity-oracle wasm-parity-prepare wasm-parity wasm-package-check wasm-release-gate
 
 wasm-adapter-check:
 	cargo check -p cribra-wasm --target wasm32-unknown-unknown
@@ -215,6 +215,14 @@ wasm-opt-clean:
 
 wasm-clean:
 	rm -rf target/wasm target/wasm-opt target/wasm-production target/wasm-bench target/wasm-parity
+
+wasm-package-check: wasm-production
+	node crates/cribra-wasm/tests/package/validate.mjs
+
+wasm-release-gate:
+	$(MAKE) wasm-adapter
+	$(MAKE) wasm-parity
+	$(MAKE) wasm-package-check
 
 test:
 	cargo test

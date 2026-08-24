@@ -192,13 +192,13 @@ variants, and malformed or extended grouped values.
 
 ``` toml
 [dependencies]
-cribra = "0.2"
+cribra = "0.4"
 ```
 
 Optional features are deliberately independent:
 
 ``` toml
-cribra = { version = "0.2", features = ["serde", "parallel"] }
+cribra = { version = "0.4", features = ["serde", "parallel"] }
 ```
 
   Feature      Default   Purpose
@@ -766,7 +766,7 @@ and literal rules plus remediation metadata.
 Enable `parallel` to scan independent sources concurrently:
 
 ``` toml
-cribra = { version = "0.2", features = ["parallel"] }
+cribra = { version = "0.3", features = ["parallel"] }
 ```
 
 ``` rust
@@ -790,7 +790,7 @@ Enable `serde` when results need to cross an application boundary or be
 persisted/serialized:
 
 ``` toml
-cribra = { version = "0.2", features = ["serde"] }
+cribra = { version = "0.3", features = ["serde"] }
 ```
 
 ``` rust
@@ -918,12 +918,21 @@ application and Silens Studio desktop app.
 
 ## Release status
 
-`0.1.0` is the first published crates.io release.
+The published Rust crate is currently in the `0.3.x` line.
 
-Development toward `0.2.0` focuses on detection quality, contextual
-classification, ambiguous sensitive-value review, explainability and stronger
-public metadata while preserving the local-first privacy boundary and the
-separation between confirmed findings and review-only candidates.
+- `0.2.x` established the Cribra name, contextual detection, ambiguous
+  candidate review, explainability, and the current transformation model.
+- `0.3.x` added the dedicated native C ABI adapter and its cross-platform
+  validation surface.
+- The current release line is `0.4.x`.
+
+`0.4.0` adds the reusable typed WebAssembly interoperability layer, production
+WASM semantic-parity validation, browser performance validation, and a single
+Binaryen `-Oz` production profile while keeping WASM independent from the native
+C ABI.
+
+The root `cribra` package remains the authoritative Rust core. Adapter crates
+are separate integration layers over the same semantics.
 
 ## Development
 
@@ -936,10 +945,16 @@ environments, and automation that already standardizes on it.
 | `just gate` | Normal local quality gate |
 | `just release-gate` | MSRV + security + package + publication dry run |
 | `just test-all` | Test all native features |
-| `just wasm` | Check the default browser/WASM contract |
-| `just wasm-serde` | Check browser/WASM with Serde |
+| `just capi-smoke-all` | Run the complete local native C ABI validation surface |
+| `just wasm` | Check the default browser/WASM core contract |
+| `just wasm-serde` | Check browser/WASM core with Serde |
+| `just wasm-adapter` | Build and validate the reusable typed JS/WASM adapter |
+| `just wasm-parity` | Compare the production WASM artifact against the Rust semantic oracle |
+| `just wasm-production` | Build the single Binaryen `-Oz` production artifact set |
+| `just wasm-bench-prepare` | Prepare the base/`-Os`/`-Oz`/`-O3` browser benchmark matrix |
+| `just wasm-bench-serve` | Serve the dependency-free real-browser benchmark harness |
 | `just audit` | Run RustSec with `cargo audit` |
-| `just bench-all` | Run maintained benchmark suites |
+| `just bench-all` | Run maintained native benchmark suites |
 | `just clean` | Remove Cargo build artifacts |
 
 Equivalent targets are available as `make gate`, `make release-gate`,

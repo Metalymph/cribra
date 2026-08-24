@@ -64,6 +64,9 @@ first use `wasm-validate` from `PATH`, then fall back to
 | `just wasm` | Default browser/WASM core compatibility check |
 | `just wasm-serde` | Browser/WASM + Serde core compatibility check |
 | `just wasm-adapter` | Build and validate the reusable browser JS/WASM adapter |
+| `just wasm-parity-oracle` | Generate the Rust-native semantic oracle |
+| `just wasm-parity-prepare` | Prepare the production WASM artifact and semantic oracle |
+| `just wasm-parity` | Compare the production Binaryen `-Oz` adapter against the Rust semantic oracle |
 | `just wasm-opt-prepare` | Build, validate, and size the base/`-Os`/`-Oz`/`-O3` Binaryen matrix |
 | `just wasm-production` | Build the single production Binaryen `-Oz` WASM artifact set |
 | `just wasm-bench-prepare` | Prepare isolated browser benchmark variants |
@@ -183,6 +186,18 @@ JSON serialization when the typed surface is sufficient. Source text and
 transformation keys remain caller-owned and are not retained by the reusable
 adapter.
 
+Before performance work, semantic changes to the adapter or core must pass the
+production-artifact parity gate:
+
+```text
+just wasm-parity
+```
+
+This runs the real Binaryen `-Oz` artifact against a Rust-native semantic oracle
+covering canonical fixtures plus dedicated Unicode, candidate, explanation,
+remediation, and transform cases. Representation differences are allowed;
+semantic differences are release blockers.
+
 The single production WASM profile selected by the v0.4 cross-engine benchmark
 gate is Binaryen `-Oz`:
 
@@ -220,8 +235,10 @@ or browser-engine behavior changes materially:
 - Firefox for Gecko/SpiderMonkey.
 
 The benchmark is comparative rather than an absolute browser score. Use the
-same generated baseline for every Binaryen variant, prefer medians for startup
-decisions, and do not use timer-quantized micro-workloads as decisive evidence.
+same generated baseline for every Binaryen variant and prefer medians for
+startup decisions. Micro-workloads are measured in repeated batches and
+normalized per operation; larger scans, typed traversal, transforms, and the
+zero-rule source-transfer floor remain the stronger architectural evidence.
 
 Generated optimization and benchmark artifacts can be removed with:
 
