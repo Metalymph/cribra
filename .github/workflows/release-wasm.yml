@@ -44,7 +44,6 @@ jobs:
               python3 -c '
           import json
           import sys
-          
           metadata = json.load(sys.stdin)
           package = next(
               package
