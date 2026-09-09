@@ -136,3 +136,43 @@ pub const SIGNED_JWT: RuleSpec = RuleSpec::pattern(
 )
 .with_validator(ValidatorKind::Jwt)
 .with_remediation(Remediation::RemoveSensitiveValue);
+
+/// Generic PKCS#8 private key in PEM form.
+pub const PKCS8_PRIVATE_KEY: RuleSpec = RuleSpec::pattern(
+    "generic.pkcs8-private-key",
+    r"(?s)-----BEGIN PRIVATE KEY-----\r?\n.{16,}?-----END PRIVATE KEY-----",
+    Severity::Critical,
+)
+.with_remediation(Remediation::ReplacePrivateKey);
+
+/// Generic encrypted PKCS#8 private key in PEM form.
+pub const ENCRYPTED_PRIVATE_KEY: RuleSpec = RuleSpec::pattern(
+    "generic.encrypted-private-key",
+    r"(?s)-----BEGIN ENCRYPTED PRIVATE KEY-----\r?\n.{16,}?-----END ENCRYPTED PRIVATE KEY-----",
+    Severity::Critical,
+)
+.with_remediation(Remediation::ReplacePrivateKey);
+
+/// Generic PKCS#1 RSA private key in PEM form.
+pub const RSA_PRIVATE_KEY: RuleSpec = RuleSpec::pattern(
+    "generic.rsa-private-key",
+    r"(?s)-----BEGIN RSA PRIVATE KEY-----\r?\n.{16,}?-----END RSA PRIVATE KEY-----",
+    Severity::Critical,
+)
+.with_remediation(Remediation::ReplacePrivateKey);
+
+/// Generic SEC1 EC private key in PEM form.
+pub const EC_PRIVATE_KEY: RuleSpec = RuleSpec::pattern(
+    "generic.ec-private-key",
+    r"(?s)-----BEGIN EC PRIVATE KEY-----\r?\n.{16,}?-----END EC PRIVATE KEY-----",
+    Severity::Critical,
+)
+.with_remediation(Remediation::ReplacePrivateKey);
+
+/// Generic OpenSSH private key in PEM form.
+pub const OPENSSH_PRIVATE_KEY: RuleSpec = RuleSpec::pattern(
+    "generic.openssh-private-key",
+    r"(?s)-----BEGIN OPENSSH PRIVATE KEY-----\r?\n.{16,}?-----END OPENSSH PRIVATE KEY-----",
+    Severity::Critical,
+)
+.with_remediation(Remediation::ReplacePrivateKey);

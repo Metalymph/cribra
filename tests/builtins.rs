@@ -9,7 +9,7 @@
 
 use std::collections::BTreeSet;
 
-use cribra::{Confidence, Scanner, builtins};
+use cribra::{Confidence, Remediation, Scanner, Severity, builtins};
 
 fn scanner_for(rules: impl IntoIterator<Item = cribra::RuleSpec>) -> Scanner {
     Scanner::builder()
@@ -287,4 +287,108 @@ fn full_pack_detects_expected_provider_specific_rules() {
     assert!(ids.contains("aws.secret-access-key"));
     assert!(ids.contains("azure.client-secret"));
     assert!(ids.contains("generic.database-password-field"));
+}
+
+#[test]
+fn private_key_builtins_detect_complete_pem_blocks() {
+    let scanner = scanner_for([
+        builtins::PKCS8_PRIVATE_KEY,
+        builtins::ENCRYPTED_PRIVATE_KEY,
+        builtins::RSA_PRIVATE_KEY,
+        builtins::EC_PRIVATE_KEY,
+        builtins::OPENSSH_PRIVATE_KEY,
+    ]);
+
+    let source = concat!(
+        "-----BEGIN PRIVATE KEY-----\n",
+        "MIIEvQIBADANBgkqhkiG9w0BAQEFAASC0123456789ABCDEF\n",
+        "-----END PRIVATE KEY-----\n",
+        "\n",
+        "-----BEGIN ENCRYPTED PRIVATE KEY-----\n",
+        "MIIE6TAbBgkqhkiG9w0BBQMwDgQI0123456789ABCDEFGH\n",
+        "-----END ENCRYPTED PRIVATE KEY-----\n",
+        "\n",
+        "-----BEGIN RSA PRIVATE KEY-----\n",
+        "MIIEowIBAAKCAQEA0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ\n",
+        "-----END RSA PRIVATE KEY-----\n",
+        "\n",
+        "-----BEGIN EC PRIVATE KEY-----\n",
+        "MHQCAQEEIB0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ\n",
+        "-----END EC PRIVATE KEY-----\n",
+        "\n",
+        "-----BEGIN OPENSSH PRIVATE KEY-----\n",
+        "b3BlbnNzaC1rZXktdjEAAAAA0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ\n",
+        "-----END OPENSSH PRIVATE KEY-----",
+    );
+
+    let results = scanner.scan([("pem", source)]);
+    let report = results.single_report().expect("one source");
+    let ids = report
+        .findings()
+        .iter()
+        .map(|finding| finding.rule_id().as_str())
+        .collect::<Vec<_>>();
+
+    assert_eq!(report.len(), 5);
+    assert!(ids.contains(&"generic.pkcs8-private-key"));
+    assert!(ids.contains(&"generic.encrypted-private-key"));
+    assert!(ids.contains(&"generic.rsa-private-key"));
+    assert!(ids.contains(&"generic.ec-private-key"));
+    assert!(ids.contains(&"generic.openssh-private-key"));
+
+    assert!(
+        report
+            .findings()
+            .iter()
+            .all(|finding| finding.severity() == Severity::Critical)
+    );
+    assert!(
+        report
+            .findings()
+            .iter()
+            .all(|finding| finding.remediation() == Some(Remediation::ReplacePrivateKey))
+    );
+}
+
+#[test]
+fn private_key_builtins_reject_incomplete_or_mismatched_pem_blocks() {
+    let scanner = scanner_for([
+        builtins::PKCS8_PRIVATE_KEY,
+        builtins::ENCRYPTED_PRIVATE_KEY,
+        builtins::RSA_PRIVATE_KEY,
+        builtins::EC_PRIVATE_KEY,
+        builtins::OPENSSH_PRIVATE_KEY,
+    ]);
+
+    for source in [
+        "-----BEGIN PRIVATE KEY-----",
+        "-----BEGIN PRIVATE KEY-----\nshort\n-----END PRIVATE KEY-----",
+        "-----BEGIN PRIVATE KEY-----\n0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ\n-----END RSA PRIVATE KEY-----",
+        "-----BEGIN PUBLIC KEY-----\n0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ\n-----END PUBLIC KEY-----",
+        "-----BEGIN CERTIFICATE-----\n0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ\n-----END CERTIFICATE-----",
+    ] {
+        let results = scanner.scan([("near-miss", source)]);
+        assert!(
+            results.single_report().expect("one source").is_empty(),
+            "unexpected private-key finding for {source:?}",
+        );
+    }
+}
+
+#[test]
+fn gcp_private_key_outranks_generic_pkcs8_for_the_same_span() {
+    let scanner = scanner_for([builtins::PKCS8_PRIVATE_KEY, builtins::GCP_PRIVATE_KEY]);
+
+    let pem = concat!(
+        "-----BEGIN PRIVATE KEY-----\n",
+        "MIIEvQIBADANBgkqhkiG9w0BAQEFAASC0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ\n",
+        "-----END PRIVATE KEY-----",
+    );
+    let source = format!(r#""private_key": "{pem}""#);
+
+    let results = scanner.scan([("gcp", source.as_str())]);
+    let report = results.single_report().expect("one source");
+
+    assert_eq!(report.len(), 1);
+    assert_eq!(report.findings()[0].rule_id().as_str(), "gcp.private-key");
 }
