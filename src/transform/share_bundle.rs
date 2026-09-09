@@ -5,13 +5,15 @@
 //! original source text. Those responsibilities belong to callers such as a
 //! CLI, WASM adapter, desktop application, or service layer.
 //!
-//! Sources must be supplied in the same order used to produce the associated
-//! [`ScanResults`](crate::ScanResults). The builder validates source count and
-//! byte lengths before applying transformations.
+//! Precomputed [`ScanResults`](crate::ScanResults) can be paired with their
+//! original sources through [`ShareBundleBuilder::build`], which validates
+//! source count and byte lengths. [`ShareBundleBuilder::scan_and_build`] is the
+//! safer atomic path when separate scan results are not required because the
+//! same source values are used for scanning and transformation.
 
 use std::{fmt, time::SystemTime};
 
-use crate::{ScanResults, ScanSummary};
+use crate::{ScanResults, ScanSummary, Scanner};
 
 use super::{
     PseudonymizationOptions, SynthesisOptions, TransformError, pseudonymize, redact, synthesize,
@@ -179,8 +181,8 @@ impl ShareBundle<()> {
     /// Creates a share-bundle builder.
     ///
     /// The builder itself is not tied to a source-key type. The final
-    /// `ShareBundle<K>` type is inferred from the `ScanResults<K>` passed to
-    /// [`ShareBundleBuilder::build`].
+    /// `ShareBundle<K>` type is inferred from the scan results or source keys
+    /// passed to the selected builder operation.
     #[must_use]
     pub const fn builder() -> ShareBundleBuilder {
         ShareBundleBuilder::new()
@@ -251,7 +253,8 @@ impl<K> IntoIterator for ShareBundle<K> {
 
 /// Builder for an in-memory [`ShareBundle`].
 ///
-/// A transformation mode must be selected explicitly before [`build`](Self::build).
+/// A transformation mode must be selected explicitly before
+/// [`build`](Self::build) or [`scan_and_build`](Self::scan_and_build).
 #[derive(Debug, Clone, Default, Eq, PartialEq)]
 pub struct ShareBundleBuilder {
     mode: Option<ShareMode>,
@@ -271,11 +274,46 @@ impl ShareBundleBuilder {
         self
     }
 
+    /// Scans and transforms UTF-8 sources atomically into a share bundle.
+    ///
+    /// This is the preferred path when callers do not already need to retain
+    /// [`ScanResults`]. The same borrowed source values are used for scanning
+    /// and transformation, so source/report pairing cannot be mixed up between
+    /// the two operations.
+    ///
+    /// Source keys are cloned once so the scanner can own them while the
+    /// collected inputs remain available for transformation.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`TransformError::MissingShareMode`] when no mode was selected,
+    /// or any error returned by the selected transformation.
+    pub fn scan_and_build<'a, K, I>(
+        &self,
+        scanner: &Scanner,
+        inputs: I,
+    ) -> Result<ShareBundle<K>, TransformError>
+    where
+        K: Clone,
+        I: IntoIterator<Item = (K, &'a str)>,
+    {
+        let inputs = inputs.into_iter().collect::<Vec<_>>();
+
+        let results = scanner.scan(inputs.iter().map(|(key, source)| (key.clone(), *source)));
+
+        self.build(&results, inputs.iter().map(|(_, source)| *source))
+    }
+
     /// Builds transformed sources from scan results and their original UTF-8 text.
     ///
-    /// `sources` must contain exactly one source for each scan entry, in the same
-    /// order used for scanning. Each source byte length is checked against the
-    /// corresponding [`ScanEntry`](crate::ScanEntry) before transformation.
+    /// `sources` must contain exactly the source used for each scan entry, in
+    /// the same order used for scanning.
+    ///
+    /// This method validates source count and recorded UTF-8 byte lengths, but
+    /// byte length is not a proof of source identity. Callers are responsible
+    /// for preserving the source/result pairing. When results do not need to be
+    /// retained separately, prefer [`Self::scan_and_build`], which guarantees
+    /// that pairing by construction.
     ///
     /// Source keys are cloned from the scan results so callers may continue
     /// using `results` after bundle generation.

@@ -503,6 +503,7 @@ fn pattern_prefilter_needles(
         ("gcp.private-key-id", ValidatorKind::Gcp) => Some(&["private_key_id"]),
         ("gcp.client-secret", ValidatorKind::Gcp) => Some(&["client_secret"]),
         ("gcp.private-key", ValidatorKind::Gcp) => Some(&["private_key"]),
+        ("gcp.escaped-private-key", ValidatorKind::Gcp) => Some(&["private_key"]),
         ("generic.password-field", ValidatorKind::Password) => Some(&[
             "admin_password",
             "root_password",
@@ -533,6 +534,9 @@ fn pattern_prefilter_needles(
         }
         ("generic.auth-token", ValidatorKind::GenericCredential) => {
             Some(&["access_token", "bearer_token", "auth_token", "token"])
+        }
+        ("generic.authorization-bearer", ValidatorKind::GenericCredential) => {
+            Some(&["authorization"])
         }
         ("generic.secret", ValidatorKind::GenericCredential) => {
             Some(&["signing_secret", "webhook_secret", "secret_key", "secret"])

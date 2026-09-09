@@ -48,7 +48,13 @@ pub(crate) fn validate_generic_credential(
         GenericCredentialKind::ApiKey
     } else if key_matches_any(
         key,
-        &["token", "access_token", "auth_token", "bearer_token"],
+        &[
+            "token",
+            "access_token",
+            "auth_token",
+            "bearer_token",
+            "authorization",
+        ],
     ) {
         GenericCredentialKind::Token
     } else if key_matches_any(

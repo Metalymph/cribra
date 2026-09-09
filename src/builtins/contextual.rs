@@ -88,13 +88,26 @@ pub const GCP_CLIENT_SECRET: RuleSpec = RuleSpec::captured_pattern(
 .with_validator(ValidatorKind::Gcp)
 .with_remediation(Remediation::RevokeAndRotateCredential);
 
-/// Google Cloud service-account private key in PEM form.
+/// Google Cloud service-account private key in literal multiline PEM form.
 ///
-/// Escaped JSON `\n` private keys are intentionally deferred until an
-/// escape-aware projection mode is implemented.
+/// JSON-escaped service-account keys are handled separately by
+/// [`GCP_ESCAPED_PRIVATE_KEY`].
 pub const GCP_PRIVATE_KEY: RuleSpec = RuleSpec::captured_pattern(
     "gcp.private-key",
-    r#"(?is)["']?private_key["']?\s*:\s*["'](?P<value>-----BEGIN PRIVATE KEY-----.*?-----END PRIVATE KEY-----)"#,
+    r#"(?is)["']?private_key["']?\s*:\s*["'](?P<value>-----BEGIN PRIVATE KEY-----\r?\n.*?\r?\n-----END PRIVATE KEY-----)"#,
+    "value",
+    Severity::Critical,
+)
+.with_validator(ValidatorKind::Gcp)
+.with_remediation(Remediation::ReplacePrivateKey);
+
+/// Google Cloud service-account private key using JSON-escaped newlines.
+///
+/// The finding span remains the exact escaped representation present in the
+/// source. Cribra does not decode or normalize the JSON string.
+pub const GCP_ESCAPED_PRIVATE_KEY: RuleSpec = RuleSpec::captured_pattern(
+    "gcp.escaped-private-key",
+    r#"(?is)["']?private_key["']?\s*:\s*["'](?P<value>-----BEGIN PRIVATE KEY-----\\n.*?\\n-----END PRIVATE KEY-----(?:\\n)?)["']"#,
     "value",
     Severity::Critical,
 )
@@ -155,6 +168,16 @@ pub const GENERIC_API_KEY: RuleSpec = RuleSpec::captured_pattern(
 pub const GENERIC_AUTH_TOKEN: RuleSpec = RuleSpec::captured_pattern(
     "generic.auth-token",
     r#"(?i)["\']?(?:token|access_token|auth_token|bearer_token)["\']?\s*[:=]\s*["']?(?P<value>[^\s"'`;]{16,2048})"#,
+    "value",
+    Severity::High,
+)
+.with_validator(ValidatorKind::GenericCredential)
+.with_remediation(Remediation::RotateCredential);
+
+/// HTTP Authorization header carrying a Bearer credential.
+pub const AUTHORIZATION_BEARER: RuleSpec = RuleSpec::captured_pattern(
+    "generic.authorization-bearer",
+    r#"(?i)["']?authorization["']?\s*:\s*["']?bearer\s+(?P<value>[^\s"'`;]{16,2048})"#,
     "value",
     Severity::High,
 )

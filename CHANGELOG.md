@@ -6,6 +6,39 @@ The project follows semantic versioning from the first public release.
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-09-09
+
+### Added
+
+- Added an atomic scan-and-build path for share-safe bundle construction so
+  scanning and transformation can operate on the same borrowed source values
+  by construction.
+- Added generic high-confidence detection for PKCS#8, encrypted PKCS#8, RSA,
+  EC and OpenSSH private-key blocks.
+- Added contextual detection for HTTP `Authorization: Bearer` credentials,
+  projecting only the credential value.
+- Added detection for JSON-escaped GCP service-account private keys while
+  preserving exact raw-source byte spans.
+
+### Changed
+
+- Clarified that source count and byte length checks in lower-level
+  `ShareBundle` construction are sanity checks rather than proof that a report
+  belongs to a particular source.
+- Tightened literal multiline GCP private-key detection so raw PEM newlines and
+  JSON-escaped `\n` representations are handled by distinct rules.
+- Expanded transformation hardening with transform-to-rescan semantic safety
+  coverage across redaction, templating, pseudonymization and synthesis.
+
+### Security
+
+- Added a preferred atomic path that prevents stale same-length source/report
+  pairing during scan-and-transform workflows.
+- Added regression coverage ensuring canonical transformed output does not
+  remain review-worthy under the same scanner.
+- Added near-miss coverage for private-key structures and HTTP authorization
+  credentials.
+
 ## [cribra-wasm 0.4.1] - 2026-08-24
 
 Distribution-only release for the WebAssembly interoperability adapter.

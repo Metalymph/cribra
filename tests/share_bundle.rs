@@ -38,6 +38,30 @@ fn public_share_bundle_transforms_multiple_sources_in_input_order() {
 }
 
 #[test]
+fn scan_and_build_keeps_scan_and_transform_source_pairing_atomic() {
+    let scanner = Scanner::builder()
+        .rule(Rule::literal("secret", "SECRET", Severity::Critical))
+        .build()
+        .expect("scanner should build");
+
+    let source = "SECRETBBBBBB";
+
+    let bundle = ShareBundle::builder()
+        .mode(ShareMode::Redact)
+        .scan_and_build(&scanner, [("memory", source)])
+        .expect("atomic share bundle should build");
+
+    assert_eq!(bundle.sources().len(), 1);
+    assert_eq!(bundle.sources()[0].key(), &"memory");
+    assert_eq!(bundle.sources()[0].content(), "[REDACTED]BBBBBB");
+
+    let summary = bundle.summary();
+    assert_eq!(summary.scanned_sources(), 1);
+    assert_eq!(summary.scanned_bytes(), source.len());
+    assert_eq!(summary.total_findings(), 1);
+}
+
+#[test]
 fn public_share_bundle_supports_every_share_mode() {
     let scanner = Scanner::builder()
         .rule(Rule::literal("secret", "SECRET", Severity::Critical))
