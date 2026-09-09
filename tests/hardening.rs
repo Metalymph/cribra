@@ -156,6 +156,57 @@ fn transformation_output_never_reintroduces_detected_values() {
 }
 
 #[test]
+fn canonical_transformation_outputs_are_clean_when_rescanned() {
+    let scanner = corpus::scanner().expect("canonical scanner should build");
+
+    for (key, source) in load_corpus_inputs() {
+        let results = scanner.scan([(key.as_str(), source.as_str())]);
+        let report = results.single_report().expect("one source");
+
+        let outputs = [
+            (
+                "redact",
+                redact(&source, report).expect("redaction should succeed"),
+            ),
+            (
+                "template",
+                template(&source, report).expect("template should succeed"),
+            ),
+            (
+                "pseudonymize",
+                pseudonymize(
+                    &source,
+                    report,
+                    &PseudonymizationOptions::new(corpus::PSEUDONYMIZATION_KEY),
+                )
+                .expect("pseudonymization should succeed"),
+            ),
+            (
+                "synthesize",
+                synthesize(
+                    &source,
+                    report,
+                    &SynthesisOptions::new(corpus::SYNTHESIS_KEY),
+                )
+                .expect("synthesis should succeed"),
+            ),
+        ];
+
+        for (mode, output) in outputs {
+            let rescanned = scanner.scan([(key.as_str(), output.as_str())]);
+            let rescanned_report = rescanned.single_report().expect("one rescanned source");
+
+            assert!(
+                !rescanned_report.needs_review(),
+                "{mode} output for {key} produced {} findings and {} candidates when rescanned",
+                rescanned_report.len(),
+                rescanned_report.candidate_len(),
+            );
+        }
+    }
+}
+
+#[test]
 fn empty_input_is_clean_and_all_transformations_are_identity() {
     let scanner = corpus::scanner().expect("canonical scanner should build");
     let source = "";
