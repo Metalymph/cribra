@@ -503,6 +503,7 @@ fn pattern_prefilter_needles(
         ("gcp.private-key-id", ValidatorKind::Gcp) => Some(&["private_key_id"]),
         ("gcp.client-secret", ValidatorKind::Gcp) => Some(&["client_secret"]),
         ("gcp.private-key", ValidatorKind::Gcp) => Some(&["private_key"]),
+        ("gcp.escaped-private-key", ValidatorKind::Gcp) => Some(&["private_key"]),
         ("generic.password-field", ValidatorKind::Password) => Some(&[
             "admin_password",
             "root_password",
