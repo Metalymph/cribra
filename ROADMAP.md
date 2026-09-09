@@ -13,7 +13,7 @@ requirement justifies another feature release.
 
 ## v0.4.2 — Security Hardening
 
-Status: in progress.
+Status: complete.
 
 v0.4.2 hardens security-sensitive boundaries in the existing Cribra core
 without introducing a new architecture.
@@ -68,27 +68,28 @@ without introducing a new architecture.
 
 ### 0.4.2-F — Documentation and security alignment
 
-- [ ] Align the roadmap with the current maintenance line.
-- [ ] Update supported security release lines.
-- [ ] Document the new security-sensitive transformation boundary.
-- [ ] Update the built-in detection catalog where documented.
-- [ ] Record v0.4.2 changes in the changelog.
-- [ ] Remove speculative future-version commitments.
+- [x] Align the roadmap with the current maintenance line.
+- [x] Update supported security release lines.
+- [x] Document the new security-sensitive transformation boundary.
+- [x] Update the built-in detection catalog where documented.
+- [x] Record v0.4.2 changes in the changelog.
+- [x] Remove speculative future-version commitments.
 
 ### 0.4.2-G — Final regression and release gate
 
-- [ ] Run the complete Rust default-feature test suite.
-- [ ] Run the complete all-features test suite.
-- [ ] Validate Serde contracts.
-- [ ] Validate serial/parallel semantic equivalence.
-- [ ] Validate native C ABI regression coverage.
-- [ ] Validate WASM build and browser-facing adapter compatibility.
-- [ ] Re-run Rust/WASM semantic parity.
-- [ ] Run formatting, lint, doctest, audit and package validation.
-- [ ] Validate release metadata and packaged artifacts.
-- [ ] Finalize v0.4.2 release notes.
+- [x] Run the complete Rust default-feature test suite.
+- [x] Run the complete all-features test suite.
+- [x] Validate Serde contracts.
+- [x] Validate serial/parallel semantic equivalence.
+- [x] Validate native C ABI regression coverage.
+- [x] Validate WASM build and browser-facing adapter compatibility.
+- [x] Re-run Rust/WASM semantic parity.
+- [x] Run formatting, lint, doctest, audit and package validation.
+- [x] Validate release metadata and packaged artifacts.
+- [x] Finalize v0.4.2 release notes.
 
-No additional detection families are planned for v0.4.2.
+v0.4.2 is complete. No additional detection families are planned for this
+release line beyond corrective patch releases.
 
 ---
 
@@ -161,7 +162,17 @@ useful security coverage without turning Cribra into a broad DLP engine.
 - [ ] Avoid generic Base64 classification.
 - [ ] Project only the encoded credential value.
 
-### 0.4.3-H — `.netrc` credentials
+### 0.4.3-H — Package registry credentials
+
+- [ ] Detect strongly contextual `.npmrc` registry credentials.
+- [ ] Cover `_authToken` under recognizable npm registry configuration syntax.
+- [ ] Project only the credential value.
+- [ ] Reject placeholders, documentation examples and unrelated `_authToken`
+  text.
+- [ ] Avoid generic Base64 detection or assumptions about unstable token
+  formats.
+
+### 0.4.3-I — `.netrc` credentials
 
 - [ ] Evaluate a narrow `machine` / `login` / `password` grammar.
 - [ ] Add detection only if false-positive behavior remains acceptably strict.
@@ -170,7 +181,7 @@ useful security coverage without turning Cribra into a broad DLP engine.
 This slice is optional and may be omitted from v0.4.3 if the required grammar
 would weaken Cribra's contextual precision.
 
-### 0.4.3-I — Cross-interface semantic parity
+### 0.4.3-J — Cross-interface semantic parity
 
 - [ ] Validate the complete new detector corpus through the Rust API.
 - [ ] Validate native C ABI compatibility.
@@ -178,7 +189,7 @@ would weaken Cribra's contextual precision.
 - [ ] Preserve equivalent findings, spans, metadata and ordering across
   supported interfaces.
 
-### 0.4.3-J — Documentation and release gate
+### 0.4.3-K — Documentation and release gate
 
 - [ ] Update the public detector catalog and limitations.
 - [ ] Update security and interoperability documentation where necessary.

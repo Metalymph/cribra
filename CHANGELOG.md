@@ -6,6 +6,8 @@ The project follows semantic versioning from the first public release.
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-09-09
+
 ### Added
 
 - Added an atomic scan-and-build path for share-safe bundle construction so
