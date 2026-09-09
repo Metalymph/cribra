@@ -161,6 +161,16 @@ pub const GENERIC_AUTH_TOKEN: RuleSpec = RuleSpec::captured_pattern(
 .with_validator(ValidatorKind::GenericCredential)
 .with_remediation(Remediation::RotateCredential);
 
+/// HTTP Authorization header carrying a Bearer credential.
+pub const AUTHORIZATION_BEARER: RuleSpec = RuleSpec::captured_pattern(
+    "generic.authorization-bearer",
+    r#"(?i)["']?authorization["']?\s*:\s*["']?bearer\s+(?P<value>[^\s"'`;]{16,2048})"#,
+    "value",
+    Severity::High,
+)
+.with_validator(ValidatorKind::GenericCredential)
+.with_remediation(Remediation::RotateCredential);
+
 /// Explicit generic secret field.
 pub const GENERIC_SECRET: RuleSpec = RuleSpec::captured_pattern(
     "generic.secret",

@@ -182,3 +182,71 @@ fn isolated_contextual_values_are_not_inferred_as_findings() {
             .collect::<Vec<_>>()
     );
 }
+
+#[test]
+fn authorization_bearer_projects_only_the_credential() {
+    const TOKEN: &str = "AbCdEfGhIjKlMnOpQrStUvWxYz012345";
+
+    let scanner = Scanner::builder()
+        .builtin(builtins::AUTHORIZATION_BEARER)
+        .build()
+        .expect("authorization bearer built-in must compile");
+
+    for source in [
+        format!("Authorization: Bearer {TOKEN}"),
+        format!("authorization: bearer {TOKEN}"),
+        format!(r#""Authorization": "Bearer {TOKEN}""#),
+    ] {
+        let results = scanner.scan([("authorization", source.as_str())]);
+        let report = results.single_report().expect("one source");
+
+        assert_eq!(report.len(), 1);
+
+        let finding = &report.findings()[0];
+        let location = finding.location();
+
+        assert_eq!(finding.rule_id().as_str(), "generic.authorization-bearer");
+        assert_eq!(&source[location.start()..location.end()], TOKEN,);
+        assert_eq!(finding.severity(), Severity::High);
+        assert_eq!(finding.remediation(), Some(Remediation::RotateCredential),);
+    }
+}
+
+#[test]
+fn authorization_bearer_rejects_non_bearer_and_invalid_credentials() {
+    let scanner = Scanner::builder()
+        .builtin(builtins::AUTHORIZATION_BEARER)
+        .build()
+        .expect("authorization bearer built-in must compile");
+
+    for source in [
+        "Authorization: Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ==",
+        "Authorization: Bearer short",
+        "Authorization: Token AbCdEfGhIjKlMnOpQrStUvWxYz012345",
+        "Proxy-Authorization: Bearer AbCdEfGhIjKlMnOpQrStUvWxYz012345",
+    ] {
+        let results = scanner.scan([("near-miss", source)]);
+        let report = results.single_report().expect("one source");
+
+        assert!(
+            report.is_empty(),
+            "unexpected Authorization Bearer finding for {source:?}",
+        );
+    }
+}
+
+#[test]
+fn authorization_bearer_remains_contextual_in_public_metadata() {
+    let scanner = Scanner::builder()
+        .builtin(builtins::AUTHORIZATION_BEARER)
+        .build()
+        .expect("authorization bearer built-in must compile");
+
+    let metadata = scanner
+        .rule_metadata()
+        .next()
+        .expect("one rule metadata entry");
+
+    assert_eq!(metadata.id(), "generic.authorization-bearer");
+    assert_eq!(metadata.detection_mode(), DetectionMode::Contextual);
+}

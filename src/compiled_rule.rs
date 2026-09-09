@@ -534,6 +534,9 @@ fn pattern_prefilter_needles(
         ("generic.auth-token", ValidatorKind::GenericCredential) => {
             Some(&["access_token", "bearer_token", "auth_token", "token"])
         }
+        ("generic.authorization-bearer", ValidatorKind::GenericCredential) => {
+            Some(&["authorization"])
+        }
         ("generic.secret", ValidatorKind::GenericCredential) => {
             Some(&["signing_secret", "webhook_secret", "secret_key", "secret"])
         }
