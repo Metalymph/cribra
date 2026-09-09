@@ -44,7 +44,6 @@ const CONTEXTUAL_PATTERNS: &[RuleSpec] = &[
     builtins::AZURE_STORAGE_ACCOUNT_KEY,
     builtins::AZURE_SHARED_ACCESS_SIGNATURE,
     builtins::GCP_PRIVATE_KEY_ID,
-    builtins::GCP_CLIENT_SECRET,
     builtins::GCP_PRIVATE_KEY,
     builtins::PASSWORD_FIELD,
     builtins::DATABASE_PASSWORD_FIELD,
