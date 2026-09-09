@@ -188,19 +188,14 @@ fn contextual_placeholders_and_unrelated_fields_are_rejected_across_syntaxes() {
 #[test]
 fn gcp_json_builtins_detect_projected_fields() {
     let source = include_str!("fixtures/service-account.json");
-    let scanner = scanner_for([
-        builtins::GCP_PRIVATE_KEY_ID,
-        builtins::GCP_CLIENT_SECRET,
-        builtins::GCP_PRIVATE_KEY,
-    ]);
+    let scanner = scanner_for([builtins::GCP_PRIVATE_KEY_ID, builtins::GCP_PRIVATE_KEY]);
 
     let results = scan_one(&scanner, source);
     let report = results.single_report().expect("one fixture was scanned");
     let ids = rule_ids(report);
 
-    assert_eq!(report.len(), 3);
+    assert_eq!(report.len(), 2);
     assert!(ids.contains("gcp.private-key-id"));
-    assert!(ids.contains("gcp.client-secret"));
     assert!(ids.contains("gcp.private-key"));
 
     let private_key = report
@@ -268,6 +263,31 @@ fn current_pack_is_public_and_compiles_as_one_scanner() {
     let scanner = scanner_for(builtins::CURRENT.iter().copied());
 
     assert_eq!(scanner.rules_count(), builtins::CURRENT.len());
+}
+
+#[test]
+fn bare_google_style_client_secret_is_detected_generically() {
+    let source = r#"{
+        "type": "authorized_user",
+        "client_id": "example.apps.googleusercontent.com",
+        "client_secret": "AbCdEfGhIjKlMnOpQrStUvWxYz012345"
+    }"#;
+
+    let scanner = Scanner::default();
+    let results = scanner.scan([("fixture", source)]);
+    let report = results.single_report().expect("one fixture was scanned");
+
+    let matching = report
+        .findings()
+        .iter()
+        .filter(|finding| {
+            let location = finding.location();
+            &source[location.start()..location.end()] == "AbCdEfGhIjKlMnOpQrStUvWxYz012345"
+        })
+        .collect::<Vec<_>>();
+
+    assert_eq!(matching.len(), 1);
+    assert_eq!(matching[0].rule_id().as_str(), "generic.secret");
 }
 
 #[test]

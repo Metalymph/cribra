@@ -30,6 +30,7 @@ fn contextual_scanner() -> Scanner {
             builtins::DATABASE_PASSWORD_FIELD,
             builtins::SENSITIVE_HASH,
             builtins::GENERIC_API_KEY,
+            builtins::GENERIC_SECRET,
         ])
         .build()
         .expect("contextual built-in rules must compile")
@@ -75,7 +76,7 @@ fn contextual_rule_metadata_declares_contextual_detection() {
         .map(|metadata| (metadata.id().to_owned(), metadata.detection_mode()))
         .collect::<BTreeMap<_, _>>();
 
-    assert_eq!(metadata.len(), 5);
+    assert_eq!(metadata.len(), 6);
     assert_eq!(
         metadata.get("aws.secret-access-key"),
         Some(&DetectionMode::Contextual)
@@ -94,6 +95,10 @@ fn contextual_rule_metadata_declares_contextual_detection() {
     );
     assert_eq!(
         metadata.get("generic.api-key"),
+        Some(&DetectionMode::Contextual)
+    );
+    assert_eq!(
+        metadata.get("generic.secret"),
         Some(&DetectionMode::Contextual)
     );
 }
@@ -249,4 +254,34 @@ fn authorization_bearer_remains_contextual_in_public_metadata() {
 
     assert_eq!(metadata.id(), "generic.authorization-bearer");
     assert_eq!(metadata.detection_mode(), DetectionMode::Contextual);
+}
+
+#[test]
+fn bare_client_secret_is_generic_not_provider_specific() {
+    let source = r#"client_secret="AbCdEfGhIjKlMnOpQrStUvWxYz012345""#;
+
+    let scanner = contextual_scanner();
+    let results = scanner.scan([("fixture", source)]);
+    let report = results.single_report().expect("one fixture was scanned");
+
+    assert_eq!(report.len(), 1);
+
+    let finding = &report.findings()[0];
+
+    assert_eq!(finding.rule_id().as_str(), "generic.secret");
+}
+
+#[test]
+fn explicit_azure_client_secret_remains_provider_specific() {
+    let source = r#"azure_client_secret="AbCdEfGhIjKlMnOpQrStUvWxYz012345""#;
+
+    let scanner = contextual_scanner();
+    let results = scanner.scan([("fixture", source)]);
+    let report = results.single_report().expect("one fixture was scanned");
+
+    assert_eq!(report.len(), 1);
+
+    let finding = &report.findings()[0];
+
+    assert_eq!(finding.rule_id().as_str(), "azure.client-secret");
 }

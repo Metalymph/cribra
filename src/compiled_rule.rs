@@ -492,7 +492,6 @@ fn pattern_prefilter_needles(
             "azure_client_secret",
             "client_secret_value",
             "clientsecret",
-            "client_secret",
         ]),
         ("azure.storage-account-key", ValidatorKind::Azure) => {
             Some(&["storage_account_key", "azure_storage_key", "account_key"])
@@ -501,7 +500,6 @@ fn pattern_prefilter_needles(
             Some(&["shared_access_signature", "azure_sas_token", "sas_token"])
         }
         ("gcp.private-key-id", ValidatorKind::Gcp) => Some(&["private_key_id"]),
-        ("gcp.client-secret", ValidatorKind::Gcp) => Some(&["client_secret"]),
         ("gcp.private-key", ValidatorKind::Gcp) => Some(&["private_key"]),
         ("gcp.escaped-private-key", ValidatorKind::Gcp) => Some(&["private_key"]),
         ("generic.password-field", ValidatorKind::Password) => Some(&[
@@ -538,9 +536,13 @@ fn pattern_prefilter_needles(
         ("generic.authorization-bearer", ValidatorKind::GenericCredential) => {
             Some(&["authorization"])
         }
-        ("generic.secret", ValidatorKind::GenericCredential) => {
-            Some(&["signing_secret", "webhook_secret", "secret_key", "secret"])
-        }
+        ("generic.secret", ValidatorKind::GenericCredential) => Some(&[
+            "signing_secret",
+            "webhook_secret",
+            "client_secret",
+            "secret_key",
+            "secret",
+        ]),
         _ => None,
     }
 }

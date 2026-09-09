@@ -38,10 +38,10 @@ pub const AWS_SESSION_TOKEN: RuleSpec = RuleSpec::captured_pattern(
 .with_validator(ValidatorKind::Aws)
 .with_remediation(Remediation::RevokeAndRotateCredential);
 
-/// Microsoft Azure or Entra application client secret.
+/// Azure client secret.
 pub const AZURE_CLIENT_SECRET: RuleSpec = RuleSpec::captured_pattern(
     "azure.client-secret",
-    r#"(?i)["\']?(?:azure_client_secret|client_secret|clientsecret|client_secret_value|microsoft_provider_authentication_secret)["\']?\s*[:=]\s*["']?(?P<value>[A-Za-z0-9~._+\-/=]{16,255})"#,
+    r#"(?i)["\']?(?:azure_client_secret|clientsecret|client_secret_value|microsoft_provider_authentication_secret)["\']?\s*[:=]\s*["']?(?P<value>[A-Za-z0-9~._+\-/=]{16,255})"#,
     "value",
     Severity::Critical,
 )
@@ -74,16 +74,6 @@ pub const GCP_PRIVATE_KEY_ID: RuleSpec = RuleSpec::captured_pattern(
     r#"(?i)["']?private_key_id["']?\s*:\s*["'](?P<value>[A-Fa-f0-9]{16,128})"#,
     "value",
     Severity::High,
-)
-.with_validator(ValidatorKind::Gcp)
-.with_remediation(Remediation::RevokeAndRotateCredential);
-
-/// Google Cloud OAuth client secret.
-pub const GCP_CLIENT_SECRET: RuleSpec = RuleSpec::captured_pattern(
-    "gcp.client-secret",
-    r#"(?i)["']?client_secret["']?\s*[:=]\s*["'](?P<value>[^"'\r\n]{16,255})"#,
-    "value",
-    Severity::Critical,
 )
 .with_validator(ValidatorKind::Gcp)
 .with_remediation(Remediation::RevokeAndRotateCredential);
@@ -187,7 +177,7 @@ pub const AUTHORIZATION_BEARER: RuleSpec = RuleSpec::captured_pattern(
 /// Explicit generic secret field.
 pub const GENERIC_SECRET: RuleSpec = RuleSpec::captured_pattern(
     "generic.secret",
-    r#"(?i)["']?(?:secret|secret_key|signing_secret|webhook_secret)["']?\s*[:=]\s*["']?(?P<value>[^\s"'`;]{16,2048})"#,
+    r#"(?i)["']?(?:secret|secret_key|client_secret|signing_secret|webhook_secret)["']?\s*[:=]\s*["']?(?P<value>[^\s"'`;]{16,2048})"#,
     "value",
     Severity::High,
 )
