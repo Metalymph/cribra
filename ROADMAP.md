@@ -1,237 +1,235 @@
 # Cribra Roadmap
-## v0.3 — Native Interoperability
 
-Cribra v0.3 focuses on making the existing privacy-first Rust core universally embeddable without expanding detection intelligence.
+Cribra is a small, application-agnostic security engine. The roadmap favors
+correctness, high-confidence detection, semantic parity across interfaces and
+safe transformation behavior over feature breadth.
 
-Architectural target:
-
-```text
-Cribra Core
-    ├── Rust API
-    └── stable-designed C ABI
-```
-
-The C ABI is the universal native-language protocol. v0.3 does not ship complete language-specific wrappers.
-
-WASM remains an independent adapter above the same Rust core. Its audit and refinement are intentionally deferred to v0.4 so that v0.3 remains a coherent native-interoperability release. WASM does not pass through the C ABI.
-
-The interoperability architecture is specified in `docs/INTEROP.md`.
-### 0.3.1 — Interop specification
-- [x] Define scope and non-goals.
-- [x] Freeze core-authority and adapter-separation rules.
-- [x] Define ownership and lifetime model.
-- [x] Define native input and stable primitive representation rules.
-- [x] Define status/error model and panic containment.
-- [x] Define scanner lifecycle and single-source boundary.
-- [x] Define report/finding/candidate projection rules.
-- [x] Define explainability and custom-rule authority boundaries.
-- [x] Define transform ownership and source/report consistency.
-- [x] Define batch/parallel design constraints.
-- [x] Define thread-safety contract targets.
-- [x] Define ABI versioning and symbol namespace policy.
-- [x] Define native artifact/header/consumer validation requirements.
-- [x] Define ABI performance policy.
-- [x] Define adapter separation rules that keep WASM independent from the C ABI.
-- [x] Define privacy/threat model and native semantic-parity expectations.
-### 0.3.2 — `cribra-capi` skeleton and artifact model
-- [x] Convert the repository root to an appropriate Cargo workspace form while preserving the published root `cribra` crate unless evidence justifies moving it.
-- [x] Add `crates/cribra-capi/` as a dedicated native adapter crate.
-- [x] Preserve `#![forbid(unsafe_code)]` in the core; confine required FFI `unsafe` to the adapter.
-- [x] Configure native static/dynamic artifact production.
-- [x] Establish initial adapter module boundaries without exposing public ABI functionality prematurely.
-### 0.3.3 — ABI version, scanner lifecycle and single-source scan
-
-- [x] Add explicit ABI protocol version querying independent from crate SemVer.
-- [x] Add builder/scanner opaque lifecycle.
-- [x] Preserve empty-builder versus current-builtins semantics.
-- [x] Add UTF-8 validated pointer-plus-length single-source scan boundary.
-- [x] Return an owned report handle.
-- [x] Contain panics at exported FFI boundaries.
-### 0.3.4 — Report and finding traversal
-
-- [x] Add finding count and indexed traversal.
-- [x] Project stable finding metadata without exposing Rust layout.
-- [x] Preserve byte-span and Unicode coordinate semantics.
-- [x] Preserve remediation optionality.
-- [x] Keep matched source values outside the ABI result model.
-### 0.3.5 — Ambiguity and explainability
-
-- [x] Add candidate count and indexed candidate projection.
-- [x] Preserve `SensitiveCandidate` as semantically distinct from `Finding`.
-- [x] Project candidate evidence without inventing severity/confidence/remediation.
-- [x] Add finding explanation resolution through scanner-owned metadata.
-- [x] Preserve candidate explanation as evidence-derived.
-### 0.3.6 — Custom-rule/configuration ABI
-
-- [x] Configure rules through the native builder rather than exposing Rust `Rule` layout.
-- [x] Support public literal, prefix, suffix and full-match pattern rule semantics.
-- [x] Preserve rule-ID uniqueness and existing scanner-build validation.
-- [x] Do not expose internal capture-projection capability as a custom-rule feature.
-### 0.3.7 — Transform ABI and owned output buffers
-
-- [x] Add explicit caller-source + report transform boundary.
-- [x] Add Rust-owned output buffer handles with one destruction path.
-- [x] Preserve redaction/template/pseudonymization/synthesis semantics where exposed.
-- [x] Preserve overlap/span validation.
-- [x] Define and test source/report consistency behavior.
-### 0.3.8 — Batch API and optional parallel execution contract
-
-- [x] Define stable batch input/key representation.
-- [x] Define batch result ownership and partial-failure semantics.
-- [x] Preserve input order.
-- [x] Add an explicit amortization path for small inputs.
-- [x] Keep Rayon an implementation detail rather than an ABI concept.
-- [x] Preserve serial/parallel semantic equivalence.
-- [x] Project `ShareBundle` only after the batch ownership model exists; do not invent a single-source substitute.
-### 0.3.9 — Ownership, error, panic and thread hardening
-
-- [x] Finalize coarse status codes and explicit error-object diagnostics.
-- [x] Validate null/invalid argument behavior.
-- [x] Audit every allocation/destruction pair.
-- [x] Audit borrowed-view lifetimes.
-- [x] Verify panic containment.
-- [x] Freeze thread-safety guarantees per handle type.
-- [x] Document unavoidable caller-side C memory contract violations.
-### 0.3.10 — Generated C header, real consumer and cross-platform CI
-
-- [x] Generate `include/cribra.h`, evaluating `cbindgen` as the default mechanism.
-- [x] Compile and link a real C smoke consumer without Cargo knowledge.
-- [x] Cover success and recoverable error paths.
-- [x] Validate macOS.
-- [x] Validate Linux.
-- [x] Validate Windows.
-- [x] Inspect public symbol/export hygiene where practical.
-- [x] Add practical sanitizer/leak/native-memory validation.
-### 0.3.11 — ABI performance benchmarks
-
-- [x] Benchmark minimal FFI call overhead.
-- [x] Benchmark native scan versus equivalent Rust-native scan.
-- [x] Benchmark report count/index traversal.
-- [x] Benchmark complete report traversal.
-- [x] Benchmark transform allocation/copy cost.
-- [x] Benchmark batch amortization.
-- [x] Document overhead policy without sacrificing semantics for micro-optimizations.
-### 0.3.12 — Documentation, examples, packaging and release gate
-
-- [x] Finalize native integration documentation.
-- [x] Provide a minimal native C example.
-- [x] Document ownership/lifetime/error/thread contracts prominently.
-- [x] Document ABI experimental compatibility policy.
-- [x] Link the native ABI performance reference from the primary documentation.
-- [x] Validate generated header and native package/release artifacts.
-- [x] Run formatting, lint, test, doctest, feature, MSRV, audit and package gates.
-- [x] Confirm the cross-platform native C ABI CI matrix is green.
-- [x] Finalize v0.3 release notes and versioning metadata.
-
-## v0.3 non-goals
-
-Do not add during this release solely as part of interoperability work:
-
-- new provider detectors;
-- new detector families;
-- plugin architecture;
-- CLI functionality;
-- complete language-specific wrapper ecosystems;
-- Rust ABI exposure;
-- WASM-through-C layering;
-- matched secret values in public result models.
+Cribra does not schedule major versions merely to create feature churn.
+After v0.4.3, development moves to maintenance and hardening mode until a
+concrete security, correctness, interoperability or broadly reusable capability
+requirement justifies another feature release.
 
 ---
 
-## v0.4 — WASM Interoperability
+## v0.4.2 — Security Hardening
 
-Cribra v0.4 focuses on auditing and refining the existing WASM/PWA adapter without changing the native C ABI architecture and without expanding detection intelligence merely for interoperability work.
+Status: in progress.
 
-WASM is an independent adapter over the same Rust core:
+v0.4.2 hardens security-sensitive boundaries in the existing Cribra core
+without introducing a new architecture.
 
-```text
-Cribra Core
-    ├── Rust API
-    ├── C ABI
-    └── WASM API
-```
+### 0.4.2-A — Source/result transformation consistency
 
-The existing WASM integration already runs in Silens Scan. v0.4 therefore starts from validation and evidence, not from a rewrite.
+- [x] Reproduce the same-length stale-source transformation hazard.
+- [x] Add an atomic scan-and-build path that scans and transforms the same
+  borrowed source values.
+- [x] Preserve the existing lower-level `build` API for compatibility.
+- [x] Document that source count and byte length are sanity checks, not source
+  identity proof.
+- [x] Avoid retaining source material or introducing source fingerprints into
+  public metadata.
 
-### 0.4.1 — Existing WASM boundary audit
+### 0.4.2-B — Transformation semantic safety
 
-- [x] Validate the current Cribra WASM integration in the Silens Scan PWA.
-- [x] Audit the currently exposed capabilities against the Rust core.
-- [x] Audit initialization and error representation.
-- [x] Audit TypeScript declarations.
-- [x] Audit JS/WASM copy behavior and avoidable secondary copies.
-- [x] Audit serialization overhead and typed projection opportunities.
-- [x] Audit batch ergonomics.
-- [x] Verify Web Worker friendliness.
-- [x] Measure bundle size.
-- [x] Document CSP/browser constraints.
-- [x] Do not route WASM through the C ABI.
+- [x] Add transform-to-rescan regression coverage.
+- [x] Verify redaction output does not remain review-worthy under the same
+  canonical scanner.
+- [x] Verify template output does not remain review-worthy.
+- [x] Verify pseudonymized output does not remain review-worthy.
+- [x] Verify synthesized output does not remain review-worthy.
+- [x] Preserve deterministic transformation behavior.
 
-### 0.4.2 — Capability parity and justified refinements
+### 0.4.2-C — Generic private-key detection
 
-- [x] Expose candidates only where the working integration needs them.
-- [x] Expose explanations only where the working integration needs them.
-- [x] Expose remediation only where the working integration needs it.
-- [x] Expose transforms only where the working integration needs them.
-- [x] Expose custom rules only where the working integration needs them.
-- [x] Prefer typed projections over serialization when evidence shows a measurable benefit.
-- [x] Avoid API churn when the existing boundary is already sufficient.
+- [x] Detect PKCS#8 private-key PEM blocks.
+- [x] Detect encrypted PKCS#8 private-key PEM blocks.
+- [x] Detect RSA private-key PEM blocks.
+- [x] Detect EC private-key PEM blocks.
+- [x] Detect OpenSSH private-key blocks.
+- [x] Reject incomplete, mismatched, public-key and certificate blocks.
+- [x] Preserve provider-specific priority when a generic private-key detector
+  overlaps stronger contextual evidence.
 
-### 0.4.3 — Rust/WASM semantic parity gate
+### 0.4.2-D — HTTP Bearer credentials
 
-- [x] Reuse canonical/golden fixtures where practical.
-- [x] Compare finding count/order and rule IDs.
-- [x] Compare spans and Unicode coordinates.
-- [x] Compare severity/confidence/remediation.
-- [x] Compare candidate count/order/kind/evidence where exposed.
-- [x] Compare explanation facts where exposed.
-- [x] Compare transformed output for equivalent supported operations.
-- [x] Require semantic parity while allowing representation differences.
+- [x] Detect explicit `Authorization: Bearer` credentials.
+- [x] Project only the credential value.
+- [x] Preserve contextual detection semantics.
+- [x] Reject Basic authentication, missing Bearer schemes, short values,
+  placeholders and misleading header names such as `Proxy-Authorization`.
 
-### 0.4.4 — WASM performance and browser validation
+### 0.4.2-E — GCP escaped private keys
 
-- [x] Measure boundary call overhead where meaningful.
-- [x] Measure source copy behavior.
-- [x] Measure serialization/projection overhead.
-- [x] Measure batch amortization.
-- [x] Validate representative browser execution.
-- [x] Validate Web Worker execution.
-- [x] Record bundle-size reference measurements.
-- [x] Document the WASM performance policy without sacrificing semantics for micro-optimizations.
+- [x] Detect JSON-escaped GCP service-account private keys.
+- [x] Preserve exact raw-source byte projection without decoding JSON strings.
+- [x] Keep literal multiline PEM and escaped JSON representations semantically
+  distinct.
+- [x] Reject incomplete and mismatched escaped private-key structures.
 
-### 0.4.5 — Documentation, packaging and release gate
+### 0.4.2-F — Documentation and security alignment
 
-- [x] Finalize WASM integration documentation.
-- [x] Document initialization, errors, workers and browser constraints.
-- [x] Document supported capability parity with the Rust core.
-- [x] Validate generated TypeScript declarations and package artifacts.
-- [x] Run the complete WASM/browser/test/package release gate.
-- [x] Finalize v0.4 release notes and versioning metadata.
+- [ ] Align the roadmap with the current maintenance line.
+- [ ] Update supported security release lines.
+- [ ] Document the new security-sensitive transformation boundary.
+- [ ] Update the built-in detection catalog where documented.
+- [ ] Record v0.4.2 changes in the changelog.
+- [ ] Remove speculative future-version commitments.
 
-## v0.4 non-goals
+### 0.4.2-G — Final regression and release gate
 
-Do not add during this release solely as part of WASM interoperability work:
+- [ ] Run the complete Rust default-feature test suite.
+- [ ] Run the complete all-features test suite.
+- [ ] Validate Serde contracts.
+- [ ] Validate serial/parallel semantic equivalence.
+- [ ] Validate native C ABI regression coverage.
+- [ ] Validate WASM build and browser-facing adapter compatibility.
+- [ ] Re-run Rust/WASM semantic parity.
+- [ ] Run formatting, lint, doctest, audit and package validation.
+- [ ] Validate release metadata and packaged artifacts.
+- [ ] Finalize v0.4.2 release notes.
 
-- new provider detectors;
-- new detector families;
-- plugin architecture;
-- CLI functionality;
-- complete native-language binding ecosystems;
-- WASM-through-C layering;
-- matched secret values in public result models;
-- a rewrite of the working WASM adapter without measured justification.
+No additional detection families are planned for v0.4.2.
 
 ---
 
-## Historical benchmark foundation
-### S1.3.1 — Benchmark foundation
+## v0.4.3 — High-Confidence Detection Coverage
 
-- [x] Add Criterion as a development dependency
-- [x] Add a dedicated `scan` benchmark target
-- [x] Measure 1 KiB, 64 KiB, and 1 MiB inputs
-- [x] Measure 4, 64, and 512-rule sets
-- [x] Measure zero, sparse, and dense findings
-- [x] Measure literal, prefix, suffix, regex, and mixed workloads
-- [ ] Record the first serial baseline
-- [ ] Document benchmark environment and commands
-- [ ] Define a performance-regression policy before optimization work
+Status: planned.
+
+v0.4.3 expands detection only where strong structure or context provides
+useful security coverage without turning Cribra into a broad DLP engine.
+
+### 0.4.3-A — GitLab credentials
+
+- [ ] Add high-confidence GitLab token families with documented prefixes.
+- [ ] Cover personal/project/group access-token families where the public shape
+  is sufficiently stable.
+- [ ] Cover high-confidence OAuth, deploy, runner and CI token families where
+  appropriate.
+- [ ] Add provider-specific validation and placeholder rejection.
+- [ ] Document the limitation that GitLab Self-Managed deployments may use
+  customized token prefixes.
+
+### 0.4.3-B — Database connection credentials
+
+- [ ] Detect credential-bearing PostgreSQL connection strings.
+- [ ] Detect credential-bearing MySQL connection strings.
+- [ ] Detect credential-bearing Redis/Rediss connection strings.
+- [ ] Detect credential-bearing MongoDB/MongoDB SRV connection strings.
+- [ ] Project only the sensitive credential span rather than the complete URI.
+- [ ] Preserve exact raw-source offsets when percent-encoded credentials are
+  present.
+- [ ] Reject connection strings without credentials.
+
+### 0.4.3-C — Quoted password and passphrase values
+
+- [ ] Detect strongly contextual quoted credential values containing
+  whitespace.
+- [ ] Preserve existing conservative unquoted credential rules.
+- [ ] Project only the quoted value contents.
+- [ ] Reject placeholders and weak/unrelated fields.
+
+### 0.4.3-D — Adversarial detection corpus
+
+- [ ] Add false-prefix and truncated-token cases.
+- [ ] Add documentation/example placeholder cases.
+- [ ] Add provider near-misses.
+- [ ] Add connection-string near-misses.
+- [ ] Add malformed and ambiguous credential forms.
+- [ ] Preserve deterministic collision and normalization behavior.
+
+### 0.4.3-E — HTTP Basic authentication
+
+- [ ] Detect explicit `Authorization: Basic` credentials.
+- [ ] Require structurally valid Base64.
+- [ ] Validate locally that decoded material has credential structure.
+- [ ] Keep the finding projected onto the encoded source credential.
+- [ ] Do not introduce generic Base64 detection.
+
+### 0.4.3-F — PGP private keys
+
+- [ ] Detect armored PGP private-key blocks.
+- [ ] Require matching private-key delimiters and non-trivial body content.
+- [ ] Reject public-key blocks and malformed structures.
+- [ ] Use critical private-key remediation semantics.
+
+### 0.4.3-G — Docker registry credentials
+
+- [ ] Detect Docker configuration `auth` credentials only under sufficiently
+  strong Docker configuration context.
+- [ ] Validate Base64 credential structure locally.
+- [ ] Avoid generic Base64 classification.
+- [ ] Project only the encoded credential value.
+
+### 0.4.3-H — `.netrc` credentials
+
+- [ ] Evaluate a narrow `machine` / `login` / `password` grammar.
+- [ ] Add detection only if false-positive behavior remains acceptably strict.
+- [ ] Do not broaden generic configuration-key parsing solely for `.netrc`.
+
+This slice is optional and may be omitted from v0.4.3 if the required grammar
+would weaken Cribra's contextual precision.
+
+### 0.4.3-I — Cross-interface semantic parity
+
+- [ ] Validate the complete new detector corpus through the Rust API.
+- [ ] Validate native C ABI compatibility.
+- [ ] Validate WebAssembly compatibility.
+- [ ] Preserve equivalent findings, spans, metadata and ordering across
+  supported interfaces.
+
+### 0.4.3-J — Documentation and release gate
+
+- [ ] Update the public detector catalog and limitations.
+- [ ] Update security and interoperability documentation where necessary.
+- [ ] Run the complete release gate.
+- [ ] Publish v0.4.3 release notes.
+
+---
+
+## After v0.4.3
+
+No feature release is currently scheduled.
+
+Cribra enters maintenance and security-hardening mode after v0.4.3.
+
+Future releases should be driven by concrete evidence such as:
+
+- a correctness or security issue;
+- a high-confidence broadly useful credential family;
+- an interoperability requirement;
+- a measurable performance problem;
+- a privacy or transformation-safety improvement;
+- a reusable capability that remains application-agnostic.
+
+The following remain intentionally outside the planned scope unless future
+evidence changes the trade-off:
+
+- generic entropy scanning;
+- generic Base64 scanning;
+- broad PII or DLP classification;
+- credit-card detection;
+- arbitrary hash classification;
+- AI-based secret classification;
+- provider network validation;
+- filesystem or repository traversal inside the core;
+- cloud SDK dependencies;
+- application-specific policy engines;
+- speculative plugin architecture.
+
+---
+
+## Historical releases
+
+### v0.3 — Native Interoperability
+
+Completed in v0.3.0.
+
+[Keep the existing detailed v0.3 checklist below this heading.]
+
+### v0.4 — WASM Interoperability
+
+Completed in v0.4.0, followed by the independently published
+`cribra-wasm 0.4.1` distribution release.
+
+[Keep the existing detailed v0.4 checklist below this heading.]

@@ -34,6 +34,7 @@ scanning across independent inputs.
 -   Deterministic keyed pseudonymization
 -   Deterministic keyed synthetic replacements
 -   Share-bundle construction
+-   Atomic scan-and-build path for source-consistent share bundles
 -   Optional Serde support
 -   Optional Rayon parallel batch scanning
 -   Unicode-aware source locations
@@ -730,6 +731,14 @@ non-secret `ShareModeKind`.
 Use share bundles when an application needs to package transformed
 sources and scan metadata together for export, support or collaboration
 workflows.
+
+When scan results do not need to exist independently from transformation,
+prefer the atomic `scan_and_build` path. It scans and transforms the same
+borrowed source values by construction.
+
+The lower-level `build` path remains available when callers already own
+`ScanResults`; callers are responsible for preserving the exact source/result
+pairing. Source count and byte length checks do not establish source identity.
 
 ## Canonical examples and golden corpus
 

@@ -10,14 +10,17 @@ The following release lines are currently supported for security fixes:
 
 | Version | Supported |
 | --- | --- |
-| 0.3.x | Yes — development line |
-| 0.2.x | Yes |
+| 0.4.x | Yes — current release line |
+| 0.3.x | No |
+| 0.2.x | No |
 | 0.1.x | No |
 | < 0.1 | No |
 
-Until Cribra reaches 1.0, support may move forward with active minor release
-lines. Older unsupported releases may still receive documentation updates, but
-security fixes are not guaranteed.
+Until Cribra reaches 1.0, security support follows the current active minor
+release line unless a release announcement explicitly states otherwise.
+
+Unsupported releases may still receive documentation corrections, but security
+fixes are not guaranteed.
 
 ## Reporting a Vulnerability
 
@@ -80,10 +83,19 @@ Cribra itself does not require network access to scan or transform data.
 A report showing that source material crosses one of these boundaries is
 considered security-relevant.
 
+Low-level transformation APIs that accept a source and a previously produced
+report require the caller to preserve the exact source/report pairing.
+Matching byte length is not proof of source identity.
+
+When scanning and immediately producing a share-safe bundle, callers should
+prefer the atomic scan-and-build path so that scanning and transformation use
+the same borrowed source values by construction.
+
 ## Native C ABI
 
-The native ABI is experimental during the 0.3 series but is designed as a
-long-lived interoperability boundary.
+The native C ABI was introduced in v0.3 as a dedicated interoperability
+adapter. Its compatibility and versioning contract is documented separately
+from Rust crate SemVer.
 
 Important invariants include:
 
