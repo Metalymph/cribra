@@ -793,3 +793,86 @@ fn database_connection_password_preserves_encoded_delimiters_and_exact_span() {
         assert_eq!(matched(source, finding), expected);
     }
 }
+
+#[test]
+fn password_fields_support_quoted_values_with_internal_whitespace() {
+    for (rule, source, expected_rule, expected) in [
+        (
+            builtins::PASSWORD_FIELD,
+            r#"password="Correct Horse Battery Staple""#,
+            "generic.password-field",
+            "Correct Horse Battery Staple",
+        ),
+        (
+            builtins::PASSWORD_FIELD,
+            "password='Correct Horse Battery Staple'",
+            "generic.password-field",
+            "Correct Horse Battery Staple",
+        ),
+        (
+            builtins::DATABASE_PASSWORD_FIELD,
+            r#"db_password="Database Horse Battery Staple""#,
+            "generic.database-password-field",
+            "Database Horse Battery Staple",
+        ),
+        (
+            builtins::PASSPHRASE_FIELD,
+            r#"private_key_passphrase="Private Key Horse Battery Staple""#,
+            "generic.passphrase-field",
+            "Private Key Horse Battery Staple",
+        ),
+    ] {
+        let scanner = scanner_for([rule]);
+        let results = scan_one(&scanner, source);
+        let report = results.single_report().expect("one fixture was scanned");
+
+        assert_eq!(report.len(), 1);
+
+        let finding = &report.findings()[0];
+
+        assert_eq!(finding.rule_id().as_str(), expected_rule);
+        assert_eq!(matched(source, finding), expected);
+    }
+}
+
+#[test]
+fn password_fields_do_not_include_trailing_whitespace_in_the_finding() {
+    let scanner = scanner_for([builtins::PASSWORD_FIELD]);
+
+    let source = "password=CorrectHorseBatteryStaple   ";
+    let results = scan_one(&scanner, source);
+    let report = results.single_report().expect("one fixture was scanned");
+
+    assert_eq!(report.len(), 1);
+    assert_eq!(
+        matched(source, &report.findings()[0]),
+        "CorrectHorseBatteryStaple"
+    );
+}
+
+#[test]
+fn password_fields_stop_at_newlines() {
+    let scanner = scanner_for([builtins::PASSWORD_FIELD]);
+
+    let source = "password=\"Correct Horse\nBattery Staple\"";
+    let results = scan_one(&scanner, source);
+    let report = results.single_report().expect("one fixture was scanned");
+
+    assert_eq!(report.len(), 1);
+    assert_eq!(matched(source, &report.findings()[0]), "Correct Horse");
+}
+
+#[test]
+fn password_fields_do_not_require_matching_surrounding_quotes() {
+    let scanner = scanner_for([builtins::PASSWORD_FIELD]);
+
+    let source = "password=\"Correct Horse Battery Staple'";
+    let results = scan_one(&scanner, source);
+    let report = results.single_report().expect("one fixture was scanned");
+
+    assert_eq!(report.len(), 1);
+    assert_eq!(
+        matched(source, &report.findings()[0]),
+        "Correct Horse Battery Staple"
+    );
+}

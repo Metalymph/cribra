@@ -104,10 +104,19 @@ pub const GCP_ESCAPED_PRIVATE_KEY: RuleSpec = RuleSpec::captured_pattern(
 .with_validator(ValidatorKind::Gcp)
 .with_remediation(Remediation::ReplacePrivateKey);
 
+// Quoted values may contain internal horizontal whitespace. Projection
+// intentionally excludes leading/trailing whitespace and never crosses a
+// newline while preserving the exact source bytes inside the detected span.
+//
+// Quote pairing and multiline quoted-value syntax are not parsed here: Cribra
+// detects credentials rather than validating JSON/YAML/TOML/env syntax.
+// Malformed surrounding syntax therefore does not suppress an otherwise valid
+// contextual credential candidate.
+
 /// Generic password field.
 pub const PASSWORD_FIELD: RuleSpec = RuleSpec::captured_pattern(
     "generic.password-field",
-    r#"(?i)["\']?(?:password|passwd|pwd|admin_password|root_password)["\']?\s*[:=]\s*["']?(?P<value>[^\s"'`;]{8,1024})"#,
+    r#"(?i)["']?(?:password|passwd|pwd|admin_password|root_password)["']?\s*[:=]\s*["']?(?P<value>[^\s"'`;](?:[^\r\n"'`;]{0,1022}[^\s"'`;])?)"#,
     "value",
     Severity::High,
 )
@@ -117,7 +126,7 @@ pub const PASSWORD_FIELD: RuleSpec = RuleSpec::captured_pattern(
 /// Database password field.
 pub const DATABASE_PASSWORD_FIELD: RuleSpec = RuleSpec::captured_pattern(
     "generic.database-password-field",
-    r#"(?i)["\']?(?:database_password|db_password|postgres_password|mysql_password|redis_password)["\']?\s*[:=]\s*["']?(?P<value>[^\s"'`;]{8,1024})"#,
+    r#"(?i)["']?(?:database_password|db_password|postgres_password|mysql_password|redis_password)["']?\s*[:=]\s*["']?(?P<value>[^\s"'`;](?:[^\r\n"'`;]{0,1022}[^\s"'`;])?)"#,
     "value",
     Severity::Critical,
 )
@@ -140,7 +149,7 @@ pub const DATABASE_CONNECTION_PASSWORD: RuleSpec = RuleSpec::captured_pattern(
 /// Private-key or application passphrase field.
 pub const PASSPHRASE_FIELD: RuleSpec = RuleSpec::captured_pattern(
     "generic.passphrase-field",
-    r#"(?i)["\']?(?:passphrase|private_key_passphrase)["\']?\s*[:=]\s*["']?(?P<value>[^\s"'`;]{8,1024})"#,
+    r#"(?i)["']?(?:passphrase|private_key_passphrase)["']?\s*[:=]\s*["']?(?P<value>[^\s"'`;](?:[^\r\n"'`;]{0,1022}[^\s"'`;])?)"#,
     "value",
     Severity::High,
 )

@@ -127,15 +127,19 @@ detect a credential.
 
 ### 0.4.3-D — Quoted Passwords and Passphrases
 
-- [ ] Add explicit quoted contextual detection for password-like values that
-      contain whitespace.
-- [ ] Support both single-quoted and double-quoted values where safe.
-- [ ] Preserve only the quoted value contents as the finding span.
-- [ ] Keep strong password/passphrase field-name requirements.
-- [ ] Preserve existing minimum-length and placeholder rejection behavior.
-- [ ] Do not loosen the existing unquoted password patterns to accept arbitrary
-      whitespace.
-- [ ] Add multiline, malformed-quote and documentation-example regressions.
+- [x] Allow quoted password, database-password, and passphrase values to contain
+      internal whitespace while preserving exact value projection.
+- [x] Keep existing contextual key validation and password validation unchanged.
+- [x] Preserve conservative handling for unquoted values by excluding leading and
+      trailing whitespace from the projected finding span.
+- [x] Do not parse configuration-language syntax or introduce quote-pairing
+      semantics in the detection engine.
+- [x] Treat mismatched surrounding quotes as malformed source syntax rather than
+      as a reason to suppress an otherwise high-confidence credential finding.
+- [x] Never extend a credential finding across a newline. Multiline quoted-value
+      parsing remains out of scope; when malformed quoted syntax reaches a
+      newline, an otherwise valid candidate on the current line may still be
+      reported rather than suppressed.
 
 This slice closes a grammar gap in existing password detection rather than
 broadening password classification semantics.
