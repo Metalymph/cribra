@@ -9,6 +9,7 @@ use crate::{
             ValidationContext,
             aws::{AwsCredentialKind, validate_aws},
             azure::{AzureCredentialKind, validate_azure},
+            database_connection::{DatabaseConnectionKind, validate_database_connection},
             gcp::{GcpCredentialKind, validate_gcp},
             generic::{GenericCredentialKind, validate_generic_credential},
             hash::{HashKind, validate_sensitive_hash},
@@ -41,6 +42,7 @@ pub(crate) enum ValidatorKind {
     Aws,
     Azure,
     Gcp,
+    DatabaseConnection,
     Password,
     SensitiveHash,
     GenericCredential,
@@ -61,6 +63,7 @@ impl ValidatorKind {
             Self::Aws
             | Self::Azure
             | Self::Gcp
+            | Self::DatabaseConnection
             | Self::Password
             | Self::SensitiveHash
             | Self::GenericCredential => DetectionMode::Contextual,
@@ -81,6 +84,7 @@ pub(crate) enum ValidationKind {
     Aws(AwsCredentialKind),
     Azure(AzureCredentialKind),
     Gcp(GcpCredentialKind),
+    DatabaseConnection(DatabaseConnectionKind),
     Password(PasswordKind),
     SensitiveHash(HashKind),
     GenericCredential(GenericCredentialKind),
@@ -169,6 +173,12 @@ pub(crate) fn validate_candidate(
             .map(|v| ValidationOutcome::new(ValidationKind::Azure(v.kind()), Confidence::High)),
         ValidatorKind::Gcp => validate_gcp(&context)
             .map(|v| ValidationOutcome::new(ValidationKind::Gcp(v.kind()), Confidence::High)),
+        ValidatorKind::DatabaseConnection => validate_database_connection(&context).map(|v| {
+            ValidationOutcome::new(
+                ValidationKind::DatabaseConnection(v.kind()),
+                Confidence::High,
+            )
+        }),
         ValidatorKind::Password => validate_password(&context).map(|v| {
             ValidationOutcome::new(ValidationKind::Password(v.kind()), Confidence::Medium)
         }),

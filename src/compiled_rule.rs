@@ -72,7 +72,9 @@ impl CompiledRuleMetadata {
         match self.validator {
             ValidatorKind::None => 0,
             ValidatorKind::GenericCredential => 100,
-            ValidatorKind::Password | ValidatorKind::SensitiveHash => 200,
+            ValidatorKind::Password
+            | ValidatorKind::SensitiveHash
+            | ValidatorKind::DatabaseConnection => 200,
             ValidatorKind::Jwt => 300,
             ValidatorKind::GitHub
             | ValidatorKind::GitLab
@@ -537,6 +539,16 @@ fn pattern_prefilter_needles(
         ("generic.authorization-bearer", ValidatorKind::GenericCredential) => {
             Some(&["authorization"])
         }
+        ("generic.database-connection-password", ValidatorKind::DatabaseConnection) => Some(&[
+            "postgres://",
+            "postgresql://",
+            "mysql://",
+            "mariadb://",
+            "mongodb://",
+            "mongodb+srv://",
+            "redis://",
+            "rediss://",
+        ]),
         ("generic.secret", ValidatorKind::GenericCredential) => Some(&[
             "signing_secret",
             "webhook_secret",

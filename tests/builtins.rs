@@ -629,3 +629,167 @@ fn gcp_escaped_private_key_rejects_incomplete_or_unrelated_values() {
         );
     }
 }
+
+#[test]
+fn database_connection_password_detects_supported_uri_schemes() {
+    let scanner = scanner_for([builtins::DATABASE_CONNECTION_PASSWORD]);
+
+    for (source, expected) in [
+        (
+            "DATABASE_URL=postgres://alice:CorrectHorseBatteryStaple@localhost/app",
+            "CorrectHorseBatteryStaple",
+        ),
+        (
+            "DATABASE_URL=postgresql://alice:CorrectHorseBatteryStaple@localhost/app",
+            "CorrectHorseBatteryStaple",
+        ),
+        (
+            "DATABASE_URL=mysql://alice:CorrectHorseBatteryStaple@localhost/app",
+            "CorrectHorseBatteryStaple",
+        ),
+        (
+            "DATABASE_URL=mariadb://alice:CorrectHorseBatteryStaple@localhost/app",
+            "CorrectHorseBatteryStaple",
+        ),
+        (
+            "DATABASE_URL=mongodb://alice:CorrectHorseBatteryStaple@localhost/app",
+            "CorrectHorseBatteryStaple",
+        ),
+        (
+            "DATABASE_URL=mongodb+srv://alice:CorrectHorseBatteryStaple@cluster.example/app",
+            "CorrectHorseBatteryStaple",
+        ),
+        (
+            "REDIS_URL=redis://alice:CorrectHorseBatteryStaple@localhost:6379",
+            "CorrectHorseBatteryStaple",
+        ),
+        (
+            "REDIS_URL=rediss://alice:CorrectHorseBatteryStaple@cache.example:6379",
+            "CorrectHorseBatteryStaple",
+        ),
+    ] {
+        let results = scan_one(&scanner, source);
+        let report = results.single_report().expect("one fixture was scanned");
+
+        assert_eq!(
+            report.len(),
+            1,
+            "database connection credential was not detected in {source:?}"
+        );
+
+        let finding = &report.findings()[0];
+
+        assert_eq!(
+            finding.rule_id().as_str(),
+            "generic.database-connection-password"
+        );
+        assert_eq!(matched(source, finding), expected);
+        assert_eq!(finding.severity(), Severity::Critical);
+        assert_eq!(finding.confidence(), Confidence::High);
+        assert_eq!(finding.remediation(), Some(Remediation::RotatePassword));
+    }
+}
+
+#[test]
+fn database_connection_password_preserves_percent_encoded_source_value() {
+    let source = "DATABASE_URL=postgresql://alice:Correct%40Horse%2FBattery@localhost/app";
+
+    let scanner = scanner_for([builtins::DATABASE_CONNECTION_PASSWORD]);
+    let results = scan_one(&scanner, source);
+    let report = results.single_report().expect("one fixture was scanned");
+
+    assert_eq!(report.len(), 1);
+
+    let finding = &report.findings()[0];
+
+    assert_eq!(
+        finding.rule_id().as_str(),
+        "generic.database-connection-password"
+    );
+    assert_eq!(matched(source, finding), "Correct%40Horse%2FBattery");
+}
+
+#[test]
+fn database_connection_password_rejects_non_credential_uris_and_near_misses() {
+    let scanner = scanner_for([builtins::DATABASE_CONNECTION_PASSWORD]);
+
+    for source in [
+        "postgres://localhost/app",
+        "postgres://alice@localhost/app",
+        "postgres://alice:@localhost/app",
+        "postgres://localhost:5432/app",
+        "postgresql://localhost/app",
+        "mysql://localhost/app",
+        "mariadb://localhost/app",
+        "mongodb://localhost/app",
+        "mongodb+srv://cluster.example/app",
+        "redis://localhost:6379",
+        "rediss://cache.example:6379",
+        "https://alice:CorrectHorseBatteryStaple@example.com",
+        "example://alice:CorrectHorseBatteryStaple@host",
+    ] {
+        let results = scan_one(&scanner, source);
+        let report = results.single_report().expect("one fixture was scanned");
+
+        assert!(
+            report.is_empty(),
+            "non-credential URI unexpectedly produced findings for {source:?}: {:?}",
+            report
+                .iter()
+                .map(|finding| finding.rule_id().as_str())
+                .collect::<Vec<_>>()
+        );
+    }
+}
+
+#[test]
+fn database_connection_password_rejects_malformed_percent_encoding() {
+    let scanner = scanner_for([builtins::DATABASE_CONNECTION_PASSWORD]);
+
+    for source in [
+        "postgres://alice:secret%2@localhost/app",
+        "postgres://alice:secret%XX@localhost/app",
+        "mysql://alice:secret%@localhost/app",
+    ] {
+        let results = scan_one(&scanner, source);
+        let report = results.single_report().expect("one fixture was scanned");
+
+        assert!(
+            report.is_empty(),
+            "malformed database password unexpectedly produced a finding: {source:?}"
+        );
+    }
+}
+
+#[test]
+fn database_connection_password_preserves_encoded_delimiters_and_exact_span() {
+    let scanner = scanner_for([builtins::DATABASE_CONNECTION_PASSWORD]);
+
+    for (source, expected) in [
+        (
+            "postgres://alice:p%40ss%3Aword@localhost/app",
+            "p%40ss%3Aword",
+        ),
+        (
+            r#""postgres://alice:CorrectHorseBatteryStaple@localhost/app""#,
+            "CorrectHorseBatteryStaple",
+        ),
+        (
+            "(postgres://alice:CorrectHorseBatteryStaple@localhost/app)",
+            "CorrectHorseBatteryStaple",
+        ),
+    ] {
+        let results = scan_one(&scanner, source);
+        let report = results.single_report().expect("one fixture was scanned");
+
+        assert_eq!(report.len(), 1);
+
+        let finding = &report.findings()[0];
+
+        assert_eq!(
+            finding.rule_id().as_str(),
+            "generic.database-connection-password"
+        );
+        assert_eq!(matched(source, finding), expected);
+    }
+}

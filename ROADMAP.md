@@ -99,6 +99,8 @@ breadth.
       - `glimt-`
       - `glagent-`
       - `glwt-`
+      - `glsoat-`
+      - `glffct-`
 - [x] Include only token families whose shape can be validated conservatively.
 - [x] Reject placeholders, truncated values and malformed near-misses.
 - [x] Add deterministic prefilter support.
@@ -111,23 +113,14 @@ cover installations using custom prefixes.
 
 ### 0.4.3-C — Database Connection Credentials
 
-- [ ] Detect credentials embedded in supported database connection URIs.
-- [ ] Cover:
-      - `postgres://`
-      - `postgresql://`
-      - `mysql://`
-      - `redis://`
-      - `rediss://`
-      - `mongodb://`
-      - `mongodb+srv://`
-- [ ] Project only the password or secret credential span rather than the whole
-      connection URI.
-- [ ] Preserve exact raw-source offsets.
-- [ ] Preserve percent-encoded source representation.
-- [ ] Reject connection strings without credentials.
-- [ ] Reject user-only connection strings without a password.
-- [ ] Add malformed-URI and delimiter adversarial cases.
-- [ ] Ensure transformation APIs operate correctly on projected password spans.
+- [x] Detect credentials embedded in recognized database connection URIs.
+- [x] Cover PostgreSQL, MySQL, MariaDB, MongoDB and Redis URI families.
+- [x] Project only the password component as the finding span.
+- [x] Preserve percent-encoded source values without decoding or normalization.
+- [x] Reject passwordless URIs, empty credentials, placeholders and malformed
+      percent encoding.
+- [x] Add deterministic prefiltering for supported database URI schemes.
+- [x] Add positive and adversarial corpus coverage.
 
 Cribra must not decode and rewrite the surrounding connection string merely to
 detect a credential.

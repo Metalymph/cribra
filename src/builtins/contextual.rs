@@ -124,6 +124,19 @@ pub const DATABASE_PASSWORD_FIELD: RuleSpec = RuleSpec::captured_pattern(
 .with_validator(ValidatorKind::Password)
 .with_remediation(Remediation::RotatePassword);
 
+/// Password embedded in a recognized database connection URI.
+///
+/// Only the password component of `username:password@host` userinfo is exposed
+/// as the finding span.
+pub const DATABASE_CONNECTION_PASSWORD: RuleSpec = RuleSpec::captured_pattern(
+    "generic.database-connection-password",
+    r#"(?i)(?:postgres(?:ql)?|mysql|mariadb|mongodb(?:\+srv)?|rediss?)://[^/\s:@]+:(?P<value>[^\s@/?#"'`]{1,1024})@"#,
+    "value",
+    Severity::Critical,
+)
+.with_validator(ValidatorKind::DatabaseConnection)
+.with_remediation(Remediation::RotatePassword);
+
 /// Private-key or application passphrase field.
 pub const PASSPHRASE_FIELD: RuleSpec = RuleSpec::captured_pattern(
     "generic.passphrase-field",

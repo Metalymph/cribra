@@ -163,3 +163,25 @@ fn gitlab_standard_prefix_is_detected_without_context_but_custom_prefix_is_not()
     assert_eq!(gitlab.len(), 1);
     assert_eq!(&source[gitlab[0].location().byte_range()], STANDARD);
 }
+
+#[test]
+fn database_connection_uris_without_password_remain_clean() {
+    let source = concat!(
+        "postgres://localhost/app\n",
+        "postgres://alice@localhost/app\n",
+        "mysql://localhost/app\n",
+        "mongodb://localhost/app\n",
+        "redis://localhost:6379\n",
+    );
+
+    let scanner = Scanner::default();
+    let results = scanner.scan([("database-uris", source)]);
+    let report = results.single_report().expect("one fixture was scanned");
+
+    assert!(
+        !report
+            .findings()
+            .iter()
+            .any(|finding| finding.rule_id().as_str() == "generic.database-connection-password")
+    );
+}
