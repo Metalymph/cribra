@@ -75,6 +75,7 @@ impl CompiledRuleMetadata {
             ValidatorKind::Password | ValidatorKind::SensitiveHash => 200,
             ValidatorKind::Jwt => 300,
             ValidatorKind::GitHub
+            | ValidatorKind::GitLab
             | ValidatorKind::Stripe
             | ValidatorKind::Cloudflare
             | ValidatorKind::Slack

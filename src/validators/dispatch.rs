@@ -17,6 +17,7 @@ use crate::{
         deterministic::{
             cloudflare::{CloudflareTokenKind, validate_cloudflare_token},
             github::{GitHubTokenKind, validate_github_token},
+            gitlab::{GitLabTokenKind, validate_gitlab_token},
             jwt::{JwtKind, validate_jwt},
             slack::{SlackTokenKind, validate_slack_token},
             stripe::{StripeTokenKind, validate_stripe_token},
@@ -31,6 +32,7 @@ pub(crate) enum ValidatorKind {
     #[default]
     None,
     GitHub,
+    GitLab,
     Stripe,
     Cloudflare,
     Slack,
@@ -50,6 +52,7 @@ impl ValidatorKind {
         match self {
             Self::None => DetectionMode::MatcherOnly,
             Self::GitHub
+            | Self::GitLab
             | Self::Stripe
             | Self::Cloudflare
             | Self::Slack
@@ -69,6 +72,7 @@ impl ValidatorKind {
 pub(crate) enum ValidationKind {
     Unvalidated,
     GitHub(GitHubTokenKind),
+    GitLab(GitLabTokenKind),
     Stripe(StripeTokenKind),
     Cloudflare(CloudflareTokenKind),
     Slack(SlackTokenKind),
@@ -146,6 +150,8 @@ pub(crate) fn validate_candidate(
         ValidatorKind::None => unreachable!("handled above"),
         ValidatorKind::GitHub => validate_github_token(context.candidate())
             .map(|v| ValidationOutcome::new(ValidationKind::GitHub(v.kind()), Confidence::High)),
+        ValidatorKind::GitLab => validate_gitlab_token(context.candidate())
+            .map(|v| ValidationOutcome::new(ValidationKind::GitLab(v.kind()), Confidence::High)),
         ValidatorKind::Stripe => validate_stripe_token(context.candidate())
             .map(|v| ValidationOutcome::new(ValidationKind::Stripe(v.kind()), Confidence::High)),
         ValidatorKind::Cloudflare => validate_cloudflare_token(context.candidate()).map(|v| {
@@ -198,6 +204,7 @@ mod tests {
 
         for validator in [
             ValidatorKind::GitHub,
+            ValidatorKind::GitLab,
             ValidatorKind::Stripe,
             ValidatorKind::Cloudflare,
             ValidatorKind::Slack,
@@ -271,5 +278,25 @@ mod tests {
             outcome.kind(),
             ValidationKind::Aws(AwsCredentialKind::SecretAccessKey)
         ));
+    }
+
+    #[test]
+    fn dispatches_gitlab_deterministic_validator() {
+        let token = "glpat-AbCdEf0123456789_AbCdEf0123456789";
+        let source = format!("GITLAB_TOKEN={token}");
+
+        let outcome = validate_candidate(
+            ValidatorKind::GitLab,
+            &source,
+            range_of(&source, token),
+            Confidence::Low,
+        )
+        .expect("GitLab token should validate");
+
+        assert!(matches!(
+            outcome.kind(),
+            ValidationKind::GitLab(GitLabTokenKind::Access)
+        ));
+        assert_eq!(outcome.confidence(), Confidence::High);
     }
 }

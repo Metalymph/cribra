@@ -84,10 +84,10 @@ breadth.
 
 ### 0.4.3-B — GitLab Credentials
 
-- [ ] Add a dedicated GitLab validator.
-- [ ] Cover stable, documented GitLab token families whose public format
+- [x] Add a dedicated GitLab validator.
+- [x] Cover stable, documented GitLab token families whose public format
       supports high-confidence structural recognition.
-- [ ] Evaluate documented prefixes including:
+- [x] Evaluate documented prefixes including:
       - `glpat-`
       - `gloas-`
       - `gldt-`

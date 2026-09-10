@@ -142,3 +142,24 @@ fn nearby_classified_and_ambiguous_values_remain_separate_channels() {
         CANDIDATE
     );
 }
+
+#[test]
+fn gitlab_standard_prefix_is_detected_without_context_but_custom_prefix_is_not() {
+    const STANDARD: &str = "glpat-AbCdEf0123456789_AbCdEf0123456789";
+    const CUSTOM: &str = "company_pat_AbCdEf0123456789_AbCdEf0123456789";
+
+    let source = format!("{STANDARD}\n{CUSTOM}\n");
+
+    let scanner = Scanner::default();
+    let results = scanner.scan([("gitlab", source.as_str())]);
+    let report = results.single_report().expect("one fixture was scanned");
+
+    let gitlab = report
+        .findings()
+        .iter()
+        .filter(|finding| finding.rule_id().as_str() == "gitlab.access-token")
+        .collect::<Vec<_>>();
+
+    assert_eq!(gitlab.len(), 1);
+    assert_eq!(&source[gitlab[0].location().byte_range()], STANDARD);
+}

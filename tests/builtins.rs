@@ -93,6 +93,140 @@ fn deterministic_builtins_detect_realistic_synthetic_values() {
 }
 
 #[test]
+fn gitlab_builtins_detect_supported_standard_prefixes() {
+    const BODY: &str = "AbCdEf0123456789_AbCdEf0123456789";
+
+    let cases = [
+        (
+            builtins::GITLAB_ACCESS_TOKEN,
+            "gitlab.access-token",
+            "glpat-",
+        ),
+        (
+            builtins::GITLAB_OAUTH_APPLICATION_SECRET,
+            "gitlab.oauth-application-secret",
+            "gloas-",
+        ),
+        (
+            builtins::GITLAB_DEPLOY_TOKEN,
+            "gitlab.deploy-token",
+            "gldt-",
+        ),
+        (
+            builtins::GITLAB_RUNNER_AUTH_TOKEN,
+            "gitlab.runner-auth-token",
+            "glrt-",
+        ),
+        (
+            builtins::GITLAB_REGISTRATION_DERIVED_RUNNER_AUTH_TOKEN,
+            "gitlab.registration-derived-runner-auth-token",
+            "glrtr-",
+        ),
+        (
+            builtins::GITLAB_CI_JOB_TOKEN,
+            "gitlab.ci-job-token",
+            "glcbt-",
+        ),
+        (
+            builtins::GITLAB_TRIGGER_TOKEN,
+            "gitlab.trigger-token",
+            "glptt-",
+        ),
+        (builtins::GITLAB_FEED_TOKEN, "gitlab.feed-token", "glft-"),
+        (
+            builtins::GITLAB_INCOMING_MAIL_TOKEN,
+            "gitlab.incoming-mail-token",
+            "glimt-",
+        ),
+        (
+            builtins::GITLAB_AGENT_TOKEN,
+            "gitlab.agent-token",
+            "glagent-",
+        ),
+        (
+            builtins::GITLAB_WORKSPACE_TOKEN,
+            "gitlab.workspace-token",
+            "glwt-",
+        ),
+        (builtins::GITLAB_SCIM_TOKEN, "gitlab.scim-token", "glsoat-"),
+        (
+            builtins::GITLAB_FEATURE_FLAG_CLIENT_TOKEN,
+            "gitlab.feature-flag-client-token",
+            "glffct-",
+        ),
+    ];
+
+    for (rule, expected_id, prefix) in cases {
+        let token = format!("{prefix}{BODY}");
+        let scanner = scanner_for([rule]);
+        let results = scanner.scan([("fixture", token.as_str())]);
+        let report = results.single_report().expect("one fixture was scanned");
+
+        assert_eq!(report.len(), 1, "{expected_id} was not detected");
+
+        let finding = &report.findings()[0];
+
+        assert_eq!(finding.rule_id().as_str(), expected_id);
+        assert_eq!(matched(&token, finding), token);
+        assert_eq!(finding.severity(), Severity::Critical);
+        assert_eq!(finding.confidence(), Confidence::High);
+        assert_eq!(
+            finding.remediation(),
+            Some(Remediation::RevokeAndRotateCredential)
+        );
+    }
+}
+
+#[test]
+fn gitlab_builtins_reject_placeholders_short_values_and_unknown_prefixes() {
+    let scanner = scanner_for([
+        builtins::GITLAB_ACCESS_TOKEN,
+        builtins::GITLAB_OAUTH_APPLICATION_SECRET,
+        builtins::GITLAB_DEPLOY_TOKEN,
+        builtins::GITLAB_RUNNER_AUTH_TOKEN,
+        builtins::GITLAB_REGISTRATION_DERIVED_RUNNER_AUTH_TOKEN,
+        builtins::GITLAB_CI_JOB_TOKEN,
+        builtins::GITLAB_TRIGGER_TOKEN,
+        builtins::GITLAB_FEED_TOKEN,
+        builtins::GITLAB_INCOMING_MAIL_TOKEN,
+        builtins::GITLAB_AGENT_TOKEN,
+        builtins::GITLAB_WORKSPACE_TOKEN,
+        builtins::GITLAB_SCIM_TOKEN,
+        builtins::GITLAB_FEATURE_FLAG_CLIENT_TOKEN,
+    ]);
+
+    for source in [
+        "glpat-your_token_here",
+        "gloas-example",
+        "gldt-too",
+        "glrt-placeholder",
+        "glrtr-token_here",
+        "glcbt-example_token",
+        "glptt-test_token",
+        "glft-placeholder",
+        "glimt-placeholder",
+        "glagent-example",
+        "glwt-token_here",
+        "glsoat-placeholder",
+        "glffct-example",
+        "glxyz-AbCdEf0123456789_AbCdEf0123456789",
+        "company_pat_AbCdEf0123456789_AbCdEf0123456789",
+    ] {
+        let results = scan_one(&scanner, source);
+        let report = results.single_report().expect("one fixture was scanned");
+
+        assert!(
+            report.is_empty(),
+            "invalid GitLab candidate unexpectedly produced findings for {source:?}: {:?}",
+            report
+                .iter()
+                .map(|finding| finding.rule_id().as_str())
+                .collect::<Vec<_>>()
+        );
+    }
+}
+
+#[test]
 fn contextual_builtins_project_only_the_secret_value() {
     let source = include_str!("fixtures/contextual.env");
     let scanner = scanner_for([
