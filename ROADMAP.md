@@ -181,14 +181,20 @@ This detector must not introduce generic Base64 scanning.
 
 ### 0.4.3-G — PGP Private Keys
 
-- [ ] Detect ASCII-armored PGP private-key blocks.
-- [ ] Require exact private-key block delimiters.
-- [ ] Require a nontrivial body.
-- [ ] Reject PGP public-key blocks.
-- [ ] Reject incomplete or mismatched blocks.
-- [ ] Use Critical severity.
-- [ ] Use private-key replacement remediation.
-- [ ] Verify collision and transformation behavior.
+- [x] Detect ASCII-armored PGP private-key blocks.
+- [x] Require exact private-key block delimiters.
+- [x] Require a nontrivial body.
+- [x] Reject PGP public-key blocks.
+- [x] Reject incomplete or mismatched blocks.
+- [x] Use Critical severity.
+- [x] Use private-key replacement remediation.
+- [x] Verify collision and transformation behavior.
+
+PGP private-key detection is limited to complete ASCII-armored private-key
+blocks with exact delimiters and a nontrivial body. Public-key, incomplete,
+short, and mismatched blocks remain clean. The full armored block is treated as
+the sensitive span and uses the same private-key replacement semantics as the
+existing PEM private-key families.
 
 ### 0.4.3-H — WireGuard Credentials
 

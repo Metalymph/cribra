@@ -876,3 +876,141 @@ fn password_fields_do_not_require_matching_surrounding_quotes() {
         "Correct Horse Battery Staple"
     );
 }
+
+#[test]
+fn pgp_private_key_detects_complete_ascii_armored_block() {
+    let scanner = scanner_for([builtins::PGP_PRIVATE_KEY]);
+
+    let source = concat!(
+        "-----BEGIN PGP PRIVATE KEY BLOCK-----\n",
+        "\n",
+        "lQOYBGsynthetic0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ\n",
+        "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGH\n",
+        "=ABCD\n",
+        "-----END PGP PRIVATE KEY BLOCK-----",
+    );
+
+    let results = scan_one(&scanner, source);
+    let report = results.single_report().expect("one source");
+
+    assert_eq!(report.len(), 1);
+
+    let finding = &report.findings()[0];
+
+    assert_eq!(finding.rule_id().as_str(), "generic.pgp-private-key");
+    assert_eq!(matched(source, finding), source);
+    assert_eq!(finding.severity(), Severity::Critical);
+    assert_eq!(finding.remediation(), Some(Remediation::ReplacePrivateKey));
+}
+
+#[test]
+fn pgp_private_key_rejects_public_incomplete_short_and_mismatched_blocks() {
+    let scanner = scanner_for([builtins::PGP_PRIVATE_KEY]);
+
+    for source in [
+        concat!(
+            "-----BEGIN PGP PUBLIC KEY BLOCK-----\n",
+            "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ\n",
+            "-----END PGP PUBLIC KEY BLOCK-----",
+        ),
+        "-----BEGIN PGP PRIVATE KEY BLOCK-----",
+        concat!(
+            "-----BEGIN PGP PRIVATE KEY BLOCK-----\n",
+            "short\n",
+            "-----END PGP PRIVATE KEY BLOCK-----",
+        ),
+        concat!(
+            "-----BEGIN PGP PRIVATE KEY BLOCK-----\n",
+            "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ\n",
+            "-----END PGP PUBLIC KEY BLOCK-----",
+        ),
+        concat!(
+            "-----BEGIN PGP PUBLIC KEY BLOCK-----\n",
+            "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ\n",
+            "-----END PGP PRIVATE KEY BLOCK-----",
+        ),
+    ] {
+        let results = scan_one(&scanner, source);
+        let report = results.single_report().expect("one source");
+
+        assert!(
+            report.is_empty(),
+            "unexpected PGP private-key finding for {source:?}"
+        );
+    }
+}
+
+#[test]
+fn pgp_private_key_supports_crlf_armored_blocks() {
+    let scanner = scanner_for([builtins::PGP_PRIVATE_KEY]);
+
+    let source = concat!(
+        "-----BEGIN PGP PRIVATE KEY BLOCK-----\r\n",
+        "\r\n",
+        "lQOYBGsynthetic0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ\r\n",
+        "=ABCD\r\n",
+        "-----END PGP PRIVATE KEY BLOCK-----",
+    );
+
+    let results = scan_one(&scanner, source);
+    let report = results.single_report().expect("one source");
+
+    assert_eq!(report.len(), 1);
+    assert_eq!(matched(source, &report.findings()[0]), source);
+}
+
+#[test]
+fn pgp_private_key_remains_independent_from_other_private_key_families() {
+    let scanner = scanner_for([
+        builtins::PKCS8_PRIVATE_KEY,
+        builtins::ENCRYPTED_PRIVATE_KEY,
+        builtins::RSA_PRIVATE_KEY,
+        builtins::EC_PRIVATE_KEY,
+        builtins::OPENSSH_PRIVATE_KEY,
+        builtins::PGP_PRIVATE_KEY,
+    ]);
+
+    let source = concat!(
+        "-----BEGIN PGP PRIVATE KEY BLOCK-----\n",
+        "lQOYBGsynthetic0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ\n",
+        "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGH\n",
+        "-----END PGP PRIVATE KEY BLOCK-----",
+    );
+
+    let results = scan_one(&scanner, source);
+    let report = results.single_report().expect("one source");
+
+    assert_eq!(report.len(), 1);
+    assert_eq!(
+        report.findings()[0].rule_id().as_str(),
+        "generic.pgp-private-key"
+    );
+}
+
+#[test]
+fn pgp_private_key_redaction_replaces_the_entire_armored_block() {
+    let scanner = scanner_for([builtins::PGP_PRIVATE_KEY]);
+
+    let source = concat!(
+        "before\n",
+        "-----BEGIN PGP PRIVATE KEY BLOCK-----\n",
+        "lQOYBGsynthetic0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ\n",
+        "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGH\n",
+        "-----END PGP PRIVATE KEY BLOCK-----\n",
+        "after",
+    );
+
+    let results = scan_one(&scanner, source);
+    let report = results.single_report().expect("one source");
+
+    assert_eq!(report.len(), 1);
+
+    let transformed =
+        cribra::transform::redact(source, report).expect("PGP private-key redaction must succeed");
+
+    assert!(!transformed.contains("BEGIN PGP PRIVATE KEY BLOCK"));
+    assert!(!transformed.contains("END PGP PRIVATE KEY BLOCK"));
+    assert!(!transformed.contains("lQOYBGsynthetic"));
+    assert!(transformed.starts_with("before\n"));
+    assert!(transformed.ends_with("\nafter"));
+}

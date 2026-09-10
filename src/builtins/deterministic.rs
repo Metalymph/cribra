@@ -263,3 +263,11 @@ pub const OPENSSH_PRIVATE_KEY: RuleSpec = RuleSpec::pattern(
     Severity::Critical,
 )
 .with_remediation(Remediation::ReplacePrivateKey);
+
+/// ASCII-armored OpenPGP private-key block.
+pub const PGP_PRIVATE_KEY: RuleSpec = RuleSpec::pattern(
+    "generic.pgp-private-key",
+    r"(?s)-----BEGIN PGP PRIVATE KEY BLOCK-----\r?\n.{16,}?\r?\n-----END PGP PRIVATE KEY BLOCK-----",
+    Severity::Critical,
+)
+.with_remediation(Remediation::ReplacePrivateKey);
