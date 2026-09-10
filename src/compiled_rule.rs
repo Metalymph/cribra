@@ -74,7 +74,8 @@ impl CompiledRuleMetadata {
             ValidatorKind::GenericCredential => 100,
             ValidatorKind::Password
             | ValidatorKind::SensitiveHash
-            | ValidatorKind::DatabaseConnection => 200,
+            | ValidatorKind::DatabaseConnection
+            | ValidatorKind::HttpBasic => 200,
             ValidatorKind::Jwt => 300,
             ValidatorKind::GitHub
             | ValidatorKind::GitLab
@@ -505,6 +506,9 @@ fn pattern_prefilter_needles(
         ("gcp.private-key-id", ValidatorKind::Gcp) => Some(&["private_key_id"]),
         ("gcp.private-key", ValidatorKind::Gcp) => Some(&["private_key"]),
         ("gcp.escaped-private-key", ValidatorKind::Gcp) => Some(&["private_key"]),
+        ("generic.authorization-basic", ValidatorKind::HttpBasic) => {
+            Some(&["authorization", "basic"])
+        }
         ("generic.password-field", ValidatorKind::Password) => Some(&[
             "admin_password",
             "root_password",

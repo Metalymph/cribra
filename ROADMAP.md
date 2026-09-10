@@ -146,31 +146,36 @@ broadening password classification semantics.
 
 ### 0.4.3-E — Adversarial Detection Corpus
 
-- [ ] Expand false-positive fixtures for all new v0.4.3 detector families.
-- [ ] Add false-prefix and truncated-token cases.
-- [ ] Add documentation and placeholder examples.
-- [ ] Add provider near-misses.
-- [ ] Add malformed database connection strings.
-- [ ] Add generic field names carrying clearly non-secret values.
-- [ ] Add Base64-looking values outside supported authentication context.
-- [ ] Add hash-like values outside password-verifier context.
-- [ ] Add collision-heavy cases between provider-specific and generic rules.
-- [ ] Verify exact-span normalization remains deterministic.
-- [ ] Verify serial and parallel scanning remain semantically equivalent.
+- [x] Expand false-positive fixtures for all new v0.4.3 detector families.
+- [x] Add false-prefix and truncated-token cases.
+- [x] Add documentation and placeholder examples.
+- [x] Add provider near-misses.
+- [x] Add malformed database connection strings.
+- [x] Add generic field names carrying clearly non-secret values.
+- [x] Add Base64-looking values outside supported authentication context.
+- [x] Add hash-like values outside password-verifier context.
+- [x] Add collision-heavy cases between provider-specific and generic rules.
+- [x] Verify exact-span normalization remains deterministic.
+- [x] Verify serial and parallel scanning remain semantically equivalent.
 
 Adversarial coverage is a release requirement, not optional test polish.
 
 ### 0.4.3-F — HTTP Basic Credentials
 
-- [ ] Detect explicit HTTP `Authorization: Basic` credentials.
-- [ ] Require explicit Basic authentication context.
-- [ ] Validate Base64 structure locally.
-- [ ] Decode locally and require a credential structure containing `:`.
-- [ ] Keep the finding span on the encoded credential present in the source.
-- [ ] Reject invalid Base64.
-- [ ] Reject unrelated Base64 data.
-- [ ] Reject unsupported authentication schemes.
-- [ ] Add placeholder and documentation-example regressions.
+- [x] Detect explicit HTTP `Authorization: Basic` credentials.
+- [x] Require explicit Basic authentication context.
+- [x] Validate canonical standard Base64 structure locally.
+- [x] Decode locally and require a credential structure containing `:`.
+- [x] Keep the finding span on the encoded credential present in the source.
+- [x] Reject invalid, truncated and non-canonical Base64.
+- [x] Reject unrelated Base64 data.
+- [x] Reject unsupported authentication schemes.
+- [x] Reject empty username/password structures and common documentation examples.
+- [x] Keep generic Base64 scanning out of scope.
+
+The detector validates only explicit HTTP Basic authentication material. Decoding is
+local and used solely to verify credential structure; decoded credentials are not
+exposed as finding spans. Generic Base64 data is never scanned or promoted.
 
 This detector must not introduce generic Base64 scanning.
 

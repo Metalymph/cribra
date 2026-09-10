@@ -196,6 +196,20 @@ pub const AUTHORIZATION_BEARER: RuleSpec = RuleSpec::captured_pattern(
 .with_validator(ValidatorKind::GenericCredential)
 .with_remediation(Remediation::RotateCredential);
 
+/// HTTP Authorization header carrying Basic credentials.
+///
+/// Only the encoded credential is exposed as the finding span. The payload is
+/// decoded locally during validation solely to verify `username:password`
+/// structure; generic Base64 data is never scanned.
+pub const AUTHORIZATION_BASIC: RuleSpec = RuleSpec::captured_pattern(
+    "generic.authorization-basic",
+    r#"(?i)["']?authorization["']?\s*:\s*["']?basic\s+(?P<value>[A-Za-z0-9+/=]{4,2048})(?:["'\s;,]|$)"#,
+    "value",
+    Severity::Critical,
+)
+.with_validator(ValidatorKind::HttpBasic)
+.with_remediation(Remediation::RotatePassword);
+
 /// Explicit generic secret field.
 pub const GENERIC_SECRET: RuleSpec = RuleSpec::captured_pattern(
     "generic.secret",

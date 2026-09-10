@@ -285,3 +285,76 @@ fn explicit_azure_client_secret_remains_provider_specific() {
 
     assert_eq!(finding.rule_id().as_str(), "azure.client-secret");
 }
+
+#[test]
+fn authorization_basic_projects_only_the_encoded_credential() {
+    const ENCODED: &str = "Y3JpYnJhOkNvcnJlY3RIb3JzZUJhdHRlcnlTdGFwbGU=";
+
+    let scanner = Scanner::builder()
+        .builtin(builtins::AUTHORIZATION_BASIC)
+        .build()
+        .expect("authorization basic built-in must compile");
+
+    for source in [
+        format!("Authorization: Basic {ENCODED}"),
+        format!("authorization: basic {ENCODED}"),
+        format!(r#""Authorization": "Basic {ENCODED}""#),
+    ] {
+        let results = scanner.scan([("authorization", source.as_str())]);
+        let report = results.single_report().expect("one source");
+
+        assert_eq!(report.len(), 1);
+
+        let finding = &report.findings()[0];
+
+        assert_eq!(finding.rule_id().as_str(), "generic.authorization-basic");
+        assert_eq!(&source[finding.location().byte_range()], ENCODED);
+        assert_eq!(finding.severity(), Severity::Critical);
+        assert_eq!(finding.remediation(), Some(Remediation::RotatePassword));
+        assert_eq!(finding.confidence(), Confidence::High);
+    }
+}
+
+#[test]
+fn authorization_basic_rejects_invalid_and_unrelated_base64() {
+    let scanner = Scanner::builder()
+        .builtin(builtins::AUTHORIZATION_BASIC)
+        .build()
+        .expect("authorization basic built-in must compile");
+
+    for source in [
+        "Authorization: Basic !!!!",
+        "Authorization: Basic Y3JpYnJh",
+        "Authorization: Basic Y3JpYnJhOg==",
+        "Authorization: Basic OnNlY3JldA==",
+        "Authorization: Basic dXNlcjpwYXNzd29yZA==",
+        "Authorization: Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ==",
+        "Authorization: Bearer Y3JpYnJhOkNvcnJlY3RIb3JzZUJhdHRlcnlTdGFwbGU=",
+        "Proxy-Authorization: Basic Y3JpYnJhOkNvcnJlY3RIb3JzZUJhdHRlcnlTdGFwbGU=",
+        "blob=Y3JpYnJhOkNvcnJlY3RIb3JzZUJhdHRlcnlTdGFwbGU=",
+    ] {
+        let results = scanner.scan([("near-miss", source)]);
+        let report = results.single_report().expect("one source");
+
+        assert!(
+            report.is_empty(),
+            "unexpected HTTP Basic finding for {source:?}"
+        );
+    }
+}
+
+#[test]
+fn authorization_basic_remains_contextual_in_public_metadata() {
+    let scanner = Scanner::builder()
+        .builtin(builtins::AUTHORIZATION_BASIC)
+        .build()
+        .expect("authorization basic built-in must compile");
+
+    let metadata = scanner
+        .rule_metadata()
+        .next()
+        .expect("one rule metadata entry");
+
+    assert_eq!(metadata.id(), "generic.authorization-basic");
+    assert_eq!(metadata.detection_mode(), DetectionMode::Contextual);
+}

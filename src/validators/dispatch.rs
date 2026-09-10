@@ -13,6 +13,7 @@ use crate::{
             gcp::{GcpCredentialKind, validate_gcp},
             generic::{GenericCredentialKind, validate_generic_credential},
             hash::{HashKind, validate_sensitive_hash},
+            http_basic::validate_http_basic,
             password::{PasswordKind, validate_password},
         },
         deterministic::{
@@ -43,6 +44,7 @@ pub(crate) enum ValidatorKind {
     Azure,
     Gcp,
     DatabaseConnection,
+    HttpBasic,
     Password,
     SensitiveHash,
     GenericCredential,
@@ -64,6 +66,7 @@ impl ValidatorKind {
             | Self::Azure
             | Self::Gcp
             | Self::DatabaseConnection
+            | Self::HttpBasic
             | Self::Password
             | Self::SensitiveHash
             | Self::GenericCredential => DetectionMode::Contextual,
@@ -85,6 +88,7 @@ pub(crate) enum ValidationKind {
     Azure(AzureCredentialKind),
     Gcp(GcpCredentialKind),
     DatabaseConnection(DatabaseConnectionKind),
+    HttpBasic,
     Password(PasswordKind),
     SensitiveHash(HashKind),
     GenericCredential(GenericCredentialKind),
@@ -179,6 +183,8 @@ pub(crate) fn validate_candidate(
                 Confidence::High,
             )
         }),
+        ValidatorKind::HttpBasic => validate_http_basic(&context)
+            .map(|_| ValidationOutcome::new(ValidationKind::HttpBasic, Confidence::High)),
         ValidatorKind::Password => validate_password(&context).map(|v| {
             ValidationOutcome::new(ValidationKind::Password(v.kind()), Confidence::Medium)
         }),
@@ -229,6 +235,7 @@ mod tests {
             ValidatorKind::Azure,
             ValidatorKind::Gcp,
             ValidatorKind::Password,
+            ValidatorKind::HttpBasic,
             ValidatorKind::SensitiveHash,
             ValidatorKind::GenericCredential,
         ] {
