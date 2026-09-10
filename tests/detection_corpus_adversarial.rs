@@ -185,3 +185,70 @@ fn database_connection_uris_without_password_remain_clean() {
             .any(|finding| finding.rule_id().as_str() == "generic.database-connection-password")
     );
 }
+
+#[test]
+fn gitlab_near_miss_prefixes_and_placeholders_remain_clean() {
+    let source = concat!(
+        "glpat-\n",
+        "glpat-short\n",
+        "glpat-placeholder\n",
+        "glrtr-placeholder\n",
+        "glimt-placeholder\n",
+        "glxat-AbCdEf0123456789_AbCdEf0123456789\n",
+        "gitlab_pat_AbCdEf0123456789_AbCdEf0123456789\n",
+    );
+
+    let scanner = Scanner::default();
+    let results = scanner.scan([("gitlab-near-misses", source)]);
+    let report = results.single_report().expect("one fixture was scanned");
+
+    assert!(
+        !report
+            .findings()
+            .iter()
+            .any(|finding| finding.rule_id().as_str().starts_with("gitlab."))
+    );
+}
+
+#[test]
+fn malformed_database_connection_credentials_remain_clean() {
+    let source = concat!(
+        "postgresql://alice:@localhost/app\n",
+        "postgresql://alice:Correct%2@localhost/app\n",
+        "postgresql://alice:Correct%XX@localhost/app\n",
+        "postgresql://alice:Correct%@localhost/app\n",
+        "postgresql://:CorrectHorseBatteryStaple@localhost/app\n",
+        "https://alice:CorrectHorseBatteryStaple@localhost/app\n",
+        "example://alice:CorrectHorseBatteryStaple@localhost/app\n",
+    );
+
+    let scanner = Scanner::default();
+    let results = scanner.scan([("database-near-misses", source)]);
+    let report = results.single_report().expect("one fixture was scanned");
+
+    assert!(
+        !report.findings().iter().any(|finding| {
+            finding.rule_id().as_str() == "generic.database-connection-password"
+        })
+    );
+}
+
+#[test]
+fn base64_and_hash_like_noise_without_sensitive_context_remains_clean() {
+    let source = concat!(
+        "blob=QWxhZGRpbjpvcGVuIHNlc2FtZQ==\n",
+        "checksum=d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2\n",
+        "sha256=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\n",
+        "artifact_hash=abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd\n",
+    );
+
+    let scanner = Scanner::default();
+    let results = scanner.scan([("opaque-noise", source)]);
+    let report = results.single_report().expect("one fixture was scanned");
+
+    assert!(
+        report.findings().is_empty(),
+        "context-free encoded/hash-like noise produced findings: {:?}",
+        finding_ids(report)
+    );
+}

@@ -157,3 +157,49 @@ fn collision_heavy_batch_is_serial_parallel_equivalent() {
 
     assert_eq!(serial, parallel);
 }
+
+#[test]
+fn gitlab_provider_finding_wins_over_generic_token_on_the_same_span() {
+    const GITLAB_TOKEN: &str = "glpat-AbCdEf0123456789_AbCdEf0123456789";
+    let source = format!("token={GITLAB_TOKEN}");
+
+    let scanner = Scanner::default();
+    let results = scanner.scan([("source", source.as_str())]);
+    let report = results.single_report().expect("one source");
+
+    let matching = report
+        .findings()
+        .iter()
+        .filter(|finding| &source[finding.location().byte_range()] == GITLAB_TOKEN)
+        .collect::<Vec<_>>();
+
+    assert_eq!(matching.len(), 1);
+    assert_eq!(matching[0].rule_id().as_str(), "gitlab.access-token");
+}
+
+#[cfg(feature = "parallel")]
+#[test]
+fn v043_detection_families_are_serial_parallel_equivalent() {
+    let sources = [
+        ("gitlab", "glpat-AbCdEf0123456789_AbCdEf0123456789"),
+        (
+            "database",
+            "postgresql://cribra:CorrectHorseBatteryStaple@localhost/app",
+        ),
+        (
+            "quoted-password",
+            r#"password="Correct Horse Battery Staple""#,
+        ),
+        (
+            "clean",
+            "sha256=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        ),
+    ];
+
+    let scanner = Scanner::default();
+
+    let serial = scanner.scan(sources);
+    let parallel = scanner.parallel_scan(sources);
+
+    assert_eq!(serial, parallel);
+}
