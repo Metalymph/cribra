@@ -99,11 +99,11 @@ breadth.
       - `glimt-`
       - `glagent-`
       - `glwt-`
-- [ ] Include only token families whose shape can be validated conservatively.
-- [ ] Reject placeholders, truncated values and malformed near-misses.
-- [ ] Add deterministic prefilter support.
-- [ ] Add provider-specific collision tests.
-- [ ] Document the GitLab Self-Managed custom-prefix limitation rather than
+- [x] Include only token families whose shape can be validated conservatively.
+- [x] Reject placeholders, truncated values and malformed near-misses.
+- [x] Add deterministic prefilter support.
+- [x] Add provider-specific collision tests.
+- [x] Document the GitLab Self-Managed custom-prefix limitation rather than
       weakening detection with broad heuristics.
 
 GitLab support must not introduce generic opaque-token detection solely to
