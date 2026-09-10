@@ -222,17 +222,26 @@ WireGuard support remains contextual and does not introduce generic
 
 ### 0.4.3-I — Docker Registry Credentials
 
-- [ ] Detect Docker registry credentials stored in Docker configuration.
-- [ ] Require sufficiently strong Docker `auths` structure.
-- [ ] Recognize supported `auth` credential fields.
-- [ ] Validate Base64 structure locally.
-- [ ] Decode locally and require the expected credential structure.
-- [ ] Project only the encoded credential value.
-- [ ] Reject unrelated `auth` fields.
-- [ ] Reject arbitrary Base64.
-- [ ] Do not treat credential-helper names or external credential-store
+- [x] Detect Docker registry credentials stored in Docker configuration.
+- [x] Require sufficiently strong Docker `auths` structure.
+- [x] Recognize supported `auth` credential fields.
+- [x] Validate Base64 structure locally.
+- [x] Decode locally and require the expected credential structure.
+- [x] Project only the encoded credential value.
+- [x] Reject unrelated `auth` fields.
+- [x] Reject arbitrary Base64.
+- [x] Do not treat credential-helper names or external credential-store
       configuration as secrets.
-- [ ] Add realistic Docker `config.json` fixtures.
+- [x] Add realistic Docker `config.json` fixtures.
+
+Docker registry credential detection is limited to `auth` values inside
+registry entries under the Docker `auths` object. Encoded values must use
+canonical standard Base64 and decode locally to a non-empty
+`username:password` credential structure.
+
+Only the encoded credential value is projected. `credsStore`, `credHelpers`,
+unrelated `auth` fields, arbitrary Base64 data, and malformed or placeholder
+credentials remain clean.
 
 ### 0.4.3-J — npm Registry Credentials
 

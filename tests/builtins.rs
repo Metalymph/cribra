@@ -1099,3 +1099,91 @@ fn wireguard_credentials_reject_base64_without_correct_wireguard_context() {
         );
     }
 }
+
+#[test]
+fn docker_registry_auth_detects_config_json_credentials() {
+    let scanner = scanner_for([builtins::DOCKER_REGISTRY_AUTH]);
+
+    let encoded = "Y3JpYnJhOkNvcnJlY3RIb3JzZUJhdHRlcnlTdGFwbGU=";
+
+    let source = format!(
+        r#"{{
+  "auths": {{
+    "https://index.docker.io/v1/": {{
+      "auth": "{encoded}"
+    }}
+  }},
+  "credsStore": "desktop"
+}}"#
+    );
+
+    let results = scan_one(&scanner, &source);
+    let report = results.single_report().expect("one source");
+
+    assert_eq!(report.len(), 1);
+
+    let finding = &report.findings()[0];
+
+    assert_eq!(finding.rule_id().as_str(), "docker.registry-auth");
+    assert_eq!(matched(&source, finding), encoded);
+    assert_eq!(finding.severity(), Severity::Critical);
+    assert_eq!(finding.remediation(), Some(Remediation::RotatePassword));
+    assert_eq!(finding.confidence(), Confidence::High);
+}
+
+#[test]
+fn docker_registry_auth_rejects_unrelated_auth_and_credential_helpers() {
+    let scanner = scanner_for([builtins::DOCKER_REGISTRY_AUTH]);
+
+    let encoded = "Y3JpYnJhOkNvcnJlY3RIb3JzZUJhdHRlcnlTdGFwbGU=";
+
+    for source in [
+        format!(r#"{{"auth": "{encoded}"}}"#),
+        format!(r#"{{"service":{{"auth":"{encoded}"}}}}"#),
+        format!(r#"{{"auths":{{"registry.example.com":{{}}}},"other":{{"auth":"{encoded}"}}}}"#),
+        r#"{"credsStore":"desktop"}"#.to_owned(),
+        r#"{"credHelpers":{"registry.example.com":"pass"}}"#.to_owned(),
+        r#"{"auths":{"registry.example.com":{}}}"#.to_owned(),
+    ] {
+        let results = scan_one(&scanner, &source);
+        let report = results.single_report().expect("one source");
+
+        assert!(
+            report.is_empty(),
+            "unexpected Docker registry credential finding for {source:?}",
+        );
+    }
+}
+
+#[test]
+fn docker_registry_auth_detects_multiple_registry_entries() {
+    let scanner = scanner_for([builtins::DOCKER_REGISTRY_AUTH]);
+
+    let first = "YWxpY2U6Q29ycmVjdEhvcnNlQmF0dGVyeVN0YXBsZQ==";
+    let second = "Ym9iOkFub3RoZXJTdHJvbmdSZWdpc3RyeVBhc3N3b3Jk";
+
+    let source = format!(
+        r#"{{
+  "auths": {{
+    "registry-one.example.com": {{
+      "auth": "{first}"
+    }},
+    "registry-two.example.com": {{
+      "auth": "{second}"
+    }}
+  }}
+}}"#
+    );
+
+    let results = scan_one(&scanner, &source);
+    let report = results.single_report().expect("one source");
+
+    assert_eq!(report.len(), 2);
+
+    let values = report
+        .iter()
+        .map(|finding| matched(&source, finding))
+        .collect::<Vec<_>>();
+
+    assert_eq!(values, [first, second]);
+}

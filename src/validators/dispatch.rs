@@ -10,6 +10,7 @@ use crate::{
             aws::{AwsCredentialKind, validate_aws},
             azure::{AzureCredentialKind, validate_azure},
             database_connection::{DatabaseConnectionKind, validate_database_connection},
+            docker_registry::validate_docker_registry,
             gcp::{GcpCredentialKind, validate_gcp},
             generic::{GenericCredentialKind, validate_generic_credential},
             hash::{HashKind, validate_sensitive_hash},
@@ -34,6 +35,7 @@ use crate::{
 pub(crate) enum ValidatorKind {
     #[default]
     None,
+    DockerRegistry,
     GitHub,
     GitLab,
     Stripe,
@@ -67,6 +69,7 @@ impl ValidatorKind {
             Self::Aws
             | Self::Azure
             | Self::Gcp
+            | Self::DockerRegistry
             | Self::DatabaseConnection
             | Self::HttpBasic
             | Self::WireGuard
@@ -80,6 +83,7 @@ impl ValidatorKind {
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub(crate) enum ValidationKind {
     Unvalidated,
+    DockerRegistry,
     GitHub(GitHubTokenKind),
     GitLab(GitLabTokenKind),
     Stripe(StripeTokenKind),
@@ -160,6 +164,8 @@ pub(crate) fn validate_candidate(
 
     match validator {
         ValidatorKind::None => unreachable!("handled above"),
+        ValidatorKind::DockerRegistry => validate_docker_registry(&context)
+            .map(|_| ValidationOutcome::new(ValidationKind::DockerRegistry, Confidence::High)),
         ValidatorKind::GitHub => validate_github_token(context.candidate())
             .map(|v| ValidationOutcome::new(ValidationKind::GitHub(v.kind()), Confidence::High)),
         ValidatorKind::GitLab => validate_gitlab_token(context.candidate())

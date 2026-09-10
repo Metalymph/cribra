@@ -76,7 +76,8 @@ impl CompiledRuleMetadata {
             | ValidatorKind::SensitiveHash
             | ValidatorKind::DatabaseConnection
             | ValidatorKind::HttpBasic
-            | ValidatorKind::WireGuard => 200,
+            | ValidatorKind::WireGuard
+            | ValidatorKind::DockerRegistry => 200,
             ValidatorKind::Jwt => 300,
             ValidatorKind::GitHub
             | ValidatorKind::GitLab
@@ -507,6 +508,7 @@ fn pattern_prefilter_needles(
         ("gcp.private-key-id", ValidatorKind::Gcp) => Some(&["private_key_id"]),
         ("gcp.private-key", ValidatorKind::Gcp) => Some(&["private_key"]),
         ("gcp.escaped-private-key", ValidatorKind::Gcp) => Some(&["private_key"]),
+        ("docker.registry-auth", ValidatorKind::DockerRegistry) => Some(&["auths", "\"auth\""]),
         ("generic.authorization-basic", ValidatorKind::HttpBasic) => {
             Some(&["authorization", "basic"])
         }

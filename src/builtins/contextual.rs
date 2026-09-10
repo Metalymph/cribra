@@ -239,3 +239,16 @@ pub const WIREGUARD_PRESHARED_KEY: RuleSpec = RuleSpec::captured_pattern(
 )
 .with_validator(ValidatorKind::WireGuard)
 .with_remediation(Remediation::ReplacePrivateKey);
+
+/// Docker registry authentication stored in Docker `config.json`.
+///
+/// Only the encoded `auth` value is projected. The value is decoded locally
+/// solely to validate its `username:password` credential structure.
+pub const DOCKER_REGISTRY_AUTH: RuleSpec = RuleSpec::captured_pattern(
+    "docker.registry-auth",
+    r#""auth"\s*:\s*"(?P<value>[A-Za-z0-9+/=]{4,4096})""#,
+    "value",
+    Severity::Critical,
+)
+.with_validator(ValidatorKind::DockerRegistry)
+.with_remediation(Remediation::RotatePassword);
