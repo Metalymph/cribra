@@ -252,3 +252,33 @@ pub const DOCKER_REGISTRY_AUTH: RuleSpec = RuleSpec::captured_pattern(
 )
 .with_validator(ValidatorKind::DockerRegistry)
 .with_remediation(Remediation::RotatePassword);
+
+/// Registry-scoped npm authentication token from `.npmrc`.
+pub const NPM_REGISTRY_AUTH_TOKEN: RuleSpec = RuleSpec::captured_pattern(
+    "npm.registry-auth-token",
+    r"(?im)^[ \t]*//[^/\s:]+(?::[0-9]+)?(?:/[^\r\n:]*)?/:_authToken[ \t]*=[ \t]*(?P<value>[^\s#;]{8,2048})[ \t]*(?:[#;].*)?$",
+    "value",
+    Severity::Critical,
+)
+.with_validator(ValidatorKind::NpmRegistry)
+.with_remediation(Remediation::RevokeAndRotateCredential);
+
+/// Registry-scoped npm legacy `_auth` credential from `.npmrc`.
+pub const NPM_REGISTRY_AUTH: RuleSpec = RuleSpec::captured_pattern(
+    "npm.registry-auth",
+    r"(?im)^[ \t]*//[^/\s:]+(?::[0-9]+)?(?:/[^\r\n:]*)?/:_auth[ \t]*=[ \t]*(?P<value>[A-Za-z0-9+/=]{4,4096})[ \t]*(?:[#;].*)?$",
+    "value",
+    Severity::Critical,
+)
+.with_validator(ValidatorKind::NpmRegistry)
+.with_remediation(Remediation::RevokeAndRotateCredential);
+
+/// Registry-scoped npm Base64 password from `.npmrc`.
+pub const NPM_REGISTRY_PASSWORD: RuleSpec = RuleSpec::captured_pattern(
+    "npm.registry-password",
+    r"(?im)^[ \t]*//[^/\s:]+(?::[0-9]+)?(?:/[^\r\n:]*)?/:_password[ \t]*=[ \t]*(?P<value>[A-Za-z0-9+/=]{4,4096})[ \t]*(?:[#;].*)?$",
+    "value",
+    Severity::Critical,
+)
+.with_validator(ValidatorKind::NpmRegistry)
+.with_remediation(Remediation::RotatePassword);

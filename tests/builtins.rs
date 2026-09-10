@@ -1187,3 +1187,80 @@ fn docker_registry_auth_detects_multiple_registry_entries() {
 
     assert_eq!(values, [first, second]);
 }
+
+#[test]
+fn npm_registry_auth_token_detects_scoped_registry_credentials() {
+    let scanner = scanner_for([builtins::NPM_REGISTRY_AUTH_TOKEN]);
+
+    let token = "npm_AbCdEfGhIjKlMnOpQrStUvWxYz012345";
+
+    let source = format!(
+        "//registry.npmjs.org/:_authToken={token}\n\
+         //npm.pkg.example.com/team/:_authToken={token}"
+    );
+
+    let results = scan_one(&scanner, &source);
+    let report = results.single_report().expect("one source");
+
+    assert_eq!(report.len(), 2);
+
+    for finding in report {
+        assert_eq!(finding.rule_id().as_str(), "npm.registry-auth-token");
+        assert_eq!(matched(&source, finding), token);
+        assert_eq!(finding.severity(), Severity::Critical);
+        assert_eq!(
+            finding.remediation(),
+            Some(Remediation::RevokeAndRotateCredential)
+        );
+        assert_eq!(finding.confidence(), Confidence::High);
+    }
+}
+
+#[test]
+fn npm_registry_credentials_reject_unscoped_and_non_secret_configuration() {
+    let scanner = scanner_for([
+        builtins::NPM_REGISTRY_AUTH_TOKEN,
+        builtins::NPM_REGISTRY_AUTH,
+        builtins::NPM_REGISTRY_PASSWORD,
+    ]);
+
+    for source in [
+        "_authToken=npm_AbCdEfGhIjKlMnOpQrStUvWxYz012345",
+        "text _authToken=npm_AbCdEfGhIjKlMnOpQrStUvWxYz012345",
+        "registry=https://registry.npmjs.org/",
+        "always-auth=true",
+        "certfile=/home/user/npm-client.pem",
+        "keyfile=/home/user/npm-client-key.pem",
+        "//registry.npmjs.org/:certfile=/home/user/npm-client.pem",
+        "//registry.npmjs.org/:keyfile=/home/user/npm-client-key.pem",
+    ] {
+        let results = scan_one(&scanner, source);
+        let report = results.single_report().expect("one source");
+
+        assert!(
+            report.is_empty(),
+            "unexpected npm registry credential finding for {source:?}",
+        );
+    }
+}
+
+#[test]
+fn npm_registry_legacy_auth_and_password_are_structurally_validated() {
+    let scanner = scanner_for([builtins::NPM_REGISTRY_AUTH, builtins::NPM_REGISTRY_PASSWORD]);
+
+    let auth = "Y3JpYnJhOkNvcnJlY3RIb3JzZUJhdHRlcnlTdGFwbGU=";
+    let password = "Q29ycmVjdEhvcnNlQmF0dGVyeVN0YXBsZQ==";
+
+    let source = format!(
+        "//registry.example.com/:_auth={auth}\n\
+         //registry.example.com/:_password={password}"
+    );
+
+    let results = scan_one(&scanner, &source);
+    let report = results.single_report().expect("one source");
+
+    assert_eq!(report.len(), 2);
+
+    assert_eq!(matched(&source, &report.findings()[0]), auth);
+    assert_eq!(matched(&source, &report.findings()[1]), password);
+}

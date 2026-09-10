@@ -245,17 +245,26 @@ credentials remain clean.
 
 ### 0.4.3-J — npm Registry Credentials
 
-- [ ] Detect strongly contextual npm registry credentials in `.npmrc` syntax.
-- [ ] Support registry-scoped `_authToken` credentials.
-- [ ] Project only the credential value.
-- [ ] Reject placeholders and documentation examples.
-- [ ] Reject unrelated `_authToken` text outside recognizable npm
+- [x] Detect strongly contextual npm registry credentials in `.npmrc` syntax.
+- [x] Support registry-scoped `_authToken` credentials.
+- [x] Project only the credential value.
+- [x] Reject placeholders and documentation examples.
+- [x] Reject unrelated `_authToken` text outside recognizable npm
       configuration syntax.
-- [ ] Evaluate documented `_auth` and `_password` forms where structural
+- [x] Evaluate documented `_auth` and `_password` forms where structural
       validation can remain conservative.
-- [ ] Do not treat `certfile` or `keyfile` path values as secret material.
-- [ ] Do not introduce generic Base64 detection.
-- [ ] Add realistic scoped-registry and private-registry fixtures.
+- [x] Do not treat `certfile` or `keyfile` path values as secret material.
+- [x] Do not introduce generic Base64 detection.
+- [x] Add realistic scoped-registry and private-registry fixtures.
+
+npm registry credential detection is limited to registry-scoped `.npmrc`
+configuration. `_authToken` values are treated as opaque credentials, while
+legacy `_auth` and `_password` values are decoded locally only for structural
+validation.
+
+Only the credential value is projected. Unscoped authentication fields,
+placeholder/documentation values, `certfile`, `keyfile`, unrelated Base64 data,
+and non-secret npm configuration remain clean.
 
 ### 0.4.3-K — `.netrc` Credentials
 
