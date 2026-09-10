@@ -198,21 +198,27 @@ existing PEM private-key families.
 
 ### 0.4.3-H — WireGuard Credentials
 
-- [ ] Detect WireGuard `PrivateKey` values under sufficiently strong WireGuard
+- [x] Detect WireGuard `PrivateKey` values under sufficiently strong WireGuard
       configuration context.
-- [ ] Detect WireGuard `PresharedKey` values under sufficiently strong
+- [x] Detect WireGuard `PresharedKey` values under sufficiently strong
       WireGuard configuration context.
-- [ ] Validate the encoded key structure locally.
-- [ ] Decode Base64 locally where required for structural validation.
-- [ ] Require the expected decoded WireGuard key length.
-- [ ] Project only the credential value.
-- [ ] Reject arbitrary `PrivateKey` fields outside WireGuard context.
-- [ ] Reject arbitrary Base64 values.
-- [ ] Reject malformed, short and placeholder values.
-- [ ] Add realistic `[Interface]` and `[Peer]` configuration fixtures.
+- [x] Validate the encoded key structure locally.
+- [x] Decode Base64 locally where required for structural validation.
+- [x] Require the expected decoded WireGuard key length.
+- [x] Project only the credential value.
+- [x] Reject arbitrary `PrivateKey` fields outside WireGuard context.
+- [x] Reject arbitrary Base64 values.
+- [x] Reject malformed, short and placeholder values.
+- [x] Add realistic `[Interface]` and `[Peer]` configuration fixtures.
 
-WireGuard support must remain contextual and must not become a generic
-`PrivateKey=<base64>` detector.
+WireGuard credential detection is limited to explicit WireGuard configuration
+semantics. `PrivateKey` is accepted only under `[Interface]`, while
+`PresharedKey` is accepted only under `[Peer]`. Candidates must use canonical
+standard Base64 and decode to exactly 32 bytes. Only the encoded credential
+value is projected as the finding span.
+
+WireGuard support remains contextual and does not introduce generic
+`PrivateKey=<base64>` or generic Base64 scanning.
 
 ### 0.4.3-I — Docker Registry Credentials
 

@@ -11,5 +11,6 @@ pub(crate) mod hash;
 pub(crate) mod http_basic;
 pub(crate) mod password;
 pub(crate) mod utils;
+pub(crate) mod wireguard;
 
 pub(crate) use context::ValidationContext;

@@ -15,6 +15,7 @@ use crate::{
             hash::{HashKind, validate_sensitive_hash},
             http_basic::validate_http_basic,
             password::{PasswordKind, validate_password},
+            wireguard::{WireGuardCredentialKind, validate_wireguard},
         },
         deterministic::{
             cloudflare::{CloudflareTokenKind, validate_cloudflare_token},
@@ -48,6 +49,7 @@ pub(crate) enum ValidatorKind {
     Password,
     SensitiveHash,
     GenericCredential,
+    WireGuard,
 }
 
 impl ValidatorKind {
@@ -67,6 +69,7 @@ impl ValidatorKind {
             | Self::Gcp
             | Self::DatabaseConnection
             | Self::HttpBasic
+            | Self::WireGuard
             | Self::Password
             | Self::SensitiveHash
             | Self::GenericCredential => DetectionMode::Contextual,
@@ -92,6 +95,7 @@ pub(crate) enum ValidationKind {
     Password(PasswordKind),
     SensitiveHash(HashKind),
     GenericCredential(GenericCredentialKind),
+    WireGuard(WireGuardCredentialKind),
 }
 
 /// The outcome of a validation attempt.
@@ -185,6 +189,8 @@ pub(crate) fn validate_candidate(
         }),
         ValidatorKind::HttpBasic => validate_http_basic(&context)
             .map(|_| ValidationOutcome::new(ValidationKind::HttpBasic, Confidence::High)),
+        ValidatorKind::WireGuard => validate_wireguard(&context)
+            .map(|v| ValidationOutcome::new(ValidationKind::WireGuard(v.kind()), Confidence::High)),
         ValidatorKind::Password => validate_password(&context).map(|v| {
             ValidationOutcome::new(ValidationKind::Password(v.kind()), Confidence::Medium)
         }),
@@ -236,6 +242,7 @@ mod tests {
             ValidatorKind::Gcp,
             ValidatorKind::Password,
             ValidatorKind::HttpBasic,
+            ValidatorKind::WireGuard,
             ValidatorKind::SensitiveHash,
             ValidatorKind::GenericCredential,
         ] {

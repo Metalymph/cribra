@@ -219,3 +219,23 @@ pub const GENERIC_SECRET: RuleSpec = RuleSpec::captured_pattern(
 )
 .with_validator(ValidatorKind::GenericCredential)
 .with_remediation(Remediation::RemoveSensitiveValue);
+
+/// WireGuard interface private key.
+pub const WIREGUARD_PRIVATE_KEY: RuleSpec = RuleSpec::captured_pattern(
+    "wireguard.private-key",
+    r"(?im)^\s*PrivateKey\s*=\s*(?P<value>[A-Za-z0-9+/]{43}=)\s*(?:#.*)?$",
+    "value",
+    Severity::Critical,
+)
+.with_validator(ValidatorKind::WireGuard)
+.with_remediation(Remediation::ReplacePrivateKey);
+
+/// WireGuard peer preshared key.
+pub const WIREGUARD_PRESHARED_KEY: RuleSpec = RuleSpec::captured_pattern(
+    "wireguard.preshared-key",
+    r"(?im)^\s*PresharedKey\s*=\s*(?P<value>[A-Za-z0-9+/]{43}=)\s*(?:#.*)?$",
+    "value",
+    Severity::Critical,
+)
+.with_validator(ValidatorKind::WireGuard)
+.with_remediation(Remediation::ReplacePrivateKey);

@@ -75,7 +75,8 @@ impl CompiledRuleMetadata {
             ValidatorKind::Password
             | ValidatorKind::SensitiveHash
             | ValidatorKind::DatabaseConnection
-            | ValidatorKind::HttpBasic => 200,
+            | ValidatorKind::HttpBasic
+            | ValidatorKind::WireGuard => 200,
             ValidatorKind::Jwt => 300,
             ValidatorKind::GitHub
             | ValidatorKind::GitLab
@@ -560,6 +561,8 @@ fn pattern_prefilter_needles(
             "secret_key",
             "secret",
         ]),
+        ("wireguard.private-key", ValidatorKind::WireGuard) => Some(&["privatekey", "[interface]"]),
+        ("wireguard.preshared-key", ValidatorKind::WireGuard) => Some(&["presharedkey", "[peer]"]),
         _ => None,
     }
 }

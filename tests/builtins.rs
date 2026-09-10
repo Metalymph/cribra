@@ -1014,3 +1014,88 @@ fn pgp_private_key_redaction_replaces_the_entire_armored_block() {
     assert!(transformed.starts_with("before\n"));
     assert!(transformed.ends_with("\nafter"));
 }
+
+#[test]
+fn wireguard_credentials_detect_realistic_configuration_fields() {
+    let scanner = scanner_for([
+        builtins::WIREGUARD_PRIVATE_KEY,
+        builtins::WIREGUARD_PRESHARED_KEY,
+    ]);
+
+    let private_key = "ERERERERERERERERERERERERERERERERERERERERERE=";
+    let peer_public_key = "MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM=";
+    let preshared_key = "IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI=";
+
+    let source = format!(
+        "\
+[Interface]
+Address = 10.0.0.2/32
+PrivateKey = {private_key}
+
+[Peer]
+PublicKey = {peer_public_key}
+PresharedKey = {preshared_key}
+Endpoint = vpn.example.com:51820
+"
+    );
+
+    let results = scan_one(&scanner, &source);
+    let report = results.single_report().expect("one source");
+
+    assert_eq!(report.len(), 2);
+
+    let private = report
+        .findings()
+        .iter()
+        .find(|finding| finding.rule_id().as_str() == "wireguard.private-key")
+        .expect("WireGuard private key");
+
+    let preshared = report
+        .findings()
+        .iter()
+        .find(|finding| finding.rule_id().as_str() == "wireguard.preshared-key")
+        .expect("WireGuard preshared key");
+
+    assert_eq!(matched(&source, private), private_key);
+    assert_eq!(matched(&source, preshared), preshared_key);
+
+    assert_eq!(private.severity(), Severity::Critical);
+    assert_eq!(preshared.severity(), Severity::Critical);
+
+    assert_eq!(private.remediation(), Some(Remediation::ReplacePrivateKey));
+    assert_eq!(
+        preshared.remediation(),
+        Some(Remediation::ReplacePrivateKey)
+    );
+
+    assert_eq!(private.confidence(), Confidence::High);
+    assert_eq!(preshared.confidence(), Confidence::High);
+}
+
+#[test]
+fn wireguard_credentials_reject_base64_without_correct_wireguard_context() {
+    let scanner = scanner_for([
+        builtins::WIREGUARD_PRIVATE_KEY,
+        builtins::WIREGUARD_PRESHARED_KEY,
+    ]);
+
+    let value = "ERERERERERERERERERERERERERERERERERERERERERE=";
+
+    for source in [
+        format!("PrivateKey = {value}"),
+        format!("PresharedKey = {value}"),
+        format!("[Peer]\nPrivateKey = {value}"),
+        format!("[Interface]\nPresharedKey = {value}"),
+        format!("[Other]\nPrivateKey = {value}"),
+        format!("blob = {value}"),
+        format!("[Interface]\nPublicKey = {value}"),
+    ] {
+        let results = scan_one(&scanner, &source);
+        let report = results.single_report().expect("one source");
+
+        assert!(
+            report.is_empty(),
+            "unexpected WireGuard credential finding for {source:?}",
+        );
+    }
+}
