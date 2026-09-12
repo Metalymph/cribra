@@ -6,6 +6,58 @@ The project follows semantic versioning from the first public release.
 
 ## [Unreleased]
 
+## [0.4.3] - 2026-09-12
+
+Cribra 0.4.3 substantially completes the current high-confidence
+secret-detection baseline while preserving conservative false-positive
+requirements and semantic parity across Rust, C and WebAssembly interfaces.
+
+### Added
+
+- Added documented GitLab credential-family coverage with dedicated validation
+  and collision handling.
+- Added password detection inside PostgreSQL, MySQL, MariaDB, MongoDB and Redis
+  connection URIs while projecting only the password component.
+- Added explicit HTTP Basic credential detection with local canonical Base64
+  validation and credential-structure verification.
+- Added ASCII-armored PGP private-key detection.
+- Added contextual WireGuard `PrivateKey` and `PresharedKey` detection.
+- Added Docker registry `auth` credential detection under recognized Docker
+  `auths` structure.
+- Added registry-scoped npm `.npmrc` credential detection for `_authToken`,
+  legacy `_auth` and `_password`.
+- Added narrow `.netrc` machine/login/password credential detection.
+- Added contextual `/etc/shadow` password-verifier detection for SHA-256 crypt,
+  SHA-512 crypt and yescrypt.
+- Added contextual `.htpasswd` password-verifier detection for Apache APR1 and
+  bcrypt.
+- Added remediation semantics specifically for exposed password verifiers.
+
+### Changed
+
+- Password, database-password and passphrase detectors now preserve supported
+  quoted values containing internal whitespace without introducing general
+  configuration-language parsing.
+- Expanded contextual prefilter coverage for the new v0.4.3 detection families.
+- Expanded normalization and collision coverage between provider-specific and
+  generic credential rules.
+- Extended the adversarial detection corpus with documentation values,
+  placeholders, malformed credentials, provider near-misses, Base64-looking
+  non-credentials, hash-like non-password data and collision-heavy fixtures.
+- Extended Rust, C and WebAssembly semantic-parity validation across the new
+  built-in detection surface.
+
+### Security
+
+- Added high-confidence coverage for several credential surfaces that
+  previously produced false negatives, including GitLab, database connection
+  passwords, HTTP Basic authentication, registry credentials and system
+  password verifiers.
+- System password verifiers remain distinct from plaintext passwords and
+  generic hashes and require recognized authentication-record context.
+- Arbitrary Base64, arbitrary hashes, entropy-based secret detection and
+  unrestricted modular-crypt detection remain intentionally out of scope.
+
 ## [0.4.2] - 2026-09-09
 
 ### Added

@@ -323,11 +323,11 @@ not independent detector implementations.
 
 ### 0.4.3-N — Documentation and Release Gate
 
-- [ ] Update README detector coverage.
-- [ ] Update CHANGELOG.
-- [ ] Update security documentation where new credential families affect the
+- [x] Update README detector coverage.
+- [x] Update CHANGELOG.
+- [x] Update security documentation where new credential families affect the
   documented threat model.
-- [ ] Ensure roadmap scope and completed work match the shipped release.
+- [x] Ensure roadmap scope and completed work match the shipped release.
 - [ ] Run formatting checks.
 - [ ] Run Clippy with all targets and features.
 - [ ] Run workspace tests.

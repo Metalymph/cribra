@@ -366,16 +366,19 @@ The v0.4 browser benchmark establishes the following policy:
 | 256-finding typed traversal | 0.060 ms |
 | 256-finding explanation traversal | 0.025 ms |
 
-## v0.4.5 release-hardening contract
+## v0.4 release-hardening contract
 
 The final release gate treats the generated JavaScript glue, TypeScript
 declarations, optimized `.wasm` artifact, semantic parity oracle, browser
 benchmark harness, and Rust package contents as independently validated release
 surfaces.
 
-The root `cribra` crate remains the crates.io package. `cribra-wasm` is an
-internal workspace adapter (`publish = false`) for producing the browser
-artifact set; it is not a second crates.io package in v0.4.
+The root `cribra` crate remains the semantic authority. `cribra-wasm` is a
+separately published crates.io adapter built directly on the Cribra core and
+must remain semantically equivalent to it.
+
+The WebAssembly adapter does not maintain an independent detector catalog or
+classification implementation.
 
 The release gate must verify that generated TypeScript declarations describe the
 same typed public classes/enums that were validated semantically, and that the
