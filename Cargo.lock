@@ -167,7 +167,7 @@ dependencies = [
 
 [[package]]
 name = "cribra"
-version = "0.4.2"
+version = "0.4.3"
 dependencies = [
  "aho-corasick",
  "base64",
@@ -190,7 +190,7 @@ dependencies = [
 
 [[package]]
 name = "cribra-wasm"
-version = "0.4.1"
+version = "0.4.2"
 dependencies = [
  "cribra",
  "serde",

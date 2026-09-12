@@ -35,6 +35,7 @@ const requiredPublicDeclarations = [
   "export enum FindingSeverity",
   "export class FindingView",
   "export enum RemediationKind",
+  "ReviewPasswordVerifier",
   "export class ScanEngine",
   "export class ScanEngineBuilder",
   "export class ScanResult",

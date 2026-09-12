@@ -58,6 +58,26 @@ requirements and semantic parity across Rust, C and WebAssembly interfaces.
 - Arbitrary Base64, arbitrary hashes, entropy-based secret detection and
   unrestricted modular-crypt detection remain intentionally out of scope.
 
+## [cribra-wasm 0.4.2] - 2026-09-12
+
+WebAssembly adapter alignment release for Cribra 0.4.3.
+
+### Changed
+
+- Added explicit `ReviewPasswordVerifier` remediation projection.
+- Extended Rust/WASM semantic parity coverage across the Cribra 0.4.3
+  detector families.
+- Verified finding spans, severity, confidence, remediation and transformation
+  semantics for the completed v0.4.3 detection surface.
+
+### Validation
+
+- Verified `wasm32-unknown-unknown` check and Clippy.
+- Verified optimized production WebAssembly generation.
+- Verified Rust/WASM semantic parity across 21 representative cases.
+- Verified generated JavaScript and TypeScript package declarations.
+- Verified production package structure and artifacts.
+
 ## [0.4.2] - 2026-09-09
 
 ### Added

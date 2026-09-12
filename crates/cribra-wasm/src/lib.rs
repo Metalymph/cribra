@@ -255,6 +255,7 @@ pub enum RemediationKind {
     ReplacePrivateKey,
     RemoveSensitiveValue,
     ReviewSensitiveHash,
+    ReviewPasswordVerifier,
     Unknown,
 }
 
@@ -268,6 +269,7 @@ impl From<Option<Remediation>> for RemediationKind {
             Some(Remediation::ReplacePrivateKey) => Self::ReplacePrivateKey,
             Some(Remediation::RemoveSensitiveValue) => Self::RemoveSensitiveValue,
             Some(Remediation::ReviewSensitiveHash) => Self::ReviewSensitiveHash,
+            Some(Remediation::ReviewPasswordVerifier) => Self::ReviewPasswordVerifier,
             Some(_) => Self::Unknown,
         }
     }
@@ -851,5 +853,22 @@ mod tests {
         builder.add_literal("custom.shared", "SECOND", FindingSeverity::Critical);
 
         assert!(builder.build_core().is_err());
+    }
+
+    #[test]
+    fn password_verifier_remediation_is_projected_explicitly() {
+        let engine = ScanEngine::new();
+        let result = engine.scan(
+            "alice:$6$abcdefghijklmnop$0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789:20000:0:99999:7:::",
+        );
+
+        assert_eq!(result.finding_count(), 1);
+
+        let finding = FindingView::from(&result.report.findings()[0]);
+
+        assert_eq!(
+            finding.remediation(),
+            RemediationKind::ReviewPasswordVerifier,
+        );
     }
 }

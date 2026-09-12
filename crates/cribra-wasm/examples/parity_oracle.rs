@@ -326,6 +326,7 @@ fn remediation_name(value: Remediation) -> String {
         Remediation::ReplacePrivateKey => "ReplacePrivateKey",
         Remediation::RemoveSensitiveValue => "RemoveSensitiveValue",
         Remediation::ReviewSensitiveHash => "ReviewSensitiveHash",
+        Remediation::ReviewPasswordVerifier => "ReviewPasswordVerifier",
         _ => "Unknown",
     }
     .to_owned()
