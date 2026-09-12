@@ -328,17 +328,17 @@ not independent detector implementations.
 - [x] Update security documentation where new credential families affect the
   documented threat model.
 - [x] Ensure roadmap scope and completed work match the shipped release.
-- [ ] Run formatting checks.
-- [ ] Run Clippy with all targets and features.
-- [ ] Run workspace tests.
-- [ ] Run all-feature tests.
-- [ ] Run documentation tests.
-- [ ] Run MSRV validation.
-- [ ] Run RustSec audit.
-- [ ] Run package validation.
-- [ ] Run publish dry-run.
-- [ ] Run C ABI header, smoke, symbol and static-library gates.
-- [ ] Run WebAssembly adapter, parity and package gates.
+- [x] Run formatting checks.
+- [x] Run Clippy with all targets and features.
+- [x] Run workspace tests.
+- [x] Run all-feature tests.
+- [x] Run documentation tests.
+- [x] Run MSRV validation.
+- [x] Run RustSec audit.
+- [x] Run package validation.
+- [x] Run publish dry-run.
+- [x] Run C ABI header, smoke, symbol and static-library gates.
+- [x] Run WebAssembly adapter, parity and package gates.
 - [ ] Verify a clean working tree before release.
 - [ ] Publish `cribra` v0.4.3 only after the release branch is merged into the
   authoritative `main`.
