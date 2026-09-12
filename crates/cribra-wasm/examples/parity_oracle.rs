@@ -127,6 +127,53 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "GITHUB_TOKEN=ghp_AbCdEf0123456789_AbCdEf0123456789".to_owned(),
     )?);
 
+    for (name, source) in [
+        ("v043-gitlab", "GITLAB_TOKEN=glpat-0123456789abcdefghij"),
+        (
+            "v043-database-uri",
+            "DATABASE_URL=postgresql://alice:CorrectHorseBatteryStaple@db.example.com/app",
+        ),
+        (
+            "v043-quoted-password",
+            r#"password="correct horse battery staple""#,
+        ),
+        (
+            "v043-http-basic",
+            "Authorization: Basic YWxpY2U6Q29ycmVjdEhvcnNlQmF0dGVyeVN0YXBsZQ==",
+        ),
+        (
+            "v043-wireguard",
+            "[Interface]\nPrivateKey = AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+        ),
+        (
+            "v043-docker-auth",
+            r#"{"auths":{"registry.example.com":{"auth":"YWxpY2U6Q29ycmVjdEhvcnNlQmF0dGVyeVN0YXBsZQ=="}}}"#,
+        ),
+        (
+            "v043-npm-auth-token",
+            "//registry.example.com/:_authToken=0123456789abcdefghijklmnopqrstuv",
+        ),
+        (
+            "v043-netrc",
+            "machine api.example.com login alice password CorrectHorseBatteryStaple",
+        ),
+        (
+            "v043-shadow-verifier",
+            "alice:$6$abcdefghijklmnop$0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789:20000:0:99999:7:::",
+        ),
+        (
+            "v043-htpasswd-verifier",
+            "alice:$apr1$abcdefgh$abcdefghijklmnopqrstuv",
+        ),
+    ] {
+        cases.push(case_oracle(
+            name.to_owned(),
+            ScannerKind::DefaultBuiltins,
+            &default_scanner,
+            source.to_owned(),
+        )?);
+    }
+
     let oracle = Oracle { schema: 1, cases };
     let output_dir = repo_root.join("target/wasm-parity");
     fs::create_dir_all(&output_dir)?;

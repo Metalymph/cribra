@@ -268,14 +268,14 @@ and non-secret npm configuration remain clean.
 
 ### 0.4.3-K — `.netrc` Credentials
 
-- [ ] Implement a narrow `.netrc` credential grammar.
-- [ ] Recognize `machine`, `login` and `password` relationships.
-- [ ] Project only password values.
-- [ ] Avoid treating unrelated `password` text as `.netrc` credentials.
-- [ ] Handle common whitespace and line-layout forms conservatively.
-- [ ] Reject incomplete records.
-- [ ] Reject documentation placeholders.
-- [ ] Add realistic multi-machine fixtures.
+- [x] Implement a narrow `.netrc` credential grammar.
+- [x] Recognize `machine`, `login` and `password` relationships.
+- [x] Project only password values.
+- [x] Avoid treating unrelated `password` text as `.netrc` credentials.
+- [x] Handle common whitespace and line-layout forms conservatively.
+- [x] Reject incomplete records.
+- [x] Reject documentation placeholders.
+- [x] Add realistic multi-machine fixtures.
 
 `.netrc` support must not require broadening the generic password parser merely
 to accommodate this file format.
@@ -307,15 +307,15 @@ expanded into an unrestricted password-hash detector.
 
 ### 0.4.3-M — Cross-Interface Semantic Parity
 
-- [ ] Verify every new built-in rule through the Rust interface.
-- [ ] Verify public metadata for every new built-in rule.
-- [ ] Verify findings and exact source spans through the C interface.
-- [ ] Verify findings and exact source spans through the WebAssembly interface.
-- [ ] Verify severity, confidence, rule identifiers and remediation metadata
+- [x] Verify every new built-in rule through the Rust interface.
+- [x] Verify public metadata for every new built-in rule.
+- [x] Verify findings and exact source spans through the C interface.
+- [x] Verify findings and exact source spans through the WebAssembly interface.
+- [x] Verify severity, confidence, rule identifiers and remediation metadata
   remain semantically equivalent.
-- [ ] Verify serial and parallel Rust scanning remain equivalent.
-- [ ] Verify deterministic ordering remains stable across interfaces.
-- [ ] Verify transformations behave consistently for all newly supported
+- [x] Verify serial and parallel Rust scanning remain equivalent.
+- [x] Verify deterministic ordering remains stable across interfaces.
+- [x] Verify transformations behave consistently for all newly supported
   finding families.
 
 C and WebAssembly adapters must remain projections of the same Cribra semantics,
