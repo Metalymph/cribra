@@ -339,16 +339,16 @@ not independent detector implementations.
 - [x] Run publish dry-run.
 - [x] Run C ABI header, smoke, symbol and static-library gates.
 - [x] Run WebAssembly adapter, parity and package gates.
-- [ ] Verify a clean working tree before release.
-- [ ] Publish `cribra` v0.4.3 only after the release branch is merged into the
+- [x] Verify a clean working tree before release.
+- [x] Publish `cribra` v0.4.3 only after the release branch is merged into the
   authoritative `main`.
-- [ ] Update the separate `cribra-wasm` crate/repository for the completed
+- [x] Update the separate `cribra-wasm` crate/repository for the completed
   Cribra `0.4.3` detection surface.
-- [ ] Align exposed built-in rules and public metadata.
-- [ ] Verify finding spans, severity, confidence and remediation semantics.
-- [ ] Verify WebAssembly behavior remains semantically equivalent to the
+- [x] Align exposed built-in rules and public metadata.
+- [x] Verify finding spans, severity, confidence and remediation semantics.
+- [x] Verify WebAssembly behavior remains semantically equivalent to the
   Cribra core contracts established by `0.4.3`.
-- [ ] Run the `cribra-wasm` release validation suite before closing `0.4.3`.
+- [x] Run the `cribra-wasm` release validation suite before closing `0.4.3`.
 
 ## After v0.4.3
 
