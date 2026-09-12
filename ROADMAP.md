@@ -282,22 +282,23 @@ to accommodate this file format.
 
 ### 0.4.3-L — System Password Verifiers
 
-- [ ] Add dedicated structural coverage for high-confidence system password
+- [x] Add dedicated structural coverage for high-confidence system password
   verifier formats where justified.
-- [ ] Cover common `/etc/shadow` record forms conservatively.
-- [ ] Evaluate supported modular crypt families such as:
+- [x] Cover common `/etc/shadow` record forms conservatively.
+- [x] Evaluate supported modular crypt families such as:
   - SHA-512 crypt;
   - SHA-256 crypt;
   - yescrypt;
   - bcrypt where applicable.
-- [ ] Cover common `.htpasswd` verifier families where structure is
+- [x] Cover common `.htpasswd` verifier families where structure is
   sufficiently distinctive.
-- [ ] Evaluate Apache APR1.
-- [ ] Require appropriate record or field context.
-- [ ] Do not classify arbitrary `$...$` strings as password verifiers.
-- [ ] Do not classify arbitrary hashes as sensitive material.
-- [ ] Keep generic checksum and package-integrity fixtures clean.
-- [ ] Define remediation semantics appropriate for password verifiers rather
+  - [x] Evaluate Apache APR1.
+  - [x] Evaluate bcrypt.
+- [x] Require appropriate record or field context.
+- [x] Do not classify arbitrary `$...$` strings as password verifiers.
+- [x] Do not classify arbitrary hashes as sensitive material.
+- [x] Keep generic checksum and package-integrity fixtures clean.
+- [x] Define remediation semantics appropriate for password verifiers rather
   than treating them as plaintext credentials.
 
 This slice is separate from `generic.sensitive-hash`. The existing generic rule
@@ -341,6 +342,13 @@ not independent detector implementations.
 - [ ] Verify a clean working tree before release.
 - [ ] Publish `cribra` v0.4.3 only after the release branch is merged into the
   authoritative `main`.
+- [ ] Update the separate `cribra-wasm` crate/repository for the completed
+  Cribra `0.4.3` detection surface.
+- [ ] Align exposed built-in rules and public metadata.
+- [ ] Verify finding spans, severity, confidence and remediation semantics.
+- [ ] Verify WebAssembly behavior remains semantically equivalent to the
+  Cribra core contracts established by `0.4.3`.
+- [ ] Run the `cribra-wasm` release validation suite before closing `0.4.3`.
 
 ## After v0.4.3
 

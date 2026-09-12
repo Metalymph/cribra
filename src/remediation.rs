@@ -25,6 +25,9 @@ pub enum Remediation {
     RemoveSensitiveValue,
     /// Review whether the detected hash is appropriate to expose or distribute.
     ReviewSensitiveHash,
+    /// Review and remove an exposed password verifier from material that should
+    /// not contain authentication data.
+    ReviewPasswordVerifier,
 }
 
 impl Remediation {
@@ -38,6 +41,7 @@ impl Remediation {
             Self::ReplacePrivateKey => "Replace private key",
             Self::RemoveSensitiveValue => "Remove sensitive value",
             Self::ReviewSensitiveHash => "Review sensitive hash",
+            Self::ReviewPasswordVerifier => "Review exposed password verifier",
         }
     }
 
@@ -63,6 +67,9 @@ impl Remediation {
             Self::ReviewSensitiveHash => {
                 "Review whether this hash represents sensitive information before sharing it."
             }
+            Self::ReviewPasswordVerifier => {
+                "Review this exposed password verifier and remove it from material that should not contain authentication data."
+            }
         }
     }
 }
@@ -86,6 +93,7 @@ mod tests {
             Remediation::ReplacePrivateKey,
             Remediation::RemoveSensitiveValue,
             Remediation::ReviewSensitiveHash,
+            Remediation::ReviewPasswordVerifier,
         ];
 
         for remediation in variants {

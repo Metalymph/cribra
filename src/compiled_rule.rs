@@ -79,7 +79,8 @@ impl CompiledRuleMetadata {
             | ValidatorKind::WireGuard
             | ValidatorKind::DockerRegistry
             | ValidatorKind::NpmRegistry
-            | ValidatorKind::Netrc => 200,
+            | ValidatorKind::Netrc
+            | ValidatorKind::SystemPasswordVerifier => 200,
             ValidatorKind::Jwt => 300,
             ValidatorKind::GitHub
             | ValidatorKind::GitLab

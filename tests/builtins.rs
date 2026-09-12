@@ -1392,3 +1392,215 @@ fn netrc_password_rejects_placeholders_and_documentation_values() {
         );
     }
 }
+
+#[test]
+fn shadow_password_verifier_detects_supported_crypt_families() {
+    let scanner = scanner_for([builtins::SHADOW_PASSWORD_VERIFIER]);
+
+    let sha256 = "$5$rounds=5000$abcdefghijklmnop$0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef";
+    let sha512 = "$6$abcdefghijklmnop$0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+    let yescrypt = "$y$j9T$abcdefghijklmnop$0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnop";
+
+    let source = format!(
+        "alice:{sha256}:20000:0:99999:7:::\n\
+         bob:{sha512}:20001:0:99999:7:::\n\
+         carol:{yescrypt}:20002:0:99999:7:::\n"
+    );
+
+    let results = scan_one(&scanner, &source);
+    let report = results.single_report().expect("one source");
+
+    assert_eq!(report.len(), 3);
+
+    let values = report
+        .iter()
+        .map(|finding| matched(&source, finding))
+        .collect::<Vec<_>>();
+
+    assert_eq!(values, [sha256, sha512, yescrypt]);
+
+    for finding in report {
+        assert_eq!(
+            finding.rule_id().as_str(),
+            "system.shadow-password-verifier"
+        );
+        assert_eq!(finding.severity(), Severity::High);
+        assert_eq!(finding.confidence(), Confidence::High);
+        assert_eq!(
+            finding.remediation(),
+            Some(Remediation::ReviewPasswordVerifier)
+        );
+    }
+}
+
+#[test]
+fn shadow_password_verifier_projects_only_the_verifier_field() {
+    let scanner = scanner_for([builtins::SHADOW_PASSWORD_VERIFIER]);
+
+    let verifier = "$6$abcdefghijklmnop$0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+    let source = format!("alice:{verifier}:20000:0:99999:7:::\n");
+
+    let results = scan_one(&scanner, &source);
+    let report = results.single_report().expect("one source");
+
+    assert_eq!(report.len(), 1);
+    assert_eq!(matched(&source, &report.findings()[0]), verifier);
+}
+
+#[test]
+fn shadow_password_verifier_rejects_non_shadow_context() {
+    let scanner = scanner_for([builtins::SHADOW_PASSWORD_VERIFIER]);
+
+    let verifier = "$6$abcdefghijklmnop$0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+
+    for source in [
+        verifier.to_owned(),
+        format!("password_hash={verifier}"),
+        format!("alice:{verifier}"),
+        format!("alice:{verifier}:20000"),
+        format!("checksum:{verifier}:sha256:package:release:artifact:linux:x86_64:stable"),
+    ] {
+        let results = scan_one(&scanner, &source);
+        let report = results.single_report().expect("one source");
+
+        assert!(
+            report.is_empty(),
+            "unexpected shadow verifier detection for {source:?}",
+        );
+    }
+}
+
+#[test]
+fn shadow_password_verifier_rejects_locked_and_unsupported_fields() {
+    let scanner = scanner_for([builtins::SHADOW_PASSWORD_VERIFIER]);
+
+    for source in [
+        "root:!:20000:0:99999:7:::\n",
+        "daemon:*:20000:0:99999:7:::\n",
+        "service:!!:20000:0:99999:7:::\n",
+        "alice:!$6$abcdefghijklmnop$0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ:20000:0:99999:7:::\n",
+        "bob:$1$salt$abcdefghijklmnopqrstuv:20000:0:99999:7:::\n",
+        "carol:$2b$12$abcdefghijklmnopqrstuuABCDEFGHIJKLMNOPQRSTUVWXYZ12345:20000:0:99999:7:::\n",
+    ] {
+        let results = scan_one(&scanner, source);
+        let report = results.single_report().expect("one source");
+
+        assert!(
+            report.is_empty(),
+            "unexpected shadow verifier detection for {source:?}",
+        );
+    }
+}
+
+#[test]
+fn htpasswd_password_verifier_detects_supported_families() {
+    let scanner = scanner_for([builtins::HTPASSWD_PASSWORD_VERIFIER]);
+
+    let apr1 = "$apr1$hfT7jp2q$2VbDVlM1QY3wP1uQYxJYB/";
+    let bcrypt_a = "$2a$12$123456789012345678901u1234567890123456789012345678901";
+    let bcrypt_b = "$2b$12$123456789012345678901u1234567890123456789012345678901";
+    let bcrypt_y = "$2y$12$123456789012345678901u1234567890123456789012345678901";
+
+    let source = format!(
+        "alice:{apr1}\n\
+         bob:{bcrypt_a}\n\
+         carol:{bcrypt_b}\n\
+         dave:{bcrypt_y}\n"
+    );
+
+    let results = scan_one(&scanner, &source);
+    let report = results.single_report().expect("one source");
+
+    assert_eq!(report.len(), 4);
+
+    let values = report
+        .iter()
+        .map(|finding| matched(&source, finding))
+        .collect::<Vec<_>>();
+
+    assert_eq!(values, [apr1, bcrypt_a, bcrypt_b, bcrypt_y]);
+
+    for finding in report {
+        assert_eq!(
+            finding.rule_id().as_str(),
+            "system.htpasswd-password-verifier"
+        );
+        assert_eq!(finding.severity(), Severity::High);
+        assert_eq!(finding.confidence(), Confidence::High);
+        assert_eq!(
+            finding.remediation(),
+            Some(Remediation::ReviewPasswordVerifier)
+        );
+    }
+}
+
+#[test]
+fn htpasswd_password_verifier_projects_only_the_verifier() {
+    let scanner = scanner_for([builtins::HTPASSWD_PASSWORD_VERIFIER]);
+
+    let verifier = "$apr1$hfT7jp2q$2VbDVlM1QY3wP1uQYxJYB/";
+    let source = format!("alice:{verifier}");
+
+    let results = scan_one(&scanner, &source);
+    let report = results.single_report().expect("one source");
+
+    assert_eq!(report.len(), 1);
+    assert_eq!(matched(&source, &report.findings()[0]), verifier);
+}
+
+#[test]
+fn htpasswd_password_verifier_rejects_standalone_and_malformed_values() {
+    let scanner = scanner_for([builtins::HTPASSWD_PASSWORD_VERIFIER]);
+
+    for source in [
+        "$apr1$hfT7jp2q$2VbDVlM1QY3wP1uQYxJYB/".to_owned(),
+        "$2b$12$123456789012345678901u1234567890123456789012345678901".to_owned(),
+        "alice:$apr1$$2VbDVlM1QY3wP1uQYxJYB/".to_owned(),
+        "alice:$apr1$toolongsalt$2VbDVlM1QY3wP1uQYxJYB/".to_owned(),
+        "alice:$apr1$hfT7jp2q$short".to_owned(),
+        "alice:$2b$03$123456789012345678901u1234567890123456789012345678901".to_owned(),
+        "alice:$2b$32$123456789012345678901u1234567890123456789012345678901".to_owned(),
+        "alice:$2x$12$123456789012345678901u1234567890123456789012345678901".to_owned(),
+    ] {
+        let results = scan_one(&scanner, &source);
+        let report = results.single_report().expect("one source");
+
+        assert!(
+            report.is_empty(),
+            "unexpected htpasswd verifier detection for {source:?}",
+        );
+    }
+}
+
+#[test]
+fn system_password_verifier_rules_do_not_cross_record_formats() {
+    let scanner = scanner_for([
+        builtins::SHADOW_PASSWORD_VERIFIER,
+        builtins::HTPASSWD_PASSWORD_VERIFIER,
+    ]);
+
+    let shadow = "$6$abcdefghijklmnop$0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+    let htpasswd = "$apr1$hfT7jp2q$2VbDVlM1QY3wP1uQYxJYB/";
+
+    let source = format!(
+        "alice:{shadow}:20000:0:99999:7:::\n\
+         bob:{htpasswd}\n"
+    );
+
+    let results = scan_one(&scanner, &source);
+    let report = results.single_report().expect("one source");
+
+    assert_eq!(report.len(), 2);
+
+    assert_eq!(
+        report.findings()[0].rule_id().as_str(),
+        "system.shadow-password-verifier"
+    );
+    assert_eq!(matched(&source, &report.findings()[0]), shadow);
+
+    assert_eq!(
+        report.findings()[1].rule_id().as_str(),
+        "system.htpasswd-password-verifier"
+    );
+    assert_eq!(matched(&source, &report.findings()[1]), htpasswd);
+}

@@ -303,3 +303,32 @@ pub const NETRC_PASSWORD: RuleSpec = RuleSpec::captured_pattern(
 )
 .with_validator(ValidatorKind::Netrc)
 .with_remediation(Remediation::RotatePassword);
+
+/// Password verifier stored in the password field of an `/etc/shadow`-style
+/// account record.
+///
+/// Only supported modular-crypt verifier families are candidates. Structural
+/// validation requires the verifier to occupy the second field of a complete
+/// shadow record.
+pub const SHADOW_PASSWORD_VERIFIER: RuleSpec = RuleSpec::captured_pattern(
+    "system.shadow-password-verifier",
+    r"(?m)^[^:\r\n\s]+:(?P<value>\$(?:5|6|y)\$[^:\r\n]{8,1020}):[^:\r\n]*:[^:\r\n]*:[^:\r\n]*:[^:\r\n]*:[^:\r\n]*:[^:\r\n]*:[^:\r\n]*$",
+    "value",
+    Severity::High,
+)
+.with_validator(ValidatorKind::SystemPasswordVerifier)
+.with_remediation(Remediation::ReviewPasswordVerifier);
+
+/// Password verifier stored in an Apache `.htpasswd`-style record.
+///
+/// Only APR1 and bcrypt verifier families are currently supported. The finding
+/// projects only the verifier rather than the complete `username:verifier`
+/// record.
+pub const HTPASSWD_PASSWORD_VERIFIER: RuleSpec = RuleSpec::captured_pattern(
+    "system.htpasswd-password-verifier",
+    r"(?m)^[^:\r\n\s]+:(?P<value>(?:\$apr1\$[^:\r\n]{1,64}|\$2[aby]\$[^:\r\n]{1,128}))$",
+    "value",
+    Severity::High,
+)
+.with_validator(ValidatorKind::SystemPasswordVerifier)
+.with_remediation(Remediation::ReviewPasswordVerifier);

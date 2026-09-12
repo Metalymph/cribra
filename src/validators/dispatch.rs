@@ -18,6 +18,10 @@ use crate::{
             netrc::validate_netrc,
             npm_registry::{NpmRegistryCredentialKind, validate_npm_registry},
             password::{PasswordKind, validate_password},
+            system_password_verifier::{
+                SystemPasswordVerifierKind, validate_htpasswd_verifier,
+                validate_system_password_verifier,
+            },
             wireguard::{WireGuardCredentialKind, validate_wireguard},
         },
         deterministic::{
@@ -55,6 +59,7 @@ pub(crate) enum ValidatorKind {
     SensitiveHash,
     GenericCredential,
     WireGuard,
+    SystemPasswordVerifier,
     Netrc,
 }
 
@@ -76,6 +81,7 @@ impl ValidatorKind {
             | Self::DockerRegistry
             | Self::NpmRegistry
             | Self::DatabaseConnection
+            | Self::SystemPasswordVerifier
             | Self::HttpBasic
             | Self::WireGuard
             | Self::Password
@@ -107,6 +113,7 @@ pub(crate) enum ValidationKind {
     SensitiveHash(HashKind),
     GenericCredential(GenericCredentialKind),
     WireGuard(WireGuardCredentialKind),
+    SystemPasswordVerifier(SystemPasswordVerifierKind),
     Netrc,
 }
 
@@ -222,6 +229,14 @@ pub(crate) fn validate_candidate(
         }),
         ValidatorKind::Netrc => validate_netrc(&context)
             .map(|_| ValidationOutcome::new(ValidationKind::Netrc, Confidence::High)),
+        ValidatorKind::SystemPasswordVerifier => validate_system_password_verifier(&context)
+            .or_else(|| validate_htpasswd_verifier(&context))
+            .map(|validation| {
+                ValidationOutcome::new(
+                    ValidationKind::SystemPasswordVerifier(validation.kind()),
+                    Confidence::High,
+                )
+            }),
     }
 }
 

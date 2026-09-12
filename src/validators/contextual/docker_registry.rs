@@ -297,7 +297,7 @@ mod tests {
     fn recognizes_multiple_sibling_registry_entries_independently() {
         let first = STANDARD.encode("alice:CorrectHorseBatteryStaple");
         let second = STANDARD.encode("bob:AnotherStrongRegistryPassword");
-    
+
         let source = format!(
             r#"{{
       "auths": {{
@@ -310,9 +310,8 @@ mod tests {
       }}
     }}"#
         );
-    
+
         assert!(validate_docker_registry(&context(&source, &first)).is_some());
         assert!(validate_docker_registry(&context(&source, &second)).is_some());
     }
-
 }
