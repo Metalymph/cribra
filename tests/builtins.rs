@@ -1264,3 +1264,131 @@ fn npm_registry_legacy_auth_and_password_are_structurally_validated() {
     assert_eq!(matched(&source, &report.findings()[0]), auth);
     assert_eq!(matched(&source, &report.findings()[1]), password);
 }
+
+#[test]
+fn netrc_password_detects_complete_machine_credentials() {
+    let scanner = scanner_for([builtins::NETRC_PASSWORD]);
+
+    let source = concat!(
+        "machine api.example.com\n",
+        "  login alice\n",
+        "  password CorrectHorseBatteryStaple\n",
+        "\n",
+        "machine registry.example.com login bob password AnotherStrongSecret42\n",
+    );
+
+    let results = scan_one(&scanner, source);
+    let report = results.single_report().expect("one source");
+
+    assert_eq!(report.len(), 2);
+
+    let values = report
+        .iter()
+        .map(|finding| matched(source, finding))
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        values,
+        ["CorrectHorseBatteryStaple", "AnotherStrongSecret42"]
+    );
+
+    for finding in report {
+        assert_eq!(finding.rule_id().as_str(), "netrc.password");
+        assert_eq!(finding.severity(), Severity::Critical);
+        assert_eq!(finding.confidence(), Confidence::High);
+        assert_eq!(finding.remediation(), Some(Remediation::RotatePassword));
+    }
+}
+
+#[test]
+fn netrc_password_projects_only_the_password_value() {
+    let scanner = scanner_for([builtins::NETRC_PASSWORD]);
+
+    let password = "CorrectHorseBatteryStaple";
+    let source = format!("machine api.example.com login alice password {password}");
+
+    let results = scan_one(&scanner, &source);
+    let report = results.single_report().expect("one source");
+
+    assert_eq!(report.len(), 1);
+    assert_eq!(matched(&source, &report.findings()[0]), password);
+}
+
+#[test]
+fn netrc_password_rejects_incomplete_and_unrelated_password_text() {
+    let scanner = scanner_for([builtins::NETRC_PASSWORD]);
+
+    let password = "CorrectHorseBatteryStaple";
+
+    for source in [
+        format!("password {password}"),
+        format!("login alice password {password}"),
+        format!("machine api.example.com password {password}"),
+        format!("PASSWORD={password}"),
+        format!("password={password}"),
+        format!("service password {password}"),
+    ] {
+        let results = scan_one(&scanner, &source);
+        let report = results.single_report().expect("one source");
+
+        assert!(
+            report.is_empty(),
+            "unexpected .netrc password finding for {source:?}",
+        );
+    }
+}
+
+#[test]
+fn netrc_password_does_not_cross_machine_record_boundaries() {
+    let scanner = scanner_for([builtins::NETRC_PASSWORD]);
+
+    let password = "CorrectHorseBatteryStaple";
+
+    for source in [
+        format!(
+            "machine first.example.com login alice\n\
+             machine second.example.com password {password}"
+        ),
+        format!(
+            "machine first.example.com login alice\n\
+             default password {password}"
+        ),
+        format!(
+            "machine first.example.com login alice\n\
+             macdef init\n\
+             password {password}"
+        ),
+    ] {
+        let results = scan_one(&scanner, &source);
+        let report = results.single_report().expect("one source");
+
+        assert!(
+            report.is_empty(),
+            "cross-record .netrc password unexpectedly detected for {source:?}",
+        );
+    }
+}
+
+#[test]
+fn netrc_password_rejects_placeholders_and_documentation_values() {
+    let scanner = scanner_for([builtins::NETRC_PASSWORD]);
+
+    for password in [
+        "changeme",
+        "password",
+        "your_password",
+        "your_password_here",
+        "example_password",
+        "replace_me",
+    ] {
+        let source = format!("machine api.example.com login alice password {password}");
+
+        let results = scan_one(&scanner, &source);
+        let report = results.single_report().expect("one source");
+
+        assert!(
+            report.is_empty(),
+            "documentation .netrc password unexpectedly detected: {password:?}",
+        );
+    }
+}

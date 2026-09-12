@@ -33,7 +33,7 @@ driven by concrete evidence rather than by catalog expansion.
 
 ### 0.4.3-A — Coverage Audit and Scope Freeze
 
-Status: active.
+Status: completed.
 
 - [x] Audit the complete current built-in detector catalog.
 - [x] Map current deterministic and contextual detector coverage.
@@ -43,30 +43,30 @@ Status: active.
 - [x] Audit collision and overlap normalization behavior.
 - [x] Audit current private-key coverage.
 - [x] Audit generic password, passphrase, credential and sensitive-hash
-      coverage.
+  coverage.
 - [x] Confirm GitLab credentials as a significant missing provider family.
 - [x] Confirm database connection credentials as a significant missing
-      credential surface.
+  credential surface.
 - [x] Confirm quoted passwords and passphrases containing spaces as a real
-      contextual coverage gap.
+  contextual coverage gap.
 - [x] Confirm HTTP Basic authentication as a high-confidence missing
-      authentication surface.
+  authentication surface.
 - [x] Confirm PGP private keys as a high-confidence missing private-key family.
 - [x] Confirm WireGuard `PrivateKey` and `PresharedKey` as high-confidence
-      secret families when sufficient WireGuard context is present.
+  secret families when sufficient WireGuard context is present.
 - [x] Confirm Docker registry authentication as a scoped tooling credential
-      surface.
+  surface.
 - [x] Confirm `.npmrc` registry authentication as a scoped tooling credential
-      surface.
+  surface.
 - [x] Confirm `.netrc` credentials as a scoped tooling credential surface.
 - [x] Audit `/etc/shadow` and `.htpasswd` against the current
-      `generic.sensitive-hash` detector.
+  `generic.sensitive-hash` detector.
 - [x] Confirm that current sensitive-hash coverage does not cover modular
-      password-verifier formats such as shadow or htpasswd records.
+  password-verifier formats such as shadow or htpasswd records.
 - [x] Identify provider-attribution ambiguity around generic field names such
-      as `client_secret`.
+  as `client_secret`.
 - [x] Define deterministic attribution semantics for ambiguous provider-generic
-      fields before expanding provider coverage.
+  fields before expanding provider coverage.
 - [x] Freeze the v0.4.3 detection scope.
 
 Bare provider-generic fields such as `client_secret` are attributed to generic
@@ -86,27 +86,27 @@ breadth.
 
 - [x] Add a dedicated GitLab validator.
 - [x] Cover stable, documented GitLab token families whose public format
-      supports high-confidence structural recognition.
+  supports high-confidence structural recognition.
 - [x] Evaluate documented prefixes including:
-      - `glpat-`
-      - `gloas-`
-      - `gldt-`
-      - `glrt-`
-      - `glrtr-`
-      - `glcbt-`
-      - `glptt-`
-      - `glft-`
-      - `glimt-`
-      - `glagent-`
-      - `glwt-`
-      - `glsoat-`
-      - `glffct-`
+  - `glpat-`
+  - `gloas-`
+  - `gldt-`
+  - `glrt-`
+  - `glrtr-`
+  - `glcbt-`
+  - `glptt-`
+  - `glft-`
+  - `glimt-`
+  - `glagent-`
+  - `glwt-`
+  - `glsoat-`
+  - `glffct-`
 - [x] Include only token families whose shape can be validated conservatively.
 - [x] Reject placeholders, truncated values and malformed near-misses.
 - [x] Add deterministic prefilter support.
 - [x] Add provider-specific collision tests.
 - [x] Document the GitLab Self-Managed custom-prefix limitation rather than
-      weakening detection with broad heuristics.
+  weakening detection with broad heuristics.
 
 GitLab support must not introduce generic opaque-token detection solely to
 cover installations using custom prefixes.
@@ -118,7 +118,7 @@ cover installations using custom prefixes.
 - [x] Project only the password component as the finding span.
 - [x] Preserve percent-encoded source values without decoding or normalization.
 - [x] Reject passwordless URIs, empty credentials, placeholders and malformed
-      percent encoding.
+  percent encoding.
 - [x] Add deterministic prefiltering for supported database URI schemes.
 - [x] Add positive and adversarial corpus coverage.
 
@@ -128,18 +128,18 @@ detect a credential.
 ### 0.4.3-D — Quoted Passwords and Passphrases
 
 - [x] Allow quoted password, database-password, and passphrase values to contain
-      internal whitespace while preserving exact value projection.
+  internal whitespace while preserving exact value projection.
 - [x] Keep existing contextual key validation and password validation unchanged.
 - [x] Preserve conservative handling for unquoted values by excluding leading and
-      trailing whitespace from the projected finding span.
+  trailing whitespace from the projected finding span.
 - [x] Do not parse configuration-language syntax or introduce quote-pairing
-      semantics in the detection engine.
+  semantics in the detection engine.
 - [x] Treat mismatched surrounding quotes as malformed source syntax rather than
-      as a reason to suppress an otherwise high-confidence credential finding.
+  as a reason to suppress an otherwise high-confidence credential finding.
 - [x] Never extend a credential finding across a newline. Multiline quoted-value
-      parsing remains out of scope; when malformed quoted syntax reaches a
-      newline, an otherwise valid candidate on the current line may still be
-      reported rather than suppressed.
+  parsing remains out of scope; when malformed quoted syntax reaches a
+  newline, an otherwise valid candidate on the current line may still be
+  reported rather than suppressed.
 
 This slice closes a grammar gap in existing password detection rather than
 broadening password classification semantics.
@@ -199,9 +199,9 @@ existing PEM private-key families.
 ### 0.4.3-H — WireGuard Credentials
 
 - [x] Detect WireGuard `PrivateKey` values under sufficiently strong WireGuard
-      configuration context.
+  configuration context.
 - [x] Detect WireGuard `PresharedKey` values under sufficiently strong
-      WireGuard configuration context.
+  WireGuard configuration context.
 - [x] Validate the encoded key structure locally.
 - [x] Decode Base64 locally where required for structural validation.
 - [x] Require the expected decoded WireGuard key length.
@@ -231,7 +231,7 @@ WireGuard support remains contextual and does not introduce generic
 - [x] Reject unrelated `auth` fields.
 - [x] Reject arbitrary Base64.
 - [x] Do not treat credential-helper names or external credential-store
-      configuration as secrets.
+  configuration as secrets.
 - [x] Add realistic Docker `config.json` fixtures.
 
 Docker registry credential detection is limited to `auth` values inside
@@ -250,9 +250,9 @@ credentials remain clean.
 - [x] Project only the credential value.
 - [x] Reject placeholders and documentation examples.
 - [x] Reject unrelated `_authToken` text outside recognizable npm
-      configuration syntax.
+  configuration syntax.
 - [x] Evaluate documented `_auth` and `_password` forms where structural
-      validation can remain conservative.
+  validation can remain conservative.
 - [x] Do not treat `certfile` or `keyfile` path values as secret material.
 - [x] Do not introduce generic Base64 detection.
 - [x] Add realistic scoped-registry and private-registry fixtures.
@@ -283,22 +283,22 @@ to accommodate this file format.
 ### 0.4.3-L — System Password Verifiers
 
 - [ ] Add dedicated structural coverage for high-confidence system password
-      verifier formats where justified.
+  verifier formats where justified.
 - [ ] Cover common `/etc/shadow` record forms conservatively.
 - [ ] Evaluate supported modular crypt families such as:
-      - SHA-512 crypt;
-      - SHA-256 crypt;
-      - yescrypt;
-      - bcrypt where applicable.
+  - SHA-512 crypt;
+  - SHA-256 crypt;
+  - yescrypt;
+  - bcrypt where applicable.
 - [ ] Cover common `.htpasswd` verifier families where structure is
-      sufficiently distinctive.
+  sufficiently distinctive.
 - [ ] Evaluate Apache APR1.
 - [ ] Require appropriate record or field context.
 - [ ] Do not classify arbitrary `$...$` strings as password verifiers.
 - [ ] Do not classify arbitrary hashes as sensitive material.
 - [ ] Keep generic checksum and package-integrity fixtures clean.
 - [ ] Define remediation semantics appropriate for password verifiers rather
-      than treating them as plaintext credentials.
+  than treating them as plaintext credentials.
 
 This slice is separate from `generic.sensitive-hash`. The existing generic rule
 intentionally recognizes contextual hexadecimal digests only and must not be
@@ -311,11 +311,11 @@ expanded into an unrestricted password-hash detector.
 - [ ] Verify findings and exact source spans through the C interface.
 - [ ] Verify findings and exact source spans through the WebAssembly interface.
 - [ ] Verify severity, confidence, rule identifiers and remediation metadata
-      remain semantically equivalent.
+  remain semantically equivalent.
 - [ ] Verify serial and parallel Rust scanning remain equivalent.
 - [ ] Verify deterministic ordering remains stable across interfaces.
 - [ ] Verify transformations behave consistently for all newly supported
-      finding families.
+  finding families.
 
 C and WebAssembly adapters must remain projections of the same Cribra semantics,
 not independent detector implementations.
@@ -325,7 +325,7 @@ not independent detector implementations.
 - [ ] Update README detector coverage.
 - [ ] Update CHANGELOG.
 - [ ] Update security documentation where new credential families affect the
-      documented threat model.
+  documented threat model.
 - [ ] Ensure roadmap scope and completed work match the shipped release.
 - [ ] Run formatting checks.
 - [ ] Run Clippy with all targets and features.
@@ -340,13 +340,195 @@ not independent detector implementations.
 - [ ] Run WebAssembly adapter, parity and package gates.
 - [ ] Verify a clean working tree before release.
 - [ ] Publish `cribra` v0.4.3 only after the release branch is merged into the
-      authoritative `main`.
+  authoritative `main`.
 
 ## After v0.4.3
 
-No feature release is currently scheduled.
+The v0.4.3 release completes the current high-confidence secret-detection
+baseline.
 
-After v0.4.3, Cribra enters a maintenance and security-hardening phase.
+v0.4.4 is reserved for the canonical reusable Cribra command-line interface.
+The broader post-v0.4.3 detection roadmap previously planned for developer
+ecosystems, systems tooling and optional sensitive-data packs is deferred to
+v0.4.5 and later releases rather than removed.
+
+Subsequent feature releases remain deliberately narrow. They extend coverage
+only where a documented credential or sensitive-data surface provides strong
+enough structural or deterministic evidence to preserve Cribra's
+false-positive standards.
+
+A planned release does not imply that every audited candidate must become a
+detector. Candidates that cannot meet Cribra's confidence requirements remain
+out of scope.
+
+### 0.4.4 — Canonical Cribra CLI
+
+v0.4.4 establishes Cribra as the authoritative owner of its command-line
+interface.
+
+The CLI must not be independently reimplemented by downstream products.
+Instead, the Cribra repository will provide both a reusable Rust CLI library and
+a thin standalone executable.
+
+Target structure:
+
+``` text
+crates/
+├── cribra/          # core engine
+├── cribra-cli/      # reusable CLI library + `cribra` executable
+└── cribra-wasm/     # WebAssembly bindings
+```
+
+Architectural ownership:
+
+``` text
+cribra-cli
+├── reusable library API
+├── binary `cribra`
+└── depends on cribra
+
+silens-cli
+└── depends on cribra-cli
+    └── `silens scan`
+```
+
+Cribra owns engine CLI semantics. Downstream products own only their own service
+composition, naming and product-specific behavior. Cribra must contain no
+knowledge of Silens.
+
+#### 0.4.4-A — CLI Foundation
+
+- [ ] Add the reusable `cribra-cli` crate.
+- [ ] Add the standalone `cribra` executable as a thin wrapper around the
+  reusable CLI library.
+- [ ] Keep all command semantics independent from Silens.
+- [ ] Preserve Cribra as the sole authority for Scan CLI behavior.
+- [ ] Avoid CLI framework dependencies unless they provide clear value over a
+  small internal parser.
+
+#### 0.4.4-B — Input Contract
+
+- [ ] Support explicit file input.
+- [ ] Support stdin.
+- [ ] Define deterministic UTF-8 input behavior.
+- [ ] Preserve exact scanner semantics from the Cribra core.
+- [ ] Keep filesystem traversal outside the core engine.
+
+#### 0.4.4-C — Output Contract
+
+- [ ] Add stable human-readable output.
+- [ ] Add machine-readable structured output.
+- [ ] Define a stable exit-code contract.
+- [ ] Ensure secret material is never leaked by diagnostics or structured
+  output.
+- [ ] Preserve finding, candidate and review-channel semantics.
+
+#### 0.4.4-D — Reusable Command Surface
+
+- [ ] Expose CLI parsing and command execution through a reusable Rust API.
+- [ ] Keep the `cribra` binary as a thin adapter.
+- [ ] Make downstream embedding possible without subprocess execution.
+- [ ] Ensure `silens-cli` can delegate `silens scan` directly to `cribra-cli`.
+- [ ] Keep Silens-specific naming, account logic and service composition outside
+  Cribra.
+
+#### 0.4.4-E — CLI Hardening
+
+- [ ] Add CLI integration tests.
+- [ ] Add stdin/file equivalence tests.
+- [ ] Add human/machine output contract tests.
+- [ ] Add exit-code regression tests.
+- [ ] Verify privacy-safe failure behavior.
+- [ ] Verify deterministic behavior across repeated executions.
+- [ ] Document the public CLI contract.
+
+Directory and repository traversal may evolve later inside this same authority.
+They must not be independently implemented by downstream consumers merely to
+extend the Scan command surface.
+
+### 0.4.5 — Developer Ecosystem Credentials I
+
+High-priority package and runtime credential surfaces.
+
+Primary audit:
+
+- Cargo / Rust registry authentication.
+- Python / PyPI / `.pypirc`.
+- Deno authentication tokens.
+- RubyGems credentials where sufficiently deterministic.
+
+Principles:
+
+- Prefer documented credential storage and configuration surfaces.
+- Reuse existing generic detectors where they already provide equivalent
+  semantic coverage.
+- Do not create ecosystem-specific rules merely for catalog breadth.
+- Project only credential material.
+- Keep network validation out of scope.
+- Require adversarial false-positive coverage for every accepted family.
+
+### 0.4.6 — Developer Ecosystem Credentials II
+
+Enterprise package and build ecosystems.
+
+Primary audit:
+
+- Maven authentication configuration.
+- Gradle repository credentials.
+- NuGet / .NET package-source credentials.
+- Additional JVM or .NET credential surfaces only where strongly contextual.
+
+Principles:
+
+- Prefer structured repository and package authentication.
+- Distinguish encrypted or protected credential references from exposed
+  secrets.
+- Do not classify paths, provider names or credential-store references as
+  secret material.
+- Avoid duplicating generic credential coverage.
+
+### 0.4.7 — Unix & Systems Tooling Credentials
+
+Credential surfaces common to systems and Unix-oriented development.
+
+Primary audit:
+
+- Nix access tokens.
+- Go module and proxy authentication.
+- Conan, vcpkg and other C/C++ package tooling.
+- Common Linux and Unix developer tooling with documented credential formats.
+- Security and infrastructure tooling only where concrete high-confidence
+  credential surfaces are identified.
+
+Principles:
+
+- Detect credential formats, not operating systems or programming languages.
+- Reuse `.netrc`, HTTP authentication and existing provider detectors.
+- Do not add rules merely because a tool is popular.
+- Kali Linux or other distributions are not detection categories.
+
+### 0.4.8 — Financial Data Pack (Opt-In)
+
+First optional sensitive-data pack outside the default secret baseline.
+
+Research candidates:
+
+- IBAN with structural and checksum validation.
+- Payment-card PAN with structural and checksum validation.
+- Other financial identifiers only where validation is sufficiently strong.
+
+Principles:
+
+- Financial detection is explicitly opt-in.
+- `builtins::CURRENT` remains focused on secrets and credentials.
+- BIC/SWIFT or generic account numbers are not findings merely by appearance.
+- No broad numeric-pattern scanning.
+- False-positive resistance is a release requirement.
+
+### Maintenance and Hardening
+
+Alongside planned feature releases, Cribra continues continuous maintenance
+and security hardening.
 
 Expected work includes:
 
@@ -362,8 +544,9 @@ Expected work includes:
 - narrowly scoped new detectors when a significant production gap is
   demonstrated.
 
-A future release number or feature line should not be created merely because
-v0.4.3 has shipped.
+Feature release scope remains evidence-driven and may be reduced, deferred or
+reordered when an audited candidate cannot satisfy Cribra's confidence
+requirements.
 
 ## Explicit Non-Goals
 
@@ -379,9 +562,10 @@ concrete requirements that justify revisiting them:
 - broad PII classification;
 - email-address detection;
 - phone-number detection;
-- payment-card/PAN scanning;
-- IBAN, BIC, SWIFT or generic bank-account classification;
-- generic financial-data classification;
+- payment-card/PAN scanning in the default built-in secret pack;
+- IBAN, BIC, SWIFT or generic bank-account classification in the default
+  built-in secret pack;
+- generic financial-data classification without explicit opt-in;
 - arbitrary Kubernetes `data:` or `Secret` Base64 scanning;
 - generic encrypted-blob detection;
 - DPAPI blob detection;

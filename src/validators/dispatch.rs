@@ -15,6 +15,7 @@ use crate::{
             generic::{GenericCredentialKind, validate_generic_credential},
             hash::{HashKind, validate_sensitive_hash},
             http_basic::validate_http_basic,
+            netrc::validate_netrc,
             npm_registry::{NpmRegistryCredentialKind, validate_npm_registry},
             password::{PasswordKind, validate_password},
             wireguard::{WireGuardCredentialKind, validate_wireguard},
@@ -54,6 +55,7 @@ pub(crate) enum ValidatorKind {
     SensitiveHash,
     GenericCredential,
     WireGuard,
+    Netrc,
 }
 
 impl ValidatorKind {
@@ -78,7 +80,8 @@ impl ValidatorKind {
             | Self::WireGuard
             | Self::Password
             | Self::SensitiveHash
-            | Self::GenericCredential => DetectionMode::Contextual,
+            | Self::GenericCredential
+            | Self::Netrc => DetectionMode::Contextual,
         }
     }
 }
@@ -104,6 +107,7 @@ pub(crate) enum ValidationKind {
     SensitiveHash(HashKind),
     GenericCredential(GenericCredentialKind),
     WireGuard(WireGuardCredentialKind),
+    Netrc,
 }
 
 /// The outcome of a validation attempt.
@@ -216,6 +220,8 @@ pub(crate) fn validate_candidate(
                 Confidence::Medium,
             )
         }),
+        ValidatorKind::Netrc => validate_netrc(&context)
+            .map(|_| ValidationOutcome::new(ValidationKind::Netrc, Confidence::High)),
     }
 }
 

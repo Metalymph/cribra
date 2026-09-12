@@ -282,3 +282,24 @@ pub const NPM_REGISTRY_PASSWORD: RuleSpec = RuleSpec::captured_pattern(
 )
 .with_validator(ValidatorKind::NpmRegistry)
 .with_remediation(Remediation::RotatePassword);
+
+/// Password belonging to a complete `.netrc` machine credential record.
+///
+/// `.netrc` is whitespace-oriented, so candidate discovery recognizes an
+/// explicit `password <value>` field while contextual validation requires a
+/// preceding `machine` and `login` belonging to the same record.
+///
+/// The matcher deliberately begins at the `password` keyword rather than
+/// consuming its leading whitespace. This keeps it compatible with the
+/// contextual pattern prefilter, whose match position is used as the regex
+/// execution hint.
+///
+/// Only the password value is exposed as the finding span.
+pub const NETRC_PASSWORD: RuleSpec = RuleSpec::captured_pattern(
+    "netrc.password",
+    r"(?m)\bpassword\b[ \t]+(?P<value>[^\s#]{1,1024})(?:[ \t]*(?:#.*)?$|[ \t]+)",
+    "value",
+    Severity::Critical,
+)
+.with_validator(ValidatorKind::Netrc)
+.with_remediation(Remediation::RotatePassword);

@@ -78,7 +78,8 @@ impl CompiledRuleMetadata {
             | ValidatorKind::HttpBasic
             | ValidatorKind::WireGuard
             | ValidatorKind::DockerRegistry
-            | ValidatorKind::NpmRegistry => 200,
+            | ValidatorKind::NpmRegistry
+            | ValidatorKind::Netrc => 200,
             ValidatorKind::Jwt => 300,
             ValidatorKind::GitHub
             | ValidatorKind::GitLab
@@ -513,6 +514,7 @@ fn pattern_prefilter_needles(
         ("npm.registry-auth-token", ValidatorKind::NpmRegistry) => Some(&["_authtoken", "//"]),
         ("npm.registry-auth", ValidatorKind::NpmRegistry) => Some(&["_auth", "//"]),
         ("npm.registry-password", ValidatorKind::NpmRegistry) => Some(&["_password", "//"]),
+        ("netrc.password", ValidatorKind::Netrc) => Some(&["machine", "login", "password"]),
         ("generic.authorization-basic", ValidatorKind::HttpBasic) => {
             Some(&["authorization", "basic"])
         }
