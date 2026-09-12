@@ -189,6 +189,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "cribra-cli"
+version = "0.4.4"
+dependencies = [
+ "cribra",
+]
+
+[[package]]
 name = "cribra-wasm"
 version = "0.4.2"
 dependencies = [
