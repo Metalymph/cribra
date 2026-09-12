@@ -40,10 +40,12 @@ fn representative_positive_corpus_detects_expected_families() {
 
     for expected in [
         "github.classic-pat",
+        "gitlab.access-token",
         "stripe.live-secret-key",
         "aws.secret-access-key",
         "azure.client-secret",
         "generic.database-password-field",
+        "generic.database-connection-password",
         "generic.api-key",
         "generic.sensitive-hash",
     ] {
@@ -141,6 +143,6 @@ fn batch_classification_keeps_failed_review_and_clean_sources_distinct() {
     assert_eq!(results.failed().count(), 1);
     assert_eq!(results.review().count(), 1);
     assert_eq!(results.clean().count(), 1);
-    assert!(results.total_findings() >= 7);
+    assert!(results.total_findings() >= 9);
     assert_eq!(results.total_candidates(), 4);
 }

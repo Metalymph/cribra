@@ -59,7 +59,13 @@ pub(crate) fn validate_generic_credential(
         GenericCredentialKind::Token
     } else if key_matches_any(
         key,
-        &["secret", "secret_key", "signing_secret", "webhook_secret"],
+        &[
+            "secret",
+            "secret_key",
+            "client_secret",
+            "signing_secret",
+            "webhook_secret",
+        ],
     ) {
         GenericCredentialKind::Secret
     } else {
@@ -97,5 +103,16 @@ mod tests {
 
         let source = "API_KEY=your_api_key_here";
         assert!(validate_generic_credential(&context(source, "your_api_key_here")).is_none());
+    }
+
+    #[test]
+    fn recognizes_client_secret_as_generic_secret() {
+        let value = "AbCdEfGhIjKlMnOpQrStUvWxYz012345";
+        let source = format!("client_secret={value}");
+
+        assert_eq!(
+            validate_generic_credential(&context(&source, value)).map(GenericValidation::kind),
+            Some(GenericCredentialKind::Secret),
+        );
     }
 }

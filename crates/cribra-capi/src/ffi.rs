@@ -3276,6 +3276,157 @@ mod tests {
     }
 
     #[test]
+    fn v043_current_builtins_match_rust_core_semantics() {
+        let sources = [
+            (
+                "gitlab",
+                "GITLAB_TOKEN=glpat-abcdefghijklmnopqrstuvwxyz123456",
+            ),
+            (
+                "database-uri",
+                "DATABASE_URL=postgresql://alice:s3cret-pass@example.com/app",
+            ),
+            (
+                "quoted-password",
+                r#"password="correct horse battery staple""#,
+            ),
+            ("http-basic", "Authorization: Basic YWxpY2U6czNjcmV0"),
+            (
+                "pgp-private-key",
+                "-----BEGIN PGP PRIVATE KEY BLOCK-----\n\
+                 lQOYBGsyntheticprivatekeymaterial1234567890\n\
+                 -----END PGP PRIVATE KEY BLOCK-----",
+            ),
+            (
+                "wireguard",
+                "[Interface]\nPrivateKey = AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+            ),
+            (
+                "docker-auth",
+                r#"{"auths":{"registry.example.com":{"auth":"YWxpY2U6czNjcmV0"}}}"#,
+            ),
+            (
+                "npm-auth",
+                "//registry.npmjs.org/:_authToken=npm_exampleSecretToken123456789",
+            ),
+            (
+                "shadow",
+                "alice:$6$abcdefghijklmnop$0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789:20000:0:99999:7:::",
+            ),
+            (
+                "netrc",
+                "machine api.example.com login alice password correct-horse-battery-staple",
+            ),
+        ];
+
+        let rust_scanner = Scanner::default();
+        let mut c_scanner = ptr::null_mut();
+
+        unsafe {
+            assert_eq!(cribra_scanner_new_current(&mut c_scanner), CRIBRA_OK,);
+            assert!(!c_scanner.is_null());
+
+            for (name, source) in sources {
+                let rust_results = rust_scanner.scan([("source", source)]);
+                let rust_report = rust_results
+                    .single_report()
+                    .expect("one Rust parity report");
+
+                let mut c_report = ptr::null_mut();
+
+                assert_eq!(
+                    cribra_scanner_scan(
+                        c_scanner,
+                        source.as_ptr(),
+                        source.len(),
+                        &mut c_report,
+                        ptr::null_mut(),
+                    ),
+                    CRIBRA_OK,
+                    "{name}: C scan failed",
+                );
+                assert!(!c_report.is_null(), "{name}: missing C report");
+
+                let mut c_count = 0;
+                assert_eq!(
+                    cribra_report_finding_count(c_report, &mut c_count),
+                    CRIBRA_OK,
+                    "{name}: C finding count failed",
+                );
+
+                assert_eq!(
+                    c_count,
+                    rust_report.findings().len(),
+                    "{name}: finding count differs",
+                );
+
+                for (index, rust_finding) in rust_report.findings().iter().enumerate() {
+                    let mut c_finding = CribraFindingView::default();
+
+                    assert_eq!(
+                        cribra_report_finding_at(c_report, index, &mut c_finding,),
+                        CRIBRA_OK,
+                        "{name}: C finding {index} unavailable",
+                    );
+
+                    let c_rule_id = std::str::from_utf8(slice::from_raw_parts(
+                        c_finding.rule_id.ptr,
+                        c_finding.rule_id.len,
+                    ))
+                    .expect("C rule identifier must remain UTF-8");
+
+                    let rust_location = rust_finding.location();
+
+                    assert_eq!(
+                        c_rule_id,
+                        rust_finding.rule_id().as_str(),
+                        "{name}: rule id differs at finding {index}",
+                    );
+                    assert_eq!(
+                        c_finding.start,
+                        rust_location.start(),
+                        "{name}: start differs at finding {index}",
+                    );
+                    assert_eq!(
+                        c_finding.end,
+                        rust_location.end(),
+                        "{name}: end differs at finding {index}",
+                    );
+                    assert_eq!(
+                        c_finding.line,
+                        rust_location.line(),
+                        "{name}: line differs at finding {index}",
+                    );
+                    assert_eq!(
+                        c_finding.column,
+                        rust_location.column(),
+                        "{name}: column differs at finding {index}",
+                    );
+                    assert_eq!(
+                        c_finding.severity,
+                        severity_code(rust_finding.severity()),
+                        "{name}: severity differs at finding {index}",
+                    );
+                    assert_eq!(
+                        c_finding.confidence,
+                        confidence_code(rust_finding.confidence()),
+                        "{name}: confidence differs at finding {index}",
+                    );
+                    assert_eq!(
+                        c_finding.remediation,
+                        remediation_code(rust_finding.remediation()),
+                        "{name}: remediation differs at finding {index}",
+                    );
+                }
+
+                cribra_report_free(c_report);
+            }
+
+            cribra_scanner_free(c_scanner);
+        }
+    }
+
+    #[test]
     fn keyed_transforms_require_exactly_32_key_bytes() {
         let (scanner, report, source) = transform_fixture();
         let key = [7_u8; 31];

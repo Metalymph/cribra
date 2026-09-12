@@ -47,6 +47,93 @@ pub const GITHUB_APP_REFRESH_TOKEN: RuleSpec =
         .with_validator(ValidatorKind::GitHub)
         .with_remediation(Remediation::RevokeAndRotateCredential);
 
+/// GitLab access token.
+pub const GITLAB_ACCESS_TOKEN: RuleSpec =
+    RuleSpec::prefix("gitlab.access-token", "glpat-", Severity::Critical)
+        .with_validator(ValidatorKind::GitLab)
+        .with_remediation(Remediation::RevokeAndRotateCredential);
+
+/// GitLab deploy token.
+pub const GITLAB_DEPLOY_TOKEN: RuleSpec =
+    RuleSpec::prefix("gitlab.deploy-token", "gldt-", Severity::Critical)
+        .with_validator(ValidatorKind::GitLab)
+        .with_remediation(Remediation::RevokeAndRotateCredential);
+
+/// GitLab OAuth application secret.
+pub const GITLAB_OAUTH_APPLICATION_SECRET: RuleSpec = RuleSpec::prefix(
+    "gitlab.oauth-application-secret",
+    "gloas-",
+    Severity::Critical,
+)
+.with_validator(ValidatorKind::GitLab)
+.with_remediation(Remediation::RevokeAndRotateCredential);
+
+/// GitLab runner authentication token.
+pub const GITLAB_RUNNER_AUTH_TOKEN: RuleSpec =
+    RuleSpec::prefix("gitlab.runner-auth-token", "glrt-", Severity::Critical)
+        .with_validator(ValidatorKind::GitLab)
+        .with_remediation(Remediation::RevokeAndRotateCredential);
+
+/// GitLab runner authentication token created through a registration token.
+pub const GITLAB_REGISTRATION_DERIVED_RUNNER_AUTH_TOKEN: RuleSpec = RuleSpec::prefix(
+    "gitlab.registration-derived-runner-auth-token",
+    "glrtr-",
+    Severity::Critical,
+)
+.with_validator(ValidatorKind::GitLab)
+.with_remediation(Remediation::RevokeAndRotateCredential);
+
+/// GitLab CI/CD job token.
+pub const GITLAB_CI_JOB_TOKEN: RuleSpec =
+    RuleSpec::prefix("gitlab.ci-job-token", "glcbt-", Severity::Critical)
+        .with_validator(ValidatorKind::GitLab)
+        .with_remediation(Remediation::RevokeAndRotateCredential);
+
+/// GitLab pipeline trigger token.
+pub const GITLAB_TRIGGER_TOKEN: RuleSpec =
+    RuleSpec::prefix("gitlab.trigger-token", "glptt-", Severity::Critical)
+        .with_validator(ValidatorKind::GitLab)
+        .with_remediation(Remediation::RevokeAndRotateCredential);
+
+/// GitLab feed token.
+pub const GITLAB_FEED_TOKEN: RuleSpec =
+    RuleSpec::prefix("gitlab.feed-token", "glft-", Severity::Critical)
+        .with_validator(ValidatorKind::GitLab)
+        .with_remediation(Remediation::RevokeAndRotateCredential);
+
+/// GitLab incoming mail token.
+pub const GITLAB_INCOMING_MAIL_TOKEN: RuleSpec =
+    RuleSpec::prefix("gitlab.incoming-mail-token", "glimt-", Severity::Critical)
+        .with_validator(ValidatorKind::GitLab)
+        .with_remediation(Remediation::RevokeAndRotateCredential);
+
+/// GitLab agent for Kubernetes token.
+pub const GITLAB_AGENT_TOKEN: RuleSpec =
+    RuleSpec::prefix("gitlab.agent-token", "glagent-", Severity::Critical)
+        .with_validator(ValidatorKind::GitLab)
+        .with_remediation(Remediation::RevokeAndRotateCredential);
+
+/// GitLab workspace token.
+pub const GITLAB_WORKSPACE_TOKEN: RuleSpec =
+    RuleSpec::prefix("gitlab.workspace-token", "glwt-", Severity::Critical)
+        .with_validator(ValidatorKind::GitLab)
+        .with_remediation(Remediation::RevokeAndRotateCredential);
+
+/// GitLab SCIM access token.
+pub const GITLAB_SCIM_TOKEN: RuleSpec =
+    RuleSpec::prefix("gitlab.scim-token", "glsoat-", Severity::Critical)
+        .with_validator(ValidatorKind::GitLab)
+        .with_remediation(Remediation::RevokeAndRotateCredential);
+
+/// GitLab feature flag client token.
+pub const GITLAB_FEATURE_FLAG_CLIENT_TOKEN: RuleSpec = RuleSpec::prefix(
+    "gitlab.feature-flag-client-token",
+    "glffct-",
+    Severity::Critical,
+)
+.with_validator(ValidatorKind::GitLab)
+.with_remediation(Remediation::RevokeAndRotateCredential);
+
 /// Stripe live-mode secret API key.
 pub const STRIPE_LIVE_SECRET_KEY: RuleSpec =
     RuleSpec::prefix("stripe.live-secret-key", "sk_live_", Severity::Critical)
@@ -173,6 +260,14 @@ pub const EC_PRIVATE_KEY: RuleSpec = RuleSpec::pattern(
 pub const OPENSSH_PRIVATE_KEY: RuleSpec = RuleSpec::pattern(
     "generic.openssh-private-key",
     r"(?s)-----BEGIN OPENSSH PRIVATE KEY-----\r?\n.{16,}?-----END OPENSSH PRIVATE KEY-----",
+    Severity::Critical,
+)
+.with_remediation(Remediation::ReplacePrivateKey);
+
+/// ASCII-armored OpenPGP private-key block.
+pub const PGP_PRIVATE_KEY: RuleSpec = RuleSpec::pattern(
+    "generic.pgp-private-key",
+    r"(?s)-----BEGIN PGP PRIVATE KEY BLOCK-----\r?\n.{16,}?\r?\n-----END PGP PRIVATE KEY BLOCK-----",
     Severity::Critical,
 )
 .with_remediation(Remediation::ReplacePrivateKey);

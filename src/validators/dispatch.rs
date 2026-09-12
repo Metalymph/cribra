@@ -9,14 +9,25 @@ use crate::{
             ValidationContext,
             aws::{AwsCredentialKind, validate_aws},
             azure::{AzureCredentialKind, validate_azure},
+            database_connection::{DatabaseConnectionKind, validate_database_connection},
+            docker_registry::validate_docker_registry,
             gcp::{GcpCredentialKind, validate_gcp},
             generic::{GenericCredentialKind, validate_generic_credential},
             hash::{HashKind, validate_sensitive_hash},
+            http_basic::validate_http_basic,
+            netrc::validate_netrc,
+            npm_registry::{NpmRegistryCredentialKind, validate_npm_registry},
             password::{PasswordKind, validate_password},
+            system_password_verifier::{
+                SystemPasswordVerifierKind, validate_htpasswd_verifier,
+                validate_system_password_verifier,
+            },
+            wireguard::{WireGuardCredentialKind, validate_wireguard},
         },
         deterministic::{
             cloudflare::{CloudflareTokenKind, validate_cloudflare_token},
             github::{GitHubTokenKind, validate_github_token},
+            gitlab::{GitLabTokenKind, validate_gitlab_token},
             jwt::{JwtKind, validate_jwt},
             slack::{SlackTokenKind, validate_slack_token},
             stripe::{StripeTokenKind, validate_stripe_token},
@@ -30,7 +41,10 @@ use crate::{
 pub(crate) enum ValidatorKind {
     #[default]
     None,
+    DockerRegistry,
+    NpmRegistry,
     GitHub,
+    GitLab,
     Stripe,
     Cloudflare,
     Slack,
@@ -39,9 +53,14 @@ pub(crate) enum ValidatorKind {
     Aws,
     Azure,
     Gcp,
+    DatabaseConnection,
+    HttpBasic,
     Password,
     SensitiveHash,
     GenericCredential,
+    WireGuard,
+    SystemPasswordVerifier,
+    Netrc,
 }
 
 impl ValidatorKind {
@@ -50,6 +69,7 @@ impl ValidatorKind {
         match self {
             Self::None => DetectionMode::MatcherOnly,
             Self::GitHub
+            | Self::GitLab
             | Self::Stripe
             | Self::Cloudflare
             | Self::Slack
@@ -58,9 +78,16 @@ impl ValidatorKind {
             Self::Aws
             | Self::Azure
             | Self::Gcp
+            | Self::DockerRegistry
+            | Self::NpmRegistry
+            | Self::DatabaseConnection
+            | Self::SystemPasswordVerifier
+            | Self::HttpBasic
+            | Self::WireGuard
             | Self::Password
             | Self::SensitiveHash
-            | Self::GenericCredential => DetectionMode::Contextual,
+            | Self::GenericCredential
+            | Self::Netrc => DetectionMode::Contextual,
         }
     }
 }
@@ -68,7 +95,10 @@ impl ValidatorKind {
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub(crate) enum ValidationKind {
     Unvalidated,
+    DockerRegistry,
+    NpmRegistry(NpmRegistryCredentialKind),
     GitHub(GitHubTokenKind),
+    GitLab(GitLabTokenKind),
     Stripe(StripeTokenKind),
     Cloudflare(CloudflareTokenKind),
     Slack(SlackTokenKind),
@@ -77,9 +107,14 @@ pub(crate) enum ValidationKind {
     Aws(AwsCredentialKind),
     Azure(AzureCredentialKind),
     Gcp(GcpCredentialKind),
+    DatabaseConnection(DatabaseConnectionKind),
+    HttpBasic,
     Password(PasswordKind),
     SensitiveHash(HashKind),
     GenericCredential(GenericCredentialKind),
+    WireGuard(WireGuardCredentialKind),
+    SystemPasswordVerifier(SystemPasswordVerifierKind),
+    Netrc,
 }
 
 /// The outcome of a validation attempt.
@@ -144,8 +179,15 @@ pub(crate) fn validate_candidate(
 
     match validator {
         ValidatorKind::None => unreachable!("handled above"),
+        ValidatorKind::NpmRegistry => validate_npm_registry(&context).map(|v| {
+            ValidationOutcome::new(ValidationKind::NpmRegistry(v.kind()), Confidence::High)
+        }),
+        ValidatorKind::DockerRegistry => validate_docker_registry(&context)
+            .map(|_| ValidationOutcome::new(ValidationKind::DockerRegistry, Confidence::High)),
         ValidatorKind::GitHub => validate_github_token(context.candidate())
             .map(|v| ValidationOutcome::new(ValidationKind::GitHub(v.kind()), Confidence::High)),
+        ValidatorKind::GitLab => validate_gitlab_token(context.candidate())
+            .map(|v| ValidationOutcome::new(ValidationKind::GitLab(v.kind()), Confidence::High)),
         ValidatorKind::Stripe => validate_stripe_token(context.candidate())
             .map(|v| ValidationOutcome::new(ValidationKind::Stripe(v.kind()), Confidence::High)),
         ValidatorKind::Cloudflare => validate_cloudflare_token(context.candidate()).map(|v| {
@@ -163,6 +205,16 @@ pub(crate) fn validate_candidate(
             .map(|v| ValidationOutcome::new(ValidationKind::Azure(v.kind()), Confidence::High)),
         ValidatorKind::Gcp => validate_gcp(&context)
             .map(|v| ValidationOutcome::new(ValidationKind::Gcp(v.kind()), Confidence::High)),
+        ValidatorKind::DatabaseConnection => validate_database_connection(&context).map(|v| {
+            ValidationOutcome::new(
+                ValidationKind::DatabaseConnection(v.kind()),
+                Confidence::High,
+            )
+        }),
+        ValidatorKind::HttpBasic => validate_http_basic(&context)
+            .map(|_| ValidationOutcome::new(ValidationKind::HttpBasic, Confidence::High)),
+        ValidatorKind::WireGuard => validate_wireguard(&context)
+            .map(|v| ValidationOutcome::new(ValidationKind::WireGuard(v.kind()), Confidence::High)),
         ValidatorKind::Password => validate_password(&context).map(|v| {
             ValidationOutcome::new(ValidationKind::Password(v.kind()), Confidence::Medium)
         }),
@@ -175,6 +227,16 @@ pub(crate) fn validate_candidate(
                 Confidence::Medium,
             )
         }),
+        ValidatorKind::Netrc => validate_netrc(&context)
+            .map(|_| ValidationOutcome::new(ValidationKind::Netrc, Confidence::High)),
+        ValidatorKind::SystemPasswordVerifier => validate_system_password_verifier(&context)
+            .or_else(|| validate_htpasswd_verifier(&context))
+            .map(|validation| {
+                ValidationOutcome::new(
+                    ValidationKind::SystemPasswordVerifier(validation.kind()),
+                    Confidence::High,
+                )
+            }),
     }
 }
 
@@ -198,6 +260,7 @@ mod tests {
 
         for validator in [
             ValidatorKind::GitHub,
+            ValidatorKind::GitLab,
             ValidatorKind::Stripe,
             ValidatorKind::Cloudflare,
             ValidatorKind::Slack,
@@ -211,7 +274,11 @@ mod tests {
             ValidatorKind::Aws,
             ValidatorKind::Azure,
             ValidatorKind::Gcp,
+            ValidatorKind::NpmRegistry,
+            ValidatorKind::DockerRegistry,
             ValidatorKind::Password,
+            ValidatorKind::HttpBasic,
+            ValidatorKind::WireGuard,
             ValidatorKind::SensitiveHash,
             ValidatorKind::GenericCredential,
         ] {
@@ -271,5 +338,25 @@ mod tests {
             outcome.kind(),
             ValidationKind::Aws(AwsCredentialKind::SecretAccessKey)
         ));
+    }
+
+    #[test]
+    fn dispatches_gitlab_deterministic_validator() {
+        let token = "glpat-AbCdEf0123456789_AbCdEf0123456789";
+        let source = format!("GITLAB_TOKEN={token}");
+
+        let outcome = validate_candidate(
+            ValidatorKind::GitLab,
+            &source,
+            range_of(&source, token),
+            Confidence::Low,
+        )
+        .expect("GitLab token should validate");
+
+        assert!(matches!(
+            outcome.kind(),
+            ValidationKind::GitLab(GitLabTokenKind::Access)
+        ));
+        assert_eq!(outcome.confidence(), Confidence::High);
     }
 }

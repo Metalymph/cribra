@@ -278,20 +278,46 @@ is reused.
 
 ### Built-in detection
 
-The current built-in catalog covers detector families for:
+### Built-in detection
 
--   GitHub
--   Stripe
--   Cloudflare
--   Slack
--   Telegram
--   JWT
--   AWS
--   Azure
--   GCP
--   password and passphrase fields
--   sensitive hashes
--   generic API keys, tokens and secrets
+The current built-in catalog covers high-confidence detector families for:
+
+- GitHub credentials;
+- GitLab credentials;
+- Stripe credentials;
+- Cloudflare credentials;
+- Slack credentials;
+- Telegram bot tokens;
+- signed JWT/JWS compact values;
+- AWS credentials;
+- Azure credentials;
+- GCP service-account material;
+- generic PKCS#8, encrypted PKCS#8, RSA, EC and OpenSSH private keys;
+- ASCII-armored PGP private keys;
+- password, database-password and passphrase fields;
+- passwords embedded in PostgreSQL, MySQL, MariaDB, MongoDB and Redis
+  connection URIs;
+- explicit HTTP Bearer authentication;
+- explicit HTTP Basic authentication;
+- WireGuard `PrivateKey` and `PresharedKey` values under recognized
+  WireGuard configuration context;
+- Docker registry `auth` credentials under Docker `auths` configuration;
+- registry-scoped npm `.npmrc` `_authToken`, `_auth` and `_password`
+  credentials;
+- `.netrc` machine/login/password credentials;
+- supported `/etc/shadow` password verifiers:
+  - SHA-256 crypt;
+  - SHA-512 crypt;
+  - yescrypt;
+- supported `.htpasswd` password verifiers:
+  - Apache APR1;
+  - bcrypt;
+- contextual sensitive hexadecimal hashes;
+- generic API keys, authentication tokens and secrets.
+
+Contextual and encoded credential families remain deliberately narrow. Cribra
+does not perform generic entropy scanning, arbitrary Base64 detection,
+unrestricted hash detection, or unrestricted modular-crypt detection.
 
 The canonical selectable built-in pack is exposed as
 `builtins::CURRENT`.
@@ -927,21 +953,24 @@ application and Silens Studio desktop app.
 
 ## Release status
 
-The published Rust crate is currently in the `0.3.x` line.
+## Release status
+
+The current Cribra release line is `0.4.x`.
 
 - `0.2.x` established the Cribra name, contextual detection, ambiguous
   candidate review, explainability, and the current transformation model.
 - `0.3.x` added the dedicated native C ABI adapter and its cross-platform
   validation surface.
-- The current release line is `0.4.x`.
-
-`0.4.0` adds the reusable typed WebAssembly interoperability layer, production
-WASM semantic-parity validation, browser performance validation, and a single
-Binaryen `-Oz` production profile while keeping WASM independent from the native
-C ABI.
+- `0.4.0` established the reusable typed WebAssembly interoperability layer.
+- `0.4.1` published `cribra-wasm` as an independently consumable adapter crate.
+- `0.4.2` hardened source/report transformation safety and private-key coverage.
+- `0.4.3` substantially completes the current high-confidence secret-detection
+  baseline with additional provider, registry, authentication, system-tooling
+  and password-verifier coverage.
 
 The root `cribra` package remains the authoritative Rust core. Adapter crates
-are separate integration layers over the same semantics.
+are separate integration layers over the same semantics and must not implement
+independent detection behavior.
 
 ## Development
 

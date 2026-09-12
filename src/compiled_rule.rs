@@ -72,9 +72,18 @@ impl CompiledRuleMetadata {
         match self.validator {
             ValidatorKind::None => 0,
             ValidatorKind::GenericCredential => 100,
-            ValidatorKind::Password | ValidatorKind::SensitiveHash => 200,
+            ValidatorKind::Password
+            | ValidatorKind::SensitiveHash
+            | ValidatorKind::DatabaseConnection
+            | ValidatorKind::HttpBasic
+            | ValidatorKind::WireGuard
+            | ValidatorKind::DockerRegistry
+            | ValidatorKind::NpmRegistry
+            | ValidatorKind::Netrc
+            | ValidatorKind::SystemPasswordVerifier => 200,
             ValidatorKind::Jwt => 300,
             ValidatorKind::GitHub
+            | ValidatorKind::GitLab
             | ValidatorKind::Stripe
             | ValidatorKind::Cloudflare
             | ValidatorKind::Slack
@@ -492,7 +501,6 @@ fn pattern_prefilter_needles(
             "azure_client_secret",
             "client_secret_value",
             "clientsecret",
-            "client_secret",
         ]),
         ("azure.storage-account-key", ValidatorKind::Azure) => {
             Some(&["storage_account_key", "azure_storage_key", "account_key"])
@@ -501,9 +509,16 @@ fn pattern_prefilter_needles(
             Some(&["shared_access_signature", "azure_sas_token", "sas_token"])
         }
         ("gcp.private-key-id", ValidatorKind::Gcp) => Some(&["private_key_id"]),
-        ("gcp.client-secret", ValidatorKind::Gcp) => Some(&["client_secret"]),
         ("gcp.private-key", ValidatorKind::Gcp) => Some(&["private_key"]),
         ("gcp.escaped-private-key", ValidatorKind::Gcp) => Some(&["private_key"]),
+        ("docker.registry-auth", ValidatorKind::DockerRegistry) => Some(&["auths", "\"auth\""]),
+        ("npm.registry-auth-token", ValidatorKind::NpmRegistry) => Some(&["_authtoken", "//"]),
+        ("npm.registry-auth", ValidatorKind::NpmRegistry) => Some(&["_auth", "//"]),
+        ("npm.registry-password", ValidatorKind::NpmRegistry) => Some(&["_password", "//"]),
+        ("netrc.password", ValidatorKind::Netrc) => Some(&["machine", "login", "password"]),
+        ("generic.authorization-basic", ValidatorKind::HttpBasic) => {
+            Some(&["authorization", "basic"])
+        }
         ("generic.password-field", ValidatorKind::Password) => Some(&[
             "admin_password",
             "root_password",
@@ -538,9 +553,25 @@ fn pattern_prefilter_needles(
         ("generic.authorization-bearer", ValidatorKind::GenericCredential) => {
             Some(&["authorization"])
         }
-        ("generic.secret", ValidatorKind::GenericCredential) => {
-            Some(&["signing_secret", "webhook_secret", "secret_key", "secret"])
-        }
+        ("generic.database-connection-password", ValidatorKind::DatabaseConnection) => Some(&[
+            "postgres://",
+            "postgresql://",
+            "mysql://",
+            "mariadb://",
+            "mongodb://",
+            "mongodb+srv://",
+            "redis://",
+            "rediss://",
+        ]),
+        ("generic.secret", ValidatorKind::GenericCredential) => Some(&[
+            "signing_secret",
+            "webhook_secret",
+            "client_secret",
+            "secret_key",
+            "secret",
+        ]),
+        ("wireguard.private-key", ValidatorKind::WireGuard) => Some(&["privatekey", "[interface]"]),
+        ("wireguard.preshared-key", ValidatorKind::WireGuard) => Some(&["presharedkey", "[peer]"]),
         _ => None,
     }
 }

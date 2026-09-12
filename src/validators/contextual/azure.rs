@@ -49,7 +49,6 @@ pub(crate) fn validate_azure(context: &ValidationContext<'_>) -> Option<AzureVal
         key,
         &[
             "azure_client_secret",
-            "client_secret",
             "clientsecret",
             "client_secret_value",
             "microsoft_provider_authentication_secret",
@@ -143,5 +142,13 @@ mod tests {
 
         let source = "AZURE_CLIENT_SECRET=your_api_key_here";
         assert!(validate_azure(&context(source, "your_api_key_here")).is_none());
+    }
+
+    #[test]
+    fn bare_client_secret_is_not_attributed_to_azure() {
+        let value = "AbCdEfGhIjKlMnOpQrStUvWxYz012345";
+        let source = format!("client_secret={value}");
+
+        assert!(validate_azure(&context(&source, value)).is_none());
     }
 }

@@ -192,9 +192,6 @@ fn synthetic_value(
             original_len,
             &mut random,
         ),
-        "gcp.client-secret" => {
-            contextual_marker(marker, "gcp_client_secret", original_len, &mut random)
-        }
         "gcp.private-key" => fixed_or_padded(
             "-----BEGIN SYNTHETIC PRIVATE KEY-----CRIBRA-----END SYNTHETIC PRIVATE KEY-----",
             original_len,

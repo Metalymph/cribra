@@ -18,9 +18,6 @@ pub(crate) enum GcpCredentialKind {
 
     /// Private-key identifier under the `private_key_id` field.
     ServiceAccountPrivateKeyId,
-
-    /// Client secret under the `client_secret` field.
-    OAuthClientSecret,
 }
 
 /// Successful Google Cloud contextual validation.
@@ -59,16 +56,6 @@ pub(crate) fn validate_gcp(context: &ValidationContext<'_>) -> Option<GcpValidat
     {
         return Some(GcpValidation {
             kind: GcpCredentialKind::ServiceAccountPrivateKeyId,
-        });
-    }
-
-    if key_matches_any(key, &["client_secret"])
-        && candidate.len() >= 16
-        && candidate.len() <= 255
-        && candidate.is_ascii()
-    {
-        return Some(GcpValidation {
-            kind: GcpCredentialKind::OAuthClientSecret,
         });
     }
 
