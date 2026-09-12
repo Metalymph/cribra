@@ -3,6 +3,7 @@
 
 pub(crate) mod cloudflare;
 pub(crate) mod github;
+pub(crate) mod gitlab;
 pub(crate) mod jwt;
 pub(crate) mod slack;
 pub(crate) mod stripe;

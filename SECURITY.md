@@ -49,6 +49,8 @@ other sensitive material in the report. Use synthetic test values instead.
 Reports are especially valuable when they concern:
 
 - false negatives that could cause sensitive material to be treated as safe;
+- incorrect classification or transformation of system password verifiers,
+  including supported `/etc/shadow` and `.htpasswd` records;
 - false candidate/finding promotion that violates documented classification
   semantics;
 - redaction, templating, pseudonymization, synthesis, or `ShareBundle`
@@ -153,5 +155,9 @@ For example, a false positive may be a correctness issue rather than a security
 issue. However, a false negative that causes sensitive material to pass through
 a documented safe-to-share transformation boundary may have direct security
 impact and should be reported privately.
+
+System password verifiers are treated as sensitive authentication material but
+are not modeled as plaintext passwords or arbitrary hashes. Detection requires
+supported verifier structure plus recognized authentication-record context.
 
 When in doubt, prefer private reporting.
