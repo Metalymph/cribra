@@ -107,8 +107,10 @@ impl ErrorSlot {
     ///
     /// # Safety
     ///
-    /// A non-null `raw` pointer must reference writable memory for one
-    /// [`CribraError`] pointer for the duration of the enclosing ABI call.
+    /// A non-null `raw` pointer must reference readable and writable memory for one
+    /// [`CribraError`] pointer for the entire lifetime of the returned `ErrorSlot`.
+    /// The pointed-to slot must not be concurrently accessed or invalidated while
+    /// the `ErrorSlot` is in use.
     pub(crate) unsafe fn from_raw(raw: *mut *mut CribraError) -> Self {
         Self { raw }
     }

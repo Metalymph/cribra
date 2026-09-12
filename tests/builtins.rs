@@ -1333,7 +1333,7 @@ fn netrc_password_rejects_incomplete_and_unrelated_password_text() {
 
         assert!(
             report.is_empty(),
-            "unexpected .netrc password finding for {source:?}",
+            "unexpected .netrc password finding for invalid fixture",
         );
     }
 }
@@ -1364,7 +1364,7 @@ fn netrc_password_does_not_cross_machine_record_boundaries() {
 
         assert!(
             report.is_empty(),
-            "cross-record .netrc password unexpectedly detected for {source:?}",
+            "cross-record .netrc password unexpectedly detected",
         );
     }
 }
@@ -1388,7 +1388,7 @@ fn netrc_password_rejects_placeholders_and_documentation_values() {
 
         assert!(
             report.is_empty(),
-            "documentation .netrc password unexpectedly detected: {password:?}",
+            "documentation .netrc password unexpectedly detected",
         );
     }
 }

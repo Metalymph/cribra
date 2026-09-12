@@ -173,7 +173,7 @@ mod tests {
         ] {
             assert!(
                 validate_netrc(&context(&source, password)).is_none(),
-                "unexpected .netrc validation for {source:?}",
+                "unexpected .netrc validation for incomplete fixture",
             );
         }
     }
@@ -199,7 +199,7 @@ mod tests {
         ] {
             assert!(
                 validate_netrc(&context(&source, password)).is_none(),
-                "unexpected cross-record .netrc validation for {source:?}",
+                "unexpected cross-record .netrc validation",
             );
         }
     }
@@ -229,7 +229,7 @@ mod tests {
 
             assert!(
                 validate_netrc(&context(&source, password)).is_none(),
-                "unexpected documentation password acceptance for {password:?}",
+                "unexpected documentation password acceptance",
             );
         }
     }
