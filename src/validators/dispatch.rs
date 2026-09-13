@@ -9,6 +9,7 @@ use crate::{
             ValidationContext,
             aws::{AwsCredentialKind, validate_aws},
             azure::{AzureCredentialKind, validate_azure},
+            cargo_registry::validate_cargo_registry,
             database_connection::{DatabaseConnectionKind, validate_database_connection},
             docker_registry::validate_docker_registry,
             gcp::{GcpCredentialKind, validate_gcp},
@@ -43,6 +44,7 @@ pub(crate) enum ValidatorKind {
     None,
     DockerRegistry,
     NpmRegistry,
+    CargoRegistry,
     GitHub,
     GitLab,
     Stripe,
@@ -80,6 +82,7 @@ impl ValidatorKind {
             | Self::Gcp
             | Self::DockerRegistry
             | Self::NpmRegistry
+            | Self::CargoRegistry
             | Self::DatabaseConnection
             | Self::SystemPasswordVerifier
             | Self::HttpBasic
@@ -96,6 +99,7 @@ impl ValidatorKind {
 pub(crate) enum ValidationKind {
     Unvalidated,
     DockerRegistry,
+    CargoRegistry,
     NpmRegistry(NpmRegistryCredentialKind),
     GitHub(GitHubTokenKind),
     GitLab(GitLabTokenKind),
@@ -182,6 +186,8 @@ pub(crate) fn validate_candidate(
         ValidatorKind::NpmRegistry => validate_npm_registry(&context).map(|v| {
             ValidationOutcome::new(ValidationKind::NpmRegistry(v.kind()), Confidence::High)
         }),
+        ValidatorKind::CargoRegistry => validate_cargo_registry(&context)
+            .map(|_| ValidationOutcome::new(ValidationKind::CargoRegistry, Confidence::High)),
         ValidatorKind::DockerRegistry => validate_docker_registry(&context)
             .map(|_| ValidationOutcome::new(ValidationKind::DockerRegistry, Confidence::High)),
         ValidatorKind::GitHub => validate_github_token(context.candidate())

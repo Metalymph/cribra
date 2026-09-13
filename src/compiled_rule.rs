@@ -90,7 +90,8 @@ impl CompiledRuleMetadata {
             | ValidatorKind::Telegram
             | ValidatorKind::Aws
             | ValidatorKind::Azure
-            | ValidatorKind::Gcp => 500,
+            | ValidatorKind::Gcp
+            | ValidatorKind::CargoRegistry => 500,
         }
     }
 }
@@ -515,6 +516,12 @@ fn pattern_prefilter_needles(
         ("npm.registry-auth-token", ValidatorKind::NpmRegistry) => Some(&["_authtoken", "//"]),
         ("npm.registry-auth", ValidatorKind::NpmRegistry) => Some(&["_auth", "//"]),
         ("npm.registry-password", ValidatorKind::NpmRegistry) => Some(&["_password", "//"]),
+        ("cargo.registry-token", ValidatorKind::CargoRegistry) => {
+            Some(&["token", "[registry", "[registries."])
+        }
+        ("cargo.registry-env-token", ValidatorKind::CargoRegistry) => {
+            Some(&["cargo_registry_token", "cargo_registries_"])
+        }
         ("netrc.password", ValidatorKind::Netrc) => Some(&["machine", "login", "password"]),
         ("generic.authorization-basic", ValidatorKind::HttpBasic) => {
             Some(&["authorization", "basic"])

@@ -283,6 +283,30 @@ pub const NPM_REGISTRY_PASSWORD: RuleSpec = RuleSpec::captured_pattern(
 .with_validator(ValidatorKind::NpmRegistry)
 .with_remediation(Remediation::RotatePassword);
 
+/// Cargo registry authentication token stored in Cargo credentials/config.
+///
+/// Contextual validation requires the `token` assignment to belong to either
+/// `[registry]` or `[registries.<name>]`.
+pub const CARGO_REGISTRY_TOKEN: RuleSpec = RuleSpec::captured_pattern(
+    "cargo.registry-token",
+    r#"(?m)^[ \t]*token[ \t]*=[ \t]*"(?P<value>[^"\r\n]{1,2048})"[ \t]*(?:#.*)?$"#,
+    "value",
+    Severity::Critical,
+)
+.with_validator(ValidatorKind::CargoRegistry)
+.with_remediation(Remediation::RevokeAndRotateCredential);
+
+/// Cargo registry authentication token provided through Cargo environment
+/// variables.
+pub const CARGO_REGISTRY_ENV_TOKEN: RuleSpec = RuleSpec::captured_pattern(
+    "cargo.registry-env-token",
+    r"(?im)^[ \t]*CARGO_(?:REGISTRY|REGISTRIES_[A-Z0-9_]+)_TOKEN[ \t]*=[ \t]*(?P<value>[^\s#;]{1,2048})[ \t]*(?:[#;].*)?$",
+    "value",
+    Severity::Critical,
+)
+.with_validator(ValidatorKind::CargoRegistry)
+.with_remediation(Remediation::RevokeAndRotateCredential);
+
 /// Password belonging to a complete `.netrc` machine credential record.
 ///
 /// `.netrc` is whitespace-oriented, so candidate discovery recognizes an

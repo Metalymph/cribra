@@ -1266,6 +1266,184 @@ fn npm_registry_legacy_auth_and_password_are_structurally_validated() {
 }
 
 #[test]
+fn cargo_registry_credentials_are_in_current_pack() {
+    let ids: std::collections::HashSet<_> =
+        builtins::CURRENT.iter().map(|rule| rule.id()).collect();
+
+    assert!(ids.contains("cargo.registry-token"));
+    assert!(ids.contains("cargo.registry-env-token"));
+}
+
+#[test]
+fn cargo_registry_token_detects_default_registry() {
+    let scanner = Scanner::default();
+    let token = "cargo-secret-token-0123456789";
+    let source = format!(
+        "[registry]\n\
+         token = \"{token}\"\n"
+    );
+
+    let results = scanner.scan([("credentials.toml", source.as_str())]);
+    let report = results.single_report().expect("one report");
+
+    assert_eq!(report.findings().len(), 1);
+
+    let finding = &report.findings()[0];
+
+    assert_eq!(finding.rule_id().as_str(), "cargo.registry-token");
+    assert_eq!(matched(&source, finding), token);
+    assert_eq!(finding.severity(), Severity::Critical);
+    assert_eq!(finding.confidence(), Confidence::High);
+    assert_eq!(
+        finding.remediation(),
+        Some(Remediation::RevokeAndRotateCredential),
+    );
+}
+
+#[test]
+fn cargo_registry_token_detects_named_registry() {
+    let scanner = Scanner::default();
+    let token = "private-registry-token-0123456789";
+    let source = format!(
+        "[registries.internal]\n\
+         index = \"sparse+https://packages.example.invalid/index/\"\n\
+         token = \"{token}\"\n"
+    );
+
+    let results = scanner.scan([("credentials.toml", source.as_str())]);
+    let report = results.single_report().expect("one report");
+
+    assert_eq!(report.findings().len(), 1);
+
+    let finding = &report.findings()[0];
+
+    assert_eq!(finding.rule_id().as_str(), "cargo.registry-token");
+    assert_eq!(matched(&source, finding), token);
+}
+
+#[test]
+fn cargo_registry_environment_tokens_are_detected() {
+    let scanner = Scanner::default();
+
+    for (source, token) in [
+        (
+            "CARGO_REGISTRY_TOKEN=cargo-default-token-0123456789",
+            "cargo-default-token-0123456789",
+        ),
+        (
+            "CARGO_REGISTRIES_INTERNAL_TOKEN=cargo-private-token-0123456789",
+            "cargo-private-token-0123456789",
+        ),
+    ] {
+        let results = scanner.scan([("environment", source)]);
+        let report = results.single_report().expect("one report");
+
+        assert_eq!(report.findings().len(), 1, "unexpected Cargo finding count",);
+
+        let finding = &report.findings()[0];
+
+        assert_eq!(finding.rule_id().as_str(), "cargo.registry-env-token",);
+        assert_eq!(matched(source, finding), token);
+        assert_eq!(finding.severity(), Severity::Critical);
+        assert_eq!(finding.confidence(), Confidence::High);
+        assert_eq!(
+            finding.remediation(),
+            Some(Remediation::RevokeAndRotateCredential),
+        );
+    }
+}
+
+#[test]
+fn cargo_registry_tokens_project_only_the_secret_value() {
+    let scanner = Scanner::default();
+    let token = "cargo-project-only-this-value-0123456789";
+    let source = format!(
+        "[registries.private]\n\
+         token = \"{token}\"\n"
+    );
+
+    let results = scanner.scan([("credentials.toml", source.as_str())]);
+    let report = results.single_report().expect("one report");
+    let finding = &report.findings()[0];
+
+    assert_eq!(matched(&source, finding), token);
+    assert_eq!(
+        finding.location().end() - finding.location().start(),
+        token.len(),
+    );
+}
+
+#[test]
+fn cargo_registry_rejects_unrelated_token_fields() {
+    let scanner = Scanner::default();
+    let token = "ordinary-token-value-0123456789";
+
+    for source in [
+        format!("token = \"{token}\""),
+        format!("[package]\ntoken = \"{token}\""),
+        format!("[profile.release]\ntoken = \"{token}\""),
+        format!("[workspace.metadata]\ntoken = \"{token}\""),
+    ] {
+        let results = scanner.scan([("fixture.toml", source.as_str())]);
+        let report = results.single_report().expect("one report");
+
+        assert!(
+            report
+                .findings()
+                .iter()
+                .all(|finding| !finding.rule_id().as_str().starts_with("cargo.")),
+            "unrelated token field unexpectedly produced Cargo finding",
+        );
+    }
+}
+
+#[test]
+fn cargo_registry_rejects_placeholders() {
+    let scanner = Scanner::default();
+
+    for token in [
+        "token",
+        "your_token",
+        "your_token_here",
+        "example_token",
+        "example_token_here",
+    ] {
+        let source = format!(
+            "[registry]\n\
+             token = \"{token}\"\n"
+        );
+
+        let results = scanner.scan([("credentials.toml", source.as_str())]);
+        let report = results.single_report().expect("one report");
+
+        assert!(
+            report
+                .findings()
+                .iter()
+                .all(|finding| !finding.rule_id().as_str().starts_with("cargo.")),
+            "placeholder unexpectedly produced Cargo finding",
+        );
+    }
+}
+
+#[test]
+fn cargo_registry_rule_wins_generic_token_collision() {
+    let scanner = Scanner::default();
+    let token = "cargo-collision-token-0123456789";
+    let source = format!("CARGO_REGISTRY_TOKEN={token}");
+
+    let results = scanner.scan([("environment", source.as_str())]);
+    let report = results.single_report().expect("one report");
+
+    assert_eq!(report.findings().len(), 1);
+
+    let finding = &report.findings()[0];
+
+    assert_eq!(finding.rule_id().as_str(), "cargo.registry-env-token",);
+    assert_eq!(matched(&source, finding), token);
+}
+
+#[test]
 fn netrc_password_detects_complete_machine_credentials() {
     let scanner = scanner_for([builtins::NETRC_PASSWORD]);
 
