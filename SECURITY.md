@@ -1,12 +1,11 @@
 # Security Policy
 
-Cribra is an embeddable, local-first Rust engine for detecting, reviewing, and safely transforming secrets and sensitive data.
+Cribra is an embeddable, local-first Rust engine for detecting, reviewing, and
+safely transforming secrets and sensitive data.
 
 Security issues should be reported privately whenever possible.
 
 ## Supported Versions
-
-The following release lines are currently supported for security fixes:
 
 | Version | Supported |
 | --- | --- |
@@ -19,22 +18,20 @@ The following release lines are currently supported for security fixes:
 Until Cribra reaches 1.0, security support follows the current active minor
 release line unless a release announcement explicitly states otherwise.
 
-Unsupported releases may still receive documentation corrections, but security
-fixes are not guaranteed.
-
 ## Reporting a Vulnerability
 
-Please do **not** open a public GitHub issue for a suspected vulnerability.
+Do not open a public GitHub issue for a suspected vulnerability.
 
-Use GitHub Private Vulnerability Reporting for this repository whenever
+Use GitHub Private Vulnerability Reporting for the repository whenever
 available.
 
 A useful report should include:
 
 - affected Cribra version or commit;
-- affected feature set (`default`, `serde`, `parallel`, native C ABI, WASM);
+- affected surface (`cribra`, `cribra-cli`, native C ABI, or `cribra-wasm`);
+- enabled crate features where relevant;
 - operating system and architecture where relevant;
-- a minimal reproducer or test case;
+- a minimal synthetic reproducer;
 - expected behavior;
 - observed behavior;
 - security or privacy impact;
@@ -42,122 +39,138 @@ A useful report should include:
 - any known workaround.
 
 Do not include real production credentials, private keys, customer data, or
-other sensitive material in the report. Use synthetic test values instead.
+other sensitive material. Use synthetic fixtures instead.
 
 ## Security-Relevant Areas
 
 Reports are especially valuable when they concern:
 
-- false negatives that could cause sensitive material to be treated as safe;
-- incorrect classification or transformation of system password verifiers,
-  including supported `/etc/shadow` and `.htpasswd` records;
-- false candidate/finding promotion that violates documented classification
-  semantics;
-- redaction, templating, pseudonymization, synthesis, or `ShareBundle`
-  behavior that leaks or preserves sensitive source material unexpectedly;
+- false negatives that can cause sensitive material to be treated as safe;
+- finding/candidate classification that violates documented semantics;
+- redaction, templating, pseudonymization, synthesis, or share-bundle behavior
+  that leaks source material unexpectedly;
 - span, overlap, or source/report consistency bugs that can produce unsafe
   transformed output;
 - accidental serialization of original source material;
-- violations of Cribra's metadata-only serialization boundary;
-- secrets or sensitive values appearing in errors, diagnostics, explanations,
-  manifests, logs, or public result objects;
-- C ABI memory-safety issues, including invalid ownership, lifetime, buffer,
-  pointer, or destruction behavior;
-- Rust panics or unwinding crossing the C ABI boundary;
-- ABI behavior that can cause undefined behavior for a conforming caller;
-- WASM boundary issues that expose source material or violate documented
-  local-first/privacy guarantees;
-- concurrency or parallel-execution bugs that change semantic results or
-  ordering;
-- dependency or supply-chain vulnerabilities with practical impact on Cribra.
+- secrets or source snippets appearing in errors, diagnostics, explanations,
+  manifests, logs, CLI output, or public result objects;
+- C ABI memory-safety, ownership, lifetime, pointer, destruction, or panic
+  containment issues;
+- WASM boundary issues that violate documented local-first/privacy guarantees;
+- CLI behavior that prints matched secret material or source contents through
+  success or failure paths;
+- semantic divergence between Rust, C, WASM, and CLI projections;
+- dependency or supply-chain vulnerabilities with practical impact.
 
 ## Privacy Boundary
 
-Cribra is designed so that original source material remains caller-controlled.
+Original source material remains caller-controlled.
 
 Public findings, sensitive candidates, explanations, remediation metadata,
-summaries, manifests, and serialized metadata must not contain matched secret
-values or original source text unless an API explicitly and intentionally
-returns transformed source content.
+summaries, manifests, serialized metadata, and CLI result output must not
+contain matched secret values or original source text unless an API explicitly
+and intentionally returns transformed source content.
 
-Cribra itself does not require network access to scan or transform data.
+Cribra performs no network access to scan or transform data.
 
-A report showing that source material crosses one of these boundaries is
-considered security-relevant.
+Low-level transformations that accept a source and an existing report require
+the caller to preserve exact source/report pairing. Matching source length is a
+sanity check, not proof of source identity.
 
-Low-level transformation APIs that accept a source and a previously produced
-report require the caller to preserve the exact source/report pairing.
-Matching byte length is not proof of source identity.
+When scanning and immediately producing share-safe output, prefer the atomic
+scan-and-build path so scanning and transformation use the same borrowed source
+values by construction.
 
-When scanning and immediately producing a share-safe bundle, callers should
-prefer the atomic scan-and-build path so that scanning and transformation use
-the same borrowed source values by construction.
+## Canonical CLI
+
+`cribra-cli` is a presentation and command adapter over the Cribra core.
+
+Security invariants include:
+
+- the CLI does not implement independent detection logic;
+- matched source values are not intentionally rendered in human or JSON output;
+- ambiguous candidates remain review-only;
+- invalid UTF-8 is rejected rather than decoded lossily;
+- input/execution diagnostics do not include source contents;
+- the CLI performs no network access or remote credential validation;
+- stdin and explicit-file scanning use the same core scanner semantics;
+- the standalone binary remains a thin adapter over the reusable library.
+
+Directory/repository traversal is not part of the v0.4.4 CLI contract.
 
 ## Native C ABI
 
-The native C ABI was introduced in v0.3 as a dedicated interoperability
-adapter. Its compatibility and versioning contract is documented separately
-from Rust crate SemVer.
+The native C ABI is a dedicated interoperability adapter.
 
 Important invariants include:
 
 - Rust object layouts are never part of the public C ABI;
-- caller input is length-delimited and explicitly validated where applicable;
-- Rust panics must not unwind across an exported FFI boundary;
-- Rust-owned allocations are released only through their documented Cribra
-  destruction function;
-- every successful allocation returned across the ABI has exactly one
-  documented destruction path;
-- borrowed views are valid only for the documented lifetime of their owner;
+- caller input is length-delimited and validated where applicable;
+- Rust panics must not unwind across exported FFI boundaries;
+- Rust-owned allocations are released only through documented Cribra
+  destruction functions;
+- borrowed views are valid only for the documented owner lifetime;
 - matched sensitive values must not appear in ABI metadata or diagnostics.
 
 Use-after-free, double-free, forged handles, invalid pointer/length regions, and
-concurrent destruction while an object is in use remain violations of the
-caller contract unless explicitly documented otherwise.
+concurrent destruction while an object is in use remain caller-contract
+violations unless explicitly documented otherwise.
 
-## WASM
+## WebAssembly
 
-WASM is an independent adapter over the same Cribra core and does not pass
-through the C ABI.
+`cribra-wasm` is an independent typed adapter over the same Cribra core and does
+not pass through the native C ABI.
 
-Security reports concerning browser/WASM integration should include, where
-relevant:
+Browser/WASM reports should include, where relevant:
 
 - browser/runtime;
 - bundler or loader;
 - Web Worker usage;
 - initialization path;
-- serialization path;
+- serialization/projection path;
 - CSP constraints;
-- whether the issue is reproducible in the core Rust API.
+- whether the issue reproduces through the Rust core.
+
+## Semantic Parity
+
+Equivalent supported operations must preserve logical semantics across exposed
+interfaces.
+
+Where applicable, parity includes:
+
+- finding count and ordering;
+- rule identifiers;
+- byte spans;
+- Unicode line/column coordinates;
+- severity;
+- confidence;
+- remediation;
+- candidate count and ordering;
+- candidate kinds and evidence;
+- explanation facts;
+- supported transformed output.
+
+Representations may differ. Classification semantics may not.
 
 ## Disclosure and Response
 
-Security reports will be assessed according to severity, exploitability,
-privacy impact, and affected release lines.
+Confirmed vulnerabilities may result in:
 
-When a vulnerability is confirmed, maintainers may:
-
-- prepare a private fix;
-- add regression tests;
-- publish a patched release;
-- publish a GitHub Security Advisory when appropriate;
-- credit reporters who wish to be acknowledged.
+- private fixes;
+- regression tests;
+- patched releases;
+- GitHub Security Advisories;
+- reporter credit when requested.
 
 Please allow reasonable time for investigation and remediation before public
 disclosure.
 
 ## Scope Notes
 
-Detection quality issues are not automatically security vulnerabilities.
+Detection-quality issues are not automatically security vulnerabilities.
 
-For example, a false positive may be a correctness issue rather than a security
-issue. However, a false negative that causes sensitive material to pass through
-a documented safe-to-share transformation boundary may have direct security
-impact and should be reported privately.
+A false positive may be a correctness issue. A false negative becomes directly
+security-relevant when it causes sensitive material to cross a documented
+safe-to-share boundary or otherwise violates an explicit security guarantee.
 
-System password verifiers are treated as sensitive authentication material but
-are not modeled as plaintext passwords or arbitrary hashes. Detection requires
-supported verifier structure plus recognized authentication-record context.
-
-When in doubt, prefer private reporting.
+When uncertain, prefer private reporting.
