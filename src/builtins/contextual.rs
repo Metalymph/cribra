@@ -321,6 +321,17 @@ pub const PYPI_REPOSITORY_TOKEN: RuleSpec = RuleSpec::captured_pattern(
 .with_validator(ValidatorKind::Pypi)
 .with_remediation(Remediation::RevokeAndRotateCredential);
 
+/// Gem-server authentication key supplied through RubyGems'
+/// `GEM_HOST_API_KEY` environment variable.
+pub const RUBYGEMS_HOST_API_KEY: RuleSpec = RuleSpec::captured_pattern(
+    "rubygems.host-api-key",
+    r##"(?im)^[ \t]*GEM_HOST_API_KEY[ \t]*=[ \t]*["']?(?P<value>[^\s"'#;]{8,2048})["']?[ \t]*(?:[#;].*)?$"##,
+    "value",
+    Severity::Critical,
+)
+.with_validator(ValidatorKind::RubyGemsHost)
+.with_remediation(Remediation::RevokeAndRotateCredential);
+
 /// Password belonging to a complete `.netrc` machine credential record.
 ///
 /// `.netrc` is whitespace-oriented, so candidate discovery recognizes an

@@ -1570,6 +1570,84 @@ fn pypi_repository_rule_wins_generic_password_collision() {
 }
 
 #[test]
+fn rubygems_credentials_are_in_current_pack() {
+    let ids: std::collections::HashSet<_> =
+        builtins::CURRENT.iter().map(|rule| rule.id()).collect();
+
+    assert!(ids.contains("rubygems.api-key"));
+    assert!(ids.contains("rubygems.host-api-key"));
+}
+
+#[test]
+fn rubygems_prefixed_api_key_is_detected_without_context() {
+    let scanner = Scanner::default();
+    let key = "rubygems_AbCdEfGhIjKlMnOpQrStUvWxYz012345";
+
+    let results = scanner.scan([("fixture", key)]);
+    let report = results.single_report().expect("one report");
+
+    assert_eq!(report.findings().len(), 1);
+    assert_eq!(
+        report.findings()[0].rule_id().to_string(),
+        "rubygems.api-key",
+    );
+    assert_eq!(matched(key, &report.findings()[0]), key);
+}
+
+#[test]
+fn rubygems_credentials_file_key_is_detected() {
+    let scanner = Scanner::default();
+    let key = "rubygems_AbCdEfGhIjKlMnOpQrStUvWxYz012345";
+    let source = format!(":rubygems_api_key: {key}\n");
+
+    let results = scanner.scan([("credentials", source.as_str())]);
+    let report = results.single_report().expect("one report");
+
+    assert_eq!(report.findings().len(), 1);
+    assert_eq!(
+        report.findings()[0].rule_id().to_string(),
+        "rubygems.api-key"
+    );
+    assert_eq!(matched(&source, &report.findings()[0]), key);
+}
+
+#[test]
+fn rubygems_host_api_key_detects_custom_server_key() {
+    let scanner = Scanner::default();
+    let key = "custom-gem-server-credential-0123456789";
+    let source = format!("GEM_HOST_API_KEY={key}");
+
+    let results = scanner.scan([("environment", source.as_str())]);
+    let report = results.single_report().expect("one report");
+
+    assert_eq!(report.findings().len(), 1);
+    assert_eq!(
+        report.findings()[0].rule_id().to_string(),
+        "rubygems.host-api-key"
+    );
+    assert_eq!(matched(&source, &report.findings()[0]), key);
+}
+
+#[test]
+fn rubygems_specific_rule_wins_collision() {
+    let scanner = Scanner::default();
+    let key = "rubygems_AbCdEfGhIjKlMnOpQrStUvWxYz012345";
+    let source = format!("GEM_HOST_API_KEY={key}");
+
+    let results = scanner.scan([("environment", source.as_str())]);
+    let report = results.single_report().expect("one report");
+
+    assert_eq!(report.findings().len(), 1);
+
+    // Prefer the structurally authoritative RubyGems.org rule when the key
+    // itself proves the provider family.
+    assert_eq!(
+        report.findings()[0].rule_id().to_string(),
+        "rubygems.api-key"
+    );
+}
+
+#[test]
 fn netrc_password_detects_complete_machine_credentials() {
     let scanner = scanner_for([builtins::NETRC_PASSWORD]);
 

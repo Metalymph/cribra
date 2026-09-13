@@ -20,6 +20,7 @@ use crate::{
             npm_registry::{NpmRegistryCredentialKind, validate_npm_registry},
             password::{PasswordKind, validate_password},
             pypi::validate_pypi,
+            rubygems::validate_rubygems_host_key,
             system_password_verifier::{
                 SystemPasswordVerifierKind, validate_htpasswd_verifier,
                 validate_system_password_verifier,
@@ -31,6 +32,7 @@ use crate::{
             github::{GitHubTokenKind, validate_github_token},
             gitlab::{GitLabTokenKind, validate_gitlab_token},
             jwt::{JwtKind, validate_jwt},
+            rubygems::validate_rubygems_api_key,
             slack::{SlackTokenKind, validate_slack_token},
             stripe::{StripeTokenKind, validate_stripe_token},
             telegram::validate_telegram_bot_token,
@@ -47,6 +49,8 @@ pub(crate) enum ValidatorKind {
     NpmRegistry,
     CargoRegistry,
     Pypi,
+    RubyGems,
+    RubyGemsHost,
     GitHub,
     GitLab,
     Stripe,
@@ -78,7 +82,8 @@ impl ValidatorKind {
             | Self::Cloudflare
             | Self::Slack
             | Self::Telegram
-            | Self::Jwt => DetectionMode::Deterministic,
+            | Self::Jwt
+            | Self::RubyGems => DetectionMode::Deterministic,
             Self::Aws
             | Self::Azure
             | Self::Gcp
@@ -86,6 +91,7 @@ impl ValidatorKind {
             | Self::NpmRegistry
             | Self::CargoRegistry
             | Self::Pypi
+            | Self::RubyGemsHost
             | Self::DatabaseConnection
             | Self::SystemPasswordVerifier
             | Self::HttpBasic
@@ -105,6 +111,8 @@ pub(crate) enum ValidationKind {
     CargoRegistry,
     NpmRegistry(NpmRegistryCredentialKind),
     Pypi,
+    RubyGems,
+    RubyGemsHost,
     GitHub(GitHubTokenKind),
     GitLab(GitLabTokenKind),
     Stripe(StripeTokenKind),
@@ -194,6 +202,10 @@ pub(crate) fn validate_candidate(
             .map(|_| ValidationOutcome::new(ValidationKind::CargoRegistry, Confidence::High)),
         ValidatorKind::Pypi => validate_pypi(&context)
             .map(|_| ValidationOutcome::new(ValidationKind::Pypi, Confidence::High)),
+        ValidatorKind::RubyGems => validate_rubygems_api_key(context.candidate())
+            .map(|_| ValidationOutcome::new(ValidationKind::RubyGems, Confidence::High)),
+        ValidatorKind::RubyGemsHost => validate_rubygems_host_key(&context)
+            .map(|_| ValidationOutcome::new(ValidationKind::RubyGemsHost, Confidence::High)),
         ValidatorKind::DockerRegistry => validate_docker_registry(&context)
             .map(|_| ValidationOutcome::new(ValidationKind::DockerRegistry, Confidence::High)),
         ValidatorKind::GitHub => validate_github_token(context.candidate())
@@ -278,23 +290,38 @@ mod tests {
             ValidatorKind::Slack,
             ValidatorKind::Telegram,
             ValidatorKind::Jwt,
+            ValidatorKind::RubyGems,
         ] {
-            assert_eq!(validator.detection_mode(), DetectionMode::Deterministic);
+            assert_eq!(
+                validator.detection_mode(),
+                DetectionMode::Deterministic,
+                "unexpected detection mode for {validator:?}",
+            );
         }
 
         for validator in [
             ValidatorKind::Aws,
             ValidatorKind::Azure,
             ValidatorKind::Gcp,
-            ValidatorKind::NpmRegistry,
-            ValidatorKind::DockerRegistry,
-            ValidatorKind::Password,
+            ValidatorKind::DatabaseConnection,
             ValidatorKind::HttpBasic,
             ValidatorKind::WireGuard,
+            ValidatorKind::DockerRegistry,
+            ValidatorKind::NpmRegistry,
+            ValidatorKind::CargoRegistry,
+            ValidatorKind::Pypi,
+            ValidatorKind::RubyGemsHost,
+            ValidatorKind::Password,
             ValidatorKind::SensitiveHash,
             ValidatorKind::GenericCredential,
+            ValidatorKind::Netrc,
+            ValidatorKind::SystemPasswordVerifier,
         ] {
-            assert_eq!(validator.detection_mode(), DetectionMode::Contextual);
+            assert_eq!(
+                validator.detection_mode(),
+                DetectionMode::Contextual,
+                "unexpected detection mode for {validator:?}",
+            );
         }
     }
 

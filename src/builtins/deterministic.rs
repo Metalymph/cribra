@@ -271,3 +271,9 @@ pub const PGP_PRIVATE_KEY: RuleSpec = RuleSpec::pattern(
     Severity::Critical,
 )
 .with_remediation(Remediation::ReplacePrivateKey);
+
+/// RubyGems.org API key using the current `rubygems_` credential prefix.
+pub const RUBYGEMS_API_KEY: RuleSpec =
+    RuleSpec::prefix("rubygems.api-key", "rubygems_", Severity::Critical)
+        .with_validator(ValidatorKind::RubyGems)
+        .with_remediation(Remediation::RevokeAndRotateCredential);
