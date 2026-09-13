@@ -91,7 +91,8 @@ impl CompiledRuleMetadata {
             | ValidatorKind::Aws
             | ValidatorKind::Azure
             | ValidatorKind::Gcp
-            | ValidatorKind::CargoRegistry => 500,
+            | ValidatorKind::CargoRegistry
+            | ValidatorKind::Pypi => 500,
         }
     }
 }
@@ -521,6 +522,9 @@ fn pattern_prefilter_needles(
         }
         ("cargo.registry-env-token", ValidatorKind::CargoRegistry) => {
             Some(&["cargo_registry_token", "cargo_registries_"])
+        }
+        ("pypi.repository-token", ValidatorKind::Pypi) => {
+            Some(&["password", "username", "__token__"])
         }
         ("netrc.password", ValidatorKind::Netrc) => Some(&["machine", "login", "password"]),
         ("generic.authorization-basic", ValidatorKind::HttpBasic) => {

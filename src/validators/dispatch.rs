@@ -19,6 +19,7 @@ use crate::{
             netrc::validate_netrc,
             npm_registry::{NpmRegistryCredentialKind, validate_npm_registry},
             password::{PasswordKind, validate_password},
+            pypi::validate_pypi,
             system_password_verifier::{
                 SystemPasswordVerifierKind, validate_htpasswd_verifier,
                 validate_system_password_verifier,
@@ -45,6 +46,7 @@ pub(crate) enum ValidatorKind {
     DockerRegistry,
     NpmRegistry,
     CargoRegistry,
+    Pypi,
     GitHub,
     GitLab,
     Stripe,
@@ -83,6 +85,7 @@ impl ValidatorKind {
             | Self::DockerRegistry
             | Self::NpmRegistry
             | Self::CargoRegistry
+            | Self::Pypi
             | Self::DatabaseConnection
             | Self::SystemPasswordVerifier
             | Self::HttpBasic
@@ -101,6 +104,7 @@ pub(crate) enum ValidationKind {
     DockerRegistry,
     CargoRegistry,
     NpmRegistry(NpmRegistryCredentialKind),
+    Pypi,
     GitHub(GitHubTokenKind),
     GitLab(GitLabTokenKind),
     Stripe(StripeTokenKind),
@@ -188,6 +192,8 @@ pub(crate) fn validate_candidate(
         }),
         ValidatorKind::CargoRegistry => validate_cargo_registry(&context)
             .map(|_| ValidationOutcome::new(ValidationKind::CargoRegistry, Confidence::High)),
+        ValidatorKind::Pypi => validate_pypi(&context)
+            .map(|_| ValidationOutcome::new(ValidationKind::Pypi, Confidence::High)),
         ValidatorKind::DockerRegistry => validate_docker_registry(&context)
             .map(|_| ValidationOutcome::new(ValidationKind::DockerRegistry, Confidence::High)),
         ValidatorKind::GitHub => validate_github_token(context.candidate())

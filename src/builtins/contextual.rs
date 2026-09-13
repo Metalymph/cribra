@@ -307,6 +307,20 @@ pub const CARGO_REGISTRY_ENV_TOKEN: RuleSpec = RuleSpec::captured_pattern(
 .with_validator(ValidatorKind::CargoRegistry)
 .with_remediation(Remediation::RevokeAndRotateCredential);
 
+/// PyPI-style repository authentication token stored as the password of a
+/// token-authenticated `.pypirc` repository section.
+///
+/// Contextual validation requires `username = __token__` in the same section
+/// and either a standard PyPI section or an explicit repository URL.
+pub const PYPI_REPOSITORY_TOKEN: RuleSpec = RuleSpec::captured_pattern(
+    "pypi.repository-token",
+    r"(?im)^[ \t]*password[ \t]*=[ \t]*(?P<value>[^\s#;]{8,2048})[ \t]*(?:[#;].*)?$",
+    "value",
+    Severity::Critical,
+)
+.with_validator(ValidatorKind::Pypi)
+.with_remediation(Remediation::RevokeAndRotateCredential);
+
 /// Password belonging to a complete `.netrc` machine credential record.
 ///
 /// `.netrc` is whitespace-oriented, so candidate discovery recognizes an

@@ -1444,6 +1444,132 @@ fn cargo_registry_rule_wins_generic_token_collision() {
 }
 
 #[test]
+fn pypi_repository_token_is_in_current_pack() {
+    let ids: std::collections::HashSet<_> =
+        builtins::CURRENT.iter().map(|rule| rule.id()).collect();
+
+    assert!(ids.contains("pypi.repository-token"));
+}
+
+#[test]
+fn pypi_repository_token_detects_default_and_custom_sections() {
+    let scanner = Scanner::default();
+
+    for (source, token) in [
+        (
+            "[pypi]\nusername = __token__\npassword = pypi-AbCdEfGhIjKlMnOpQrStUvWxYz012345",
+            "pypi-AbCdEfGhIjKlMnOpQrStUvWxYz012345",
+        ),
+        (
+            "[internal]\nrepository = https://packages.example.invalid/legacy/\nusername = __token__\npassword = private-package-token-0123456789",
+            "private-package-token-0123456789",
+        ),
+    ] {
+        let results = scanner.scan([(".pypirc", source)]);
+        let report = results.single_report().expect("one report");
+
+        assert_eq!(report.findings().len(), 1);
+
+        let finding = &report.findings()[0];
+
+        assert_eq!(finding.rule_id().as_str(), "pypi.repository-token");
+        assert_eq!(matched(source, finding), token);
+        assert_eq!(finding.severity(), Severity::Critical);
+        assert_eq!(finding.confidence(), Confidence::High);
+        assert_eq!(
+            finding.remediation(),
+            Some(Remediation::RevokeAndRotateCredential),
+        );
+    }
+}
+
+#[test]
+fn pypi_repository_token_projects_only_token_value() {
+    let scanner = Scanner::default();
+    let token = "pypi-AbCdEfGhIjKlMnOpQrStUvWxYz012345";
+    let source = format!(
+        "[pypi]\n\
+         username = __token__\n\
+         password = {token}\n"
+    );
+
+    let results = scanner.scan([(".pypirc", source.as_str())]);
+    let report = results.single_report().expect("one report");
+    let finding = &report.findings()[0];
+
+    assert_eq!(matched(&source, finding), token);
+    assert_eq!(
+        finding.location().end() - finding.location().start(),
+        token.len(),
+    );
+}
+
+#[test]
+fn pypi_repository_token_does_not_cross_sections() {
+    let scanner = Scanner::default();
+    let token = "private-package-token-0123456789";
+    let source = format!(
+        "[first]\n\
+         repository = https://packages.example.invalid/\n\
+         username = __token__\n\
+         [second]\n\
+         password = {token}\n"
+    );
+
+    let results = scanner.scan([(".pypirc", source.as_str())]);
+    let report = results.single_report().expect("one report");
+
+    assert!(
+        report
+            .findings()
+            .iter()
+            .all(|finding| finding.rule_id().as_str() != "pypi.repository-token")
+    );
+}
+
+#[test]
+fn pypi_repository_token_rejects_ordinary_repository_passwords() {
+    let scanner = Scanner::default();
+    let password = "CorrectHorseBatteryStaple";
+    let source = format!(
+        "[internal]\n\
+         repository = https://packages.example.invalid/\n\
+         username = alice\n\
+         password = {password}\n"
+    );
+
+    let results = scanner.scan([(".pypirc", source.as_str())]);
+    let report = results.single_report().expect("one report");
+
+    assert!(
+        report
+            .findings()
+            .iter()
+            .all(|finding| finding.rule_id().as_str() != "pypi.repository-token")
+    );
+}
+
+#[test]
+fn pypi_repository_rule_wins_generic_password_collision() {
+    let scanner = Scanner::default();
+    let token = "pypi-AbCdEfGhIjKlMnOpQrStUvWxYz012345";
+    let source = format!(
+        "[pypi]\n\
+         username = __token__\n\
+         password = {token}\n"
+    );
+
+    let results = scanner.scan([(".pypirc", source.as_str())]);
+    let report = results.single_report().expect("one report");
+
+    assert_eq!(report.findings().len(), 1);
+    assert_eq!(
+        report.findings()[0].rule_id().as_str(),
+        "pypi.repository-token",
+    );
+}
+
+#[test]
 fn netrc_password_detects_complete_machine_credentials() {
     let scanner = scanner_for([builtins::NETRC_PASSWORD]);
 
