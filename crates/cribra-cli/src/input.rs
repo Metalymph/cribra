@@ -12,23 +12,12 @@ use std::{
 
 /// Explicit source selected by the command-line caller.
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub(crate) enum Input {
+pub enum Input {
     /// Read one explicit filesystem path.
     File(PathBuf),
 
     /// Read bytes from standard input.
     Stdin,
-}
-
-impl Input {
-    /// Parses one CLI input operand.
-    pub(crate) fn parse(value: &str) -> Self {
-        if value == "-" {
-            Self::Stdin
-        } else {
-            Self::File(PathBuf::from(value))
-        }
-    }
 }
 
 /// Fully acquired UTF-8 input.
@@ -103,19 +92,6 @@ fn source_from_bytes(name: String, bytes: Vec<u8>) -> Result<SourceInput, InputE
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn dash_selects_stdin() {
-        assert_eq!(Input::parse("-"), Input::Stdin);
-    }
-
-    #[test]
-    fn ordinary_operand_selects_exact_file_path() {
-        assert_eq!(
-            Input::parse("config/example.env"),
-            Input::File(PathBuf::from("config/example.env")),
-        );
-    }
 
     #[test]
     fn source_input_preserves_text_exactly() {

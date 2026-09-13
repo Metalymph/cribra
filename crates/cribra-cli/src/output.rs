@@ -9,22 +9,7 @@ use cribra::{
     CandidateEvidence, Confidence, Remediation, ScanReport, SensitiveCandidateKind, Severity,
 };
 
-/// Stable CLI output representation.
-#[derive(Debug, Clone, Copy, Eq, PartialEq)]
-pub(crate) enum OutputFormat {
-    Human,
-    Json,
-}
-
-impl OutputFormat {
-    pub(crate) fn parse(value: &str) -> Option<Self> {
-        match value {
-            "human" => Some(Self::Human),
-            "json" => Some(Self::Json),
-            _ => None,
-        }
-    }
-}
+use crate::command::OutputFormat;
 
 fn push_json_field(output: &mut String, name: &str, value: &str) {
     push_json_string(output, name);
