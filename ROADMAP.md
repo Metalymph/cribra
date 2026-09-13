@@ -406,21 +406,21 @@ knowledge of Silens.
 
 #### 0.4.4-A — CLI Foundation
 
-- [ ] Add the reusable `cribra-cli` crate.
-- [ ] Add the standalone `cribra` executable as a thin wrapper around the
+- [x] Add the reusable `cribra-cli` crate.
+- [x] Add the standalone `cribra` executable as a thin wrapper around the
   reusable CLI library.
-- [ ] Keep all command semantics independent from Silens.
-- [ ] Preserve Cribra as the sole authority for Scan CLI behavior.
-- [ ] Avoid CLI framework dependencies unless they provide clear value over a
+- [x] Keep all command semantics independent from Silens.
+- [x] Preserve Cribra as the sole authority for Scan CLI behavior.
+- [x] Avoid CLI framework dependencies unless they provide clear value over a
   small internal parser.
 
 #### 0.4.4-B — Input Contract
 
-- [ ] Support explicit file input.
-- [ ] Support stdin.
-- [ ] Define deterministic UTF-8 input behavior.
-- [ ] Preserve exact scanner semantics from the Cribra core.
-- [ ] Keep filesystem traversal outside the core engine.
+- [x] Support explicit file input.
+- [x] Support stdin.
+- [x] Define deterministic UTF-8 input behavior.
+- [x] Preserve exact scanner semantics from the Cribra core.
+- [x] Keep filesystem traversal outside the core engine.
 
 #### 0.4.4-C — Output Contract
 

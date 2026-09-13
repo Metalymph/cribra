@@ -8,6 +8,7 @@
 //! authoritative in the `cribra` core crate.
 
 mod input;
+mod output;
 
 use std::{
     ffi::{OsStr, OsString},
@@ -30,6 +31,7 @@ where
             print_help();
             ExitCode::SUCCESS
         }
+
         Some(argument) if argument == OsStr::new("scan") => {
             let Some(input) = args.next() else {
                 eprintln!("cribra: scan requires an input path or '-' for stdin");
@@ -37,8 +39,33 @@ where
                 return ExitCode::from(2);
             };
 
-            if args.next().is_some() {
-                eprintln!("cribra: scan accepts exactly one input");
+            let mut format = output::OutputFormat::Human;
+
+            while let Some(argument) = args.next() {
+                if argument == OsStr::new("--format") {
+                    let Some(value) = args.next() else {
+                        eprintln!("cribra: --format requires 'human' or 'json'");
+                        eprintln!("Try 'cribra --help' for usage.");
+                        return ExitCode::from(2);
+                    };
+
+                    let Some(parsed) = output::OutputFormat::parse(&value.to_string_lossy()) else {
+                        eprintln!(
+                            "cribra: unsupported output format: {}",
+                            value.to_string_lossy()
+                        );
+                        eprintln!("Try 'cribra --help' for usage.");
+                        return ExitCode::from(2);
+                    };
+
+                    format = parsed;
+                    continue;
+                }
+
+                eprintln!(
+                    "cribra: unexpected scan argument: {}",
+                    argument.to_string_lossy()
+                );
                 eprintln!("Try 'cribra --help' for usage.");
                 return ExitCode::from(2);
             }
@@ -48,24 +75,34 @@ where
             match input::read(&input) {
                 Ok(source) => {
                     let scanner = cribra::Scanner::default();
-                    let _results = scanner.scan([(source.name(), source.text())]);
+                    let results = scanner.scan([(source.name(), source.text())]);
+
+                    let report = results
+                        .single_report()
+                        .expect("single CLI input must produce exactly one report");
+
+                    print!("{}", output::render(format, source.name(), report,));
 
                     ExitCode::SUCCESS
                 }
+
                 Err(error) => {
                     eprintln!("cribra: {error}");
                     ExitCode::FAILURE
                 }
             }
         }
+
         Some(argument) if argument == OsStr::new("--help") || argument == OsStr::new("-h") => {
             print_help();
             ExitCode::SUCCESS
         }
+
         Some(argument) if argument == OsStr::new("--version") || argument == OsStr::new("-V") => {
             println!("cribra {VERSION}");
             ExitCode::SUCCESS
         }
+
         Some(argument) => {
             eprintln!("cribra: unknown argument: {}", argument.to_string_lossy());
             eprintln!("Try 'cribra --help' for usage.");
@@ -77,20 +114,22 @@ where
 fn print_help() {
     println!(
         "\
-Cribra
+        Usage:
+          cribra scan <FILE> [--format human|json]
+          cribra scan - [--format human|json]
+          cribra [OPTIONS]
 
-Usage:
-  cribra scan <FILE>
-  cribra scan -
-  cribra [OPTIONS]
+        Commands:
+          scan <FILE>       Scan one explicit UTF-8 file
+          scan -            Scan UTF-8 from standard input
 
-Commands:
-  scan <FILE>       Scan one explicit UTF-8 file
-  scan -            Scan UTF-8 from standard input
+        Scan options:
+          --format FORMAT   Output format: human or json
 
-Options:
-  -h, --help        Print help
-  -V, --version     Print version"
+        Options:
+          -h, --help        Print help
+          -V, --version     Print version
+          "
     );
 }
 
