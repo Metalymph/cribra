@@ -167,7 +167,7 @@ dependencies = [
 
 [[package]]
 name = "cribra"
-version = "0.4.3"
+version = "0.4.4"
 dependencies = [
  "aho-corasick",
  "base64",
