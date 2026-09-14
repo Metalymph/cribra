@@ -13,6 +13,7 @@ pub(crate) mod hash;
 pub(crate) mod http_basic;
 pub(crate) mod netrc;
 pub(crate) mod npm_registry;
+pub(crate) mod nuget;
 pub(crate) mod password;
 pub(crate) mod pypi;
 pub(crate) mod rubygems;

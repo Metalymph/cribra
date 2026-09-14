@@ -374,7 +374,9 @@ fn advance_position(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Confidence, Rule, Severity, validators::dispatch::ValidatorKind};
+    use crate::{
+        Confidence, Rule, Severity, compiled_rule::RuleIndex, validators::dispatch::ValidatorKind,
+    };
 
     const DENSE_DIAGNOSTIC_SIZE: usize = 64 * 1_024;
 
@@ -606,5 +608,41 @@ mod tests {
         assert_eq!(metadata[0].kind(), crate::RuleKind::Literal);
         assert_eq!(metadata[1].id(), "pattern");
         assert_eq!(metadata[1].kind(), crate::RuleKind::Pattern);
+    }
+
+    #[test]
+    fn nuget_specialization_wins_effective_same_span_normalization() {
+        let rules = CompiledRuleSet::compile(vec![
+            crate::builtins::NUGET_PACKAGE_SOURCE_CLEARTEXT_PASSWORD
+                .to_rule()
+                .expect("NuGet rule should compile"),
+            crate::builtins::PASSWORD_FIELD
+                .to_rule()
+                .expect("generic password rule should compile"),
+        ])
+        .expect("rules should compile");
+
+        let mut candidates = vec![
+            AcceptedCandidate {
+                metadata: rules.metadata(RuleIndex::new(0)),
+                start: 10,
+                end: 22,
+                confidence: crate::Confidence::High,
+            },
+            AcceptedCandidate {
+                metadata: rules.metadata(RuleIndex::new(1)),
+                start: 10,
+                end: 22,
+                confidence: crate::Confidence::Medium,
+            },
+        ];
+
+        normalize_candidates(&mut candidates);
+
+        assert_eq!(candidates.len(), 1);
+        assert_eq!(
+            candidates[0].metadata.id().as_str(),
+            "nuget.package-source-cleartext-password"
+        );
     }
 }

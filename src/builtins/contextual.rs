@@ -321,6 +321,20 @@ pub const PYPI_REPOSITORY_TOKEN: RuleSpec = RuleSpec::captured_pattern(
 .with_validator(ValidatorKind::Pypi)
 .with_remediation(Remediation::RevokeAndRotateCredential);
 
+/// Cleartext password stored in a NuGet package-source credentials section.
+///
+/// The matcher deliberately supports the common key-before-value form and
+/// projects only the raw value span. Context validation establishes the
+/// bounded packageSourceCredentials region without parsing XML.
+pub const NUGET_PACKAGE_SOURCE_CLEARTEXT_PASSWORD: RuleSpec = RuleSpec::captured_pattern(
+    "nuget.package-source-cleartext-password",
+    r#"(?is)<add\b[^<>]*?\bkey\s*=\s*["']ClearTextPassword["'][^<>]*?\bvalue\s*=\s*["'](?P<value>[^\x00-\x1f\x7f"'<>]*?)["'][^<>]*?/?>"#,
+    "value",
+    Severity::Critical,
+)
+.with_validator(ValidatorKind::Nuget)
+.with_remediation(Remediation::RevokeAndRotateCredential);
+
 /// Gem-server authentication key supplied through RubyGems'
 /// `GEM_HOST_API_KEY` environment variable.
 pub const RUBYGEMS_HOST_API_KEY: RuleSpec = RuleSpec::captured_pattern(

@@ -9,7 +9,10 @@
 
 use std::collections::BTreeSet;
 
-use cribra::{Confidence, Remediation, Scanner, Severity, builtins};
+use cribra::{
+    Confidence, Remediation, Scanner, Severity, builtins,
+    transform::{SynthesisOptions, synthesize},
+};
 
 fn scanner_for(rules: impl IntoIterator<Item = cribra::RuleSpec>) -> Scanner {
     Scanner::builder()
@@ -441,6 +444,111 @@ fn full_pack_detects_expected_provider_specific_rules() {
     assert!(ids.contains("aws.secret-access-key"));
     assert!(ids.contains("azure.client-secret"));
     assert!(ids.contains("generic.database-password-field"));
+}
+
+#[test]
+fn nuget_cleartext_password_projects_only_the_value() {
+    let scanner = scanner_for([builtins::NUGET_PACKAGE_SOURCE_CLEARTEXT_PASSWORD]);
+    let source = r#"<configuration>
+  <packageSourceCredentials>
+    <PrivateFeed>
+      <add
+        key='ClearTextPassword'
+        value='NuGetSecretValue_1234' />
+    </PrivateFeed>
+  </packageSourceCredentials>
+</configuration>"#;
+
+    let results = scan_one(&scanner, source);
+    let report = results.single_report().expect("one source was scanned");
+
+    assert_eq!(report.len(), 1);
+    let finding = &report.findings()[0];
+    assert_eq!(
+        finding.rule_id().as_str(),
+        "nuget.package-source-cleartext-password"
+    );
+    assert_eq!(matched(source, finding), "NuGetSecretValue_1234");
+    assert_eq!(finding.severity(), Severity::Critical);
+    assert_eq!(finding.confidence(), Confidence::High);
+    assert_eq!(
+        finding.remediation(),
+        Some(Remediation::RevokeAndRotateCredential)
+    );
+}
+
+#[test]
+fn nuget_cleartext_password_rejects_protected_outside_and_malformed_values() {
+    let scanner = scanner_for([builtins::NUGET_PACKAGE_SOURCE_CLEARTEXT_PASSWORD]);
+    let source = concat!(
+        r#"<packageSourceCredentials><Feed><add key="Password" value="ProtectedValue_1234" /></Feed></packageSourceCredentials>"#,
+        r#"<packageSourceCredentials><Feed><add key="Username" value="alice-user" /></Feed></packageSourceCredentials>"#,
+        r#"<Feed><add key="ClearTextPassword" value="OutsideValue_1234" /></Feed>"#,
+        r#"<packageSourceCredentials><Feed><add value="ReversedValue_1234" key="ClearTextPassword" /></Feed></packageSourceCredentials>"#,
+        r#"<packageSourceCredentials><Feed><add key="ClearTextPassword" value="placeholder_value" /></Feed>"#,
+    );
+
+    let results = scan_one(&scanner, source);
+    let report = results.single_report().expect("one source was scanned");
+
+    assert!(report.is_empty());
+}
+
+#[test]
+fn nuget_context_does_not_leak_across_closed_regions_or_comments() {
+    let scanner = scanner_for([builtins::NUGET_PACKAGE_SOURCE_CLEARTEXT_PASSWORD]);
+    let source = concat!(
+        r#"<packageSourceCredentials></packageSourceCredentials><Feed><add key="ClearTextPassword" value="LeakedValue_1234" /></Feed>"#,
+        r#"<!-- <packageSourceCredentials><Feed><add key="ClearTextPassword" value="CommentValue_1234" /></Feed></packageSourceCredentials> -->"#,
+    );
+
+    let results = scan_one(&scanner, source);
+    let report = results.single_report().expect("one source was scanned");
+
+    assert!(report.is_empty());
+}
+
+#[test]
+fn nuget_environment_credentials_are_explicitly_not_classified_as_nuget() {
+    let scanner = scanner_for([builtins::NUGET_PACKAGE_SOURCE_CLEARTEXT_PASSWORD]);
+    let source =
+        "NuGetPackageSourceCredentials_PrivateFeed=Username=alice;Password=NuGetEnvSecret_1234";
+
+    let results = scan_one(&scanner, source);
+    let report = results.single_report().expect("one source was scanned");
+
+    assert!(
+        report
+            .findings()
+            .iter()
+            .all(|finding| finding.rule_id().as_str() != "nuget.package-source-cleartext-password")
+    );
+}
+
+#[test]
+fn nuget_synthesis_is_invalid_under_normal_validation_on_rescan() {
+    let scanner = scanner_for([builtins::NUGET_PACKAGE_SOURCE_CLEARTEXT_PASSWORD]);
+    let source = r#"<packageSourceCredentials><PrivateFeed><add key="ClearTextPassword" value="NuGetSecretValue_1234" /></PrivateFeed></packageSourceCredentials>"#;
+    let results = scan_one(&scanner, source);
+    let report = results.single_report().expect("one source was scanned");
+
+    let synthesized = synthesize(source, report, &SynthesisOptions::new([91; 32]))
+        .expect("NuGet synthesis should succeed");
+
+    assert_eq!(synthesized.len(), source.len());
+    assert!(!synthesized.contains("NuGetSecretValue_1234"));
+    assert!(synthesized.as_bytes().contains(&0));
+
+    let rescanned_results = scan_one(&scanner, &synthesized);
+    let rescanned = rescanned_results
+        .single_report()
+        .expect("one synthesized source was scanned");
+    assert!(
+        rescanned
+            .findings()
+            .iter()
+            .all(|finding| finding.rule_id().as_str() != "nuget.package-source-cleartext-password")
+    );
 }
 
 #[test]

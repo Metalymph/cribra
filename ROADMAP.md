@@ -56,9 +56,12 @@ Status: active.
 
 - [x] Cargo / Rust registry authentication.
 - [x] Python / PyPI / `.pypirc` repository tokens.
-- [ ] RubyGems credentials, including `GEM_HOST_API_KEY`, with deterministic
+- [x] RubyGems credentials, including `GEM_HOST_API_KEY`, with deterministic
   collision handling against generic credential rules.
-- [ ] NuGet / .NET cleartext package-source credentials.
+- [x] NuGet / .NET cleartext package-source credentials in nuget.config;
+  NuGetPackageSourceCredentials_{name} environment credentials remain
+  deferred because exact password projection and source association require
+  additional parsing beyond the bounded B4 matcher.
 - [ ] Maven repository credentials.
 - [ ] Deno authentication tokens.
 
@@ -114,7 +117,47 @@ Status: pending.
 - [ ] Validate WebAssembly parity for findings, spans, severity, confidence,
   remediation, candidates, and explanations.
 
-#### 0.4.5-F — Cribra CLI distribution
+#### 0.4.5-F — Swift Package Manager credential coverage
+
+Status: pending.
+
+Goal: audit Swift Package Manager credential surfaces and add dedicated
+detection only where SwiftPM provides stronger, documented semantics than
+existing shared credential rules.
+
+- [ ] Audit SwiftPM registry authentication and documented credential storage.
+- [ ] Audit `SWIFTPM_REGISTRY_TOKEN`, `SWIFTPM_REGISTRY_PASSWORD`,
+  `SWIFTPM_SOURCE_CONTROL_TOKEN`, and `SWIFTPM_NETRC_DATA`.
+- [ ] Reuse the existing `.netrc` detector wherever it already provides equivalent semantics.
+- [ ] Preserve exact credential-value spans and deterministic collision behavior.
+- [ ] Add synthesis semantics and adversarial/collision tests for accepted rules.
+- [ ] Do not extract credentials from Keychain or other OS credential stores.
+- [ ] Do not add a SwiftPM parser, Swift runtime dependency, network validation,
+  or adapter-specific logic to the core.
+
+The audit may close with shared-rule coverage or explicit deferral where
+high-confidence exact-span detection is not justified.
+
+#### 0.4.5-G — Kotlin / Gradle credential audit
+
+Status: pending.
+
+Goal: cover credentials encountered in Kotlin development without inventing a
+Kotlin package-manager category. Repository authentication is primarily owned by
+Gradle, Maven, AWS, and shared credential contracts.
+
+- [ ] Audit Gradle Groovy and Kotlin DSL repository credential configuration.
+- [ ] Audit `PasswordCredentials`, including repository-derived Gradle properties.
+- [ ] Audit `HttpHeaderCredentials` and existing generic/HTTP coverage.
+- [ ] Audit `AwsCredentials` only for gaps not already covered by AWS rules.
+- [ ] Audit Kotlin Multiplatform repository/dependency workflows.
+- [ ] Prefer `gradle.*`, `maven.*`, `aws.*`, or existing generic/shared ownership
+  over `kotlin.*` rule IDs.
+- [ ] Add rules only when documented context materially improves confidence,
+  attribution, or exact-span semantics.
+- [ ] Allow this step to complete with no new detector if existing coverage is sufficient.
+
+#### 0.4.5-H — Cribra CLI distribution
 
 Status: pending.
 
@@ -130,7 +173,7 @@ policy into the core engine.
 - [ ] Validate packaged binaries against the canonical CLI behavior and release
   version.
 
-#### 0.4.5-G — Documentation and release gate
+#### 0.4.5-I — Documentation and release gate
 
 Status: pending.
 

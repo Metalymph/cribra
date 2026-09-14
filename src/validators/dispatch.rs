@@ -18,6 +18,7 @@ use crate::{
             http_basic::validate_http_basic,
             netrc::validate_netrc,
             npm_registry::{NpmRegistryCredentialKind, validate_npm_registry},
+            nuget::validate_nuget,
             password::{PasswordKind, validate_password},
             pypi::validate_pypi,
             rubygems::validate_rubygems_host_key,
@@ -69,6 +70,7 @@ pub(crate) enum ValidatorKind {
     WireGuard,
     SystemPasswordVerifier,
     Netrc,
+    Nuget,
 }
 
 impl ValidatorKind {
@@ -99,7 +101,8 @@ impl ValidatorKind {
             | Self::Password
             | Self::SensitiveHash
             | Self::GenericCredential
-            | Self::Netrc => DetectionMode::Contextual,
+            | Self::Netrc
+            | Self::Nuget => DetectionMode::Contextual,
         }
     }
 }
@@ -131,6 +134,7 @@ pub(crate) enum ValidationKind {
     WireGuard(WireGuardCredentialKind),
     SystemPasswordVerifier(SystemPasswordVerifierKind),
     Netrc,
+    Nuget,
 }
 
 /// The outcome of a validation attempt.
@@ -253,6 +257,8 @@ pub(crate) fn validate_candidate(
         }),
         ValidatorKind::Netrc => validate_netrc(&context)
             .map(|_| ValidationOutcome::new(ValidationKind::Netrc, Confidence::High)),
+        ValidatorKind::Nuget => validate_nuget(&context)
+            .map(|_| ValidationOutcome::new(ValidationKind::Nuget, Confidence::High)),
         ValidatorKind::SystemPasswordVerifier => validate_system_password_verifier(&context)
             .or_else(|| validate_htpasswd_verifier(&context))
             .map(|validation| {
@@ -315,6 +321,7 @@ mod tests {
             ValidatorKind::SensitiveHash,
             ValidatorKind::GenericCredential,
             ValidatorKind::Netrc,
+            ValidatorKind::Nuget,
             ValidatorKind::SystemPasswordVerifier,
         ] {
             assert_eq!(
