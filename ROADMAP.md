@@ -67,6 +67,20 @@ confidence standard. Gradle, Go, Conan, vcpkg, Nix, and related ecosystems do
 not require dedicated rules merely for catalog coverage when existing generic
 or shared credential surfaces already provide equivalent semantics.
 
+#### Transformation Semantic Parity
+
+Status: completed.
+
+- [x] Audit every rule in `builtins::CURRENT`.
+- [x] Give every built-in an explicit synthesis strategy while keeping custom
+  rule fallback separate.
+- [x] Keep structured and encoded synthetic values deliberately invalid under
+  their corresponding detector contracts.
+- [x] Verify redact, template, and pseudonymization parity through their
+  generic span/metadata contracts.
+- [x] Complete the repository validation gates before marking this step
+  complete.
+
 #### 0.4.5-C — Collision and normalization hardening
 
 Status: pending.

@@ -116,108 +116,313 @@ fn synthetic_value(
 ) -> String {
     let mut random = SyntheticBytes::new(key, rule_id, start, end);
 
+    builtin_synthetic_value(rule_id, original_len, marker, &mut random)
+        .unwrap_or_else(|| contextual_marker(marker, "value", original_len, &mut random))
+}
+
+/// Returns the intentional synthesis strategy for a built-in rule.
+///
+/// `None` is reserved for caller-defined rules. Keeping this lookup separate
+/// from the custom fallback makes adding a built-in without synthesis semantics
+/// an observable test failure instead of a silent behavior change.
+fn builtin_synthetic_value(
+    rule_id: &str,
+    original_len: usize,
+    marker: &str,
+    random: &mut SyntheticBytes,
+) -> Option<String> {
     match rule_id {
         // GitHub: preserve token family prefix, but force `!` into the opaque
         // body so the output is structurally recognizable and validator-invalid.
-        "github.classic-pat" => prefixed_invalid("ghp_", original_len, '!', &mut random),
+        "github.classic-pat" => Some(prefixed_invalid("ghp_", original_len, '!', random)),
         "github.fine-grained-pat" => {
-            prefixed_invalid("github_pat_", original_len, '!', &mut random)
+            Some(prefixed_invalid("github_pat_", original_len, '!', random))
         }
-        "github.oauth-token" => prefixed_invalid("gho_", original_len, '!', &mut random),
-        "github.app-user-token" => prefixed_invalid("ghu_", original_len, '!', &mut random),
-        "github.app-installation-token" => prefixed_invalid("ghs_", original_len, '!', &mut random),
-        "github.app-refresh-token" => prefixed_invalid("ghr_", original_len, '!', &mut random),
-        "github.stateless-installation-token" => {
-            fixed_or_padded("ghs_0_SYNTHETIC.invalid.token!", original_len, &mut random)
+        "github.oauth-token" => Some(prefixed_invalid("gho_", original_len, '!', random)),
+        "github.app-user-token" => Some(prefixed_invalid("ghu_", original_len, '!', random)),
+        "github.app-installation-token" => {
+            Some(prefixed_invalid("ghs_", original_len, '!', random))
+        }
+        "github.app-refresh-token" => Some(prefixed_invalid("ghr_", original_len, '!', random)),
+        "github.stateless-installation-token" => Some(fixed_or_padded(
+            "ghs_0_SYNTHETIC.invalid.token!",
+            original_len,
+            random,
+        )),
+
+        // GitLab: preserve each documented family prefix while forcing an
+        // invalid character into the opaque token body.
+        "gitlab.access-token" => Some(prefixed_invalid("glpat-", original_len, '!', random)),
+        "gitlab.oauth-application-secret" => {
+            Some(prefixed_invalid("gloas-", original_len, '!', random))
+        }
+        "gitlab.deploy-token" => Some(prefixed_invalid("gldt-", original_len, '!', random)),
+        "gitlab.runner-auth-token" => Some(prefixed_invalid("glrt-", original_len, '!', random)),
+        "gitlab.registration-derived-runner-auth-token" => {
+            Some(prefixed_invalid("glrtr-", original_len, '!', random))
+        }
+        "gitlab.ci-job-token" => Some(prefixed_invalid("glcbt-", original_len, '!', random)),
+        "gitlab.trigger-token" => Some(prefixed_invalid("glptt-", original_len, '!', random)),
+        "gitlab.feed-token" => Some(prefixed_invalid("glft-", original_len, '!', random)),
+        "gitlab.incoming-mail-token" => Some(prefixed_invalid("glimt-", original_len, '!', random)),
+        "gitlab.agent-token" => Some(prefixed_invalid("glagent-", original_len, '!', random)),
+        "gitlab.workspace-token" => Some(prefixed_invalid("glwt-", original_len, '!', random)),
+        "gitlab.scim-token" => Some(prefixed_invalid("glsoat-", original_len, '!', random)),
+        "gitlab.feature-flag-client-token" => {
+            Some(prefixed_invalid("glffct-", original_len, '!', random))
         }
 
         // Stripe.
-        "stripe.live-secret-key" => prefixed_invalid("sk_live_", original_len, '!', &mut random),
-        "stripe.test-secret-key" => prefixed_invalid("sk_test_", original_len, '!', &mut random),
+        "stripe.live-secret-key" => Some(prefixed_invalid("sk_live_", original_len, '!', random)),
+        "stripe.test-secret-key" => Some(prefixed_invalid("sk_test_", original_len, '!', random)),
         "stripe.live-restricted-key" => {
-            prefixed_invalid("rk_live_", original_len, '!', &mut random)
+            Some(prefixed_invalid("rk_live_", original_len, '!', random))
         }
         "stripe.test-restricted-key" => {
-            prefixed_invalid("rk_test_", original_len, '!', &mut random)
+            Some(prefixed_invalid("rk_test_", original_len, '!', random))
         }
-        "stripe.webhook-secret" => prefixed_invalid("whsec_", original_len, '!', &mut random),
+        "stripe.webhook-secret" => Some(prefixed_invalid("whsec_", original_len, '!', random)),
 
         // Cloudflare.
-        "cloudflare.global-api-key" => prefixed_invalid("cfk_", original_len, '!', &mut random),
-        "cloudflare.user-api-token" => prefixed_invalid("cfut_", original_len, '!', &mut random),
-        "cloudflare.account-api-token" => prefixed_invalid("cfat_", original_len, '!', &mut random),
+        "cloudflare.global-api-key" => Some(prefixed_invalid("cfk_", original_len, '!', random)),
+        "cloudflare.user-api-token" => Some(prefixed_invalid("cfut_", original_len, '!', random)),
+        "cloudflare.account-api-token" => {
+            Some(prefixed_invalid("cfat_", original_len, '!', random))
+        }
 
         // Slack.
-        "slack.bot-token" => prefixed_invalid("xoxb-", original_len, '!', &mut random),
-        "slack.user-token" => prefixed_invalid("xoxp-", original_len, '!', &mut random),
-        "slack.app-level-token" => prefixed_invalid("xapp-", original_len, '!', &mut random),
-        "slack.workflow-token" => prefixed_invalid("xwfp-", original_len, '!', &mut random),
+        "slack.bot-token" => Some(prefixed_invalid("xoxb-", original_len, '!', random)),
+        "slack.user-token" => Some(prefixed_invalid("xoxp-", original_len, '!', random)),
+        "slack.app-level-token" => Some(prefixed_invalid("xapp-", original_len, '!', random)),
+        "slack.workflow-token" => Some(prefixed_invalid("xwfp-", original_len, '!', random)),
 
         // Telegram/JWT preserve the broad visual family while deliberately
         // breaking the scanner-valid alphabet/shape.
-        "telegram.bot-token" => fixed_or_padded(
+        "telegram.bot-token" => Some(fixed_or_padded(
             "00000:CRIBRA_SYNTHETIC_BOT_TOKEN!",
             original_len,
-            &mut random,
-        ),
-        "jwt.signed-compact" => {
-            fixed_or_padded("eyS.synthetic.payload.invalid!", original_len, &mut random)
-        }
+            random,
+        )),
+        "jwt.signed-compact" => Some(fixed_or_padded(
+            "eyS.synthetic.payload.invalid!",
+            original_len,
+            random,
+        )),
+
+        // PEM-like material keeps a readable family marker but does not retain
+        // the exact BEGIN/END delimiter accepted by any built-in detector.
+        "generic.pkcs8-private-key" => Some(fixed_or_padded(
+            "-----BEGIN CRIBRA SYNTHETIC PKCS8 PRIVATE KEY-----\\ninvalid\\n-----END CRIBRA SYNTHETIC PKCS8 PRIVATE KEY-----",
+            original_len,
+            random,
+        )),
+        "generic.encrypted-private-key" => Some(fixed_or_padded(
+            "-----BEGIN CRIBRA SYNTHETIC ENCRYPTED PRIVATE KEY-----\\ninvalid\\n-----END CRIBRA SYNTHETIC ENCRYPTED PRIVATE KEY-----",
+            original_len,
+            random,
+        )),
+        "generic.rsa-private-key" => Some(fixed_or_padded(
+            "-----BEGIN CRIBRA SYNTHETIC RSA PRIVATE KEY-----\\ninvalid\\n-----END CRIBRA SYNTHETIC RSA PRIVATE KEY-----",
+            original_len,
+            random,
+        )),
+        "generic.ec-private-key" => Some(fixed_or_padded(
+            "-----BEGIN CRIBRA SYNTHETIC EC PRIVATE KEY-----\\ninvalid\\n-----END CRIBRA SYNTHETIC EC PRIVATE KEY-----",
+            original_len,
+            random,
+        )),
+        "generic.openssh-private-key" => Some(fixed_or_padded(
+            "-----BEGIN CRIBRA SYNTHETIC OPENSSH PRIVATE KEY-----\\ninvalid\\n-----END CRIBRA SYNTHETIC OPENSSH PRIVATE KEY-----",
+            original_len,
+            random,
+        )),
+        "generic.pgp-private-key" => Some(fixed_or_padded(
+            "-----BEGIN CRIBRA SYNTHETIC PGP PRIVATE KEY BLOCK-----\\ninvalid\\n-----END CRIBRA SYNTHETIC PGP PRIVATE KEY BLOCK-----",
+            original_len,
+            random,
+        )),
 
         // AWS identifiers keep their conventional prefix but violate the
         // uppercase/digit or token alphabet.
-        "aws.access-key-id" => prefixed_invalid("AKIA", original_len, 's', &mut random),
-        "aws.temporary-access-key-id" => prefixed_invalid("ASIA", original_len, 's', &mut random),
-        "aws.secret-access-key" => {
-            fixed_or_padded("CRIBRA_SYNTHETIC_AWS_SECRET!", original_len, &mut random)
-        }
-        "aws.session-token" => {
-            fixed_or_padded("CRIBRA_SYNTHETIC_AWS_SESSION!", original_len, &mut random)
-        }
+        "aws.access-key-id" => Some(prefixed_invalid("AKIA", original_len, 's', random)),
+        "aws.temporary-access-key-id" => Some(prefixed_invalid("ASIA", original_len, 's', random)),
+        "aws.secret-access-key" => Some(fixed_or_padded(
+            "CRIBRA_SYNTHETIC_AWS_SECRET!",
+            original_len,
+            random,
+        )),
+        "aws.session-token" => Some(fixed_or_padded(
+            "CRIBRA_SYNTHETIC_AWS_SESSION!",
+            original_len,
+            random,
+        )),
 
         // Azure.
-        "azure.client-secret" => {
-            contextual_marker(marker, "azure_client_secret", original_len, &mut random)
-        }
-        "azure.storage-account-key" => {
-            fixed_or_padded("CRIBRA_SYNTHETIC_AZURE_STORAGE!", original_len, &mut random)
-        }
-        "azure.shared-access-signature" => {
-            fixed_or_padded("CRIBRA_SYNTHETIC_AZURE_SAS!", original_len, &mut random)
-        }
+        "azure.client-secret" => Some(contextual_marker(
+            marker,
+            "azure_client_secret",
+            original_len,
+            random,
+        )),
+        "azure.storage-account-key" => Some(fixed_or_padded(
+            "CRIBRA_SYNTHETIC_AZURE_STORAGE!",
+            original_len,
+            random,
+        )),
+        "azure.shared-access-signature" => Some(fixed_or_padded(
+            "CRIBRA_SYNTHETIC_AZURE_SAS!",
+            original_len,
+            random,
+        )),
 
         // GCP.
-        "gcp.private-key-id" => fixed_or_padded(
+        "gcp.private-key-id" => Some(fixed_or_padded(
             "g000000000000000_cribra_synthetic",
             original_len,
-            &mut random,
-        ),
-        "gcp.private-key" => fixed_or_padded(
-            "-----BEGIN SYNTHETIC PRIVATE KEY-----CRIBRA-----END SYNTHETIC PRIVATE KEY-----",
+            random,
+        )),
+        "gcp.private-key" => Some(fixed_or_padded(
+            "-----BEGIN CRIBRA SYNTHETIC PRIVATE KEY-----\\ninvalid\\n-----END CRIBRA SYNTHETIC PRIVATE KEY-----",
             original_len,
-            &mut random,
-        ),
+            random,
+        )),
+        "gcp.escaped-private-key" => Some(fixed_or_padded(
+            "-----BEGIN CRIBRA SYNTHETIC PRIVATE KEY-----\\\\ninvalid\\\\n-----END CRIBRA SYNTHETIC PRIVATE KEY-----",
+            original_len,
+            random,
+        )),
+
+        // Contextual encoded credentials use a marker that cannot satisfy the
+        // corresponding encoded-value validator (notably Base64 validators).
+        "docker.registry-auth" => Some(contextual_marker(
+            marker,
+            "docker_registry_auth",
+            original_len,
+            random,
+        )),
+        "npm.registry-auth-token" => Some(contextual_marker(
+            marker,
+            "npm_auth_token",
+            original_len,
+            random,
+        )),
+        "npm.registry-auth" => Some(contextual_marker(
+            marker,
+            "npm_legacy_auth",
+            original_len,
+            random,
+        )),
+        "npm.registry-password" => Some(contextual_marker(
+            marker,
+            "npm_password",
+            original_len,
+            random,
+        )),
+        "cargo.registry-token" => Some(contextual_marker(
+            marker,
+            "cargo_registry_token",
+            original_len,
+            random,
+        )),
+        "cargo.registry-env-token" => Some(contextual_marker(
+            marker,
+            "cargo_registry_env_token",
+            original_len,
+            random,
+        )),
+        "pypi.repository-token" => Some(contextual_marker(
+            marker,
+            "pypi_repository_token",
+            original_len,
+            random,
+        )),
+        "rubygems.api-key" => Some(prefixed_invalid("rubygems_", original_len, '!', random)),
+        "rubygems.host-api-key" => Some(contextual_marker(
+            marker,
+            "rubygems_host_api_key",
+            original_len,
+            random,
+        )),
+        "netrc.password" => Some(contextual_marker(
+            marker,
+            "netrc_password",
+            original_len,
+            random,
+        )),
 
         // Contextual generic families.
         "generic.password-field" => {
-            contextual_marker(marker, "password", original_len, &mut random)
+            Some(contextual_marker(marker, "password", original_len, random))
         }
-        "generic.database-password-field" => {
-            contextual_marker(marker, "database_password", original_len, &mut random)
-        }
-        "generic.passphrase-field" => {
-            contextual_marker(marker, "passphrase", original_len, &mut random)
-        }
-        "generic.sensitive-hash" => {
-            fixed_or_padded("g_cribra_synthetic_hash", original_len, &mut random)
-        }
-        "generic.api-key" => contextual_marker(marker, "api_key", original_len, &mut random),
-        "generic.auth-token" => contextual_marker(marker, "auth_token", original_len, &mut random),
-        "generic.secret" => contextual_marker(marker, "secret", original_len, &mut random),
+        "generic.database-password-field" => Some(contextual_marker(
+            marker,
+            "database_password",
+            original_len,
+            random,
+        )),
+        "generic.database-connection-password" => Some(contextual_marker(
+            marker,
+            "database_connection_password",
+            original_len,
+            random,
+        )),
+        "generic.passphrase-field" => Some(contextual_marker(
+            marker,
+            "passphrase",
+            original_len,
+            random,
+        )),
+        "generic.sensitive-hash" => Some(fixed_or_padded(
+            "g_cribra_synthetic_hash",
+            original_len,
+            random,
+        )),
+        "generic.api-key" => Some(contextual_marker(marker, "api_key", original_len, random)),
+        "generic.auth-token" => Some(contextual_marker(
+            marker,
+            "auth_token",
+            original_len,
+            random,
+        )),
+        "generic.authorization-bearer" => Some(contextual_marker(
+            marker,
+            "authorization_bearer",
+            original_len,
+            random,
+        )),
+        "generic.authorization-basic" => Some(contextual_marker(
+            marker,
+            "authorization_basic",
+            original_len,
+            random,
+        )),
+        "generic.secret" => Some(contextual_marker(marker, "secret", original_len, random)),
+        "wireguard.private-key" => Some(contextual_marker(
+            marker,
+            "wireguard_private_key",
+            original_len,
+            random,
+        )),
+        "wireguard.preshared-key" => Some(contextual_marker(
+            marker,
+            "wireguard_preshared_key",
+            original_len,
+            random,
+        )),
+        "system.shadow-password-verifier" => Some(contextual_marker(
+            marker,
+            "shadow_password_verifier",
+            original_len,
+            random,
+        )),
+        "system.htpasswd-password-verifier" => Some(contextual_marker(
+            marker,
+            "htpasswd_password_verifier",
+            original_len,
+            random,
+        )),
 
-        // Custom rules do not imply provider semantics. Keep the value clearly
-        // synthetic while making generation deterministic.
-        _ => contextual_marker(marker, "value", original_len, &mut random),
+        _ => None,
     }
 }
 
@@ -368,6 +573,32 @@ mod tests {
         let second = synthesize(source, &report, &options).unwrap();
 
         assert_eq!(first, second);
+    }
+
+    #[test]
+    fn every_current_builtin_has_explicit_synthesis_semantics() {
+        for spec in crate::builtins::CURRENT {
+            let mut random = SyntheticBytes::new(&[17; 32], spec.id(), 0, 96);
+
+            assert!(
+                builtin_synthetic_value(spec.id(), 96, "cribra_synthetic", &mut random).is_some(),
+                "built-in rule `{}` must have explicit synthesis semantics",
+                spec.id(),
+            );
+        }
+    }
+
+    #[test]
+    fn custom_rules_keep_the_generic_deterministic_fallback() {
+        let mut random = SyntheticBytes::new(&[18; 32], "custom.secret", 0, 64);
+
+        let output = synthetic_value("custom.secret", 64, 0, 64, "cribra_synthetic", &[18; 32]);
+
+        assert!(
+            builtin_synthetic_value("custom.secret", 64, "cribra_synthetic", &mut random).is_none()
+        );
+        assert!(output.starts_with("cribra_synthetic_value"));
+        assert_eq!(output.len(), 64);
     }
 
     #[test]
