@@ -587,6 +587,26 @@ fn maven_synthesis_is_invalid_under_normal_validation_on_rescan() {
 }
 
 #[test]
+fn maven_server_password_wins_generic_password_collision() {
+    let scanner = scanner_for([builtins::MAVEN_SERVER_PASSWORD, builtins::PASSWORD_FIELD]);
+    let password = "CorrectHorseBatteryStaple";
+    let source = format!(
+        "<settings><servers><server><id>private</id><username>alice</username>\
+         <password>{password}</password></server></servers></settings>"
+    );
+
+    let results = scan_one(&scanner, &source);
+    let report = results.single_report().expect("one source was scanned");
+
+    assert_eq!(report.len(), 1);
+
+    let finding = &report.findings()[0];
+
+    assert_eq!(finding.rule_id().as_str(), "maven.server-password");
+    assert_eq!(matched(&source, finding), password);
+}
+
+#[test]
 fn private_key_builtins_detect_complete_pem_blocks() {
     let scanner = scanner_for([
         builtins::PKCS8_PRIVATE_KEY,
@@ -1724,9 +1744,9 @@ fn rubygems_credentials_are_in_current_pack() {
 #[test]
 fn rubygems_prefixed_api_key_is_detected_without_context() {
     let scanner = Scanner::default();
-    let key = "rubygems_AbCdEfGhIjKlMnOpQrStUvWxYz012345";
+    let key = format!("rubygems_{}", "a".repeat(32));
 
-    let results = scanner.scan([("fixture", key)]);
+    let results = scanner.scan([("fixture", key.as_str())]);
     let report = results.single_report().expect("one report");
 
     assert_eq!(report.findings().len(), 1);
@@ -1734,13 +1754,13 @@ fn rubygems_prefixed_api_key_is_detected_without_context() {
         report.findings()[0].rule_id().to_string(),
         "rubygems.api-key",
     );
-    assert_eq!(matched(key, &report.findings()[0]), key);
+    assert_eq!(matched(&key, &report.findings()[0]), key);
 }
 
 #[test]
 fn rubygems_credentials_file_key_is_detected() {
     let scanner = Scanner::default();
-    let key = "rubygems_AbCdEfGhIjKlMnOpQrStUvWxYz012345";
+    let key = format!("rubygems_{}", "a".repeat(32));
     let source = format!(":rubygems_api_key: {key}\n");
 
     let results = scanner.scan([("credentials", source.as_str())]);
@@ -1774,7 +1794,7 @@ fn rubygems_host_api_key_detects_custom_server_key() {
 #[test]
 fn rubygems_specific_rule_wins_collision() {
     let scanner = Scanner::default();
-    let key = "rubygems_AbCdEfGhIjKlMnOpQrStUvWxYz012345";
+    let key = format!("rubygems_{}", "a".repeat(32));
     let source = format!("GEM_HOST_API_KEY={key}");
 
     let results = scanner.scan([("environment", source.as_str())]);

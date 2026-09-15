@@ -93,11 +93,11 @@ Status: completed.
 
 Status: pending.
 
-- [ ] Verify provider/ecosystem-specific rules deterministically win valid
+- [x] Verify provider/ecosystem-specific rules deterministically win valid
   collisions with generic credential rules.
-- [ ] Preserve exact finding spans and stable rule attribution.
-- [ ] Verify contextual prefilters remain consistent with validator semantics.
-- [ ] Keep rule-ID and detection-mode contracts explicit as validator families
+- [x] Preserve exact finding spans and stable rule attribution.
+- [x] Verify contextual prefilters remain consistent with validator semantics.
+- [x] Keep rule-ID and detection-mode contracts explicit as validator families
   expand.
 
 #### 0.4.5-D — Adversarial corpus and false-positive hardening

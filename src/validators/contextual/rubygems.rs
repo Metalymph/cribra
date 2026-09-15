@@ -75,9 +75,9 @@ mod tests {
 
     #[test]
     fn yields_to_structurally_valid_rubygems_api_key() {
-        let key = "rubygems_AbCdEfGhIjKlMnOpQrStUvWxYz012345";
+        let key = format!("rubygems_{}", "a".repeat(32));
         let source = format!("GEM_HOST_API_KEY={key}");
 
-        assert!(validate_rubygems_host_key(&context(&source, key)).is_none());
+        assert!(validate_rubygems_host_key(&context(&source, &key)).is_none());
     }
 }

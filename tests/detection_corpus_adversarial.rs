@@ -12,6 +12,8 @@ use cribra::{Scanner, SensitiveCandidateKind};
 const TRUNCATED: &str = include_str!("fixtures/corpus_v02/adversarial-truncated.txt");
 const PUNCTUATION: &str = include_str!("fixtures/corpus_v02/adversarial-punctuation.txt");
 const HARMLESS: &str = include_str!("fixtures/corpus_v02/adversarial-harmless.txt");
+const DEVELOPER_CREDENTIAL_REFERENCES: &str =
+    include_str!("fixtures/corpus_v02/adversarial-developer-credential-references.txt");
 const MIXED_CONTEXT: &str = include_str!("fixtures/corpus_v02/adversarial-context.txt");
 
 fn finding_ids(report: &cribra::ScanReport) -> BTreeSet<&str> {
@@ -250,5 +252,34 @@ fn base64_and_hash_like_noise_without_sensitive_context_remains_clean() {
         report.findings().is_empty(),
         "context-free encoded/hash-like noise produced findings: {:?}",
         finding_ids(report)
+    );
+}
+
+#[test]
+fn developer_credential_references_without_material_remain_clean() {
+    let scanner = Scanner::default();
+    let results = scanner.scan([(
+        "developer-credential-references",
+        DEVELOPER_CREDENTIAL_REFERENCES,
+    )]);
+    let report = results.single_report().expect("one fixture was scanned");
+
+    for finding in report.findings() {
+        eprintln!(
+            "{} {:?} => {:?}",
+            finding.rule_id(),
+            finding.location().byte_range(),
+            &DEVELOPER_CREDENTIAL_REFERENCES[finding.location().byte_range()]
+        );
+    }
+
+    assert!(
+        report.findings().is_empty(),
+        "developer credential references produced findings: {:?}",
+        finding_ids(report)
+    );
+    assert!(
+        report.candidates().is_empty(),
+        "developer credential references produced review candidates"
     );
 }
