@@ -552,6 +552,41 @@ fn nuget_synthesis_is_invalid_under_normal_validation_on_rescan() {
 }
 
 #[test]
+fn maven_synthesis_is_invalid_under_normal_validation_on_rescan() {
+    let scanner = scanner_for([builtins::MAVEN_SERVER_PASSWORD]);
+    let source = r#"<settings><servers><server><id>private</id><username>alice</username><password>MavenSecretValue_1234</password></server></servers></settings>"#;
+
+    let results = scan_one(&scanner, source);
+    let report = results.single_report().expect("one source was scanned");
+
+    assert_eq!(report.len(), 1);
+    assert_eq!(
+        report.findings()[0].rule_id().as_str(),
+        "maven.server-password"
+    );
+
+    let synthesized = synthesize(source, report, &SynthesisOptions::new([92; 32]))
+        .expect("Maven synthesis should succeed");
+
+    assert_eq!(synthesized.len(), source.len());
+    assert!(!synthesized.contains("MavenSecretValue_1234"));
+    assert!(synthesized.as_bytes().contains(&0));
+
+    let rescanned_results = scan_one(&scanner, &synthesized);
+    let rescanned = rescanned_results
+        .single_report()
+        .expect("one synthesized source was scanned");
+
+    assert!(
+        rescanned
+            .findings()
+            .iter()
+            .all(|finding| finding.rule_id().as_str() != "maven.server-password"),
+        "synthetic Maven password must not validate as a real Maven credential",
+    );
+}
+
+#[test]
 fn private_key_builtins_detect_complete_pem_blocks() {
     let scanner = scanner_for([
         builtins::PKCS8_PRIVATE_KEY,

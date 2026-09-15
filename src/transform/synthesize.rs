@@ -339,6 +339,7 @@ fn builtin_synthetic_value(
         "nuget.package-source-cleartext-password" => {
             Some(prefixed_invalid("", original_len, '\0', random))
         }
+        "maven.server-password" => Some(prefixed_invalid("", original_len, '\0', random)),
         "rubygems.api-key" => Some(prefixed_invalid("rubygems_", original_len, '!', random)),
         "rubygems.host-api-key" => Some(contextual_marker(
             marker,
