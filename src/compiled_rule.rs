@@ -95,7 +95,8 @@ impl CompiledRuleMetadata {
             | ValidatorKind::Pypi
             | ValidatorKind::RubyGems
             | ValidatorKind::RubyGemsHost
-            | ValidatorKind::Nuget => 500,
+            | ValidatorKind::Nuget
+            | ValidatorKind::Maven => 500,
         }
     }
 }
@@ -530,6 +531,9 @@ fn pattern_prefilter_needles(
             Some(&["password", "username", "__token__"])
         }
         ("nuget.package-source-cleartext-password", ValidatorKind::Nuget) => Some(&["<add"]),
+        ("maven.server-password", ValidatorKind::Maven) => {
+            Some(&["<password", "<server", "<servers"])
+        }
         ("rubygems.host-api-key", ValidatorKind::RubyGemsHost) => Some(&["gem_host_api_key"]),
         ("netrc.password", ValidatorKind::Netrc) => Some(&["machine", "login", "password"]),
         ("generic.authorization-basic", ValidatorKind::HttpBasic) => {

@@ -16,6 +16,7 @@ use crate::{
             generic::{GenericCredentialKind, validate_generic_credential},
             hash::{HashKind, validate_sensitive_hash},
             http_basic::validate_http_basic,
+            maven::validate_maven,
             netrc::validate_netrc,
             npm_registry::{NpmRegistryCredentialKind, validate_npm_registry},
             nuget::validate_nuget,
@@ -50,6 +51,7 @@ pub(crate) enum ValidatorKind {
     NpmRegistry,
     CargoRegistry,
     Pypi,
+    Maven,
     RubyGems,
     RubyGemsHost,
     GitHub,
@@ -93,6 +95,7 @@ impl ValidatorKind {
             | Self::NpmRegistry
             | Self::CargoRegistry
             | Self::Pypi
+            | Self::Maven
             | Self::RubyGemsHost
             | Self::DatabaseConnection
             | Self::SystemPasswordVerifier
@@ -114,6 +117,7 @@ pub(crate) enum ValidationKind {
     CargoRegistry,
     NpmRegistry(NpmRegistryCredentialKind),
     Pypi,
+    Maven,
     RubyGems,
     RubyGemsHost,
     GitHub(GitHubTokenKind),
@@ -206,6 +210,8 @@ pub(crate) fn validate_candidate(
             .map(|_| ValidationOutcome::new(ValidationKind::CargoRegistry, Confidence::High)),
         ValidatorKind::Pypi => validate_pypi(&context)
             .map(|_| ValidationOutcome::new(ValidationKind::Pypi, Confidence::High)),
+        ValidatorKind::Maven => validate_maven(&context)
+            .map(|_| ValidationOutcome::new(ValidationKind::Maven, Confidence::High)),
         ValidatorKind::RubyGems => validate_rubygems_api_key(context.candidate())
             .map(|_| ValidationOutcome::new(ValidationKind::RubyGems, Confidence::High)),
         ValidatorKind::RubyGemsHost => validate_rubygems_host_key(&context)
@@ -316,6 +322,7 @@ mod tests {
             ValidatorKind::NpmRegistry,
             ValidatorKind::CargoRegistry,
             ValidatorKind::Pypi,
+            ValidatorKind::Maven,
             ValidatorKind::RubyGemsHost,
             ValidatorKind::Password,
             ValidatorKind::SensitiveHash,

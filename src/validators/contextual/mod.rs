@@ -11,6 +11,7 @@ pub(crate) mod gcp;
 pub(crate) mod generic;
 pub(crate) mod hash;
 pub(crate) mod http_basic;
+pub(crate) mod maven;
 pub(crate) mod netrc;
 pub(crate) mod npm_registry;
 pub(crate) mod nuget;
