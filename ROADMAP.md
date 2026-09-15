@@ -52,7 +52,7 @@ Status: completed.
 
 #### 0.4.5-B — Developer package credentials
 
-Status: active.
+Status: completed.
 
 - [x] Cargo / Rust registry authentication.
 - [x] Python / PyPI / `.pypirc` repository tokens.
@@ -62,8 +62,13 @@ Status: active.
   NuGetPackageSourceCredentials_{name} environment credentials remain
   deferred because exact password projection and source association require
   additional parsing beyond the bounded B4 matcher.
-- [ ] Maven repository credentials.
-- [ ] Deno authentication tokens.
+- [x] Maven repository credentials.
+- [x] Deno authentication tokens audited and deferred. `DENO_AUTH_TOKENS` is
+  a documented security-relevant credential surface, but its multi-entry
+  representation requires reliable per-entry credential discovery and exact
+  span projection that the current rule execution model does not provide
+  without broader parsing or overly generic scanning. No dedicated Deno rule is
+  added in v0.4.5.
 
 Audited surfaces may be rejected or deferred when they cannot satisfy Cribra's
 confidence standard. Gradle, Go, Conan, vcpkg, Nix, and related ecosystems do
