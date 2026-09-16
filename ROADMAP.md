@@ -104,12 +104,12 @@ Status: pending.
 
 Status: pending.
 
-- [ ] Add positive, negative, malformed, placeholder, documentation, and
+- [x] Add positive, negative, malformed, placeholder, documentation, and
   cross-format fixtures for every accepted family.
-- [ ] Add collision regressions for ecosystem-specific versus generic rules.
-- [ ] Reject protected references, helper names, paths, registry names, and
+- [x] Add collision regressions for ecosystem-specific versus generic rules.
+- [x] Reject protected references, helper names, paths, registry names, and
   credential-store references that are not credential material.
-- [ ] Preserve Cribra's preference for deliberate false negatives over noisy
+- [x] Preserve Cribra's preference for deliberate false negatives over noisy
   classification.
 
 #### 0.4.5-E — Interface and parity validation
