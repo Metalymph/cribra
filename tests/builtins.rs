@@ -1811,6 +1811,59 @@ fn rubygems_specific_rule_wins_collision() {
 }
 
 #[test]
+fn developer_credential_rules_expose_expected_public_metadata() {
+    let scanner = Scanner::default();
+
+    for (source, expected_rule) in [
+        (
+            "[registry]\ntoken = \"cargo-secret-token-0123456789\"",
+            "cargo.registry-token",
+        ),
+        (
+            "CARGO_REGISTRY_TOKEN=cargo-default-token-0123456789",
+            "cargo.registry-env-token",
+        ),
+        (
+            "[pypi]\nusername = __token__\npassword = pypi-AbCdEfGhIjKlMnOpQrStUvWxYz012345",
+            "pypi.repository-token",
+        ),
+        (
+            r#"<packageSourceCredentials><Feed><add key="ClearTextPassword" value="NuGetSecretValue_1234" /></Feed></packageSourceCredentials>"#,
+            "nuget.package-source-cleartext-password",
+        ),
+        (
+            "<settings><servers><server><password>MavenSecretValue_1234</password></server></servers></settings>",
+            "maven.server-password",
+        ),
+        (
+            "rubygems_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "rubygems.api-key",
+        ),
+        (
+            "GEM_HOST_API_KEY=custom-gem-server-credential-0123456789",
+            "rubygems.host-api-key",
+        ),
+    ] {
+        let results = scanner.scan([("fixture", source)]);
+        let report = results.single_report().expect("one report");
+
+        let finding = report
+            .findings()
+            .iter()
+            .find(|finding| finding.rule_id().as_str() == expected_rule)
+            .expect("expected developer credential finding");
+
+        assert_eq!(finding.severity(), Severity::Critical, "{expected_rule}");
+        assert_eq!(finding.confidence(), Confidence::High, "{expected_rule}");
+        assert_eq!(
+            finding.remediation(),
+            Some(Remediation::RevokeAndRotateCredential),
+            "{expected_rule}",
+        );
+    }
+}
+
+#[test]
 fn netrc_password_detects_complete_machine_credentials() {
     let scanner = scanner_for([builtins::NETRC_PASSWORD]);
 
