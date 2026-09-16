@@ -165,6 +165,45 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             "v043-htpasswd-verifier",
             "alice:$apr1$abcdefgh$abcdefghijklmnopqrstuv",
         ),
+        
+    ] {
+        cases.push(case_oracle(
+            name.to_owned(),
+            ScannerKind::DefaultBuiltins,
+            &default_scanner,
+            source.to_owned(),
+        )?);
+    }
+
+    for (name, source) in [
+        (
+            "v045-cargo-registry-token",
+            "[registry]\ntoken = \"cargo-secret-token-0123456789\"",
+        ),
+        (
+            "v045-cargo-registry-env-token",
+            "CARGO_REGISTRY_TOKEN=cargo-default-token-0123456789",
+        ),
+        (
+            "v045-pypi-repository-token",
+            "[pypi]\nusername = __token__\npassword = pypi-AbCdEfGhIjKlMnOpQrStUvWxYz012345",
+        ),
+        (
+            "v045-nuget-cleartext-password",
+            r#"<packageSourceCredentials><Feed><add key="ClearTextPassword" value="NuGetSecretValue_1234" /></Feed></packageSourceCredentials>"#,
+        ),
+        (
+            "v045-maven-server-password",
+            "<settings><servers><server><password>MavenSecretValue_1234</password></server></servers></settings>",
+        ),
+        (
+            "v045-rubygems-api-key",
+            "rubygems_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        ),
+        (
+            "v045-rubygems-host-api-key",
+            "GEM_HOST_API_KEY=custom-gem-server-credential-0123456789",
+        ),
     ] {
         cases.push(case_oracle(
             name.to_owned(),

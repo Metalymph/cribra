@@ -114,12 +114,12 @@ Status: completed.
 
 #### 0.4.5-E — Interface and parity validation
 
-Status: pending.
+Status: complete.
 
 - [x] Validate Rust behavior for every accepted rule.
 - [x] Validate native C ABI exposure and semantic parity.
-- [ ] Align `cribra-wasm` with the completed v0.4.5 core semantics.
-- [ ] Validate WebAssembly parity for findings, spans, severity, confidence,
+- [x] Align `cribra-wasm` with the completed v0.4.5 core semantics.
+- [x] Validate WebAssembly parity for findings, spans, severity, confidence,
   remediation, candidates, and explanations.
 
 #### 0.4.5-F — Swift Package Manager credential coverage
