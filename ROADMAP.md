@@ -91,7 +91,7 @@ Status: completed.
 
 #### 0.4.5-C — Collision and normalization hardening
 
-Status: pending.
+Status: completed.
 
 - [x] Verify provider/ecosystem-specific rules deterministically win valid
   collisions with generic credential rules.
@@ -102,7 +102,7 @@ Status: pending.
 
 #### 0.4.5-D — Adversarial corpus and false-positive hardening
 
-Status: pending.
+Status: completed.
 
 - [x] Add positive, negative, malformed, placeholder, documentation, and
   cross-format fixtures for every accepted family.
@@ -116,8 +116,8 @@ Status: pending.
 
 Status: pending.
 
-- [ ] Validate Rust behavior for every accepted rule.
-- [ ] Validate native C ABI exposure and semantic parity.
+- [x] Validate Rust behavior for every accepted rule.
+- [x] Validate native C ABI exposure and semantic parity.
 - [ ] Align `cribra-wasm` with the completed v0.4.5 core semantics.
 - [ ] Validate WebAssembly parity for findings, spans, severity, confidence,
   remediation, candidates, and explanations.
@@ -162,7 +162,40 @@ Gradle, Maven, AWS, and shared credential contracts.
   attribution, or exact-span semantics.
 - [ ] Allow this step to complete with no new detector if existing coverage is sufficient.
 
-#### 0.4.5-H — Cribra CLI distribution
+#### 0.4.5-H — PHP / Composer and Dart / pub credential coverage
+
+Status: pending.
+
+Goal: audit the remaining high-value PHP and Dart package/developer credential
+surfaces, adding dedicated detection only where Composer or pub provides
+documented semantics stronger than existing shared credential rules.
+
+- [ ] Audit Composer authentication surfaces, including `auth.json`,
+  `composer.json` authentication where applicable, and documented environment
+  configuration.
+- [ ] Audit Composer `http-basic`, `bearer`, `github-oauth`, `gitlab-oauth`,
+  `gitlab-token`, and other documented authentication families.
+- [ ] Reuse existing HTTP, GitHub, GitLab, `.netrc`, and generic credential
+  rules wherever they already provide equivalent semantic coverage.
+- [ ] Audit Dart / pub repository authentication and documented credential
+  storage/configuration surfaces.
+- [ ] Audit authenticated custom package repositories and documented token
+  configuration used by `dart pub`.
+- [ ] Prefer `composer.*`, `pub.*`, provider-specific, or existing
+  generic/shared ownership over artificial `php.*` or `dart.*` rule IDs.
+- [ ] Preserve exact credential-value spans and deterministic collision
+  behavior for every accepted rule.
+- [ ] Add synthesis semantics and adversarial/collision tests for accepted
+  rules.
+- [ ] Do not extract credentials from OS credential stores or other protected
+  external storage.
+- [ ] Do not add PHP/Dart runtimes, package-manager parsers, network validation,
+  or adapter-specific logic to the core.
+
+The audit may close with shared-rule coverage, dedicated Composer/pub rules, or
+explicit deferral where high-confidence exact-span detection is not justified.
+
+#### 0.4.5-I — Cribra CLI distribution
 
 Status: pending.
 
@@ -178,7 +211,7 @@ policy into the core engine.
 - [ ] Validate packaged binaries against the canonical CLI behavior and release
   version.
 
-#### 0.4.5-I — Documentation and release gate
+#### 0.4.5-J — Documentation and release gate
 
 Status: pending.
 
