@@ -2846,6 +2846,52 @@ mod tests {
     }
 
     #[test]
+    fn developer_credential_contextual_explanation_preserves_detection_mode() {
+        let mut scanner = ptr::null_mut();
+        let mut report = ptr::null_mut();
+        let source = b"CARGO_REGISTRY_TOKEN=cargo-default-token-0123456789";
+    
+        unsafe {
+            assert_eq!(cribra_scanner_new_current(&mut scanner), CRIBRA_OK);
+            assert_eq!(
+                cribra_scanner_scan(
+                    scanner,
+                    source.as_ptr(),
+                    source.len(),
+                    &mut report,
+                    ptr::null_mut(),
+                ),
+                CRIBRA_OK
+            );
+    
+            let mut explanation = CribraExplanationView::default();
+            assert_eq!(
+                cribra_scanner_explain_finding(
+                    scanner,
+                    report,
+                    0,
+                    &mut explanation,
+                    ptr::null_mut(),
+                ),
+                CRIBRA_OK
+            );
+    
+            assert_eq!(explanation.kind, CRIBRA_EXPLANATION_CLASSIFIED);
+            assert_eq!(
+                explanation.detection_mode,
+                CRIBRA_DETECTION_MODE_CONTEXTUAL
+            );
+            assert_eq!(
+                explanation.candidate_evidence,
+                CRIBRA_CANDIDATE_EVIDENCE_NONE
+            );
+    
+            cribra_report_free(report);
+            cribra_scanner_free(scanner);
+        }
+    }
+
+    #[test]
     fn stable_value_mappings_cover_current_core_variants() {
         assert_eq!(severity_code(Severity::Info), CRIBRA_SEVERITY_INFO);
         assert_eq!(severity_code(Severity::Critical), CRIBRA_SEVERITY_CRITICAL);
@@ -3316,6 +3362,34 @@ mod tests {
             (
                 "netrc",
                 "machine api.example.com login alice password correct-horse-battery-staple",
+            ),
+            (
+                "cargo-registry-token",
+                "[registry]\ntoken = \"cargo-secret-token-0123456789\"",
+            ),
+            (
+                "cargo-registry-env-token",
+                "CARGO_REGISTRY_TOKEN=cargo-default-token-0123456789",
+            ),
+            (
+                "pypi-repository-token",
+                "[pypi]\nusername = __token__\npassword = pypi-AbCdEfGhIjKlMnOpQrStUvWxYz012345",
+            ),
+            (
+                "nuget-package-source-cleartext-password",
+                r#"<packageSourceCredentials><Feed><add key="ClearTextPassword" value="NuGetSecretValue_1234" /></Feed></packageSourceCredentials>"#,
+            ),
+            (
+                "maven-server-password",
+                "<settings><servers><server><password>MavenSecretValue_1234</password></server></servers></settings>",
+            ),
+            (
+                "rubygems-api-key",
+                "rubygems_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            ),
+            (
+                "rubygems-host-api-key",
+                "GEM_HOST_API_KEY=custom-gem-server-credential-0123456789",
             ),
         ];
 
