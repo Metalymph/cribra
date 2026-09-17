@@ -130,14 +130,14 @@ Goal: audit Swift Package Manager credential surfaces and add dedicated
 detection only where SwiftPM provides stronger, documented semantics than
 existing shared credential rules.
 
-- [ ] Audit SwiftPM registry authentication and documented credential storage.
-- [ ] Audit `SWIFTPM_REGISTRY_TOKEN`, `SWIFTPM_REGISTRY_PASSWORD`,
+- [x] Audit SwiftPM registry authentication and documented credential storage.
+- [x] Audit `SWIFTPM_REGISTRY_TOKEN`, `SWIFTPM_REGISTRY_PASSWORD`,
   `SWIFTPM_SOURCE_CONTROL_TOKEN`, and `SWIFTPM_NETRC_DATA`.
-- [ ] Reuse the existing `.netrc` detector wherever it already provides equivalent semantics.
-- [ ] Preserve exact credential-value spans and deterministic collision behavior.
-- [ ] Add synthesis semantics and adversarial/collision tests for accepted rules.
-- [ ] Do not extract credentials from Keychain or other OS credential stores.
-- [ ] Do not add a SwiftPM parser, Swift runtime dependency, network validation,
+- [x] Reuse the existing `.netrc` detector wherever it already provides equivalent semantics.
+- [x] Preserve exact credential-value spans and deterministic collision behavior.
+- [x] Add synthesis semantics and adversarial/collision tests for accepted rules.
+- [x] Do not extract credentials from Keychain or other OS credential stores.
+- [x] Do not add a SwiftPM parser, Swift runtime dependency, network validation,
   or adapter-specific logic to the core.
 
 The audit may close with shared-rule coverage or explicit deferral where
@@ -195,7 +195,22 @@ documented semantics stronger than existing shared credential rules.
 The audit may close with shared-rule coverage, dedicated Composer/pub rules, or
 explicit deferral where high-confidence exact-span detection is not justified.
 
-#### 0.4.5-I — Cribra CLI distribution
+#### 0.4.5-I — Documentation and release gate
+
+Status: pending.
+
+- [ ] Update README, ROADMAP, CHANGELOG, rule documentation, and public coverage
+  descriptions.
+- [ ] Run formatting, workspace check/test, Clippy, docs, MSRV, RustSec, and
+  packaging gates.
+- [ ] Run C ABI release gates.
+- [ ] Run WebAssembly adapter and parity gates.
+- [ ] Run `cribra-cli` packaging/distribution validation, including Homebrew and
+  APT artifacts.
+- [ ] Verify a clean working tree and protected-main release workflow.
+- [ ] Publish/tag v0.4.5 only after all release gates pass.
+
+#### 0.4.6 — Cribra CLI distribution
 
 Status: pending.
 
@@ -211,22 +226,7 @@ policy into the core engine.
 - [ ] Validate packaged binaries against the canonical CLI behavior and release
   version.
 
-#### 0.4.5-J — Documentation and release gate
-
-Status: pending.
-
-- [ ] Update README, ROADMAP, CHANGELOG, rule documentation, and public coverage
-  descriptions.
-- [ ] Run formatting, workspace check/test, Clippy, docs, MSRV, RustSec, and
-  packaging gates.
-- [ ] Run C ABI release gates.
-- [ ] Run WebAssembly adapter and parity gates.
-- [ ] Run `cribra-cli` packaging/distribution validation, including Homebrew and
-  APT artifacts.
-- [ ] Verify a clean working tree and protected-main release workflow.
-- [ ] Publish/tag v0.4.5 only after all release gates pass.
-
-### v0.4.6 — Native Language Bindings
+### v0.4.7 — Native Language Bindings
 
 
 Goal: provide ergonomic bindings for high-value native/security ecosystems
@@ -256,7 +256,7 @@ provides the portable browser/JavaScript WebAssembly boundary adequately.
 A separate JS/TS binding should be considered only if a concrete runtime cannot
 use the existing WASM contract safely or ergonomically.
 
-### v0.4.7 — Financial Data Pack (Opt-In)
+### v0.4.8 — Financial Data Pack (Opt-In)
 
 Goal: add the first optional sensitive-data pack outside the default
 secret/credential baseline.
