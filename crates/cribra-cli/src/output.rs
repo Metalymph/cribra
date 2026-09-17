@@ -6,7 +6,8 @@
 use std::fmt::Write;
 
 use cribra::{
-    CandidateEvidence, Confidence, Remediation, ScanReport, SensitiveCandidateKind, Severity,
+    CandidateEvidence, Confidence, DetectionMode, Explanation, Finding, Remediation, ScanReport,
+    Scanner, SensitiveCandidateKind, Severity,
 };
 
 use crate::command::OutputFormat;
@@ -41,7 +42,7 @@ fn push_json_string(output: &mut String, value: &str) {
 }
 
 /// Renders one scan report as deterministic metadata-only JSON.
-pub(crate) fn render_json(source_name: &str, report: &ScanReport) -> String {
+pub(crate) fn render_json(source_name: &str, report: &ScanReport, scanner: &Scanner) -> String {
     let mut output = String::new();
 
     let status = if !report.findings().is_empty() {
@@ -101,6 +102,13 @@ pub(crate) fn render_json(source_name: &str, report: &ScanReport) -> String {
 
         push_json_field(
             &mut output,
+            "detection",
+            finding_detection_name(finding, scanner),
+        );
+        output.push(',');
+
+        push_json_field(
+            &mut output,
             "remediation",
             remediation_name(finding.remediation()),
         );
@@ -147,10 +155,15 @@ pub(crate) fn render_json(source_name: &str, report: &ScanReport) -> String {
 }
 
 /// Renders one scan report using the requested stable CLI format.
-pub(crate) fn render(format: OutputFormat, source_name: &str, report: &ScanReport) -> String {
+pub(crate) fn render(
+    format: OutputFormat,
+    source_name: &str,
+    report: &ScanReport,
+    scanner: &Scanner,
+) -> String {
     match format {
-        OutputFormat::Human => render_human(source_name, report),
-        OutputFormat::Json => render_json(source_name, report),
+        OutputFormat::Human => render_human(source_name, report, scanner),
+        OutputFormat::Json => render_json(source_name, report, scanner),
     }
 }
 
@@ -158,7 +171,7 @@ pub(crate) fn render(format: OutputFormat, source_name: &str, report: &ScanRepor
 ///
 /// The output contains source identity, aggregate state, finding metadata and
 /// review-candidate metadata. It never includes matched source material.
-pub(crate) fn render_human(source_name: &str, report: &ScanReport) -> String {
+pub(crate) fn render_human(source_name: &str, report: &ScanReport, scanner: &Scanner) -> String {
     let mut output = String::new();
 
     let status = if !report.findings().is_empty() {
@@ -180,7 +193,7 @@ pub(crate) fn render_human(source_name: &str, report: &ScanReport) -> String {
 
         writeln!(
             output,
-            "finding: {} {}:{} bytes={}..{} severity={} confidence={} remediation={}",
+            "finding: {} {}:{} bytes={}..{} severity={} confidence={} detection={} remediation={}",
             finding.rule_id().as_str(),
             location.line(),
             location.column(),
@@ -188,6 +201,7 @@ pub(crate) fn render_human(source_name: &str, report: &ScanReport) -> String {
             location.end(),
             severity_name(finding.severity()),
             confidence_name(finding.confidence()),
+            finding_detection_name(finding, scanner),
             remediation_name(finding.remediation()),
         )
         .expect("writing to String cannot fail");
@@ -198,17 +212,34 @@ pub(crate) fn render_human(source_name: &str, report: &ScanReport) -> String {
 
         writeln!(
             output,
-            "candidate: {}:{} bytes={}..{} evidence={}",
+            "candidate: {}:{} bytes={}..{} kind={} evidence={}",
             location.line(),
             location.column(),
             location.start(),
             location.end(),
+            candidate_kind_name(candidate.kind()),
             candidate_evidence_name(candidate.evidence()),
         )
         .expect("writing to String cannot fail");
     }
 
     output
+}
+
+fn finding_detection_name(finding: &Finding, scanner: &Scanner) -> &'static str {
+    match finding.explanation(scanner) {
+        Some(Explanation::Classified(mode)) => detection_mode_name(mode),
+        Some(Explanation::Ambiguous(_)) | None => "unknown",
+        Some(_) => "unknown",
+    }
+}
+
+fn detection_mode_name(mode: DetectionMode) -> &'static str {
+    match mode {
+        DetectionMode::MatcherOnly => "matcher-only",
+        DetectionMode::Deterministic => "deterministic",
+        DetectionMode::Contextual => "contextual",
+    }
 }
 
 fn severity_name(severity: Severity) -> &'static str {
@@ -268,7 +299,7 @@ mod tests {
         let report = results.single_report().expect("one report");
 
         assert_eq!(
-            render_human("clean.txt", report),
+            render_human("clean.txt", report, &scanner),
             "\
 source: clean.txt
 status: clean
@@ -286,26 +317,29 @@ candidates: 0
         let results = scanner.scan([("config.env", source.as_str())]);
         let report = results.single_report().expect("one report");
 
-        let output = render_human("config.env", report);
+        let output = render_human("config.env", report, &scanner);
 
         assert!(output.contains("status: findings"));
         assert!(output.contains("github"));
         assert!(output.contains("severity="));
         assert!(output.contains("confidence="));
+        assert!(output.contains("detection="));
         assert!(!output.contains(secret));
     }
 
     #[test]
-    fn candidate_output_does_not_include_source_value() {
+    fn candidate_output_contains_kind_and_evidence_but_not_source_value() {
         let scanner = cribra::Scanner::default();
         let candidate = "ABCD-EFGH-IJKL-MNOP";
         let results = scanner.scan([("candidate.txt", candidate)]);
         let report = results.single_report().expect("one report");
 
-        let output = render_human("candidate.txt", report);
+        let output = render_human("candidate.txt", report, &scanner);
 
         assert!(output.contains("status: review"));
         assert!(output.contains("candidate:"));
+        assert!(output.contains("kind=recovery-like-code"));
+        assert!(output.contains("evidence=structural"));
         assert!(!output.contains(candidate));
     }
 
@@ -317,7 +351,7 @@ candidates: 0
         let results = scanner.scan([("config.env", source.as_str())]);
         let report = results.single_report().expect("one report");
 
-        let output = render_json("config.env", report);
+        let output = render_json("config.env", report, &scanner);
 
         assert!(output.starts_with('{'));
         assert!(output.ends_with("}\n"));
@@ -326,6 +360,7 @@ candidates: 0
         assert!(output.contains("\"rule_id\":"));
         assert!(output.contains("\"severity\":"));
         assert!(output.contains("\"confidence\":"));
+        assert!(output.contains("\"detection\":"));
         assert!(!output.contains(secret));
     }
 
@@ -335,9 +370,22 @@ candidates: 0
         let results = scanner.scan([("clean", "ordinary text")]);
         let report = results.single_report().expect("one report");
 
-        let output = render_json("dir/\"quoted\"\\file", report);
+        let output = render_json("dir/\"quoted\"\\file", report, &scanner);
 
         assert!(output.contains("\"source\":\"dir/\\\"quoted\\\"\\\\file\""));
+    }
+
+    #[test]
+    fn detection_mode_names_are_stable() {
+        assert_eq!(
+            detection_mode_name(DetectionMode::MatcherOnly),
+            "matcher-only"
+        );
+        assert_eq!(
+            detection_mode_name(DetectionMode::Deterministic),
+            "deterministic"
+        );
+        assert_eq!(detection_mode_name(DetectionMode::Contextual), "contextual");
     }
 
     #[test]

@@ -91,6 +91,7 @@ pub fn execute(command: &Command) -> Result<CommandOutput, ExecuteError> {
                 command.format,
                 source.name(),
                 report,
+                &scanner,
             )))
         }
 
