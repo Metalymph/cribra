@@ -420,7 +420,7 @@ mod tests {
             assert_eq!(
                 kind(&source, password, ComposerCredentialKind::HttpBasicPassword,),
                 None,
-                "placeholder unexpectedly validated: {password}",
+                "placeholder unexpectedly validated",
             );
         }
     }
