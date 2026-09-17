@@ -28,7 +28,10 @@ impl ComposerValidation {
     }
 }
 
-pub(crate) fn validate_composer(context: &ValidationContext<'_>) -> Option<ComposerValidation> {
+pub(crate) fn validate_composer(
+    context: &ValidationContext<'_>,
+    expected: ComposerCredentialKind,
+) -> Option<ComposerValidation> {
     let candidate = context.candidate();
 
     if candidate.is_empty()
@@ -40,31 +43,14 @@ pub(crate) fn validate_composer(context: &ValidationContext<'_>) -> Option<Compo
         return None;
     }
 
-    if is_http_basic_password(context) {
-        return Some(ComposerValidation {
-            kind: ComposerCredentialKind::HttpBasicPassword,
-        });
-    }
+    let valid = match expected {
+        ComposerCredentialKind::HttpBasicPassword => is_http_basic_password(context),
+        ComposerCredentialKind::BearerToken => is_bearer_token(context),
+        ComposerCredentialKind::BitbucketConsumerSecret => is_bitbucket_consumer_secret(context),
+        ComposerCredentialKind::ForgejoToken => is_forgejo_token(context),
+    };
 
-    if is_bearer_token(context) {
-        return Some(ComposerValidation {
-            kind: ComposerCredentialKind::BearerToken,
-        });
-    }
-
-    if is_bitbucket_consumer_secret(context) {
-        return Some(ComposerValidation {
-            kind: ComposerCredentialKind::BitbucketConsumerSecret,
-        });
-    }
-
-    if is_forgejo_token(context) {
-        return Some(ComposerValidation {
-            kind: ComposerCredentialKind::ForgejoToken,
-        });
-    }
-
-    None
+    valid.then_some(ComposerValidation { kind: expected })
 }
 
 fn is_composer_documentation_value(value: &str) -> bool {
@@ -311,8 +297,12 @@ mod tests {
         ValidationContext::new(source, start..start + value.len())
     }
 
-    fn kind(source: &str, value: &str) -> Option<ComposerCredentialKind> {
-        validate_composer(&context(source, value)).map(ComposerValidation::kind)
+    fn kind(
+        source: &str,
+        value: &str,
+        expected: ComposerCredentialKind,
+    ) -> Option<ComposerCredentialKind> {
+        validate_composer(&context(source, value), expected).map(ComposerValidation::kind)
     }
 
     #[test]
@@ -330,7 +320,7 @@ mod tests {
         );
 
         assert_eq!(
-            kind(&source, password),
+            kind(&source, password, ComposerCredentialKind::HttpBasicPassword),
             Some(ComposerCredentialKind::HttpBasicPassword),
         );
     }
@@ -340,7 +330,10 @@ mod tests {
         let password = "ComposerSecret_123456";
         let source = format!(r#"{{"password":"{password}"}}"#);
 
-        assert_eq!(kind(&source, password), None);
+        assert_eq!(
+            kind(&source, password, ComposerCredentialKind::HttpBasicPassword),
+            None
+        );
     }
 
     #[test]
@@ -354,7 +347,10 @@ mod tests {
 }}"#
         );
 
-        assert_eq!(kind(&source, password), None);
+        assert_eq!(
+            kind(&source, password, ComposerCredentialKind::HttpBasicPassword),
+            None
+        );
     }
 
     #[test]
@@ -373,7 +369,10 @@ mod tests {
 }}"#
         );
 
-        assert_eq!(kind(&source, password), None);
+        assert_eq!(
+            kind(&source, password, ComposerCredentialKind::HttpBasicPassword),
+            None
+        );
     }
 
     #[test]
@@ -392,7 +391,7 @@ mod tests {
         );
 
         assert_eq!(
-            kind(&source, password),
+            kind(&source, password, ComposerCredentialKind::HttpBasicPassword),
             Some(ComposerCredentialKind::HttpBasicPassword),
         );
     }
@@ -419,7 +418,7 @@ mod tests {
             );
 
             assert_eq!(
-                kind(&source, password),
+                kind(&source, password, ComposerCredentialKind::HttpBasicPassword,),
                 None,
                 "placeholder unexpectedly validated: {password}",
             );
@@ -440,7 +439,10 @@ mod tests {
 }}"#
         );
 
-        assert_eq!(kind(&source, password), None);
+        assert_eq!(
+            kind(&source, password, ComposerCredentialKind::HttpBasicPassword,),
+            None,
+        );
     }
 
     #[test]
@@ -455,7 +457,7 @@ mod tests {
         );
 
         assert_eq!(
-            kind(&source, token),
+            kind(&source, token, ComposerCredentialKind::BearerToken),
             Some(ComposerCredentialKind::BearerToken),
         );
     }
@@ -469,7 +471,10 @@ mod tests {
             format!(r#"{{"application":{{"repo.example":"{token}"}}}}"#),
             format!(r#"{{"bearer":{{"":"{token}"}}}}"#),
         ] {
-            assert_eq!(kind(&source, token), None);
+            assert_eq!(
+                kind(&source, token, ComposerCredentialKind::BearerToken),
+                None,
+            );
         }
     }
 
@@ -487,7 +492,10 @@ mod tests {
     }}"#
         );
 
-        assert_eq!(kind(&source, token), None);
+        assert_eq!(
+            kind(&source, token, ComposerCredentialKind::BearerToken),
+            None,
+        );
     }
 
     #[test]
@@ -505,7 +513,11 @@ mod tests {
         );
 
         assert_eq!(
-            kind(&source, secret),
+            kind(
+                &source,
+                secret,
+                ComposerCredentialKind::BitbucketConsumerSecret,
+            ),
             Some(ComposerCredentialKind::BitbucketConsumerSecret),
         );
     }
@@ -525,7 +537,7 @@ mod tests {
         );
 
         assert_eq!(
-            kind(&source, token),
+            kind(&source, token, ComposerCredentialKind::ForgejoToken),
             Some(ComposerCredentialKind::ForgejoToken),
         );
     }
@@ -536,11 +548,56 @@ mod tests {
 
         for source in [
             format!(r#"{{"application":{{"consumer-secret":"{secret}"}}}}"#),
-            format!(r#"{{"application":{{"token":"{secret}"}}}}"#),
             format!(r#"{{"bitbucket-oauth":{{"":{{"consumer-secret":"{secret}"}}}}}}"#),
+        ] {
+            assert_eq!(
+                kind(
+                    &source,
+                    secret,
+                    ComposerCredentialKind::BitbucketConsumerSecret,
+                ),
+                None,
+            );
+        }
+
+        for source in [
+            format!(r#"{{"application":{{"token":"{secret}"}}}}"#),
             format!(r#"{{"forgejo-token":{{"":{{"token":"{secret}"}}}}}}"#),
         ] {
-            assert_eq!(kind(&source, secret), None);
+            assert_eq!(
+                kind(&source, secret, ComposerCredentialKind::ForgejoToken),
+                None,
+            );
         }
+    }
+
+    #[test]
+    fn bearer_does_not_accept_http_basic_password() {
+        let password = "ComposerRepositorySecret_123456";
+        let source = format!(
+            r#"{{"http-basic":{{"repo.example":{{"username":"alice","password":"{password}"}}}}}}"#
+        );
+
+        assert!(
+            validate_composer(
+                &context(&source, password),
+                ComposerCredentialKind::BearerToken,
+            )
+            .is_none()
+        );
+    }
+
+    #[test]
+    fn http_basic_does_not_accept_bearer_token() {
+        let token = "ComposerBearerToken_123456";
+        let source = format!(r#"{{"bearer":{{"repo.example":"{token}"}}}}"#);
+
+        assert!(
+            validate_composer(
+                &context(&source, token),
+                ComposerCredentialKind::HttpBasicPassword,
+            )
+            .is_none()
+        );
     }
 }

@@ -100,7 +100,10 @@ impl CompiledRuleMetadata {
             | ValidatorKind::Gradle
             | ValidatorKind::Nuget
             | ValidatorKind::Maven
-            | ValidatorKind::Composer => 500,
+            | ValidatorKind::ComposerHttpBasicPassword
+            | ValidatorKind::ComposerBearerToken
+            | ValidatorKind::ComposerBitbucketConsumerSecret
+            | ValidatorKind::ComposerForgejoToken => 500,
         }
     }
 }
@@ -525,12 +528,13 @@ fn pattern_prefilter_needles(
         ("npm.registry-auth-token", ValidatorKind::NpmRegistry) => Some(&["_authtoken", "//"]),
         ("npm.registry-auth", ValidatorKind::NpmRegistry) => Some(&["_auth", "//"]),
         ("npm.registry-password", ValidatorKind::NpmRegistry) => Some(&["_password", "//"]),
-        ("composer.http-basic-password", ValidatorKind::Composer) => Some(&["\"password\""]),
-        ("composer.bearer-token", ValidatorKind::Composer) => Some(&["\"bearer\""]),
-        ("composer.bitbucket-consumer-secret", ValidatorKind::Composer) => {
+        ("composer.http-basic-password", ValidatorKind::ComposerHttpBasicPassword) => {
+            Some(&["\"password\""])
+        }
+        ("composer.bitbucket-consumer-secret", ValidatorKind::ComposerBitbucketConsumerSecret) => {
             Some(&["\"consumer-secret\""])
         }
-        ("composer.forgejo-token", ValidatorKind::Composer) => Some(&["\"forgejo-token\""]),
+        ("composer.forgejo-token", ValidatorKind::ComposerForgejoToken) => Some(&["\"token\""]),
         ("cargo.registry-token", ValidatorKind::CargoRegistry) => {
             Some(&["token", "[registry", "[registries."])
         }

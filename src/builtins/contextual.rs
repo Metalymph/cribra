@@ -293,7 +293,7 @@ pub const COMPOSER_HTTP_BASIC_PASSWORD: RuleSpec = RuleSpec::captured_pattern(
     "value",
     Severity::Critical,
 )
-.with_validator(ValidatorKind::Composer)
+.with_validator(ValidatorKind::ComposerHttpBasicPassword)
 .with_remediation(Remediation::RotatePassword);
 
 /// Bearer token for a Composer repository.
@@ -307,7 +307,7 @@ pub const COMPOSER_BEARER_TOKEN: RuleSpec = RuleSpec::captured_pattern(
     "value",
     Severity::Critical,
 )
-.with_validator(ValidatorKind::Composer)
+.with_validator(ValidatorKind::ComposerBearerToken)
 .with_remediation(Remediation::RevokeAndRotateCredential);
 
 /// Bitbucket OAuth consumer secret stored in Composer authentication
@@ -321,7 +321,7 @@ pub const COMPOSER_BITBUCKET_CONSUMER_SECRET: RuleSpec = RuleSpec::captured_patt
     "value",
     Severity::Critical,
 )
-.with_validator(ValidatorKind::Composer)
+.with_validator(ValidatorKind::ComposerBitbucketConsumerSecret)
 .with_remediation(Remediation::RevokeAndRotateCredential);
 
 /// Forgejo token stored in Composer authentication configuration.
@@ -334,7 +334,7 @@ pub const COMPOSER_FORGEJO_TOKEN: RuleSpec = RuleSpec::captured_pattern(
     "value",
     Severity::Critical,
 )
-.with_validator(ValidatorKind::Composer)
+.with_validator(ValidatorKind::ComposerForgejoToken)
 .with_remediation(Remediation::RevokeAndRotateCredential);
 
 /// Cargo registry authentication token stored in Cargo credentials/config.

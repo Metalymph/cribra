@@ -56,7 +56,10 @@ pub(crate) enum ValidatorKind {
     CargoRegistry,
     Pypi,
     Maven,
-    Composer,
+    ComposerHttpBasicPassword,
+    ComposerBearerToken,
+    ComposerBitbucketConsumerSecret,
+    ComposerForgejoToken,
     RubyGems,
     RubyGemsHost,
     SwiftPm,
@@ -104,7 +107,10 @@ impl ValidatorKind {
             | Self::CargoRegistry
             | Self::Pypi
             | Self::Maven
-            | Self::Composer
+            | Self::ComposerHttpBasicPassword
+            | Self::ComposerBearerToken
+            | Self::ComposerBitbucketConsumerSecret
+            | Self::ComposerForgejoToken
             | Self::RubyGemsHost
             | Self::SwiftPm
             | Self::SwiftPmNetrc
@@ -228,12 +234,29 @@ pub(crate) fn validate_candidate(
             .map(|_| ValidationOutcome::new(ValidationKind::Pypi, Confidence::High)),
         ValidatorKind::Maven => validate_maven(&context)
             .map(|_| ValidationOutcome::new(ValidationKind::Maven, Confidence::High)),
-        ValidatorKind::Composer => validate_composer(&context).map(|validation| {
-            ValidationOutcome::new(
-                ValidationKind::Composer(validation.kind()),
-                Confidence::High,
-            )
-        }),
+        ValidatorKind::ComposerHttpBasicPassword
+        | ValidatorKind::ComposerBearerToken
+        | ValidatorKind::ComposerBitbucketConsumerSecret
+        | ValidatorKind::ComposerForgejoToken => {
+            let expected = match validator {
+                ValidatorKind::ComposerHttpBasicPassword => {
+                    ComposerCredentialKind::HttpBasicPassword
+                }
+                ValidatorKind::ComposerBearerToken => ComposerCredentialKind::BearerToken,
+                ValidatorKind::ComposerBitbucketConsumerSecret => {
+                    ComposerCredentialKind::BitbucketConsumerSecret
+                }
+                ValidatorKind::ComposerForgejoToken => ComposerCredentialKind::ForgejoToken,
+                _ => unreachable!(),
+            };
+
+            validate_composer(&context, expected).map(|validation| {
+                ValidationOutcome::new(
+                    ValidationKind::Composer(validation.kind()),
+                    Confidence::High,
+                )
+            })
+        }
         ValidatorKind::RubyGems => validate_rubygems_api_key(context.candidate())
             .map(|_| ValidationOutcome::new(ValidationKind::RubyGems, Confidence::High)),
         ValidatorKind::RubyGemsHost => validate_rubygems_host_key(&context)
