@@ -411,6 +411,38 @@ pub const SWIFTPM_NETRC_PASSWORD: RuleSpec = RuleSpec::captured_pattern(
 .with_validator(ValidatorKind::SwiftPmNetrc)
 .with_remediation(Remediation::RotatePassword);
 
+/// Gradle repository password supplied through the documented project-property
+/// environment-variable mapping.
+///
+/// Repository `PasswordCredentials` derive a `<repository>Password` property.
+/// Only the explicit `ORG_GRADLE_PROJECT_` form is recognized because Cribra
+/// does not currently use source-path metadata to attribute arbitrary
+/// `<repository>Password` assignments to Gradle.
+pub const GRADLE_REPOSITORY_PASSWORD: RuleSpec = RuleSpec::captured_pattern(
+    "gradle.repository-password",
+    r#"(?m)^[ \t]*ORG_GRADLE_PROJECT_[A-Za-z0-9_.-]+Password[ \t]*=[ \t]*["']?(?P<value>[^\s"'#;]{1,2048})["']?[ \t]*(?:[#;].*)?$"#,
+    "value",
+    Severity::Critical,
+)
+.with_validator(ValidatorKind::Gradle)
+.with_remediation(Remediation::RotatePassword);
+
+/// Gradle repository HTTP authentication header value supplied through the
+/// documented project-property environment-variable mapping.
+///
+/// `HttpHeaderCredentials` derive a `<repository>AuthHeaderValue` property.
+/// Only the explicit `ORG_GRADLE_PROJECT_` form is recognized because Cribra
+/// does not currently use source-path metadata to attribute arbitrary
+/// repository properties to Gradle.
+pub const GRADLE_REPOSITORY_AUTH_HEADER_VALUE: RuleSpec = RuleSpec::captured_pattern(
+    "gradle.repository-auth-header-value",
+    r#"(?m)^[ \t]*ORG_GRADLE_PROJECT_[A-Za-z0-9_.-]+AuthHeaderValue[ \t]*=[ \t]*["']?(?P<value>[^\r\n"'#;]{1,2048}?)["']?[ \t]*(?:[#;].*)?$"#,
+    "value",
+    Severity::Critical,
+)
+.with_validator(ValidatorKind::Gradle)
+.with_remediation(Remediation::RevokeAndRotateCredential);
+
 /// Password belonging to a complete `.netrc` machine credential record.
 ///
 /// `.netrc` is whitespace-oriented, so candidate discovery recognizes an

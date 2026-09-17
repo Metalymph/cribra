@@ -3404,6 +3404,14 @@ mod tests {
                 "swiftpm-netrc-password",
                 r#"SWIFTPM_NETRC_DATA="machine registry.example.com login alice password SwiftPMNetrcSecret_123456""#,
             ),
+            (
+                "gradle-repository-password",
+                "ORG_GRADLE_PROJECT_internalRepositoryPassword=GradleRepositorySecret_123456",
+            ),
+            (
+                "gradle-repository-auth-header-value",
+                "ORG_GRADLE_PROJECT_internalRepositoryAuthHeaderValue=Bearer GradleRepositoryToken_123456",
+            ),
         ];
 
         let rust_scanner = Scanner::default();

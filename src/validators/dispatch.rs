@@ -14,6 +14,7 @@ use crate::{
             docker_registry::validate_docker_registry,
             gcp::{GcpCredentialKind, validate_gcp},
             generic::{GenericCredentialKind, validate_generic_credential},
+            gradle::{GradleCredentialKind, validate_gradle},
             hash::{HashKind, validate_sensitive_hash},
             http_basic::validate_http_basic,
             maven::validate_maven,
@@ -58,6 +59,7 @@ pub(crate) enum ValidatorKind {
     RubyGemsHost,
     SwiftPm,
     SwiftPmNetrc,
+    Gradle,
     GitHub,
     GitLab,
     Stripe,
@@ -103,6 +105,7 @@ impl ValidatorKind {
             | Self::RubyGemsHost
             | Self::SwiftPm
             | Self::SwiftPmNetrc
+            | Self::Gradle
             | Self::DatabaseConnection
             | Self::SystemPasswordVerifier
             | Self::HttpBasic
@@ -128,6 +131,7 @@ pub(crate) enum ValidationKind {
     RubyGemsHost,
     SwiftPm,
     SwiftPmNetrc,
+    Gradle(GradleCredentialKind),
     GitHub(GitHubTokenKind),
     GitLab(GitLabTokenKind),
     Stripe(StripeTokenKind),
@@ -228,6 +232,8 @@ pub(crate) fn validate_candidate(
             .map(|_| ValidationOutcome::new(ValidationKind::SwiftPm, Confidence::High)),
         ValidatorKind::SwiftPmNetrc => validate_swiftpm_netrc(&context)
             .map(|_| ValidationOutcome::new(ValidationKind::SwiftPmNetrc, Confidence::High)),
+        ValidatorKind::Gradle => validate_gradle(&context)
+            .map(|v| ValidationOutcome::new(ValidationKind::Gradle(v.kind()), Confidence::High)),
         ValidatorKind::DockerRegistry => validate_docker_registry(&context)
             .map(|_| ValidationOutcome::new(ValidationKind::DockerRegistry, Confidence::High)),
         ValidatorKind::GitHub => validate_github_token(context.candidate())
@@ -337,6 +343,8 @@ mod tests {
             ValidatorKind::Maven,
             ValidatorKind::RubyGemsHost,
             ValidatorKind::SwiftPm,
+            ValidatorKind::SwiftPmNetrc,
+            ValidatorKind::Gradle,
             ValidatorKind::Password,
             ValidatorKind::SensitiveHash,
             ValidatorKind::GenericCredential,

@@ -1429,7 +1429,7 @@ fn npm_registry_legacy_auth_and_password_are_structurally_validated() {
 }
 
 #[test]
-fn cargo_and_swiftpm_credentials_are_in_current_pack() {
+fn developer_credentials_are_in_current_pack() {
     let ids: std::collections::HashSet<_> =
         builtins::CURRENT.iter().map(|rule| rule.id()).collect();
 
@@ -1440,6 +1440,9 @@ fn cargo_and_swiftpm_credentials_are_in_current_pack() {
     assert!(ids.contains("swiftpm.registry-password"));
     assert!(ids.contains("swiftpm.source-control-token"));
     assert!(ids.contains("swiftpm.netrc-password"));
+    assert!(ids.contains("gradle.repository-password"));
+    assert!(ids.contains("gradle.repository-password"));
+    assert!(ids.contains("gradle.repository-auth-header-value"));
 }
 
 #[test]
@@ -1874,6 +1877,16 @@ fn developer_credential_rules_expose_expected_public_metadata() {
             r#"SWIFTPM_NETRC_DATA="machine registry.example.com login alice password SwiftPMNetrcSecret_123456""#,
             "swiftpm.netrc-password",
             Remediation::RotatePassword,
+        ),
+        (
+            "ORG_GRADLE_PROJECT_internalRepositoryPassword=GradleRepositorySecret_123456",
+            "gradle.repository-password",
+            Remediation::RotatePassword,
+        ),
+        (
+            "ORG_GRADLE_PROJECT_internalRepositoryAuthHeaderValue=Bearer-GradleRepositoryToken_123456",
+            "gradle.repository-auth-header-value",
+            Remediation::RevokeAndRotateCredential,
         ),
     ] {
         let results = scanner.scan([("fixture", source)]);
@@ -2340,6 +2353,95 @@ fn swiftpm_netrc_password_rejects_lookalike_container_names() {
             "unexpected SwiftPM netrc finding for lookalike container {name}",
         );
     }
+}
+
+#[test]
+fn gradle_repository_password_has_expected_public_semantics() {
+    let scanner = scanner_for([builtins::GRADLE_REPOSITORY_PASSWORD]);
+
+    let password = "GradleRepositorySecret_123456";
+    let source = format!("ORG_GRADLE_PROJECT_internalRepositoryPassword={password}");
+
+    let results = scan_one(&scanner, &source);
+    let report = results.single_report().expect("one source");
+
+    assert_eq!(report.len(), 1);
+
+    let finding = &report.findings()[0];
+
+    assert_eq!(finding.rule_id().as_str(), "gradle.repository-password");
+    assert_eq!(matched(&source, finding), password);
+    assert_eq!(finding.severity(), Severity::Critical);
+    assert_eq!(finding.confidence(), Confidence::High);
+    assert_eq!(finding.remediation(), Some(Remediation::RotatePassword),);
+}
+
+#[test]
+fn gradle_repository_credentials_reject_unattributed_properties() {
+    let scanner = scanner_for([
+        builtins::GRADLE_REPOSITORY_PASSWORD,
+        builtins::GRADLE_REPOSITORY_AUTH_HEADER_VALUE,
+    ]);
+    let password = "GradleRepositorySecret_123456";
+
+    for source in [
+        format!("internalRepositoryPassword={password}"),
+        format!("MY_ORG_GRADLE_PROJECT_internalRepositoryPassword={password}"),
+        format!("ORG_GRADLE_PROJECT_Password={password}"),
+        format!("ORG_GRADLE_PROJECT_internalRepositoryPasswordSuffix={password}"),
+        "internalRepositoryAuthHeaderValue=Bearer GradleRepositoryToken_123456".to_owned(),
+    ] {
+        let results = scan_one(&scanner, &source);
+        let report = results.single_report().expect("one source");
+
+        assert!(
+            report.is_empty(),
+            "unattributed Gradle property unexpectedly detected: {source}",
+        );
+    }
+}
+
+#[test]
+fn gradle_repository_auth_header_value_detects_environment_credential() {
+    let scanner = scanner_for([builtins::GRADLE_REPOSITORY_AUTH_HEADER_VALUE]);
+
+    let credential = "Bearer GradleRepositoryToken_123456";
+    let source = format!("ORG_GRADLE_PROJECT_internalRepositoryAuthHeaderValue={credential}");
+
+    let results = scan_one(&scanner, &source);
+    let report = results.single_report().expect("one source");
+
+    assert_eq!(report.len(), 1);
+
+    let finding = &report.findings()[0];
+
+    assert_eq!(
+        finding.rule_id().as_str(),
+        "gradle.repository-auth-header-value"
+    );
+    assert_eq!(matched(&source, finding), credential);
+    assert_eq!(finding.severity(), Severity::Critical);
+    assert_eq!(finding.confidence(), Confidence::High);
+    assert_eq!(
+        finding.remediation(),
+        Some(Remediation::RevokeAndRotateCredential),
+    );
+}
+
+#[test]
+fn gradle_repository_password_wins_generic_password_collision() {
+    let scanner = Scanner::default();
+    let password = "GradleRepositorySecret_123456";
+    let source = format!("ORG_GRADLE_PROJECT_internalRepositoryPassword={password}");
+
+    let results = scan_one(&scanner, &source);
+    let report = results.single_report().expect("one source");
+
+    assert_eq!(report.findings().len(), 1);
+
+    let finding = &report.findings()[0];
+    assert_eq!(finding.rule_id().as_str(), "gradle.repository-password");
+    assert_eq!(matched(&source, finding), password);
 }
 
 #[test]

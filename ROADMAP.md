@@ -114,7 +114,7 @@ Status: completed.
 
 #### 0.4.5-E — Interface and parity validation
 
-Status: complete.
+Status: completed.
 
 - [x] Validate Rust behavior for every accepted rule.
 - [x] Validate native C ABI exposure and semantic parity.
@@ -124,7 +124,7 @@ Status: complete.
 
 #### 0.4.5-F — Swift Package Manager credential coverage
 
-Status: pending.
+Status: completed.
 
 Goal: audit Swift Package Manager credential surfaces and add dedicated
 detection only where SwiftPM provides stronger, documented semantics than
@@ -151,16 +151,16 @@ Goal: cover credentials encountered in Kotlin development without inventing a
 Kotlin package-manager category. Repository authentication is primarily owned by
 Gradle, Maven, AWS, and shared credential contracts.
 
-- [ ] Audit Gradle Groovy and Kotlin DSL repository credential configuration.
-- [ ] Audit `PasswordCredentials`, including repository-derived Gradle properties.
-- [ ] Audit `HttpHeaderCredentials` and existing generic/HTTP coverage.
-- [ ] Audit `AwsCredentials` only for gaps not already covered by AWS rules.
-- [ ] Audit Kotlin Multiplatform repository/dependency workflows.
-- [ ] Prefer `gradle.*`, `maven.*`, `aws.*`, or existing generic/shared ownership
+- [x] Audit Gradle Groovy and Kotlin DSL repository credential configuration.
+- [x] Audit `PasswordCredentials`, including repository-derived Gradle properties.
+- [x] Audit `HttpHeaderCredentials` and existing generic/HTTP coverage.
+- [x] Audit `AwsCredentials` only for gaps not already covered by AWS rules.
+- [x] Audit Kotlin Multiplatform repository/dependency workflows.
+- [x] Prefer `gradle.*`, `maven.*`, `aws.*`, or existing generic/shared ownership
   over `kotlin.*` rule IDs.
-- [ ] Add rules only when documented context materially improves confidence,
+- [x] Add rules only when documented context materially improves confidence,
   attribution, or exact-span semantics.
-- [ ] Allow this step to complete with no new detector if existing coverage is sufficient.
+- [x] Allow this step to complete with no new detector if existing coverage is sufficient.
 
 #### 0.4.5-H — PHP / Composer and Dart / pub credential coverage
 

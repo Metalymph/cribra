@@ -371,6 +371,18 @@ fn builtin_synthetic_value(
             original_len,
             random,
         )),
+        "gradle.repository-password" => Some(contextual_marker(
+            marker,
+            "gradle_repository_password",
+            original_len,
+            random,
+        )),
+        "gradle.repository-auth-header-value" => Some(contextual_marker(
+            marker,
+            "gradle_repository_auth_header_value",
+            original_len,
+            random,
+        )),
         "netrc.password" => Some(contextual_marker(
             marker,
             "netrc_password",

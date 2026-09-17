@@ -97,6 +97,7 @@ impl CompiledRuleMetadata {
             | ValidatorKind::RubyGemsHost
             | ValidatorKind::SwiftPm
             | ValidatorKind::SwiftPmNetrc
+            | ValidatorKind::Gradle
             | ValidatorKind::Nuget
             | ValidatorKind::Maven => 500,
         }
@@ -543,6 +544,10 @@ fn pattern_prefilter_needles(
             Some(&["swiftpm_source_control_token"])
         }
         ("swiftpm.netrc-password", ValidatorKind::SwiftPmNetrc) => Some(&["password"]),
+        ("gradle.repository-password", ValidatorKind::Gradle) => Some(&["org_gradle_project_"]),
+        ("gradle.repository-auth-header-value", ValidatorKind::Gradle) => {
+            Some(&["org_gradle_project_"])
+        }
         ("netrc.password", ValidatorKind::Netrc) => Some(&["machine", "login", "password"]),
         ("generic.authorization-basic", ValidatorKind::HttpBasic) => {
             Some(&["authorization", "basic"])

@@ -219,6 +219,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             "v045-swiftpm-netrc-password",
             r#"SWIFTPM_NETRC_DATA="machine registry.example.com login alice password SwiftPMNetrcSecret_123456""#,
         ),
+        (
+            "v045-gradle-repository-password",
+            "ORG_GRADLE_PROJECT_internalRepositoryPassword=GradleRepositorySecret_123456",
+        ),
+        (
+            "v045-gradle-repository-auth-header-value",
+            "ORG_GRADLE_PROJECT_internalRepositoryAuthHeaderValue=Bearer GradleRepositoryToken_123456",
+        ),
     ] {
         cases.push(case_oracle(
             name.to_owned(),
