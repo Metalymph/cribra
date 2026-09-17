@@ -177,19 +177,27 @@ documented semantics stronger than existing shared credential rules.
   `gitlab-token`, and other documented authentication families.
 - [x] Reuse existing HTTP, GitHub, GitLab, `.netrc`, and generic credential
   rules wherever they already provide equivalent semantic coverage.
-- [ ] Audit Dart / pub repository authentication and documented credential
-  storage/configuration surfaces.
-- [ ] Audit authenticated custom package repositories and documented token
+- [x] Audit Dart/pub credential surfaces.
+  - `PUB_HOSTED_URL` is repository configuration, not credential material.
+  - `dart pub token add` accepts the secret out-of-band; there is no reliable
+    static source representation to detect.
+  - `dart pub token add --env-var` persists/references an arbitrary environment
+    variable name; the corresponding environment assignment cannot be
+    attributed to Dart/pub from the assignment alone.
+  - Recognizable provider credentials remain owned by their provider-specific
+    rules.
+  - Decision: no Dart/pub-specific detector is justified for v0.4.5.
+- [x] Audit authenticated custom package repositories and documented token
   configuration used by `dart pub`.
-- [ ] Prefer `composer.*`, `pub.*`, provider-specific, or existing
+- [x] Prefer `composer.*`, `pub.*`, provider-specific, or existing
   generic/shared ownership over artificial `php.*` or `dart.*` rule IDs.
-- [ ] Preserve exact credential-value spans and deterministic collision
+- [x] Preserve exact credential-value spans and deterministic collision
   behavior for every accepted rule.
-- [ ] Add synthesis semantics and adversarial/collision tests for accepted
+- [x] Add synthesis semantics and adversarial/collision tests for accepted
   rules.
-- [ ] Do not extract credentials from OS credential stores or other protected
+- [x] Do not extract credentials from OS credential stores or other protected
   external storage.
-- [ ] Do not add PHP/Dart runtimes, package-manager parsers, network validation,
+- [x] Do not add PHP/Dart runtimes, package-manager parsers, network validation,
   or adapter-specific logic to the core.
 
 The audit may close with shared-rule coverage, dedicated Composer/pub rules, or

@@ -3389,6 +3389,22 @@ mod tests {
                 "GEM_HOST_API_KEY=custom-gem-server-credential-0123456789",
             ),
             (
+                "composer-http-basic-password",
+                r#"{"http-basic":{"repo.example":{"username":"alice","password":"ComposerRepositorySecret_123456"}}}"#,
+            ),
+            (
+                "composer-bearer-token",
+                r#"{"bearer":{"repo.example":"ComposerBearerToken_123456"}}"#,
+            ),
+            (
+                "composer-bitbucket-consumer-secret",
+                r#"{"bitbucket-oauth":{"bitbucket.org":{"consumer-key":"consumer-key","consumer-secret":"BitbucketConsumerSecret_123456"}}}"#,
+            ),
+            (
+                "composer-forgejo-token",
+                r#"{"forgejo-token":{"forgejo.example.org":{"username":"alice","token":"ForgejoAccessToken_123456"}}}"#,
+            ),
+            (
                 "swiftpm-registry-token",
                 "SWIFTPM_REGISTRY_TOKEN=swiftpm-registry-token-0123456789",
             ),
