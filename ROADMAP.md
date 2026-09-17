@@ -170,12 +170,12 @@ Goal: audit the remaining high-value PHP and Dart package/developer credential
 surfaces, adding dedicated detection only where Composer or pub provides
 documented semantics stronger than existing shared credential rules.
 
-- [ ] Audit Composer authentication surfaces, including `auth.json`,
+- [x] Audit Composer authentication surfaces, including `auth.json`,
   `composer.json` authentication where applicable, and documented environment
   configuration.
-- [ ] Audit Composer `http-basic`, `bearer`, `github-oauth`, `gitlab-oauth`,
+- [x] Audit Composer `http-basic`, `bearer`, `github-oauth`, `gitlab-oauth`,
   `gitlab-token`, and other documented authentication families.
-- [ ] Reuse existing HTTP, GitHub, GitLab, `.netrc`, and generic credential
+- [x] Reuse existing HTTP, GitHub, GitLab, `.netrc`, and generic credential
   rules wherever they already provide equivalent semantic coverage.
 - [ ] Audit Dart / pub repository authentication and documented credential
   storage/configuration surfaces.
