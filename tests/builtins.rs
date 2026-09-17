@@ -1429,6 +1429,151 @@ fn npm_registry_legacy_auth_and_password_are_structurally_validated() {
 }
 
 #[test]
+fn composer_http_basic_password_detects_repository_credential() {
+    let scanner = scanner_for([builtins::COMPOSER_HTTP_BASIC_PASSWORD]);
+
+    let password = "ComposerRepositorySecret_123456";
+    let source = format!(
+        r#"{{
+  "http-basic": {{
+    "repo.example": {{
+      "username": "alice",
+      "password": "{password}"
+    }}
+  }}
+}}"#
+    );
+
+    let results = scan_one(&scanner, &source);
+    let report = results.single_report().expect("one source");
+
+    assert_eq!(report.len(), 1);
+
+    let finding = &report.findings()[0];
+    assert_eq!(finding.rule_id().as_str(), "composer.http-basic-password");
+    assert_eq!(matched(&source, finding), password);
+    assert_eq!(finding.severity(), Severity::Critical);
+    assert_eq!(finding.confidence(), Confidence::High);
+    assert_eq!(finding.remediation(), Some(Remediation::RotatePassword),);
+}
+
+#[test]
+fn composer_bearer_token_detects_repository_credential() {
+    let scanner = scanner_for([builtins::COMPOSER_BEARER_TOKEN]);
+
+    let token = "ComposerBearerToken_123456";
+    let source = format!(
+        r#"{{
+  "bearer": {{
+    "repo.example": "{token}"
+  }}
+}}"#
+    );
+
+    let results = scan_one(&scanner, &source);
+    let report = results.single_report().expect("one source");
+
+    assert_eq!(report.len(), 1);
+
+    let finding = &report.findings()[0];
+    assert_eq!(finding.rule_id().as_str(), "composer.bearer-token");
+    assert_eq!(matched(&source, finding), token);
+    assert_eq!(finding.severity(), Severity::Critical);
+    assert_eq!(finding.confidence(), Confidence::High);
+    assert_eq!(
+        finding.remediation(),
+        Some(Remediation::RevokeAndRotateCredential),
+    );
+}
+
+#[test]
+fn composer_bearer_token_rejects_unattributed_values() {
+    let scanner = scanner_for([builtins::COMPOSER_BEARER_TOKEN]);
+    let token = "ComposerBearerToken_123456";
+
+    for source in [
+        format!(r#"{{"repo.example":"{token}"}}"#),
+        format!(r#"{{"application":{{"repo.example":"{token}"}}}}"#),
+        format!(r#"{{"bearer":{{"":"{token}"}}}}"#),
+    ] {
+        let results = scan_one(&scanner, &source);
+        let report = results.single_report().expect("one source");
+
+        assert!(
+            report.is_empty(),
+            "unattributed bearer value unexpectedly detected as Composer: {source}",
+        );
+    }
+}
+
+#[test]
+fn composer_bitbucket_consumer_secret_detects_repository_credential() {
+    let scanner = scanner_for([builtins::COMPOSER_BITBUCKET_CONSUMER_SECRET]);
+
+    let secret = "BitbucketConsumerSecret_123456";
+    let source = format!(
+        r#"{{
+  "bitbucket-oauth": {{
+    "bitbucket.org": {{
+      "consumer-key": "consumer-key",
+      "consumer-secret": "{secret}"
+    }}
+  }}
+}}"#
+    );
+
+    let results = scan_one(&scanner, &source);
+    let report = results.single_report().expect("one source");
+
+    assert_eq!(report.len(), 1);
+
+    let finding = &report.findings()[0];
+    assert_eq!(
+        finding.rule_id().as_str(),
+        "composer.bitbucket-consumer-secret"
+    );
+    assert_eq!(matched(&source, finding), secret);
+    assert_eq!(finding.severity(), Severity::Critical);
+    assert_eq!(finding.confidence(), Confidence::High);
+    assert_eq!(
+        finding.remediation(),
+        Some(Remediation::RevokeAndRotateCredential),
+    );
+}
+
+#[test]
+fn composer_forgejo_token_detects_repository_credential() {
+    let scanner = scanner_for([builtins::COMPOSER_FORGEJO_TOKEN]);
+
+    let token = "ForgejoAccessToken_123456";
+    let source = format!(
+        r#"{{
+  "forgejo-token": {{
+    "forgejo.example.org": {{
+      "username": "alice",
+      "token": "{token}"
+    }}
+  }}
+}}"#
+    );
+
+    let results = scan_one(&scanner, &source);
+    let report = results.single_report().expect("one source");
+
+    assert_eq!(report.len(), 1);
+
+    let finding = &report.findings()[0];
+    assert_eq!(finding.rule_id().as_str(), "composer.forgejo-token");
+    assert_eq!(matched(&source, finding), token);
+    assert_eq!(finding.severity(), Severity::Critical);
+    assert_eq!(finding.confidence(), Confidence::High);
+    assert_eq!(
+        finding.remediation(),
+        Some(Remediation::RevokeAndRotateCredential),
+    );
+}
+
+#[test]
 fn developer_credentials_are_in_current_pack() {
     let ids: std::collections::HashSet<_> =
         builtins::CURRENT.iter().map(|rule| rule.id()).collect();
@@ -1443,6 +1588,10 @@ fn developer_credentials_are_in_current_pack() {
     assert!(ids.contains("gradle.repository-password"));
     assert!(ids.contains("gradle.repository-password"));
     assert!(ids.contains("gradle.repository-auth-header-value"));
+    assert!(ids.contains("composer.http-basic-password"));
+    assert!(ids.contains("composer.bearer-token"));
+    assert!(ids.contains("composer.bitbucket-consumer-secret"));
+    assert!(ids.contains("composer.forgejo-token"));
 }
 
 #[test]
@@ -1823,6 +1972,26 @@ fn developer_credential_rules_expose_expected_public_metadata() {
     let scanner = Scanner::default();
 
     for (source, expected_rule, expected_remediation) in [
+        (
+            r#"{"http-basic":{"repo.example":{"username":"alice","password":"ComposerRepositorySecret_123456"}}}"#,
+            "composer.http-basic-password",
+            Remediation::RotatePassword,
+        ),
+        (
+            r#"{"bearer":{"repo.example":"ComposerBearerToken_123456"}}"#,
+            "composer.bearer-token",
+            Remediation::RevokeAndRotateCredential,
+        ),
+        (
+            r#"{"bitbucket-oauth":{"bitbucket.org":{"consumer-key":"key","consumer-secret":"BitbucketConsumerSecret_123456"}}}"#,
+            "composer.bitbucket-consumer-secret",
+            Remediation::RevokeAndRotateCredential,
+        ),
+        (
+            r#"{"forgejo-token":{"forgejo.example.org":{"username":"alice","token":"ForgejoAccessToken_123456"}}}"#,
+            "composer.forgejo-token",
+            Remediation::RevokeAndRotateCredential,
+        ),
         (
             "[registry]\ntoken = \"cargo-secret-token-0123456789\"",
             "cargo.registry-token",

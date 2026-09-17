@@ -283,6 +283,60 @@ pub const NPM_REGISTRY_PASSWORD: RuleSpec = RuleSpec::captured_pattern(
 .with_validator(ValidatorKind::NpmRegistry)
 .with_remediation(Remediation::RotatePassword);
 
+/// Cleartext password for a Composer `http-basic` repository credential.
+///
+/// The contextual validator requires the candidate to be the `password`
+/// property of a repository object nested directly under `http-basic`.
+pub const COMPOSER_HTTP_BASIC_PASSWORD: RuleSpec = RuleSpec::captured_pattern(
+    "composer.http-basic-password",
+    r#""password"[ \t\r\n]*:[ \t\r\n]*"(?P<value>[^"\r\n]{1,2048})""#,
+    "value",
+    Severity::Critical,
+)
+.with_validator(ValidatorKind::Composer)
+.with_remediation(Remediation::RotatePassword);
+
+/// Bearer token for a Composer repository.
+///
+/// Composer stores bearer credentials as repository-to-token entries under the
+/// `bearer` authentication object. The contextual validator establishes that
+/// structural ownership before accepting the candidate.
+pub const COMPOSER_BEARER_TOKEN: RuleSpec = RuleSpec::captured_pattern(
+    "composer.bearer-token",
+    r#""[A-Za-z0-9._:/-]{1,512}"[ \t\r\n]*:[ \t\r\n]*"(?P<value>[^"\r\n]{1,2048})""#,
+    "value",
+    Severity::Critical,
+)
+.with_validator(ValidatorKind::Composer)
+.with_remediation(Remediation::RevokeAndRotateCredential);
+
+/// Bitbucket OAuth consumer secret stored in Composer authentication
+/// configuration.
+///
+/// The contextual validator requires the `consumer-secret` property to belong
+/// to a non-empty repository object under `bitbucket-oauth`.
+pub const COMPOSER_BITBUCKET_CONSUMER_SECRET: RuleSpec = RuleSpec::captured_pattern(
+    "composer.bitbucket-consumer-secret",
+    r#""consumer-secret"[ \t\r\n]*:[ \t\r\n]*"(?P<value>[^"\r\n]{1,2048})""#,
+    "value",
+    Severity::Critical,
+)
+.with_validator(ValidatorKind::Composer)
+.with_remediation(Remediation::RevokeAndRotateCredential);
+
+/// Forgejo token stored in Composer authentication configuration.
+///
+/// The contextual validator requires the `token` property to belong to a
+/// non-empty repository object under `forgejo-token`.
+pub const COMPOSER_FORGEJO_TOKEN: RuleSpec = RuleSpec::captured_pattern(
+    "composer.forgejo-token",
+    r#""token"[ \t\r\n]*:[ \t\r\n]*"(?P<value>[^"\r\n]{1,2048})""#,
+    "value",
+    Severity::Critical,
+)
+.with_validator(ValidatorKind::Composer)
+.with_remediation(Remediation::RevokeAndRotateCredential);
+
 /// Cargo registry authentication token stored in Cargo credentials/config.
 ///
 /// Contextual validation requires the `token` assignment to belong to either

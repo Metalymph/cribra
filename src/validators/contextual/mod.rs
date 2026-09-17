@@ -5,6 +5,7 @@ mod context;
 pub(crate) mod aws;
 pub(crate) mod azure;
 pub(crate) mod cargo_registry;
+pub(crate) mod composer;
 pub(crate) mod database_connection;
 pub(crate) mod docker_registry;
 pub(crate) mod gcp;

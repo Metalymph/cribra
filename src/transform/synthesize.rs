@@ -318,6 +318,30 @@ fn builtin_synthetic_value(
             original_len,
             random,
         )),
+        "composer.http-basic-password" => Some(contextual_marker(
+            marker,
+            "composer_http_basic_password",
+            original_len,
+            random,
+        )),
+        "composer.bearer-token" => Some(contextual_marker(
+            marker,
+            "composer_bearer_token",
+            original_len,
+            random,
+        )),
+        "composer.bitbucket-consumer-secret" => Some(contextual_marker(
+            marker,
+            "composer_bitbucket_consumer_secret",
+            original_len,
+            random,
+        )),
+        "composer.forgejo-token" => Some(contextual_marker(
+            marker,
+            "composer_forgejo_token",
+            original_len,
+            random,
+        )),
         "cargo.registry-token" => Some(contextual_marker(
             marker,
             "cargo_registry_token",

@@ -10,6 +10,7 @@ use crate::{
             aws::{AwsCredentialKind, validate_aws},
             azure::{AzureCredentialKind, validate_azure},
             cargo_registry::validate_cargo_registry,
+            composer::{ComposerCredentialKind, validate_composer},
             database_connection::{DatabaseConnectionKind, validate_database_connection},
             docker_registry::validate_docker_registry,
             gcp::{GcpCredentialKind, validate_gcp},
@@ -55,6 +56,7 @@ pub(crate) enum ValidatorKind {
     CargoRegistry,
     Pypi,
     Maven,
+    Composer,
     RubyGems,
     RubyGemsHost,
     SwiftPm,
@@ -102,6 +104,7 @@ impl ValidatorKind {
             | Self::CargoRegistry
             | Self::Pypi
             | Self::Maven
+            | Self::Composer
             | Self::RubyGemsHost
             | Self::SwiftPm
             | Self::SwiftPmNetrc
@@ -127,6 +130,7 @@ pub(crate) enum ValidationKind {
     NpmRegistry(NpmRegistryCredentialKind),
     Pypi,
     Maven,
+    Composer(ComposerCredentialKind),
     RubyGems,
     RubyGemsHost,
     SwiftPm,
@@ -224,6 +228,12 @@ pub(crate) fn validate_candidate(
             .map(|_| ValidationOutcome::new(ValidationKind::Pypi, Confidence::High)),
         ValidatorKind::Maven => validate_maven(&context)
             .map(|_| ValidationOutcome::new(ValidationKind::Maven, Confidence::High)),
+        ValidatorKind::Composer => validate_composer(&context).map(|validation| {
+            ValidationOutcome::new(
+                ValidationKind::Composer(validation.kind()),
+                Confidence::High,
+            )
+        }),
         ValidatorKind::RubyGems => validate_rubygems_api_key(context.candidate())
             .map(|_| ValidationOutcome::new(ValidationKind::RubyGems, Confidence::High)),
         ValidatorKind::RubyGemsHost => validate_rubygems_host_key(&context)
