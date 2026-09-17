@@ -152,7 +152,7 @@ mod tests {
 
             assert!(
                 validate_gradle(&context(&source, password)).is_some(),
-                "{password}",
+                "non-placeholder password unexpectedly rejected",
             );
 
             assert_eq!(

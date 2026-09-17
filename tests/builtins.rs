@@ -2501,7 +2501,7 @@ fn swiftpm_netrc_password_rejects_placeholders() {
 
         assert!(
             report.is_empty(),
-            "unexpected SwiftPM netrc finding for placeholder {password:?}",
+            "unexpected SwiftPM netrc finding for placeholder password",
         );
     }
 }
@@ -2565,7 +2565,7 @@ fn gradle_repository_credentials_reject_unattributed_properties() {
 
         assert!(
             report.is_empty(),
-            "unattributed Gradle property unexpectedly detected: {source}",
+            "unattributed Gradle property unexpectedly detected",
         );
     }
 }
