@@ -90,7 +90,20 @@ impl CompiledRuleMetadata {
             | ValidatorKind::Telegram
             | ValidatorKind::Aws
             | ValidatorKind::Azure
-            | ValidatorKind::Gcp => 500,
+            | ValidatorKind::Gcp
+            | ValidatorKind::CargoRegistry
+            | ValidatorKind::Pypi
+            | ValidatorKind::RubyGems
+            | ValidatorKind::RubyGemsHost
+            | ValidatorKind::SwiftPm
+            | ValidatorKind::SwiftPmNetrc
+            | ValidatorKind::Gradle
+            | ValidatorKind::Nuget
+            | ValidatorKind::Maven
+            | ValidatorKind::ComposerHttpBasicPassword
+            | ValidatorKind::ComposerBearerToken
+            | ValidatorKind::ComposerBitbucketConsumerSecret
+            | ValidatorKind::ComposerForgejoToken => 500,
         }
     }
 }
@@ -515,6 +528,37 @@ fn pattern_prefilter_needles(
         ("npm.registry-auth-token", ValidatorKind::NpmRegistry) => Some(&["_authtoken", "//"]),
         ("npm.registry-auth", ValidatorKind::NpmRegistry) => Some(&["_auth", "//"]),
         ("npm.registry-password", ValidatorKind::NpmRegistry) => Some(&["_password", "//"]),
+        ("composer.http-basic-password", ValidatorKind::ComposerHttpBasicPassword) => {
+            Some(&["\"password\""])
+        }
+        ("composer.bitbucket-consumer-secret", ValidatorKind::ComposerBitbucketConsumerSecret) => {
+            Some(&["\"consumer-secret\""])
+        }
+        ("composer.forgejo-token", ValidatorKind::ComposerForgejoToken) => Some(&["\"token\""]),
+        ("cargo.registry-token", ValidatorKind::CargoRegistry) => {
+            Some(&["token", "[registry", "[registries."])
+        }
+        ("cargo.registry-env-token", ValidatorKind::CargoRegistry) => {
+            Some(&["cargo_registry_token", "cargo_registries_"])
+        }
+        ("pypi.repository-token", ValidatorKind::Pypi) => {
+            Some(&["password", "username", "__token__"])
+        }
+        ("nuget.package-source-cleartext-password", ValidatorKind::Nuget) => Some(&["<add"]),
+        ("maven.server-password", ValidatorKind::Maven) => Some(&["<password"]),
+        ("rubygems.host-api-key", ValidatorKind::RubyGemsHost) => Some(&["gem_host_api_key"]),
+        ("swiftpm.registry-token", ValidatorKind::SwiftPm) => Some(&["swiftpm_registry_token"]),
+        ("swiftpm.registry-password", ValidatorKind::SwiftPm) => {
+            Some(&["swiftpm_registry_password"])
+        }
+        ("swiftpm.source-control-token", ValidatorKind::SwiftPm) => {
+            Some(&["swiftpm_source_control_token"])
+        }
+        ("swiftpm.netrc-password", ValidatorKind::SwiftPmNetrc) => Some(&["password"]),
+        ("gradle.repository-password", ValidatorKind::Gradle) => Some(&["org_gradle_project_"]),
+        ("gradle.repository-auth-header-value", ValidatorKind::Gradle) => {
+            Some(&["org_gradle_project_"])
+        }
         ("netrc.password", ValidatorKind::Netrc) => Some(&["machine", "login", "password"]),
         ("generic.authorization-basic", ValidatorKind::HttpBasic) => {
             Some(&["authorization", "basic"])

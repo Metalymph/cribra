@@ -283,6 +283,220 @@ pub const NPM_REGISTRY_PASSWORD: RuleSpec = RuleSpec::captured_pattern(
 .with_validator(ValidatorKind::NpmRegistry)
 .with_remediation(Remediation::RotatePassword);
 
+/// Cleartext password for a Composer `http-basic` repository credential.
+///
+/// The contextual validator requires the candidate to be the `password`
+/// property of a repository object nested directly under `http-basic`.
+pub const COMPOSER_HTTP_BASIC_PASSWORD: RuleSpec = RuleSpec::captured_pattern(
+    "composer.http-basic-password",
+    r#""password"[ \t\r\n]*:[ \t\r\n]*"(?P<value>[^"\r\n]{1,2048})""#,
+    "value",
+    Severity::Critical,
+)
+.with_validator(ValidatorKind::ComposerHttpBasicPassword)
+.with_remediation(Remediation::RotatePassword);
+
+/// Bearer token for a Composer repository.
+///
+/// Composer stores bearer credentials as repository-to-token entries under the
+/// `bearer` authentication object. The contextual validator establishes that
+/// structural ownership before accepting the candidate.
+pub const COMPOSER_BEARER_TOKEN: RuleSpec = RuleSpec::captured_pattern(
+    "composer.bearer-token",
+    r#""[A-Za-z0-9._:/-]{1,512}"[ \t\r\n]*:[ \t\r\n]*"(?P<value>[^"\r\n]{1,2048})""#,
+    "value",
+    Severity::Critical,
+)
+.with_validator(ValidatorKind::ComposerBearerToken)
+.with_remediation(Remediation::RevokeAndRotateCredential);
+
+/// Bitbucket OAuth consumer secret stored in Composer authentication
+/// configuration.
+///
+/// The contextual validator requires the `consumer-secret` property to belong
+/// to a non-empty repository object under `bitbucket-oauth`.
+pub const COMPOSER_BITBUCKET_CONSUMER_SECRET: RuleSpec = RuleSpec::captured_pattern(
+    "composer.bitbucket-consumer-secret",
+    r#""consumer-secret"[ \t\r\n]*:[ \t\r\n]*"(?P<value>[^"\r\n]{1,2048})""#,
+    "value",
+    Severity::Critical,
+)
+.with_validator(ValidatorKind::ComposerBitbucketConsumerSecret)
+.with_remediation(Remediation::RevokeAndRotateCredential);
+
+/// Forgejo token stored in Composer authentication configuration.
+///
+/// The contextual validator requires the `token` property to belong to a
+/// non-empty repository object under `forgejo-token`.
+pub const COMPOSER_FORGEJO_TOKEN: RuleSpec = RuleSpec::captured_pattern(
+    "composer.forgejo-token",
+    r#""token"[ \t\r\n]*:[ \t\r\n]*"(?P<value>[^"\r\n]{1,2048})""#,
+    "value",
+    Severity::Critical,
+)
+.with_validator(ValidatorKind::ComposerForgejoToken)
+.with_remediation(Remediation::RevokeAndRotateCredential);
+
+/// Cargo registry authentication token stored in Cargo credentials/config.
+///
+/// Contextual validation requires the `token` assignment to belong to either
+/// `[registry]` or `[registries.<name>]`.
+pub const CARGO_REGISTRY_TOKEN: RuleSpec = RuleSpec::captured_pattern(
+    "cargo.registry-token",
+    r#"(?m)^[ \t]*token[ \t]*=[ \t]*"(?P<value>[^"\r\n]{1,2048})"[ \t]*(?:#.*)?$"#,
+    "value",
+    Severity::Critical,
+)
+.with_validator(ValidatorKind::CargoRegistry)
+.with_remediation(Remediation::RevokeAndRotateCredential);
+
+/// Cargo registry authentication token provided through Cargo environment
+/// variables.
+pub const CARGO_REGISTRY_ENV_TOKEN: RuleSpec = RuleSpec::captured_pattern(
+    "cargo.registry-env-token",
+    r"(?im)^[ \t]*CARGO_(?:REGISTRY|REGISTRIES_[A-Z0-9_]+)_TOKEN[ \t]*=[ \t]*(?P<value>[^\s#;]{1,2048})[ \t]*(?:[#;].*)?$",
+    "value",
+    Severity::Critical,
+)
+.with_validator(ValidatorKind::CargoRegistry)
+.with_remediation(Remediation::RevokeAndRotateCredential);
+
+/// PyPI-style repository authentication token stored as the password of a
+/// token-authenticated `.pypirc` repository section.
+///
+/// Contextual validation requires `username = __token__` in the same section
+/// and either a standard PyPI section or an explicit repository URL.
+pub const PYPI_REPOSITORY_TOKEN: RuleSpec = RuleSpec::captured_pattern(
+    "pypi.repository-token",
+    r"(?im)^[ \t]*password[ \t]*=[ \t]*(?P<value>[^\s#;]{8,2048})[ \t]*(?:[#;].*)?$",
+    "value",
+    Severity::Critical,
+)
+.with_validator(ValidatorKind::Pypi)
+.with_remediation(Remediation::RevokeAndRotateCredential);
+
+/// Cleartext password stored in a NuGet package-source credentials section.
+///
+/// The matcher deliberately supports the common key-before-value form and
+/// projects only the raw value span. Context validation establishes the
+/// bounded packageSourceCredentials region without parsing XML.
+pub const NUGET_PACKAGE_SOURCE_CLEARTEXT_PASSWORD: RuleSpec = RuleSpec::captured_pattern(
+    "nuget.package-source-cleartext-password",
+    r#"(?is)<add\b[^<>]*?\bkey\s*=\s*["']ClearTextPassword["'][^<>]*?\bvalue\s*=\s*["'](?P<value>[^\x00-\x1f\x7f"'<>]*?)["'][^<>]*?/?>"#,
+    "value",
+    Severity::Critical,
+)
+.with_validator(ValidatorKind::Nuget)
+.with_remediation(Remediation::RevokeAndRotateCredential);
+
+/// Cleartext password belonging to a Maven server credential in `settings.xml`.
+///
+/// Contextual validation requires the password element to belong to a bounded
+/// `<servers><server>...</server></servers>` region. Maven encrypted/protected
+/// password representations are rejected by the validator.
+pub const MAVEN_SERVER_PASSWORD: RuleSpec = RuleSpec::captured_pattern(
+    "maven.server-password",
+    r"(?is)<password\s*>(?P<value>[^<\x00-\x1f\x7f]{1,2048})</password\s*>",
+    "value",
+    Severity::Critical,
+)
+.with_validator(ValidatorKind::Maven)
+.with_remediation(Remediation::RevokeAndRotateCredential);
+
+/// Gem-server authentication key supplied through RubyGems'
+/// `GEM_HOST_API_KEY` environment variable.
+pub const RUBYGEMS_HOST_API_KEY: RuleSpec = RuleSpec::captured_pattern(
+    "rubygems.host-api-key",
+    r##"(?im)^[ \t]*GEM_HOST_API_KEY[ \t]*=[ \t]*["']?(?P<value>[^\s"'#;]{8,2048})["']?[ \t]*(?:[#;].*)?$"##,
+    "value",
+    Severity::Critical,
+)
+.with_validator(ValidatorKind::RubyGemsHost)
+.with_remediation(Remediation::RevokeAndRotateCredential);
+
+/// Swift Package Manager registry bearer token supplied through
+/// `SWIFTPM_REGISTRY_TOKEN`.
+pub const SWIFTPM_REGISTRY_TOKEN: RuleSpec = RuleSpec::captured_pattern(
+    "swiftpm.registry-token",
+    r#"(?im)^[ \t]*SWIFTPM_REGISTRY_TOKEN[ \t]*=[ \t]*["']?(?P<value>[^\s"'#;]{8,2048})["']?[ \t]*(?:[#;].*)?$"#,
+    "value",
+    Severity::Critical,
+)
+.with_validator(ValidatorKind::SwiftPm)
+.with_remediation(Remediation::RevokeAndRotateCredential);
+
+/// Swift Package Manager registry password supplied through
+/// `SWIFTPM_REGISTRY_PASSWORD`.
+pub const SWIFTPM_REGISTRY_PASSWORD: RuleSpec = RuleSpec::captured_pattern(
+    "swiftpm.registry-password",
+    r#"(?im)^[ \t]*SWIFTPM_REGISTRY_PASSWORD[ \t]*=[ \t]*["']?(?P<value>[^\s"'#;]{8,2048})["']?[ \t]*(?:[#;].*)?$"#,
+    "value",
+    Severity::Critical,
+)
+.with_validator(ValidatorKind::SwiftPm)
+.with_remediation(Remediation::RotatePassword);
+
+/// Swift Package Manager source-control token supplied through
+/// `SWIFTPM_SOURCE_CONTROL_TOKEN`.
+pub const SWIFTPM_SOURCE_CONTROL_TOKEN: RuleSpec = RuleSpec::captured_pattern(
+    "swiftpm.source-control-token",
+    r#"(?im)^[ \t]*SWIFTPM_SOURCE_CONTROL_TOKEN[ \t]*=[ \t]*["']?(?P<value>[^\s"'#;]{8,2048})["']?[ \t]*(?:[#;].*)?$"#,
+    "value",
+    Severity::Critical,
+)
+.with_validator(ValidatorKind::SwiftPm)
+.with_remediation(Remediation::RevokeAndRotateCredential);
+
+/// Password embedded in Swift Package Manager's `SWIFTPM_NETRC_DATA`
+/// environment variable.
+///
+/// Candidate discovery recognizes individual `.netrc` `password` fields.
+/// Contextual validation establishes that each candidate belongs both to the
+/// SwiftPM inline credential container and to a complete
+/// `machine` → `login` → `password` record.
+///
+/// Only the individual password value is exposed as the finding span.
+pub const SWIFTPM_NETRC_PASSWORD: RuleSpec = RuleSpec::captured_pattern(
+    "swiftpm.netrc-password",
+    r#"\bpassword\b[ \t]+(?P<value>[^\s#"'\\]{1,1024})"#,
+    "value",
+    Severity::Critical,
+)
+.with_validator(ValidatorKind::SwiftPmNetrc)
+.with_remediation(Remediation::RotatePassword);
+
+/// Gradle repository password supplied through the documented project-property
+/// environment-variable mapping.
+///
+/// Repository `PasswordCredentials` derive a `<repository>Password` property.
+/// Only the explicit `ORG_GRADLE_PROJECT_` form is recognized because Cribra
+/// does not currently use source-path metadata to attribute arbitrary
+/// `<repository>Password` assignments to Gradle.
+pub const GRADLE_REPOSITORY_PASSWORD: RuleSpec = RuleSpec::captured_pattern(
+    "gradle.repository-password",
+    r#"(?m)^[ \t]*ORG_GRADLE_PROJECT_[A-Za-z0-9_.-]+Password[ \t]*=[ \t]*["']?(?P<value>[^\s"'#;]{1,2048})["']?[ \t]*(?:[#;].*)?$"#,
+    "value",
+    Severity::Critical,
+)
+.with_validator(ValidatorKind::Gradle)
+.with_remediation(Remediation::RotatePassword);
+
+/// Gradle repository HTTP authentication header value supplied through the
+/// documented project-property environment-variable mapping.
+///
+/// `HttpHeaderCredentials` derive a `<repository>AuthHeaderValue` property.
+/// Only the explicit `ORG_GRADLE_PROJECT_` form is recognized because Cribra
+/// does not currently use source-path metadata to attribute arbitrary
+/// repository properties to Gradle.
+pub const GRADLE_REPOSITORY_AUTH_HEADER_VALUE: RuleSpec = RuleSpec::captured_pattern(
+    "gradle.repository-auth-header-value",
+    r#"(?m)^[ \t]*ORG_GRADLE_PROJECT_[A-Za-z0-9_.-]+AuthHeaderValue[ \t]*=[ \t]*["']?(?P<value>[^\r\n"'#;]{1,2048}?)["']?[ \t]*(?:[#;].*)?$"#,
+    "value",
+    Severity::Critical,
+)
+.with_validator(ValidatorKind::Gradle)
+.with_remediation(Remediation::RevokeAndRotateCredential);
+
 /// Password belonging to a complete `.netrc` machine credential record.
 ///
 /// `.netrc` is whitespace-oriented, so candidate discovery recognizes an

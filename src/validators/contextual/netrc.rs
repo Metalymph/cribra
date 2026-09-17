@@ -25,8 +25,10 @@ pub(crate) struct NetrcValidation;
 /// `.netrc` fields are whitespace-delimited. A new `machine`, `default`, or
 /// `macdef` token terminates the previous credential record.
 pub(crate) fn validate_netrc(context: &ValidationContext<'_>) -> Option<NetrcValidation> {
-    let candidate = context.candidate();
+    validate_netrc_password(context.candidate(), context.before_window(CONTEXT_WINDOW))
+}
 
+pub(crate) fn validate_netrc_password(candidate: &str, before: &str) -> Option<NetrcValidation> {
     if candidate.is_empty()
         || candidate.len() > MAX_PASSWORD_LEN
         || candidate.chars().any(char::is_whitespace)
@@ -37,8 +39,6 @@ pub(crate) fn validate_netrc(context: &ValidationContext<'_>) -> Option<NetrcVal
         return None;
     }
 
-    let before = context.before_window(CONTEXT_WINDOW);
-
     has_complete_machine_record(before).then_some(NetrcValidation)
 }
 
@@ -48,7 +48,7 @@ pub(crate) fn validate_netrc(context: &ValidationContext<'_>) -> Option<NetrcVal
 /// Comments are ignored from `#` to end-of-line. The parser deliberately
 /// recognizes only the fields needed to establish credential context rather
 /// than accepting arbitrary text containing the same words.
-fn has_complete_machine_record(before: &str) -> bool {
+pub(super) fn has_complete_machine_record(before: &str) -> bool {
     let mut machine = false;
     let mut login = false;
     let mut password_keyword = false;
@@ -232,5 +232,17 @@ mod tests {
                 "unexpected documentation password acceptance",
             );
         }
+    }
+
+    #[test]
+    fn reusable_password_validation_preserves_netrc_record_semantics() {
+        let password = "CorrectHorseBatteryStaple";
+        let before = "machine registry.example.com login alice password ";
+
+        assert!(validate_netrc_password(password, before).is_some());
+        assert!(validate_netrc_password("replace_me", before).is_none());
+        assert!(
+            validate_netrc_password(password, "machine registry.example.com password ",).is_none()
+        );
     }
 }

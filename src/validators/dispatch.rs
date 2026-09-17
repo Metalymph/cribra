@@ -9,15 +9,24 @@ use crate::{
             ValidationContext,
             aws::{AwsCredentialKind, validate_aws},
             azure::{AzureCredentialKind, validate_azure},
+            cargo_registry::validate_cargo_registry,
+            composer::{ComposerCredentialKind, validate_composer},
             database_connection::{DatabaseConnectionKind, validate_database_connection},
             docker_registry::validate_docker_registry,
             gcp::{GcpCredentialKind, validate_gcp},
             generic::{GenericCredentialKind, validate_generic_credential},
+            gradle::{GradleCredentialKind, validate_gradle},
             hash::{HashKind, validate_sensitive_hash},
             http_basic::validate_http_basic,
+            maven::validate_maven,
             netrc::validate_netrc,
             npm_registry::{NpmRegistryCredentialKind, validate_npm_registry},
+            nuget::validate_nuget,
             password::{PasswordKind, validate_password},
+            pypi::validate_pypi,
+            rubygems::validate_rubygems_host_key,
+            swiftpm::validate_swiftpm,
+            swiftpm_netrc::validate_swiftpm_netrc,
             system_password_verifier::{
                 SystemPasswordVerifierKind, validate_htpasswd_verifier,
                 validate_system_password_verifier,
@@ -29,6 +38,7 @@ use crate::{
             github::{GitHubTokenKind, validate_github_token},
             gitlab::{GitLabTokenKind, validate_gitlab_token},
             jwt::{JwtKind, validate_jwt},
+            rubygems::validate_rubygems_api_key,
             slack::{SlackTokenKind, validate_slack_token},
             stripe::{StripeTokenKind, validate_stripe_token},
             telegram::validate_telegram_bot_token,
@@ -43,6 +53,18 @@ pub(crate) enum ValidatorKind {
     None,
     DockerRegistry,
     NpmRegistry,
+    CargoRegistry,
+    Pypi,
+    Maven,
+    ComposerHttpBasicPassword,
+    ComposerBearerToken,
+    ComposerBitbucketConsumerSecret,
+    ComposerForgejoToken,
+    RubyGems,
+    RubyGemsHost,
+    SwiftPm,
+    SwiftPmNetrc,
+    Gradle,
     GitHub,
     GitLab,
     Stripe,
@@ -61,6 +83,7 @@ pub(crate) enum ValidatorKind {
     WireGuard,
     SystemPasswordVerifier,
     Netrc,
+    Nuget,
 }
 
 impl ValidatorKind {
@@ -74,12 +97,24 @@ impl ValidatorKind {
             | Self::Cloudflare
             | Self::Slack
             | Self::Telegram
-            | Self::Jwt => DetectionMode::Deterministic,
+            | Self::Jwt
+            | Self::RubyGems => DetectionMode::Deterministic,
             Self::Aws
             | Self::Azure
             | Self::Gcp
             | Self::DockerRegistry
             | Self::NpmRegistry
+            | Self::CargoRegistry
+            | Self::Pypi
+            | Self::Maven
+            | Self::ComposerHttpBasicPassword
+            | Self::ComposerBearerToken
+            | Self::ComposerBitbucketConsumerSecret
+            | Self::ComposerForgejoToken
+            | Self::RubyGemsHost
+            | Self::SwiftPm
+            | Self::SwiftPmNetrc
+            | Self::Gradle
             | Self::DatabaseConnection
             | Self::SystemPasswordVerifier
             | Self::HttpBasic
@@ -87,7 +122,8 @@ impl ValidatorKind {
             | Self::Password
             | Self::SensitiveHash
             | Self::GenericCredential
-            | Self::Netrc => DetectionMode::Contextual,
+            | Self::Netrc
+            | Self::Nuget => DetectionMode::Contextual,
         }
     }
 }
@@ -96,7 +132,16 @@ impl ValidatorKind {
 pub(crate) enum ValidationKind {
     Unvalidated,
     DockerRegistry,
+    CargoRegistry,
     NpmRegistry(NpmRegistryCredentialKind),
+    Pypi,
+    Maven,
+    Composer(ComposerCredentialKind),
+    RubyGems,
+    RubyGemsHost,
+    SwiftPm,
+    SwiftPmNetrc,
+    Gradle(GradleCredentialKind),
     GitHub(GitHubTokenKind),
     GitLab(GitLabTokenKind),
     Stripe(StripeTokenKind),
@@ -115,6 +160,7 @@ pub(crate) enum ValidationKind {
     WireGuard(WireGuardCredentialKind),
     SystemPasswordVerifier(SystemPasswordVerifierKind),
     Netrc,
+    Nuget,
 }
 
 /// The outcome of a validation attempt.
@@ -182,6 +228,45 @@ pub(crate) fn validate_candidate(
         ValidatorKind::NpmRegistry => validate_npm_registry(&context).map(|v| {
             ValidationOutcome::new(ValidationKind::NpmRegistry(v.kind()), Confidence::High)
         }),
+        ValidatorKind::CargoRegistry => validate_cargo_registry(&context)
+            .map(|_| ValidationOutcome::new(ValidationKind::CargoRegistry, Confidence::High)),
+        ValidatorKind::Pypi => validate_pypi(&context)
+            .map(|_| ValidationOutcome::new(ValidationKind::Pypi, Confidence::High)),
+        ValidatorKind::Maven => validate_maven(&context)
+            .map(|_| ValidationOutcome::new(ValidationKind::Maven, Confidence::High)),
+        ValidatorKind::ComposerHttpBasicPassword
+        | ValidatorKind::ComposerBearerToken
+        | ValidatorKind::ComposerBitbucketConsumerSecret
+        | ValidatorKind::ComposerForgejoToken => {
+            let expected = match validator {
+                ValidatorKind::ComposerHttpBasicPassword => {
+                    ComposerCredentialKind::HttpBasicPassword
+                }
+                ValidatorKind::ComposerBearerToken => ComposerCredentialKind::BearerToken,
+                ValidatorKind::ComposerBitbucketConsumerSecret => {
+                    ComposerCredentialKind::BitbucketConsumerSecret
+                }
+                ValidatorKind::ComposerForgejoToken => ComposerCredentialKind::ForgejoToken,
+                _ => unreachable!(),
+            };
+
+            validate_composer(&context, expected).map(|validation| {
+                ValidationOutcome::new(
+                    ValidationKind::Composer(validation.kind()),
+                    Confidence::High,
+                )
+            })
+        }
+        ValidatorKind::RubyGems => validate_rubygems_api_key(context.candidate())
+            .map(|_| ValidationOutcome::new(ValidationKind::RubyGems, Confidence::High)),
+        ValidatorKind::RubyGemsHost => validate_rubygems_host_key(&context)
+            .map(|_| ValidationOutcome::new(ValidationKind::RubyGemsHost, Confidence::High)),
+        ValidatorKind::SwiftPm => validate_swiftpm(&context)
+            .map(|_| ValidationOutcome::new(ValidationKind::SwiftPm, Confidence::High)),
+        ValidatorKind::SwiftPmNetrc => validate_swiftpm_netrc(&context)
+            .map(|_| ValidationOutcome::new(ValidationKind::SwiftPmNetrc, Confidence::High)),
+        ValidatorKind::Gradle => validate_gradle(&context)
+            .map(|v| ValidationOutcome::new(ValidationKind::Gradle(v.kind()), Confidence::High)),
         ValidatorKind::DockerRegistry => validate_docker_registry(&context)
             .map(|_| ValidationOutcome::new(ValidationKind::DockerRegistry, Confidence::High)),
         ValidatorKind::GitHub => validate_github_token(context.candidate())
@@ -229,6 +314,8 @@ pub(crate) fn validate_candidate(
         }),
         ValidatorKind::Netrc => validate_netrc(&context)
             .map(|_| ValidationOutcome::new(ValidationKind::Netrc, Confidence::High)),
+        ValidatorKind::Nuget => validate_nuget(&context)
+            .map(|_| ValidationOutcome::new(ValidationKind::Nuget, Confidence::High)),
         ValidatorKind::SystemPasswordVerifier => validate_system_password_verifier(&context)
             .or_else(|| validate_htpasswd_verifier(&context))
             .map(|validation| {
@@ -266,23 +353,43 @@ mod tests {
             ValidatorKind::Slack,
             ValidatorKind::Telegram,
             ValidatorKind::Jwt,
+            ValidatorKind::RubyGems,
         ] {
-            assert_eq!(validator.detection_mode(), DetectionMode::Deterministic);
+            assert_eq!(
+                validator.detection_mode(),
+                DetectionMode::Deterministic,
+                "unexpected detection mode for {validator:?}",
+            );
         }
 
         for validator in [
             ValidatorKind::Aws,
             ValidatorKind::Azure,
             ValidatorKind::Gcp,
-            ValidatorKind::NpmRegistry,
-            ValidatorKind::DockerRegistry,
-            ValidatorKind::Password,
+            ValidatorKind::DatabaseConnection,
             ValidatorKind::HttpBasic,
             ValidatorKind::WireGuard,
+            ValidatorKind::DockerRegistry,
+            ValidatorKind::NpmRegistry,
+            ValidatorKind::CargoRegistry,
+            ValidatorKind::Pypi,
+            ValidatorKind::Maven,
+            ValidatorKind::RubyGemsHost,
+            ValidatorKind::SwiftPm,
+            ValidatorKind::SwiftPmNetrc,
+            ValidatorKind::Gradle,
+            ValidatorKind::Password,
             ValidatorKind::SensitiveHash,
             ValidatorKind::GenericCredential,
+            ValidatorKind::Netrc,
+            ValidatorKind::Nuget,
+            ValidatorKind::SystemPasswordVerifier,
         ] {
-            assert_eq!(validator.detection_mode(), DetectionMode::Contextual);
+            assert_eq!(
+                validator.detection_mode(),
+                DetectionMode::Contextual,
+                "unexpected detection mode for {validator:?}",
+            );
         }
     }
 

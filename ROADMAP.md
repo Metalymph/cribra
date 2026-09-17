@@ -30,219 +30,212 @@ interoperability work do not by themselves require `0.5`.
 
 ## Current release line
 
-### v0.4.4 — Canonical Cribra CLI
-
-Status: active.
-
-v0.4.4 establishes Cribra as the authoritative owner of its command-line
-interface.
-
-The release adds a reusable Rust CLI library plus a thin standalone `cribra`
-executable while keeping detection, validation, findings, remediation, and
-transformations authoritative in the `cribra` core.
-
-The CLI is deliberately small and dependency-light. It must not become a second
-scanner implementation or an application-specific policy layer.
-
-Target structure:
-
-```text
-crates/
-├── cribra/          # core engine
-├── cribra-cli/      # reusable CLI library + `cribra` executable
-└── cribra-wasm/     # WebAssembly adapter
-```
-
-Architectural ownership:
-
-```text
-cribra
-└── semantic authority
-
-cribra-cli
-├── reusable command model
-├── parser
-├── execution surface
-├── stable output contracts
-└── thin `cribra` binary
-```
-
-Downstream products may embed `cribra-cli` when they need the canonical command
-surface, but they must not reimplement Cribra CLI semantics independently.
-
-Cribra itself contains no knowledge of Silens or any other downstream product.
-
-### 0.4.4-A — CLI Foundation
-
-Status: completed.
-
-- [x] Add the reusable `cribra-cli` crate.
-- [x] Add the standalone `cribra` executable as a thin wrapper around the
-  reusable CLI library.
-- [x] Keep command semantics independent from downstream products.
-- [x] Preserve Cribra as the sole authority for its CLI behavior.
-- [x] Avoid CLI framework dependencies unless they provide clear value over a
-  small internal parser.
-- [x] Keep the initial `cribra-cli` dependency surface limited to Cribra itself.
-
-### 0.4.4-B — Input Contract
-
-Status: completed.
-
-- [x] Support one explicit file input.
-- [x] Support stdin via `-`.
-- [x] Define deterministic UTF-8 input behavior.
-- [x] Preserve exact source bytes after UTF-8 validation.
-- [x] Preserve CRLF and Unicode input without normalization.
-- [x] Reject invalid UTF-8.
-- [x] Preserve exact scanner semantics from the Cribra core.
-- [x] Keep filesystem traversal, discovery, globbing, and repository walking
-  outside the initial CLI contract.
-
-### 0.4.4-C — Output Contract
-
-Status: completed.
-
-- [x] Add stable human-readable output.
-- [x] Add machine-readable JSON output.
-- [x] Preserve finding, candidate, and review-channel semantics.
-- [x] Report source identity, status, counts, locations, rule IDs, severity,
-  confidence, remediation, candidate kind, and candidate evidence using only
-  public Cribra metadata.
-- [x] Ensure matched secret material is never rendered.
-- [x] Define the process exit-code contract:
-  - `0` for successful command execution, including clean, review-only, and
-    finding-bearing scans;
-  - `1` for input/execution failures;
-  - `2` for command-line usage or parse errors.
-- [x] Keep output deterministic for equivalent inputs.
-
-### 0.4.4-D — Reusable Command Surface
-
-Status: completed.
-
-- [x] Expose a reusable public `Command` model.
-- [x] Expose `ScanCommand`, `ScanInput`, and `OutputFormat`.
-- [x] Expose reusable command parsing.
-- [x] Expose reusable execution without subprocess invocation.
-- [x] Keep the standalone binary as a thin process adapter.
-- [x] Separate command parsing, input acquisition, execution, rendering, and
-  process I/O responsibilities.
-- [x] Keep `ScanReport`, `Finding`, `SensitiveCandidate`, and detection authority
-  owned by the Cribra core rather than duplicating them in the CLI layer.
-- [x] Keep public CLI errors explicit while retaining internal input-acquisition
-  details as implementation concerns where possible.
-- [x] Prefer borrowed access such as `&str` where ownership is unnecessary while
-  retaining owned `String`/`PathBuf` values where command or output lifetime
-  requires ownership.
-- [x] Add no new third-party CLI, error, serialization, or argument-parsing
-  dependency.
-
-### 0.4.4-E — CLI Hardening
-
-Status: completed.
-
-- [x] Add integration tests against the real `cribra` executable.
-- [x] Add explicit file-input integration coverage.
-- [x] Add stdin integration coverage.
-- [x] Add stdin/file semantic-equivalence coverage.
-- [x] Add human-output contract coverage.
-- [x] Add JSON-output contract coverage.
-- [x] Add clean, review-only, and finding-bearing scan coverage.
-- [x] Add exit-code regression coverage for `0`, `1`, and `2`.
-- [x] Verify privacy-safe failure behavior.
-- [x] Verify invalid UTF-8 produces a stable privacy-safe diagnostic.
-- [x] Verify missing-file failures do not expose source material.
-- [x] Verify finding output does not contain matched secret values.
-- [x] Verify candidate output does not contain candidate source values.
-- [x] Verify the standalone binary remains only a thin adapter over the reusable
-  library.
-
-### 0.4.4-F — Documentation, Packaging, and Release Gate
-
-Status: active.
-
-- [x] Update the root README with canonical CLI installation and usage.
-- [x] Add `cribra-cli` package documentation.
-- [x] Document file/stdin behavior, UTF-8 requirements, output formats, and exit
-  codes.
-- [x] Document the reusable Rust command surface.
-- [x] Document the privacy boundary for CLI output and diagnostics.
-- [x] Ensure ROADMAP and CHANGELOG match the intended release.
-- [ ] Run formatting checks.
-- [ ] Run workspace checks.
-- [ ] Run workspace tests.
-- [ ] Run Clippy with all relevant targets/features.
-- [ ] Run documentation tests.
-- [ ] Run MSRV validation.
-- [ ] Run RustSec audit.
-- [ ] Run `cribra-cli` package validation.
-- [ ] Run `cribra-cli` publish dry-run.
-- [ ] Run existing C ABI release gates.
-- [ ] Run existing WebAssembly adapter and parity gates.
-- [ ] Verify a clean working tree before release.
-- [ ] Merge through the protected `main` workflow.
-- [ ] Publish `cribra-cli` only after the authoritative release commit is on
-  `main`.
-- [ ] Tag and publish Cribra v0.4.4 only after all release gates pass.
-
-Directory or repository traversal may be added later under Cribra CLI authority
-if a concrete use case justifies it. Downstream consumers must not
-independently fork CLI semantics merely to add traversal convenience.
-
-## After v0.4.4
-
-The post-v0.4.4 roadmap remains additive and stability-first.
-
-The core architecture, public result model, transformation model, C ABI
-principles, and WebAssembly semantic authority are considered stable unless
-concrete evidence justifies an architectural change.
-
 ### v0.4.5 — Developer Ecosystem Credential Coverage
+
+Status: active.
 
 Goal: consolidate the remaining high-value developer, package, runtime, build,
 and systems credential surfaces into one evidence-driven release rather than
 spreading additive detector work across several releases.
 
-Primary audit candidates:
+#### 0.4.5-A — Scope and coverage audit
 
-- Cargo / Rust registry authentication;
-- Python / PyPI / `.pypirc`;
-- Deno authentication tokens;
-- RubyGems credentials where sufficiently deterministic;
-- Maven repository authentication;
-- Gradle repository credentials;
-- NuGet / .NET package-source credentials;
-- additional JVM or .NET credential surfaces only where strongly contextual;
-- Nix access tokens;
-- Go module and proxy authentication;
-- Conan, vcpkg, and other C/C++ package-tool credentials;
-- common Unix and systems developer tooling with documented credential formats;
-- security and infrastructure tooling only where a concrete high-confidence
-  credential surface is identified.
+Status: completed.
 
-Principles:
+- [x] Audit high-value developer/package credential surfaces.
+- [x] Prefer documented credential storage and configuration contracts.
+- [x] Reuse generic, `.netrc`, HTTP-authentication, and provider detectors where
+  they already provide equivalent semantic coverage.
+- [x] Reject ecosystem-specific classification when it would add catalog breadth
+  without stronger semantics.
+- [x] Keep network validation and new parser/runtime dependencies out of scope.
 
-- prefer documented credential storage and configuration surfaces;
-- reuse existing generic detectors where they already provide equivalent
-  semantic coverage;
-- do not create ecosystem-specific rules merely for catalog breadth;
-- project only credential material;
-- keep network validation out of scope;
-- distinguish exposed credentials from encrypted/protected references;
-- do not classify paths, provider names, helper names, or credential-store
-  references as secrets;
-- reuse `.netrc`, HTTP authentication, and existing provider detectors where
-  appropriate;
-- require adversarial false-positive coverage for every accepted family;
-- reject audited candidates that cannot satisfy Cribra's confidence standard;
-- preserve Rust, C, and WebAssembly semantic parity for every accepted rule;
-- introduce no architectural changes to the core.
+#### 0.4.5-B — Developer package credentials
 
-v0.4.5 is intended as a consolidated enrichment release. It does not imply that
-every audited ecosystem will receive a dedicated detector.
+Status: completed.
 
-### v0.4.6 — Native Language Bindings
+- [x] Cargo / Rust registry authentication.
+- [x] Python / PyPI / `.pypirc` repository tokens.
+- [x] RubyGems credentials, including `GEM_HOST_API_KEY`, with deterministic
+  collision handling against generic credential rules.
+- [x] NuGet / .NET cleartext package-source credentials in nuget.config;
+  NuGetPackageSourceCredentials_{name} environment credentials remain
+  deferred because exact password projection and source association require
+  additional parsing beyond the bounded B4 matcher.
+- [x] Maven repository credentials.
+- [x] Deno authentication tokens audited and deferred. `DENO_AUTH_TOKENS` is
+  a documented security-relevant credential surface, but its multi-entry
+  representation requires reliable per-entry credential discovery and exact
+  span projection that the current rule execution model does not provide
+  without broader parsing or overly generic scanning. No dedicated Deno rule is
+  added in v0.4.5.
+
+Audited surfaces may be rejected or deferred when they cannot satisfy Cribra's
+confidence standard. Gradle, Go, Conan, vcpkg, Nix, and related ecosystems do
+not require dedicated rules merely for catalog coverage when existing generic
+or shared credential surfaces already provide equivalent semantics.
+
+#### Transformation Semantic Parity
+
+Status: completed.
+
+- [x] Audit every rule in `builtins::CURRENT`.
+- [x] Give every built-in an explicit synthesis strategy while keeping custom
+  rule fallback separate.
+- [x] Keep structured and encoded synthetic values deliberately invalid under
+  their corresponding detector contracts.
+- [x] Verify redact, template, and pseudonymization parity through their
+  generic span/metadata contracts.
+- [x] Complete the repository validation gates before marking this step
+  complete.
+
+#### 0.4.5-C — Collision and normalization hardening
+
+Status: completed.
+
+- [x] Verify provider/ecosystem-specific rules deterministically win valid
+  collisions with generic credential rules.
+- [x] Preserve exact finding spans and stable rule attribution.
+- [x] Verify contextual prefilters remain consistent with validator semantics.
+- [x] Keep rule-ID and detection-mode contracts explicit as validator families
+  expand.
+
+#### 0.4.5-D — Adversarial corpus and false-positive hardening
+
+Status: completed.
+
+- [x] Add positive, negative, malformed, placeholder, documentation, and
+  cross-format fixtures for every accepted family.
+- [x] Add collision regressions for ecosystem-specific versus generic rules.
+- [x] Reject protected references, helper names, paths, registry names, and
+  credential-store references that are not credential material.
+- [x] Preserve Cribra's preference for deliberate false negatives over noisy
+  classification.
+
+#### 0.4.5-E — Interface and parity validation
+
+Status: completed.
+
+- [x] Validate Rust behavior for every accepted rule.
+- [x] Validate native C ABI exposure and semantic parity.
+- [x] Align `cribra-wasm` with the completed v0.4.5 core semantics.
+- [x] Validate WebAssembly parity for findings, spans, severity, confidence,
+  remediation, candidates, and explanations.
+
+#### 0.4.5-F — Swift Package Manager credential coverage
+
+Status: completed.
+
+Goal: audit Swift Package Manager credential surfaces and add dedicated
+detection only where SwiftPM provides stronger, documented semantics than
+existing shared credential rules.
+
+- [x] Audit SwiftPM registry authentication and documented credential storage.
+- [x] Audit `SWIFTPM_REGISTRY_TOKEN`, `SWIFTPM_REGISTRY_PASSWORD`,
+  `SWIFTPM_SOURCE_CONTROL_TOKEN`, and `SWIFTPM_NETRC_DATA`.
+- [x] Reuse the existing `.netrc` detector wherever it already provides equivalent semantics.
+- [x] Preserve exact credential-value spans and deterministic collision behavior.
+- [x] Add synthesis semantics and adversarial/collision tests for accepted rules.
+- [x] Do not extract credentials from Keychain or other OS credential stores.
+- [x] Do not add a SwiftPM parser, Swift runtime dependency, network validation,
+  or adapter-specific logic to the core.
+
+The audit may close with shared-rule coverage or explicit deferral where
+high-confidence exact-span detection is not justified.
+
+#### 0.4.5-G — Kotlin / Gradle credential audit
+
+Status: pending.
+
+Goal: cover credentials encountered in Kotlin development without inventing a
+Kotlin package-manager category. Repository authentication is primarily owned by
+Gradle, Maven, AWS, and shared credential contracts.
+
+- [x] Audit Gradle Groovy and Kotlin DSL repository credential configuration.
+- [x] Audit `PasswordCredentials`, including repository-derived Gradle properties.
+- [x] Audit `HttpHeaderCredentials` and existing generic/HTTP coverage.
+- [x] Audit `AwsCredentials` only for gaps not already covered by AWS rules.
+- [x] Audit Kotlin Multiplatform repository/dependency workflows.
+- [x] Prefer `gradle.*`, `maven.*`, `aws.*`, or existing generic/shared ownership
+  over `kotlin.*` rule IDs.
+- [x] Add rules only when documented context materially improves confidence,
+  attribution, or exact-span semantics.
+- [x] Allow this step to complete with no new detector if existing coverage is sufficient.
+
+#### 0.4.5-H — PHP / Composer and Dart / pub credential coverage
+
+Status: pending.
+
+Goal: audit the remaining high-value PHP and Dart package/developer credential
+surfaces, adding dedicated detection only where Composer or pub provides
+documented semantics stronger than existing shared credential rules.
+
+- [x] Audit Composer authentication surfaces, including `auth.json`,
+  `composer.json` authentication where applicable, and documented environment
+  configuration.
+- [x] Audit Composer `http-basic`, `bearer`, `github-oauth`, `gitlab-oauth`,
+  `gitlab-token`, and other documented authentication families.
+- [x] Reuse existing HTTP, GitHub, GitLab, `.netrc`, and generic credential
+  rules wherever they already provide equivalent semantic coverage.
+- [x] Audit Dart/pub credential surfaces.
+  - `PUB_HOSTED_URL` is repository configuration, not credential material.
+  - `dart pub token add` accepts the secret out-of-band; there is no reliable
+    static source representation to detect.
+  - `dart pub token add --env-var` persists/references an arbitrary environment
+    variable name; the corresponding environment assignment cannot be
+    attributed to Dart/pub from the assignment alone.
+  - Recognizable provider credentials remain owned by their provider-specific
+    rules.
+  - Decision: no Dart/pub-specific detector is justified for v0.4.5.
+- [x] Audit authenticated custom package repositories and documented token
+  configuration used by `dart pub`.
+- [x] Prefer `composer.*`, `pub.*`, provider-specific, or existing
+  generic/shared ownership over artificial `php.*` or `dart.*` rule IDs.
+- [x] Preserve exact credential-value spans and deterministic collision
+  behavior for every accepted rule.
+- [x] Add synthesis semantics and adversarial/collision tests for accepted
+  rules.
+- [x] Do not extract credentials from OS credential stores or other protected
+  external storage.
+- [x] Do not add PHP/Dart runtimes, package-manager parsers, network validation,
+  or adapter-specific logic to the core.
+
+The audit may close with shared-rule coverage, dedicated Composer/pub rules, or
+explicit deferral where high-confidence exact-span detection is not justified.
+
+#### 0.4.5-I — Documentation and release gate
+
+Status: pending.
+
+- [ ] Update README, ROADMAP, CHANGELOG, rule documentation, and public coverage
+  descriptions.
+- [ ] Run formatting, workspace check/test, Clippy, docs, MSRV, RustSec, and
+  packaging gates.
+- [ ] Run C ABI release gates.
+- [ ] Run WebAssembly adapter and parity gates.
+- [ ] Run `cribra-cli` packaging/distribution validation, including Homebrew and
+  APT artifacts.
+- [ ] Verify a clean working tree and protected-main release workflow.
+- [ ] Publish/tag v0.4.5 only after all release gates pass.
+
+#### 0.4.6 — Cribra CLI distribution
+
+Status: pending.
+
+Goal: make the canonical `cribra` CLI straightforward to install on common
+developer systems without changing CLI semantics or moving package-manager
+policy into the core engine.
+
+- [ ] Add Homebrew distribution/install support for `cribra-cli`.
+- [ ] Add Debian/Ubuntu APT distribution/install support for `cribra-cli`.
+- [ ] Keep Homebrew and APT packaging as distribution adapters over the same
+  canonical `cribra` executable.
+- [ ] Document installation, upgrade, and uninstall paths.
+- [ ] Validate packaged binaries against the canonical CLI behavior and release
+  version.
+
+### v0.4.7 — Native Language Bindings
+
 
 Goal: provide ergonomic bindings for high-value native/security ecosystems
 without expanding or weakening the Cribra core.
@@ -271,7 +264,7 @@ provides the portable browser/JavaScript WebAssembly boundary adequately.
 A separate JS/TS binding should be considered only if a concrete runtime cannot
 use the existing WASM contract safely or ergonomically.
 
-### v0.4.7 — Financial Data Pack (Opt-In)
+### v0.4.8 — Financial Data Pack (Opt-In)
 
 Goal: add the first optional sensitive-data pack outside the default
 secret/credential baseline.
@@ -355,6 +348,31 @@ when the available evidence is insufficient to distinguish sensitive material
 from ordinary data.
 
 ## Historical Releases
+
+### v0.4.4 — Canonical Cribra CLI
+
+Status: completed.
+
+v0.4.4 established Cribra as the authoritative owner of its command-line
+interface through the reusable `cribra-cli` crate and thin `cribra` executable.
+
+Completed work included:
+
+- canonical reusable command, input, execution, and output contracts;
+- explicit UTF-8 file and stdin input with exact source preservation;
+- deterministic human and JSON metadata-only output;
+- stable `0`/`1`/`2` process exit semantics;
+- privacy-safe diagnostics with no matched secret or candidate value leakage;
+- executable integration and adversarial CLI coverage;
+- zero new CLI framework, serialization, argument-parsing, or error dependency;
+- documentation and package validation;
+- full workspace, Clippy, docs, MSRV, RustSec, C ABI, and WebAssembly parity
+  release gates;
+- protected-main publication of `cribra-cli` and Cribra v0.4.4.
+
+Filesystem traversal remains outside the core engine and was not required for
+the canonical v0.4.4 CLI contract.
+
 
 ### v0.4.3 — High-Confidence Detection Coverage
 

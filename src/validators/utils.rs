@@ -82,13 +82,21 @@ pub(crate) fn is_obvious_placeholder(value: &str) -> bool {
         "changeme",
     ];
 
-    EXACT_PLACEHOLDERS
-        .iter()
-        .any(|placeholder| trimmed.eq_ignore_ascii_case(placeholder))
+    is_angle_bracket_placeholder(trimmed)
+        || EXACT_PLACEHOLDERS
+            .iter()
+            .any(|placeholder| trimmed.eq_ignore_ascii_case(placeholder))
         || EMBEDDED_MARKERS
             .iter()
             .any(|marker| contains_ignore_ascii_case(trimmed, marker))
         || has_single_repeated_ascii_byte(trimmed)
+}
+
+/// Returns `true` for documentation placeholders whose entire value is
+/// enclosed in angle brackets, such as `<your-token>` or `<password>`.
+#[inline]
+fn is_angle_bracket_placeholder(value: &str) -> bool {
+    value.len() >= 3 && value.starts_with('<') && value.ends_with('>')
 }
 
 #[inline]
@@ -154,6 +162,17 @@ mod tests {
         assert!(is_obvious_placeholder("[REDACTED]"));
         assert!(is_obvious_placeholder("prefix_YOUR_TOKEN_HERE_suffix"));
         assert!(is_obvious_placeholder("prefix_EXAMPLE_TOKEN_HERE_suffix"));
+    }
+
+    #[test]
+    fn rejects_angle_bracket_documentation_placeholders() {
+        assert!(is_obvious_placeholder("<your-token>"));
+        assert!(is_obvious_placeholder("<password>"));
+        assert!(is_obvious_placeholder("<API_KEY>"));
+
+        assert!(!is_obvious_placeholder("<>"));
+        assert!(!is_obvious_placeholder("prefix<token>suffix"));
+        assert!(!is_obvious_placeholder("value > other"));
     }
 
     #[test]
