@@ -95,6 +95,8 @@ impl CompiledRuleMetadata {
             | ValidatorKind::Pypi
             | ValidatorKind::RubyGems
             | ValidatorKind::RubyGemsHost
+            | ValidatorKind::SwiftPm
+            | ValidatorKind::SwiftPmNetrc
             | ValidatorKind::Nuget
             | ValidatorKind::Maven => 500,
         }
@@ -533,6 +535,14 @@ fn pattern_prefilter_needles(
         ("nuget.package-source-cleartext-password", ValidatorKind::Nuget) => Some(&["<add"]),
         ("maven.server-password", ValidatorKind::Maven) => Some(&["<password"]),
         ("rubygems.host-api-key", ValidatorKind::RubyGemsHost) => Some(&["gem_host_api_key"]),
+        ("swiftpm.registry-token", ValidatorKind::SwiftPm) => Some(&["swiftpm_registry_token"]),
+        ("swiftpm.registry-password", ValidatorKind::SwiftPm) => {
+            Some(&["swiftpm_registry_password"])
+        }
+        ("swiftpm.source-control-token", ValidatorKind::SwiftPm) => {
+            Some(&["swiftpm_source_control_token"])
+        }
+        ("swiftpm.netrc-password", ValidatorKind::SwiftPmNetrc) => Some(&["password"]),
         ("netrc.password", ValidatorKind::Netrc) => Some(&["machine", "login", "password"]),
         ("generic.authorization-basic", ValidatorKind::HttpBasic) => {
             Some(&["authorization", "basic"])

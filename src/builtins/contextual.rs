@@ -360,6 +360,57 @@ pub const RUBYGEMS_HOST_API_KEY: RuleSpec = RuleSpec::captured_pattern(
 .with_validator(ValidatorKind::RubyGemsHost)
 .with_remediation(Remediation::RevokeAndRotateCredential);
 
+/// Swift Package Manager registry bearer token supplied through
+/// `SWIFTPM_REGISTRY_TOKEN`.
+pub const SWIFTPM_REGISTRY_TOKEN: RuleSpec = RuleSpec::captured_pattern(
+    "swiftpm.registry-token",
+    r#"(?im)^[ \t]*SWIFTPM_REGISTRY_TOKEN[ \t]*=[ \t]*["']?(?P<value>[^\s"'#;]{8,2048})["']?[ \t]*(?:[#;].*)?$"#,
+    "value",
+    Severity::Critical,
+)
+.with_validator(ValidatorKind::SwiftPm)
+.with_remediation(Remediation::RevokeAndRotateCredential);
+
+/// Swift Package Manager registry password supplied through
+/// `SWIFTPM_REGISTRY_PASSWORD`.
+pub const SWIFTPM_REGISTRY_PASSWORD: RuleSpec = RuleSpec::captured_pattern(
+    "swiftpm.registry-password",
+    r#"(?im)^[ \t]*SWIFTPM_REGISTRY_PASSWORD[ \t]*=[ \t]*["']?(?P<value>[^\s"'#;]{8,2048})["']?[ \t]*(?:[#;].*)?$"#,
+    "value",
+    Severity::Critical,
+)
+.with_validator(ValidatorKind::SwiftPm)
+.with_remediation(Remediation::RotatePassword);
+
+/// Swift Package Manager source-control token supplied through
+/// `SWIFTPM_SOURCE_CONTROL_TOKEN`.
+pub const SWIFTPM_SOURCE_CONTROL_TOKEN: RuleSpec = RuleSpec::captured_pattern(
+    "swiftpm.source-control-token",
+    r#"(?im)^[ \t]*SWIFTPM_SOURCE_CONTROL_TOKEN[ \t]*=[ \t]*["']?(?P<value>[^\s"'#;]{8,2048})["']?[ \t]*(?:[#;].*)?$"#,
+    "value",
+    Severity::Critical,
+)
+.with_validator(ValidatorKind::SwiftPm)
+.with_remediation(Remediation::RevokeAndRotateCredential);
+
+/// Password embedded in Swift Package Manager's `SWIFTPM_NETRC_DATA`
+/// environment variable.
+///
+/// Candidate discovery recognizes individual `.netrc` `password` fields.
+/// Contextual validation establishes that each candidate belongs both to the
+/// SwiftPM inline credential container and to a complete
+/// `machine` → `login` → `password` record.
+///
+/// Only the individual password value is exposed as the finding span.
+pub const SWIFTPM_NETRC_PASSWORD: RuleSpec = RuleSpec::captured_pattern(
+    "swiftpm.netrc-password",
+    r#"\bpassword\b[ \t]+(?P<value>[^\s#"'\\]{1,1024})"#,
+    "value",
+    Severity::Critical,
+)
+.with_validator(ValidatorKind::SwiftPmNetrc)
+.with_remediation(Remediation::RotatePassword);
+
 /// Password belonging to a complete `.netrc` machine credential record.
 ///
 /// `.netrc` is whitespace-oriented, so candidate discovery recognizes an

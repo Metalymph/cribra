@@ -347,6 +347,30 @@ fn builtin_synthetic_value(
             original_len,
             random,
         )),
+        "swiftpm.registry-token" => Some(contextual_marker(
+            marker,
+            "swiftpm_registry_token",
+            original_len,
+            random,
+        )),
+        "swiftpm.registry-password" => Some(contextual_marker(
+            marker,
+            "swiftpm_registry_password",
+            original_len,
+            random,
+        )),
+        "swiftpm.source-control-token" => Some(contextual_marker(
+            marker,
+            "swiftpm_source_control_token",
+            original_len,
+            random,
+        )),
+        "swiftpm.netrc-password" => Some(contextual_marker(
+            marker,
+            "swiftpm_netrc_password",
+            original_len,
+            random,
+        )),
         "netrc.password" => Some(contextual_marker(
             marker,
             "netrc_password",

@@ -23,6 +23,8 @@ use crate::{
             password::{PasswordKind, validate_password},
             pypi::validate_pypi,
             rubygems::validate_rubygems_host_key,
+            swiftpm::validate_swiftpm,
+            swiftpm_netrc::validate_swiftpm_netrc,
             system_password_verifier::{
                 SystemPasswordVerifierKind, validate_htpasswd_verifier,
                 validate_system_password_verifier,
@@ -54,6 +56,8 @@ pub(crate) enum ValidatorKind {
     Maven,
     RubyGems,
     RubyGemsHost,
+    SwiftPm,
+    SwiftPmNetrc,
     GitHub,
     GitLab,
     Stripe,
@@ -97,6 +101,8 @@ impl ValidatorKind {
             | Self::Pypi
             | Self::Maven
             | Self::RubyGemsHost
+            | Self::SwiftPm
+            | Self::SwiftPmNetrc
             | Self::DatabaseConnection
             | Self::SystemPasswordVerifier
             | Self::HttpBasic
@@ -120,6 +126,8 @@ pub(crate) enum ValidationKind {
     Maven,
     RubyGems,
     RubyGemsHost,
+    SwiftPm,
+    SwiftPmNetrc,
     GitHub(GitHubTokenKind),
     GitLab(GitLabTokenKind),
     Stripe(StripeTokenKind),
@@ -216,6 +224,10 @@ pub(crate) fn validate_candidate(
             .map(|_| ValidationOutcome::new(ValidationKind::RubyGems, Confidence::High)),
         ValidatorKind::RubyGemsHost => validate_rubygems_host_key(&context)
             .map(|_| ValidationOutcome::new(ValidationKind::RubyGemsHost, Confidence::High)),
+        ValidatorKind::SwiftPm => validate_swiftpm(&context)
+            .map(|_| ValidationOutcome::new(ValidationKind::SwiftPm, Confidence::High)),
+        ValidatorKind::SwiftPmNetrc => validate_swiftpm_netrc(&context)
+            .map(|_| ValidationOutcome::new(ValidationKind::SwiftPmNetrc, Confidence::High)),
         ValidatorKind::DockerRegistry => validate_docker_registry(&context)
             .map(|_| ValidationOutcome::new(ValidationKind::DockerRegistry, Confidence::High)),
         ValidatorKind::GitHub => validate_github_token(context.candidate())
@@ -324,6 +336,7 @@ mod tests {
             ValidatorKind::Pypi,
             ValidatorKind::Maven,
             ValidatorKind::RubyGemsHost,
+            ValidatorKind::SwiftPm,
             ValidatorKind::Password,
             ValidatorKind::SensitiveHash,
             ValidatorKind::GenericCredential,

@@ -1429,12 +1429,17 @@ fn npm_registry_legacy_auth_and_password_are_structurally_validated() {
 }
 
 #[test]
-fn cargo_registry_credentials_are_in_current_pack() {
+fn cargo_and_swiftpm_credentials_are_in_current_pack() {
     let ids: std::collections::HashSet<_> =
         builtins::CURRENT.iter().map(|rule| rule.id()).collect();
 
     assert!(ids.contains("cargo.registry-token"));
     assert!(ids.contains("cargo.registry-env-token"));
+
+    assert!(ids.contains("swiftpm.registry-token"));
+    assert!(ids.contains("swiftpm.registry-password"));
+    assert!(ids.contains("swiftpm.source-control-token"));
+    assert!(ids.contains("swiftpm.netrc-password"));
 }
 
 #[test]
@@ -1814,34 +1819,61 @@ fn rubygems_specific_rule_wins_collision() {
 fn developer_credential_rules_expose_expected_public_metadata() {
     let scanner = Scanner::default();
 
-    for (source, expected_rule) in [
+    for (source, expected_rule, expected_remediation) in [
         (
             "[registry]\ntoken = \"cargo-secret-token-0123456789\"",
             "cargo.registry-token",
+            Remediation::RevokeAndRotateCredential,
         ),
         (
             "CARGO_REGISTRY_TOKEN=cargo-default-token-0123456789",
             "cargo.registry-env-token",
+            Remediation::RevokeAndRotateCredential,
         ),
         (
             "[pypi]\nusername = __token__\npassword = pypi-AbCdEfGhIjKlMnOpQrStUvWxYz012345",
             "pypi.repository-token",
+            Remediation::RevokeAndRotateCredential,
         ),
         (
             r#"<packageSourceCredentials><Feed><add key="ClearTextPassword" value="NuGetSecretValue_1234" /></Feed></packageSourceCredentials>"#,
             "nuget.package-source-cleartext-password",
+            Remediation::RevokeAndRotateCredential,
         ),
         (
             "<settings><servers><server><password>MavenSecretValue_1234</password></server></servers></settings>",
             "maven.server-password",
+            Remediation::RevokeAndRotateCredential,
         ),
         (
             "rubygems_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
             "rubygems.api-key",
+            Remediation::RevokeAndRotateCredential,
         ),
         (
             "GEM_HOST_API_KEY=custom-gem-server-credential-0123456789",
             "rubygems.host-api-key",
+            Remediation::RevokeAndRotateCredential,
+        ),
+        (
+            "SWIFTPM_REGISTRY_TOKEN=swiftpm-registry-token-0123456789",
+            "swiftpm.registry-token",
+            Remediation::RevokeAndRotateCredential,
+        ),
+        (
+            "SWIFTPM_REGISTRY_PASSWORD=SwiftPMRegistryPassword_123456",
+            "swiftpm.registry-password",
+            Remediation::RotatePassword,
+        ),
+        (
+            "SWIFTPM_SOURCE_CONTROL_TOKEN=swiftpm-source-control-token-0123456789",
+            "swiftpm.source-control-token",
+            Remediation::RevokeAndRotateCredential,
+        ),
+        (
+            r#"SWIFTPM_NETRC_DATA="machine registry.example.com login alice password SwiftPMNetrcSecret_123456""#,
+            "swiftpm.netrc-password",
+            Remediation::RotatePassword,
         ),
     ] {
         let results = scanner.scan([("fixture", source)]);
@@ -1857,7 +1889,7 @@ fn developer_credential_rules_expose_expected_public_metadata() {
         assert_eq!(finding.confidence(), Confidence::High, "{expected_rule}");
         assert_eq!(
             finding.remediation(),
-            Some(Remediation::RevokeAndRotateCredential),
+            Some(expected_remediation),
             "{expected_rule}",
         );
     }
@@ -1987,6 +2019,325 @@ fn netrc_password_rejects_placeholders_and_documentation_values() {
         assert!(
             report.is_empty(),
             "documentation .netrc password unexpectedly detected",
+        );
+    }
+}
+
+#[test]
+fn swiftpm_registry_token_detects_environment_credential() {
+    let scanner = scanner_for([builtins::SWIFTPM_REGISTRY_TOKEN]);
+
+    let token = "swiftpm-registry-token-0123456789";
+    let source = format!("SWIFTPM_REGISTRY_TOKEN={token}");
+
+    let results = scan_one(&scanner, &source);
+    let report = results.single_report().expect("one source");
+
+    assert_eq!(report.len(), 1);
+
+    let finding = &report.findings()[0];
+    assert_eq!(finding.rule_id().as_str(), "swiftpm.registry-token");
+    assert_eq!(matched(&source, finding), token);
+    assert_eq!(finding.severity(), Severity::Critical);
+    assert_eq!(finding.confidence(), Confidence::High);
+    assert_eq!(
+        finding.remediation(),
+        Some(Remediation::RevokeAndRotateCredential)
+    );
+}
+
+#[test]
+fn swiftpm_registry_password_detects_environment_credential() {
+    let scanner = scanner_for([builtins::SWIFTPM_REGISTRY_PASSWORD]);
+
+    let password = "SwiftPMRegistryPassword_123456";
+    let source = format!("SWIFTPM_REGISTRY_PASSWORD={password}");
+
+    let results = scan_one(&scanner, &source);
+    let report = results.single_report().expect("one source");
+
+    assert_eq!(report.len(), 1);
+
+    let finding = &report.findings()[0];
+    assert_eq!(finding.rule_id().as_str(), "swiftpm.registry-password");
+    assert_eq!(matched(&source, finding), password);
+    assert_eq!(finding.severity(), Severity::Critical);
+    assert_eq!(finding.confidence(), Confidence::High);
+    assert_eq!(finding.remediation(), Some(Remediation::RotatePassword));
+}
+
+#[test]
+fn swiftpm_source_control_token_detects_environment_credential() {
+    let scanner = scanner_for([builtins::SWIFTPM_SOURCE_CONTROL_TOKEN]);
+
+    let token = "swiftpm-source-control-token-0123456789";
+    let source = format!("SWIFTPM_SOURCE_CONTROL_TOKEN={token}");
+
+    let results = scan_one(&scanner, &source);
+    let report = results.single_report().expect("one source");
+
+    assert_eq!(report.len(), 1);
+
+    let finding = &report.findings()[0];
+    assert_eq!(finding.rule_id().as_str(), "swiftpm.source-control-token");
+    assert_eq!(matched(&source, finding), token);
+    assert_eq!(finding.severity(), Severity::Critical);
+    assert_eq!(finding.confidence(), Confidence::High);
+    assert_eq!(
+        finding.remediation(),
+        Some(Remediation::RevokeAndRotateCredential)
+    );
+}
+
+#[test]
+fn swiftpm_registry_login_is_not_a_credential_rule() {
+    let scanner = Scanner::default();
+    let source = "SWIFTPM_REGISTRY_LOGIN=swift-user";
+
+    let results = scan_one(&scanner, source);
+    let report = results.single_report().expect("one source");
+
+    assert!(
+        report
+            .iter()
+            .all(|finding| !finding.rule_id().as_str().starts_with("swiftpm.")),
+        "SwiftPM registry login unexpectedly classified as a credential",
+    );
+}
+
+#[test]
+fn swiftpm_credentials_support_quoted_values_and_project_only_the_secret() {
+    for (rule, source, expected) in [
+        (
+            builtins::SWIFTPM_REGISTRY_TOKEN,
+            r#"SWIFTPM_REGISTRY_TOKEN="swiftpm-registry-token-0123456789""#,
+            "swiftpm-registry-token-0123456789",
+        ),
+        (
+            builtins::SWIFTPM_REGISTRY_PASSWORD,
+            "SWIFTPM_REGISTRY_PASSWORD='SwiftPMRegistryPassword_123456'",
+            "SwiftPMRegistryPassword_123456",
+        ),
+        (
+            builtins::SWIFTPM_SOURCE_CONTROL_TOKEN,
+            r#"SWIFTPM_SOURCE_CONTROL_TOKEN="swiftpm-source-control-token-0123456789""#,
+            "swiftpm-source-control-token-0123456789",
+        ),
+    ] {
+        let scanner = scanner_for([rule]);
+        let results = scan_one(&scanner, source);
+        let report = results.single_report().expect("one source");
+
+        assert_eq!(report.len(), 1);
+        assert_eq!(matched(source, &report.findings()[0]), expected);
+    }
+}
+
+#[test]
+fn swiftpm_credentials_reject_obvious_placeholders() {
+    for (rule, name) in [
+        (builtins::SWIFTPM_REGISTRY_TOKEN, "SWIFTPM_REGISTRY_TOKEN"),
+        (
+            builtins::SWIFTPM_REGISTRY_PASSWORD,
+            "SWIFTPM_REGISTRY_PASSWORD",
+        ),
+        (
+            builtins::SWIFTPM_SOURCE_CONTROL_TOKEN,
+            "SWIFTPM_SOURCE_CONTROL_TOKEN",
+        ),
+    ] {
+        for value in [
+            "changeme",
+            "replace_me",
+            "your_token_here",
+            "your_password_here",
+        ] {
+            let source = format!("{name}={value}");
+            let scanner = scanner_for([rule]);
+            let results = scan_one(&scanner, &source);
+            let report = results.single_report().expect("one source");
+
+            assert!(
+                report.is_empty(),
+                "unexpected SwiftPM finding for placeholder {value:?}",
+            );
+        }
+    }
+}
+
+#[test]
+fn swiftpm_credentials_reject_unrelated_and_lookalike_variables() {
+    for (rule, sources) in [
+        (
+            builtins::SWIFTPM_REGISTRY_TOKEN,
+            [
+                "SWIFTPM_REGISTRY_TOKEN_SUFFIX=swiftpm-secret-0123456789",
+                "MY_SWIFTPM_REGISTRY_TOKEN=swiftpm-secret-0123456789",
+            ],
+        ),
+        (
+            builtins::SWIFTPM_REGISTRY_PASSWORD,
+            [
+                "SWIFTPM_REGISTRY_PASSWORD_SUFFIX=SwiftPMSecret_123456",
+                "MY_SWIFTPM_REGISTRY_PASSWORD=SwiftPMSecret_123456",
+            ],
+        ),
+        (
+            builtins::SWIFTPM_SOURCE_CONTROL_TOKEN,
+            [
+                "SWIFTPM_SOURCE_CONTROL_TOKEN_SUFFIX=swiftpm-secret-0123456789",
+                "MY_SWIFTPM_SOURCE_CONTROL_TOKEN=swiftpm-secret-0123456789",
+            ],
+        ),
+    ] {
+        let scanner = scanner_for([rule]);
+
+        for source in sources {
+            let results = scan_one(&scanner, source);
+            let report = results.single_report().expect("one source");
+
+            assert!(
+                report.is_empty(),
+                "unexpected SwiftPM finding for lookalike variable: {source}",
+            );
+        }
+    }
+}
+
+#[test]
+fn swiftpm_netrc_data_detects_each_machine_password() {
+    let source = concat!(
+        "SWIFTPM_NETRC_DATA=\"",
+        "machine registry1.example.com login alice password SwiftPMNetrcSecretOne_123456\n",
+        "machine registry2.example.com login bob password SwiftPMNetrcSecretTwo_123456",
+        "\"",
+    );
+
+    let scanner = scanner_for([builtins::SWIFTPM_NETRC_PASSWORD]);
+    let results = scan_one(&scanner, source);
+    let report = results.single_report().expect("one source");
+
+    assert_eq!(report.len(), 2);
+
+    let mut values = report
+        .findings()
+        .iter()
+        .map(|finding| matched(source, finding))
+        .collect::<Vec<_>>();
+    values.sort_unstable();
+
+    assert_eq!(
+        values,
+        [
+            "SwiftPMNetrcSecretOne_123456",
+            "SwiftPMNetrcSecretTwo_123456",
+        ]
+    );
+
+    for finding in report.findings() {
+        assert_eq!(finding.rule_id().as_str(), "swiftpm.netrc-password");
+        assert_eq!(finding.severity(), Severity::Critical);
+        assert_eq!(finding.confidence(), Confidence::High);
+        assert_eq!(finding.remediation(), Some(Remediation::RotatePassword),);
+    }
+}
+
+#[test]
+fn swiftpm_netrc_password_does_not_claim_plain_netrc() {
+    let source = "machine registry.example.com login alice password SwiftPMNetrcSecret_123456";
+
+    let scanner = scanner_for([builtins::SWIFTPM_NETRC_PASSWORD]);
+    let results = scan_one(&scanner, source);
+    let report = results.single_report().expect("one source");
+
+    assert!(report.is_empty());
+}
+
+#[test]
+fn swiftpm_netrc_password_rejects_incomplete_machine_records() {
+    for source in [
+        r#"SWIFTPM_NETRC_DATA="password SwiftPMNetrcSecret_123456""#,
+        r#"SWIFTPM_NETRC_DATA="machine registry.example.com password SwiftPMNetrcSecret_123456""#,
+        r#"SWIFTPM_NETRC_DATA="login alice password SwiftPMNetrcSecret_123456""#,
+        r#"SWIFTPM_NETRC_DATA="machine registry.example.com login password SwiftPMNetrcSecret_123456""#,
+    ] {
+        let scanner = scanner_for([builtins::SWIFTPM_NETRC_PASSWORD]);
+        let results = scan_one(&scanner, source);
+        let report = results.single_report().expect("one source");
+
+        assert!(
+            report.is_empty(),
+            "unexpected SwiftPM netrc finding for incomplete record: {source}",
+        );
+    }
+}
+
+#[test]
+fn swiftpm_netrc_password_does_not_cross_record_boundaries() {
+    for source in [
+        concat!(
+            r#"SWIFTPM_NETRC_DATA="machine first.example.com login alice "#,
+            "machine second.example.com password SwiftPMNetrcSecret_123456\"",
+        ),
+        concat!(
+            r#"SWIFTPM_NETRC_DATA="machine first.example.com login alice "#,
+            "default password SwiftPMNetrcSecret_123456\"",
+        ),
+        concat!(
+            r#"SWIFTPM_NETRC_DATA="machine first.example.com login alice "#,
+            "macdef init password SwiftPMNetrcSecret_123456\"",
+        ),
+    ] {
+        let scanner = scanner_for([builtins::SWIFTPM_NETRC_PASSWORD]);
+        let results = scan_one(&scanner, source);
+        let report = results.single_report().expect("one source");
+
+        assert!(
+            report.is_empty(),
+            "unexpected cross-record SwiftPM netrc finding: {source}",
+        );
+    }
+}
+
+#[test]
+fn swiftpm_netrc_password_rejects_placeholders() {
+    for password in [
+        "changeme",
+        "password",
+        "your_password",
+        "your_password_here",
+        "example_password",
+        "replace_me",
+    ] {
+        let source = format!(
+            r#"SWIFTPM_NETRC_DATA="machine registry.example.com login alice password {password}""#
+        );
+
+        let scanner = scanner_for([builtins::SWIFTPM_NETRC_PASSWORD]);
+        let results = scan_one(&scanner, &source);
+        let report = results.single_report().expect("one source");
+
+        assert!(
+            report.is_empty(),
+            "unexpected SwiftPM netrc finding for placeholder {password:?}",
+        );
+    }
+}
+
+#[test]
+fn swiftpm_netrc_password_rejects_lookalike_container_names() {
+    for name in ["MY_SWIFTPM_NETRC_DATA", "SWIFTPM_NETRC_DATA_SUFFIX"] {
+        let source = format!(
+            r#"{name}="machine registry.example.com login alice password SwiftPMNetrcSecret_123456""#
+        );
+
+        let scanner = scanner_for([builtins::SWIFTPM_NETRC_PASSWORD]);
+        let results = scan_one(&scanner, &source);
+        let report = results.single_report().expect("one source");
+
+        assert!(
+            report.is_empty(),
+            "unexpected SwiftPM netrc finding for lookalike container {name}",
         );
     }
 }

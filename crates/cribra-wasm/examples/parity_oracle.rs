@@ -165,7 +165,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             "v043-htpasswd-verifier",
             "alice:$apr1$abcdefgh$abcdefghijklmnopqrstuv",
         ),
-        
     ] {
         cases.push(case_oracle(
             name.to_owned(),
@@ -203,6 +202,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         (
             "v045-rubygems-host-api-key",
             "GEM_HOST_API_KEY=custom-gem-server-credential-0123456789",
+        ),
+        (
+            "v045-swiftpm-registry-token",
+            "SWIFTPM_REGISTRY_TOKEN=swiftpm-registry-token-0123456789",
+        ),
+        (
+            "v045-swiftpm-registry-password",
+            "SWIFTPM_REGISTRY_PASSWORD=SwiftPMRegistryPassword_123456",
+        ),
+        (
+            "v045-swiftpm-source-control-token",
+            "SWIFTPM_SOURCE_CONTROL_TOKEN=swiftpm-source-control-token-0123456789",
+        ),
+        (
+            "v045-swiftpm-netrc-password",
+            r#"SWIFTPM_NETRC_DATA="machine registry.example.com login alice password SwiftPMNetrcSecret_123456""#,
         ),
     ] {
         cases.push(case_oracle(

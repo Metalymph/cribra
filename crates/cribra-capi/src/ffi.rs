@@ -2850,7 +2850,7 @@ mod tests {
         let mut scanner = ptr::null_mut();
         let mut report = ptr::null_mut();
         let source = b"CARGO_REGISTRY_TOKEN=cargo-default-token-0123456789";
-    
+
         unsafe {
             assert_eq!(cribra_scanner_new_current(&mut scanner), CRIBRA_OK);
             assert_eq!(
@@ -2863,7 +2863,7 @@ mod tests {
                 ),
                 CRIBRA_OK
             );
-    
+
             let mut explanation = CribraExplanationView::default();
             assert_eq!(
                 cribra_scanner_explain_finding(
@@ -2875,17 +2875,14 @@ mod tests {
                 ),
                 CRIBRA_OK
             );
-    
+
             assert_eq!(explanation.kind, CRIBRA_EXPLANATION_CLASSIFIED);
-            assert_eq!(
-                explanation.detection_mode,
-                CRIBRA_DETECTION_MODE_CONTEXTUAL
-            );
+            assert_eq!(explanation.detection_mode, CRIBRA_DETECTION_MODE_CONTEXTUAL);
             assert_eq!(
                 explanation.candidate_evidence,
                 CRIBRA_CANDIDATE_EVIDENCE_NONE
             );
-    
+
             cribra_report_free(report);
             cribra_scanner_free(scanner);
         }
@@ -3390,6 +3387,22 @@ mod tests {
             (
                 "rubygems-host-api-key",
                 "GEM_HOST_API_KEY=custom-gem-server-credential-0123456789",
+            ),
+            (
+                "swiftpm-registry-token",
+                "SWIFTPM_REGISTRY_TOKEN=swiftpm-registry-token-0123456789",
+            ),
+            (
+                "swiftpm-registry-password",
+                "SWIFTPM_REGISTRY_PASSWORD=SwiftPMRegistryPassword_123456",
+            ),
+            (
+                "swiftpm-source-control-token",
+                "SWIFTPM_SOURCE_CONTROL_TOKEN=swiftpm-source-control-token-0123456789",
+            ),
+            (
+                "swiftpm-netrc-password",
+                r#"SWIFTPM_NETRC_DATA="machine registry.example.com login alice password SwiftPMNetrcSecret_123456""#,
             ),
         ];
 
