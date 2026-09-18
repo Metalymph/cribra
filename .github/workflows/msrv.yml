@@ -4,14 +4,6 @@ on:
   push:
     branches: [main]
   pull_request:
-    paths:
-      - "Cargo.toml"
-      - "Cargo.lock"
-      - "src/**"
-      - "tests/**"
-      - "examples/**"
-      - ".github/workflows/msrv.yml"
-      - ".github/workflows/release.yml"
 
 permissions:
   contents: read
