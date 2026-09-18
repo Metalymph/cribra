@@ -42,10 +42,15 @@ fn push_json_string(output: &mut String, value: &str) {
 }
 
 /// Renders one scan report as deterministic metadata-only JSON.
-pub(crate) fn render_json(source_name: &str, report: &ScanReport, scanner: &Scanner) -> String {
+pub(crate) fn render_json(
+    source_name: &str,
+    report: &ScanReport,
+    findings: &[&Finding],
+    scanner: &Scanner,
+) -> String {
     let mut output = String::new();
 
-    let status = if !report.findings().is_empty() {
+    let status = if !findings.is_empty() {
         "findings"
     } else if !report.candidates().is_empty() {
         "review"
@@ -61,14 +66,15 @@ pub(crate) fn render_json(source_name: &str, report: &ScanReport, scanner: &Scan
     push_json_field(&mut output, "status", status);
     output.push(',');
 
-    write!(output, "\"findings_count\":{},", report.len()).expect("writing to String cannot fail");
+    write!(output, "\"findings_count\":{},", findings.len())
+        .expect("writing to String cannot fail");
 
     write!(output, "\"candidates_count\":{},", report.candidate_len())
         .expect("writing to String cannot fail");
 
     output.push_str("\"findings\":[");
 
-    for (index, finding) in report.findings().iter().enumerate() {
+    for (index, finding) in findings.iter().copied().enumerate() {
         if index != 0 {
             output.push(',');
         }
@@ -159,11 +165,12 @@ pub(crate) fn render(
     format: OutputFormat,
     source_name: &str,
     report: &ScanReport,
+    findings: &[&Finding],
     scanner: &Scanner,
 ) -> String {
     match format {
-        OutputFormat::Human => render_human(source_name, report, scanner),
-        OutputFormat::Json => render_json(source_name, report, scanner),
+        OutputFormat::Human => render_human(source_name, report, findings, scanner),
+        OutputFormat::Json => render_json(source_name, report, findings, scanner),
     }
 }
 
@@ -171,10 +178,15 @@ pub(crate) fn render(
 ///
 /// The output contains source identity, aggregate state, finding metadata and
 /// review-candidate metadata. It never includes matched source material.
-pub(crate) fn render_human(source_name: &str, report: &ScanReport, scanner: &Scanner) -> String {
+pub(crate) fn render_human(
+    source_name: &str,
+    report: &ScanReport,
+    findings: &[&Finding],
+    scanner: &Scanner,
+) -> String {
     let mut output = String::new();
 
-    let status = if !report.findings().is_empty() {
+    let status = if !findings.is_empty() {
         "findings"
     } else if !report.candidates().is_empty() {
         "review"
@@ -184,11 +196,11 @@ pub(crate) fn render_human(source_name: &str, report: &ScanReport, scanner: &Sca
 
     writeln!(output, "source: {source_name}").expect("writing to String cannot fail");
     writeln!(output, "status: {status}").expect("writing to String cannot fail");
-    writeln!(output, "findings: {}", report.len()).expect("writing to String cannot fail");
+    writeln!(output, "findings: {}", findings.len()).expect("writing to String cannot fail");
     writeln!(output, "candidates: {}", report.candidate_len())
         .expect("writing to String cannot fail");
 
-    for finding in report.findings() {
+    for finding in findings.iter().copied() {
         let location = finding.location();
 
         writeln!(
@@ -298,8 +310,10 @@ mod tests {
         let results = scanner.scan([("clean.txt", "ordinary text")]);
         let report = results.single_report().expect("one report");
 
+        let findings = report.findings().iter().collect::<Vec<_>>();
+
         assert_eq!(
-            render_human("clean.txt", report, &scanner),
+            render_human("clean.txt", report, &findings, &scanner),
             "\
 source: clean.txt
 status: clean
@@ -317,7 +331,9 @@ candidates: 0
         let results = scanner.scan([("config.env", source.as_str())]);
         let report = results.single_report().expect("one report");
 
-        let output = render_human("config.env", report, &scanner);
+        let findings = report.findings().iter().collect::<Vec<_>>();
+
+        let output = render_human("config.env", report, &findings, &scanner);
 
         assert!(output.contains("status: findings"));
         assert!(output.contains("github"));
@@ -334,7 +350,9 @@ candidates: 0
         let results = scanner.scan([("candidate.txt", candidate)]);
         let report = results.single_report().expect("one report");
 
-        let output = render_human("candidate.txt", report, &scanner);
+        let findings = report.findings().iter().collect::<Vec<_>>();
+
+        let output = render_human("candidate.txt", report, &findings, &scanner);
 
         assert!(output.contains("status: review"));
         assert!(output.contains("candidate:"));
@@ -351,7 +369,9 @@ candidates: 0
         let results = scanner.scan([("config.env", source.as_str())]);
         let report = results.single_report().expect("one report");
 
-        let output = render_json("config.env", report, &scanner);
+        let findings = report.findings().iter().collect::<Vec<_>>();
+
+        let output = render_json("config.env", report, &findings, &scanner);
 
         assert!(output.starts_with('{'));
         assert!(output.ends_with("}\n"));
@@ -370,7 +390,9 @@ candidates: 0
         let results = scanner.scan([("clean", "ordinary text")]);
         let report = results.single_report().expect("one report");
 
-        let output = render_json("dir/\"quoted\"\\file", report, &scanner);
+        let findings = report.findings().iter().collect::<Vec<_>>();
+
+        let output = render_json("dir/\"quoted\"\\file", report, &findings, &scanner);
 
         assert!(output.contains("\"source\":\"dir/\\\"quoted\\\"\\\\file\""));
     }

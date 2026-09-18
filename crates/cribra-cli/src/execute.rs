@@ -83,6 +83,18 @@ pub fn execute(command: &Command) -> Result<CommandOutput, ExecuteError> {
             let scanner = cribra::Scanner::default();
             let results = scanner.scan([(source.name(), source.text())]);
 
+            let mut query = results.query();
+
+            if let Some(severity) = command.minimum_severity {
+                query = query.minimum_severity(severity);
+            }
+
+            if let Some(confidence) = command.minimum_confidence {
+                query = query.minimum_confidence(confidence);
+            }
+
+            let findings = query.iter().map(|(_, finding)| finding).collect::<Vec<_>>();
+
             let report = results
                 .single_report()
                 .expect("single CLI input must produce exactly one report");
@@ -91,6 +103,7 @@ pub fn execute(command: &Command) -> Result<CommandOutput, ExecuteError> {
                 command.format,
                 source.name(),
                 report,
+                &findings,
                 &scanner,
             )))
         }

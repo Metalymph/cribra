@@ -77,6 +77,9 @@ where
 
             let mut format = OutputFormat::Human;
 
+            let mut minimum_severity = None;
+            let mut minimum_confidence = None;
+
             while let Some(argument) = args.next() {
                 if argument == OsStr::new("--format") {
                     let Some(value) = args.next() else {
@@ -94,13 +97,54 @@ where
                     continue;
                 }
 
+                if argument == OsStr::new("--min-severity") {
+                    let Some(value) = args.next() else {
+                        return Err(ParseError::new(
+                            "--min-severity requires info, low, medium, high, or critical",
+                        ));
+                    };
+
+                    let Some(parsed) = command::parse_severity(&value.to_string_lossy()) else {
+                        return Err(ParseError::new(format!(
+                            "unsupported minimum severity: {}",
+                            value.to_string_lossy()
+                        )));
+                    };
+
+                    minimum_severity = Some(parsed);
+                    continue;
+                }
+
+                if argument == OsStr::new("--min-confidence") {
+                    let Some(value) = args.next() else {
+                        return Err(ParseError::new(
+                            "--min-confidence requires low, medium, or high",
+                        ));
+                    };
+
+                    let Some(parsed) = command::parse_confidence(&value.to_string_lossy()) else {
+                        return Err(ParseError::new(format!(
+                            "unsupported minimum confidence: {}",
+                            value.to_string_lossy()
+                        )));
+                    };
+
+                    minimum_confidence = Some(parsed);
+                    continue;
+                }
+
                 return Err(ParseError::new(format!(
                     "unexpected scan argument: {}",
                     argument.to_string_lossy()
                 )));
             }
 
-            Ok(Command::Scan(ScanCommand { input, format }))
+            Ok(Command::Scan(ScanCommand {
+                input,
+                format,
+                minimum_severity,
+                minimum_confidence,
+            }))
         }
 
         Some(argument) if argument == OsStr::new("--help") || argument == OsStr::new("-h") => {
@@ -152,21 +196,23 @@ where
 
 pub(crate) fn help_text() -> &'static str {
     "\
-Usage:
-  cribra scan <FILE> [--format human|json]
-  cribra scan - [--format human|json]
-  cribra [OPTIONS]
+    Usage:
+      cribra scan <FILE> [--format human|json] [--min-severity LEVEL] [--min-confidence LEVEL]
+      cribra scan - [--format human|json] [--min-severity LEVEL] [--min-confidence LEVEL]
+      cribra [OPTIONS]
 
-Commands:
-  scan <FILE>       Scan one explicit UTF-8 file
-  scan -            Scan UTF-8 from standard input
+    Commands:
+      scan <FILE>              Scan one explicit UTF-8 file
+      scan -                   Scan UTF-8 from standard input
 
-Scan options:
-  --format FORMAT   Output format: human or json
+    Scan options:
+      --format FORMAT          Output format: human or json
+      --min-severity LEVEL     Minimum severity: info, low, medium, high, critical
+      --min-confidence LEVEL   Minimum confidence: low, medium, high
 
-Options:
-  -h, --help        Print help
-  -V, --version     Print version
+    Options:
+      -h, --help               Print help
+      -V, --version            Print version
 "
 }
 
@@ -198,6 +244,8 @@ mod tests {
             Command::Scan(ScanCommand {
                 input: ScanInput::File("config.env".into()),
                 format: OutputFormat::Human,
+                minimum_severity: None,
+                minimum_confidence: None,
             })
         );
     }
@@ -209,6 +257,8 @@ mod tests {
             Command::Scan(ScanCommand {
                 input: ScanInput::Stdin,
                 format: OutputFormat::Json,
+                minimum_severity: None,
+                minimum_confidence: None,
             })
         );
     }
@@ -254,6 +304,8 @@ mod tests {
         let command = Command::Scan(ScanCommand {
             input: ScanInput::File(path.clone()),
             format: OutputFormat::Json,
+            minimum_severity: None,
+            minimum_confidence: None,
         });
 
         let result = execute(&command).unwrap();
@@ -271,5 +323,85 @@ mod tests {
     #[test]
     fn process_adapter_preserves_usage_exit_code() {
         assert_eq!(run(["cribra", "--unknown"]), ExitCode::from(2));
+    }
+
+    #[test]
+    fn scan_filters_parse() {
+        assert_eq!(
+            parse([
+                "cribra",
+                "scan",
+                "config.env",
+                "--min-severity",
+                "high",
+                "--min-confidence",
+                "medium",
+            ])
+            .unwrap(),
+            Command::Scan(ScanCommand {
+                input: ScanInput::File("config.env".into()),
+                format: OutputFormat::Human,
+                minimum_severity: Some(cribra::Severity::High),
+                minimum_confidence: Some(cribra::Confidence::Medium),
+            })
+        );
+    }
+
+    #[test]
+    fn scan_rejects_invalid_minimum_severity() {
+        assert!(parse(["cribra", "scan", "config.env", "--min-severity", "urgent",]).is_err());
+    }
+
+    #[test]
+    fn scan_rejects_invalid_minimum_confidence() {
+        assert!(
+            parse([
+                "cribra",
+                "scan",
+                "config.env",
+                "--min-confidence",
+                "certain",
+            ])
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn minimum_severity_includes_equal_severity() {
+        use std::{
+            fs,
+            time::{SystemTime, UNIX_EPOCH},
+        };
+
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system clock should be after Unix epoch")
+            .as_nanos();
+
+        let path = std::env::temp_dir().join(format!(
+            "cribra-cli-filter-{}-{unique}.env",
+            std::process::id()
+        ));
+
+        fs::write(
+            &path,
+            b"GITHUB_TOKEN=ghp_AbCdEf0123456789_AbCdEf0123456789\n",
+        )
+        .unwrap();
+
+        let command = Command::Scan(ScanCommand {
+            input: ScanInput::File(path.clone()),
+            format: OutputFormat::Json,
+            minimum_severity: Some(cribra::Severity::Critical),
+            minimum_confidence: None,
+        });
+
+        let result = execute(&command).unwrap();
+
+        fs::remove_file(path).unwrap();
+
+        assert!(result.stdout().contains("\"findings_count\":1"));
+        assert!(result.stdout().contains("\"status\":\"findings\""));
+        assert!(result.stdout().contains("\"severity\":\"critical\""));
     }
 }
