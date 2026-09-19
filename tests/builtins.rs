@@ -3121,6 +3121,33 @@ fn financial_pack_composes_with_default_builtins_without_joining_default_pack() 
 }
 
 #[test]
+fn financial_pack_preserves_financial_rule_ownership_when_composed_with_default_builtins() {
+    let scanner = Scanner::builder()
+        .builtins(builtins::CURRENT)
+        .builtins(builtins::financial::CURRENT)
+        .build()
+        .expect("default and financial packs must compose");
+
+    let source = concat!(
+        "iban=IT60X0542811101000000123456\n",
+        "card_number=1234567890123452"
+    );
+
+    let results = scan_one(&scanner, source);
+    let report = results.single_report().expect("one fixture was scanned");
+
+    assert_eq!(report.len(), 2);
+
+    let ids: Vec<_> = report
+        .findings()
+        .iter()
+        .map(|finding| finding.rule_id().as_str())
+        .collect();
+
+    assert_eq!(ids, ["financial.iban", "financial.pan"]);
+}
+
+#[test]
 fn financial_pan_is_network_agnostic() {
     // Synthetic Luhn-valid value used only to prove that PAN validation does
     // not depend on card-network, issuer or live BIN/IIN attribution.
@@ -3135,4 +3162,19 @@ fn financial_pan_is_network_agnostic() {
     assert_eq!(report.findings()[0].rule_id().as_str(), "financial.pan");
     assert_eq!(matched(&source, &report.findings()[0]), pan);
     assert_eq!(report.findings()[0].confidence(), Confidence::High);
+}
+
+#[test]
+fn financial_pan_rejects_values_outside_supported_length_range() {
+    let scanner = scanner_for([builtins::financial::PAN]);
+
+    for source in ["card_number=123456789", "card_number=12345678901234567890"] {
+        let results = scan_one(&scanner, source);
+        let report = results.single_report().expect("one fixture was scanned");
+
+        assert!(
+            report.is_empty(),
+            "PAN outside the supported 10..=19 digit range must not be detected"
+        );
+    }
 }

@@ -3367,6 +3367,50 @@ mod tests {
     }
 
     #[test]
+    fn financial_finding_flows_through_generic_c_abi_transform() {
+        let mut builder = ptr::null_mut();
+        let mut scanner = ptr::null_mut();
+        let mut report = ptr::null_mut();
+        let mut output = ptr::null_mut();
+        let source = b"card_number=1234567890123452";
+
+        unsafe {
+            assert_eq!(cribra_builder_new(&mut builder), CRIBRA_OK);
+            assert_eq!(cribra_builder_add_financial_builtins(builder), CRIBRA_OK);
+            assert_eq!(
+                cribra_builder_build(builder, &mut scanner, ptr::null_mut()),
+                CRIBRA_OK
+            );
+            assert_eq!(
+                cribra_scanner_scan(
+                    scanner,
+                    source.as_ptr(),
+                    source.len(),
+                    &mut report,
+                    ptr::null_mut(),
+                ),
+                CRIBRA_OK
+            );
+
+            assert_eq!(
+                cribra_transform_redact(
+                    source.as_ptr(),
+                    source.len(),
+                    report,
+                    &mut output,
+                    ptr::null_mut(),
+                ),
+                CRIBRA_OK
+            );
+            assert_eq!(output_text(output), "card_number=[REDACTED]");
+
+            cribra_output_free(output);
+            cribra_report_free(report);
+            cribra_scanner_free(scanner);
+        }
+    }
+
+    #[test]
     fn template_and_custom_redaction_preserve_core_semantics() {
         let (scanner, report, source) = transform_fixture();
         let mut output = ptr::null_mut();
