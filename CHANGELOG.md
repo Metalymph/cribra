@@ -9,7 +9,9 @@ history.
 
 ## [Unreleased]
 
-The current development line adds the first opt-in sensitive-data family
+## [0.4.6] - 2026-09-19
+
+Cribra 0.4.6 adds the first opt-in sensitive-data family
 without broadening Cribra's default security and credential catalog.
 
 ### Added
