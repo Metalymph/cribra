@@ -41,6 +41,7 @@ struct CaseOracle {
 enum ScannerKind {
     CanonicalCustom,
     DefaultBuiltins,
+    FinancialBuiltins,
 }
 
 #[derive(Serialize)]
@@ -91,6 +92,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let default_scanner = Scanner::default();
     let mut cases = Vec::new();
 
+    let financial_scanner = Scanner::builder()
+        .builtins(cribra::builtins::financial::CURRENT)
+        .build()?;
+
     for path in sorted_files(&fixture_root)? {
         let relative = path
             .strip_prefix(&fixture_root)?
@@ -125,6 +130,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ScannerKind::DefaultBuiltins,
         &default_scanner,
         "GITHUB_TOKEN=ghp_AbCdEf0123456789_AbCdEf0123456789".to_owned(),
+    )?);
+
+    cases.push(case_oracle(
+        "v046-financial-iban".to_owned(),
+        ScannerKind::FinancialBuiltins,
+        &financial_scanner,
+        "iban=GB82WEST12345698765432".to_owned(),
+    )?);
+
+    cases.push(case_oracle(
+        "v046-financial-pan".to_owned(),
+        ScannerKind::FinancialBuiltins,
+        &financial_scanner,
+        "card_number=1234567890123452".to_owned(),
     )?);
 
     for (name, source) in [

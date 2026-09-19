@@ -906,6 +906,11 @@ CribraStatus cribra_batch_results_summary(const struct CribraBatchResults *resul
 CribraStatus cribra_builder_add_current_builtins(struct CribraBuilder *builder);
 
 /**
+ * Adds Cribra's opt-in financial built-in catalog to a scanner builder.
+ */
+CribraStatus cribra_builder_add_financial_builtins(struct CribraBuilder *builder);
+
+/**
  * Adds one public custom rule to a scanner builder.
  *
  * `id` and `value` are copied into Rust-owned rule storage before this function

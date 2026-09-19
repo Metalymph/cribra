@@ -145,7 +145,8 @@ confidence, or remediation and is never automatically transformed.
 
 ## Built-in detection
 
-The current built-in catalog covers high-confidence families including:
+The default built-in catalog covers high-confidence security and credential
+families including:
 
 - GitHub and GitLab credentials;
 - Stripe, Cloudflare, Slack, and Telegram credentials;
@@ -157,6 +158,8 @@ The current built-in catalog covers high-confidence families including:
 - explicit HTTP Bearer and HTTP Basic authentication;
 - contextual WireGuard credentials;
 - Docker registry authentication;
+- developer and package-registry credentials for supported Cargo, PyPI, NuGet,
+  Maven, RubyGems, SwiftPM, Gradle, and Composer surfaces;
 - registry-scoped npm credentials;
 - `.netrc` credentials;
 - supported `/etc/shadow` password verifiers;
@@ -164,7 +167,32 @@ The current built-in catalog covers high-confidence families including:
 - contextual sensitive hashes;
 - generic API keys, tokens, and secrets.
 
-The canonical selectable built-in pack is `builtins::CURRENT`.
+The canonical default pack is `builtins::CURRENT`.
+
+Additional built-in families may be exposed through explicit opt-in packs rather
+than broadening the default scanner. The financial pack is available as
+`builtins::financial::CURRENT` and currently contains:
+
+- `financial.iban` — registered-country IBAN structure, exact country length,
+  and MOD-97 validation;
+- `financial.pan` — contextual payment-card PAN recognition using numeric
+  structure, supported length, Luhn validity, and strong payment-card context.
+
+Compose it explicitly when financial recognition is required:
+
+```rust
+use cribra::Scanner;
+
+let scanner = Scanner::builder()
+    .builtins(cribra::builtins::CURRENT)
+    .builtins(cribra::builtins::financial::CURRENT)
+    .build()?;
+# Ok::<(), cribra::ScannerBuildError>(())
+```
+
+Financial findings identify locally recognizable data. They do not establish
+ownership, issuer or account assignment, account existence, activity,
+authorization, or compromise.
 
 Cribra intentionally does not perform generic entropy scanning, arbitrary
 Base64 detection, unrestricted hash detection, or broad PII classification.
@@ -218,25 +246,43 @@ same borrowed sources by construction.
 
 ## Native C interoperability
 
-The dedicated `cribra-capi` adapter exposes a stable-designed native protocol
+The dedicated `cribra-capi` adapter exposes Cribra through a native C ABI
 without exposing Rust object layouts.
 
-Important invariants include explicit ownership, explicit destruction, UTF-8
-validation, panic containment, metadata-only result projection, and semantic
-parity with the Rust core.
+The ABI preserves the Rust core as semantic authority while providing explicit
+ownership and destruction, UTF-8 validation, panic containment, metadata-only
+result projection, scanner construction, report traversal, transformations,
+and opt-in built-in composition.
 
-See `docs/INTEROP.md`.
+C applications can consume the ABI directly. C++ applications use the same ABI
+and may layer their own ownership ergonomics over it; Cribra does not maintain
+a separate C++ semantic implementation.
+
+Runnable C and C++ consumers are available under `examples/c/` and
+`examples/cpp/`.
+
+See `docs/INTEROP.md` for the native interoperability contract.
 
 ## WebAssembly
 
-`cribra-wasm` is a typed `wasm-bindgen` adapter over the same Cribra core.
+`cribra-wasm` is a typed `wasm-bindgen` adapter over the same Cribra core. It
+does not route through the C ABI or maintain an independent detector
+implementation.
 
-It does not route through the C ABI and does not maintain an independent
-detector implementation.
+Cribra produces one optimized WebAssembly artifact using Binaryen `-Oz`.
+Browser consumers can use the generated URL/fetch initialization path, while
+server-side JavaScript runtimes can initialize the same artifact explicitly
+from its Wasm bytes.
 
-The production browser artifact uses Binaryen `-Oz`. Rust/WASM parity gates
-cover findings, spans, metadata, candidates, explanations, and supported
-transformations.
+The production artifact has been exercised directly from a browser and from
+Node.js 26.9.0, Bun 1.4.2, and Deno 2.9.7. These versions record the validated
+example environment rather than define a compatibility range.
+
+Rust/WASM parity gates cover findings, spans, metadata, candidates,
+explanations, transformations, and the opt-in financial built-ins.
+
+Runnable browser and JavaScript-runtime consumers are available under
+`examples/wasm-browser/` and `examples/wasm-runtime/`.
 
 See `docs/WASM_INTEROP.md`.
 
@@ -311,12 +357,29 @@ contracts.
 
 The active release line is `0.4.x`.
 
-`0.4.4` adds the canonical reusable Cribra CLI without changing the core
-detection architecture. The project remains on `0.4.x` while changes are
-additive and preserve the current public semantic contracts.
+The current development line extends Cribra conservatively through additive
+detectors, opt-in detection packs, interoperability improvements, and
+downstream-consumer readiness while preserving the existing public semantic
+contracts.
 
 A future `0.5` is reserved for a deliberate architectural or public-contract
 change significant enough to justify a new minor line.
+
+## Examples
+
+Cribra includes runnable integration examples rather than documentation-only
+snippets:
+
+- **Rust** — `examples/financial_review.rs` composes the default and opt-in
+  financial packs, inspects finding metadata, and creates a redacted derivative.
+- **Browser / WebAssembly** — `examples/wasm-browser/` scans and redacts
+  caller-owned text locally in a dependency-free browser application.
+- **Node.js / Bun / Deno** — `examples/wasm-runtime/` loads the same production
+  WebAssembly artifact from a server-side JavaScript runtime.
+- **C** — `examples/c/` demonstrates scanner construction, opt-in pack
+  composition, report traversal, transformation, and explicit ABI cleanup.
+- **C++** — `examples/cpp/` consumes the C ABI through small local move-only
+  RAII wrappers without introducing a separate Cribra binding.
 
 ## License
 

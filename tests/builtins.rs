@@ -2824,3 +2824,357 @@ fn system_password_verifier_rules_do_not_cross_record_formats() {
     );
     assert_eq!(matched(&source, &report.findings()[1]), htpasswd);
 }
+
+#[test]
+fn financial_iban_is_opt_in_and_not_part_of_default_scanner() {
+    let source = "IT60X0542811101000000123456";
+
+    let default_results = scan_one(&Scanner::default(), source);
+    let default_report = default_results
+        .single_report()
+        .expect("one fixture was scanned");
+
+    assert!(
+        default_report
+            .findings()
+            .iter()
+            .all(|finding| finding.rule_id().as_str() != "financial.iban")
+    );
+
+    let scanner = scanner_for(builtins::financial::CURRENT.iter().copied());
+    let results = scan_one(&scanner, source);
+    let report = results.single_report().expect("one fixture was scanned");
+
+    assert_eq!(report.len(), 1);
+    assert_eq!(report.findings()[0].rule_id().as_str(), "financial.iban");
+}
+
+#[test]
+fn financial_iban_reports_exact_electronic_span() {
+    let iban = "IT60X0542811101000000123456";
+    let source = format!("before {iban} after");
+    let scanner = scanner_for([builtins::financial::IBAN]);
+
+    let results = scan_one(&scanner, &source);
+    let report = results.single_report().expect("one fixture was scanned");
+
+    assert_eq!(report.len(), 1);
+
+    let finding = &report.findings()[0];
+
+    assert_eq!(finding.rule_id().as_str(), "financial.iban");
+    assert_eq!(matched(&source, finding), iban);
+    assert_eq!(finding.severity(), Severity::High);
+    assert_eq!(finding.confidence(), Confidence::High);
+    assert_eq!(
+        finding.remediation(),
+        Some(Remediation::RemoveSensitiveValue)
+    );
+}
+
+#[test]
+fn financial_iban_print_representation_is_not_discovered_yet() {
+    let source = "IT60 X054 2811 1010 0000 0123 456";
+    let scanner = scanner_for([builtins::financial::IBAN]);
+
+    let results = scan_one(&scanner, source);
+    let report = results.single_report().expect("one fixture was scanned");
+
+    assert!(report.is_empty());
+}
+
+#[test]
+fn financial_iban_accepts_punctuation_boundaries_without_including_them() {
+    let iban = "IT60X0542811101000000123456";
+    let source = format!("({iban})");
+    let scanner = scanner_for([builtins::financial::IBAN]);
+
+    let results = scan_one(&scanner, &source);
+    let report = results.single_report().expect("one fixture was scanned");
+
+    assert_eq!(report.len(), 1);
+    assert_eq!(matched(&source, &report.findings()[0]), iban);
+}
+
+#[test]
+fn financial_iban_rejects_alphanumeric_adjacency() {
+    let iban = "IT60X0542811101000000123456";
+    let scanner = scanner_for([builtins::financial::IBAN]);
+
+    for source in [format!("x{iban}"), format!("{iban}x")] {
+        let results = scan_one(&scanner, &source);
+        let report = results.single_report().expect("one fixture was scanned");
+
+        assert!(
+            report.is_empty(),
+            "IBAN embedded in an alphanumeric token must not be detected"
+        );
+    }
+}
+
+#[test]
+fn financial_iban_rejects_invalid_checksum() {
+    let scanner = scanner_for([builtins::financial::IBAN]);
+    let source = "IT00X0542811101000000123456";
+
+    let results = scan_one(&scanner, source);
+    let report = results.single_report().expect("one fixture was scanned");
+
+    assert!(report.is_empty());
+}
+
+#[test]
+fn financial_iban_rejects_unknown_country() {
+    let scanner = scanner_for([builtins::financial::IBAN]);
+    let source = "ZZ60X0542811101000000123456";
+
+    let results = scan_one(&scanner, source);
+    let report = results.single_report().expect("one fixture was scanned");
+
+    assert!(report.is_empty());
+}
+
+#[test]
+fn financial_iban_is_detected_before_following_prose() {
+    let iban = "IT60X0542811101000000123456";
+    let source = format!("IBAN {iban} account");
+    let scanner = scanner_for([builtins::financial::IBAN]);
+
+    let results = scan_one(&scanner, &source);
+    let report = results.single_report().expect("one fixture was scanned");
+
+    assert_eq!(report.len(), 1);
+    assert_eq!(matched(&source, &report.findings()[0]), iban);
+}
+
+#[test]
+fn financial_pan_is_opt_in_and_not_part_of_default_scanner() {
+    let source = "card_number=4111111111111111";
+
+    let default_results = scan_one(&Scanner::default(), source);
+    let default_report = default_results
+        .single_report()
+        .expect("one fixture was scanned");
+
+    assert!(
+        default_report
+            .findings()
+            .iter()
+            .all(|finding| finding.rule_id().as_str() != "financial.pan")
+    );
+
+    let scanner = scanner_for(builtins::financial::CURRENT.iter().copied());
+    let results = scan_one(&scanner, source);
+    let report = results.single_report().expect("one fixture was scanned");
+
+    assert_eq!(report.len(), 1);
+    assert_eq!(report.findings()[0].rule_id().as_str(), "financial.pan");
+}
+
+#[test]
+fn financial_pan_reports_exact_compact_span_and_metadata() {
+    let pan = "4111111111111111";
+    let source = format!("card_number=({pan})");
+    let scanner = scanner_for([builtins::financial::PAN]);
+
+    let results = scan_one(&scanner, &source);
+    let report = results.single_report().expect("one fixture was scanned");
+
+    assert_eq!(report.len(), 1);
+
+    let finding = &report.findings()[0];
+
+    assert_eq!(finding.rule_id().as_str(), "financial.pan");
+    assert_eq!(matched(&source, finding), pan);
+    assert_eq!(finding.severity(), Severity::High);
+    assert_eq!(finding.confidence(), Confidence::High);
+    assert_eq!(
+        finding.remediation(),
+        Some(Remediation::RemoveSensitiveValue)
+    );
+}
+
+#[test]
+fn financial_pan_requires_explicit_card_context() {
+    let pan = "4111111111111111";
+    let scanner = scanner_for([builtins::financial::PAN]);
+
+    for key in [
+        "number",
+        "account",
+        "account_number",
+        "payment",
+        "card",
+        "reference_number",
+    ] {
+        let source = format!("{key}={pan}");
+        let results = scan_one(&scanner, &source);
+        let report = results.single_report().expect("one fixture was scanned");
+
+        assert!(
+            report.is_empty(),
+            "weak context {key:?} must not establish PAN authority"
+        );
+    }
+}
+
+#[test]
+fn financial_pan_accepts_explicit_normalized_card_contexts() {
+    let pan = "4111111111111111";
+    let scanner = scanner_for([builtins::financial::PAN]);
+
+    for key in [
+        "pan",
+        "primary_account_number",
+        "CARD-NUMBER",
+        "card.no",
+        "card_num",
+        "payment-card-number",
+        "credit.card.number",
+        "debit_card_number",
+    ] {
+        let source = format!("{key}={pan}");
+        let results = scan_one(&scanner, &source);
+        let report = results.single_report().expect("one fixture was scanned");
+
+        assert_eq!(
+            report.len(),
+            1,
+            "explicit PAN context {key:?} should be accepted"
+        );
+        assert_eq!(matched(&source, &report.findings()[0]), pan);
+    }
+}
+
+#[test]
+fn financial_pan_rejects_invalid_luhn_checksum() {
+    let source = "card_number=4111111111111112";
+    let scanner = scanner_for([builtins::financial::PAN]);
+
+    let results = scan_one(&scanner, source);
+    let report = results.single_report().expect("one fixture was scanned");
+
+    assert!(report.is_empty());
+}
+
+#[test]
+fn financial_pan_does_not_extract_from_longer_numeric_tokens() {
+    let scanner = scanner_for([builtins::financial::PAN]);
+
+    for source in [
+        "card_number=94111111111111111999",
+        "card_number=94111111111111111111",
+    ] {
+        let results = scan_one(&scanner, source);
+        let report = results.single_report().expect("one fixture was scanned");
+
+        assert!(
+            report.is_empty(),
+            "PAN matcher must not extract a valid-looking substring from a longer numeric token"
+        );
+    }
+}
+
+#[test]
+fn financial_pan_formatted_representations_are_not_discovered_yet() {
+    let scanner = scanner_for([builtins::financial::PAN]);
+
+    for source in [
+        "card_number=4111 1111 1111 1111",
+        "card_number=4111-1111-1111-1111",
+    ] {
+        let results = scan_one(&scanner, source);
+        let report = results.single_report().expect("one fixture was scanned");
+
+        assert!(
+            report.is_empty(),
+            "formatted PAN representations are outside the current discovery contract"
+        );
+    }
+}
+
+#[test]
+fn financial_pan_accepts_punctuation_boundaries_without_including_them() {
+    let pan = "4111111111111111";
+    let source = format!("card_number=({pan}),");
+    let scanner = scanner_for([builtins::financial::PAN]);
+
+    let results = scan_one(&scanner, &source);
+    let report = results.single_report().expect("one fixture was scanned");
+
+    assert_eq!(report.len(), 1);
+    assert_eq!(matched(&source, &report.findings()[0]), pan);
+}
+
+#[test]
+fn financial_pack_composes_with_default_builtins_without_joining_default_pack() {
+    let scanner = Scanner::builder()
+        .builtins(builtins::CURRENT)
+        .builtins(builtins::financial::CURRENT)
+        .build()
+        .expect("default and financial packs must compose");
+
+    assert_eq!(
+        scanner.rules_count(),
+        builtins::CURRENT.len() + builtins::financial::CURRENT.len()
+    );
+}
+
+#[test]
+fn financial_pack_preserves_financial_rule_ownership_when_composed_with_default_builtins() {
+    let scanner = Scanner::builder()
+        .builtins(builtins::CURRENT)
+        .builtins(builtins::financial::CURRENT)
+        .build()
+        .expect("default and financial packs must compose");
+
+    let source = concat!(
+        "iban=IT60X0542811101000000123456\n",
+        "card_number=1234567890123452"
+    );
+
+    let results = scan_one(&scanner, source);
+    let report = results.single_report().expect("one fixture was scanned");
+
+    assert_eq!(report.len(), 2);
+
+    let ids: Vec<_> = report
+        .findings()
+        .iter()
+        .map(|finding| finding.rule_id().as_str())
+        .collect();
+
+    assert_eq!(ids, ["financial.iban", "financial.pan"]);
+}
+
+#[test]
+fn financial_pan_is_network_agnostic() {
+    // Synthetic Luhn-valid value used only to prove that PAN validation does
+    // not depend on card-network, issuer or live BIN/IIN attribution.
+    let pan = "1234567890123452";
+    let source = format!("card_number={pan}");
+    let scanner = scanner_for([builtins::financial::PAN]);
+
+    let results = scan_one(&scanner, &source);
+    let report = results.single_report().expect("one fixture was scanned");
+
+    assert_eq!(report.len(), 1);
+    assert_eq!(report.findings()[0].rule_id().as_str(), "financial.pan");
+    assert_eq!(matched(&source, &report.findings()[0]), pan);
+    assert_eq!(report.findings()[0].confidence(), Confidence::High);
+}
+
+#[test]
+fn financial_pan_rejects_values_outside_supported_length_range() {
+    let scanner = scanner_for([builtins::financial::PAN]);
+
+    for source in ["card_number=123456789", "card_number=12345678901234567890"] {
+        let results = scan_one(&scanner, source);
+        let report = results.single_report().expect("one fixture was scanned");
+
+        assert!(
+            report.is_empty(),
+            "PAN outside the supported 10..=19 digit range must not be detected"
+        );
+    }
+}

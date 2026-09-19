@@ -1,35 +1,53 @@
-# Cribra WASM Interoperability Audit
+# Cribra WebAssembly Interoperability
 
-Status: v0.4.5 release-hardening documentation and packaging gate
-Branch: `v0.4-wasm-interoperability`
+Status: implemented WebAssembly interoperability contract and validation record
 
 ## Purpose
 
-Cribra v0.4 audits and refines the already-working browser/WASM integration
-without changing core semantics merely to create a new wrapper.
+`cribra-wasm` is Cribra's typed WebAssembly adapter. It projects the Rust core
+into JavaScript and TypeScript environments without creating a second detection
+implementation.
 
-The v0.4 rule remains evidence before implementation and optimization: preserve
-the Rust core as semantic authority, measure the real browser boundary, and add
-or optimize only what concrete consumers justify.
+The Rust `cribra` crate remains the semantic authority for detection,
+validation, findings, candidates, explainability, remediation, ordering, and
+transformations. The WebAssembly adapter owns only the typed `wasm-bindgen`
+projection and WebAssembly-specific lifecycle.
+
+This document records both the current WebAssembly contract and the measured
+evidence that established its production profile. Historical v0.4.x benchmark
+sections are retained where they explain current architectural decisions.
 
 ## Architecture
 
 ```text
-Cribra Core
-    ├── Rust API
-    ├── C ABI
-    └── WASM adapter
-            │
-            └── JavaScript / TypeScript consumer
+Cribra core (`cribra`)
+        │
+        ▼
+`cribra-wasm`
+        │
+        ├── browser
+        ├── Node.js
+        ├── Bun
+        └── Deno
 ```
 
-The WASM adapter is independent from `cribra-capi`. The C ABI is not an
-implementation layer for browser WASM.
+`cribra-wasm` is independent from `cribra-capi`. WebAssembly does not route
+through the native C ABI.
 
-The core remains browser-agnostic. The dedicated `cribra-wasm` crate owns the
-typed `wasm-bindgen` projection. DOM APIs, Worker orchestration, service-worker
-integration, caching, CSP, source lifetime, session lifetime, storage, and UI
-remain consumer responsibilities.
+The core remains browser- and runtime-agnostic. `cribra-wasm` owns the typed
+`wasm-bindgen` projection. DOM APIs, Worker orchestration, service-worker
+integration, caching, CSP, source lifetime, session lifetime, storage,
+filesystem access, networking, and UI remain consumer responsibilities.
+
+Cribra maintains one production WebAssembly artifact rather than separate
+browser and server-runtime builds. Browser consumers use the generated
+URL/fetch initialization path. Server-side JavaScript runtimes can load the
+same `.wasm` artifact as bytes and pass it explicitly to the generated
+initializer.
+
+The maintained integration examples exercise this artifact in a browser and in
+Node.js 26.9.0, Bun 1.4.2, and Deno 2.9.7. These versions record validated
+environments rather than define a permanent compatibility range.
 
 ## v0.4.1 measured baseline
 
@@ -142,14 +160,15 @@ Browser-specific scheduler and JIT behavior can affect absolute benchmark
 numbers. Semantic parity is required across targets; performance measurements
 are interpreted as regression and architecture evidence.
 
-## Supported Rust/WASM capability parity
+## Current Rust/WASM capability parity
 
 The WASM surface is intentionally narrower than the complete generic Rust API,
 but every exposed capability delegates to the same Rust core semantics.
 
-| Capability | Rust core | `cribra-wasm` | v0.4 parity status |
+| Capability | Rust core | `cribra-wasm` | Status |
 | --- | --- | --- | --- |
-| current built-ins | yes | yes | semantic parity verified |
+| current default built-ins | yes | yes | semantic parity verified |
+| opt-in financial built-ins | yes | yes | semantic parity verified |
 | literal/prefix/suffix/pattern custom rules | yes | yes | semantic parity verified |
 | finding count/order/rule ID | yes | yes | semantic parity verified |
 | byte spans and Unicode coordinates | yes | yes | semantic parity verified |
@@ -161,12 +180,55 @@ but every exposed capability delegates to the same Rust core semantics.
 | keyed pseudonymization | yes | yes | semantic parity verified |
 | keyed deterministic synthesis | yes | yes | semantic parity verified |
 | generic ordered multi-source `ScanResults<K>` | yes | no | consumer performs repeated single-source scans |
-| Rayon parallel scan | optional native feature | no | not a browser/WASM contract |
+| Rayon parallel scan | optional native feature | no | not a WebAssembly contract |
 | Serde transport | optional | not used by adapter transport | typed projections retained |
 | raw WASM memory / allocator API | n/a | no | intentionally not exposed |
 
+The opt-in financial catalog is exposed through
+`ScanEngineBuilder.addFinancialBuiltins()` and delegates to
+`builtins::financial::CURRENT` in the Rust core. The adapter does not maintain
+its own financial rule catalog or validation logic.
+
 Representation differences are allowed. Semantic differences in exposed
 capabilities are not.
+
+## Production artifact and runtime initialization
+
+The production build uses `wasm-bindgen --target web` and Binaryen `-Oz`.
+
+One generated artifact set serves the validated browser and server-side
+JavaScript integrations:
+
+```text
+cribra.js
+cribra.d.ts
+cribra_bg.wasm
+```
+
+In browsers, the generated initializer can resolve and fetch
+`cribra_bg.wasm` through its URL-based path.
+
+Node.js, Bun, and Deno can instead read the same Wasm file and initialize the
+adapter explicitly from its bytes. This avoids relying on `fetch(file://...)`
+behavior and does not require a second `wasm-bindgen` target.
+
+The runnable examples are:
+
+The runnable examples are:
+
+```text
+examples/wasm-browser/
+examples/wasm-runtime/
+```
+
+The browser example demonstrates local scanning and redaction with no framework
+dependency. The runtime example uses the same JavaScript glue and Wasm binary
+from Node.js, Bun, and Deno.
+
+`ScanEngineBuilder.build()` consumes the builder. Consumers must not call
+`free()` on the builder after a successful consuming build operation.
+Rust-owned result and finding projections retain their documented explicit
+lifecycle.
 
 ## Binaryen production-profile gate
 
@@ -366,12 +428,11 @@ The v0.4 browser benchmark establishes the following policy:
 | 256-finding typed traversal | 0.060 ms |
 | 256-finding explanation traversal | 0.025 ms |
 
-## v0.4 release-hardening contract
+## Current release-hardening contract
 
-The final release gate treats the generated JavaScript glue, TypeScript
-declarations, optimized `.wasm` artifact, semantic parity oracle, browser
-benchmark harness, and Rust package contents as independently validated release
-surfaces.
+The release gate treats the generated JavaScript glue, TypeScript declarations,
+optimized `.wasm` artifact, semantic parity oracle, browser benchmark harness,
+and Rust package contents as independently validated release surfaces.
 
 The root `cribra` crate remains the semantic authority. `cribra-wasm` is a
 separately published crates.io adapter built directly on the Cribra core and
