@@ -24,5 +24,20 @@ pub const IBAN: RuleSpec = RuleSpec::captured_pattern(
 .with_validator(ValidatorKind::Iban)
 .with_remediation(Remediation::RemoveSensitiveValue);
 
+/// Payment-card primary account number in compact electronic representation.
+///
+/// Discovery is intentionally limited to 10–19 consecutive ASCII digits.
+/// Validation additionally requires a valid Luhn checksum and explicit
+/// payment-card field context. Card-network attribution is outside the rule
+/// contract.
+pub const PAN: RuleSpec = RuleSpec::captured_pattern(
+    "financial.pan",
+    r"(?:^|[^0-9])(?P<value>[0-9]{10,19})(?:$|[^0-9])",
+    "value",
+    Severity::High,
+)
+.with_validator(ValidatorKind::Pan)
+.with_remediation(Remediation::RemoveSensitiveValue);
+
 /// Financial identifier rules available as an explicit opt-in pack.
-pub const CURRENT: &[RuleSpec] = &[IBAN];
+pub const CURRENT: &[RuleSpec] = &[IBAN, PAN];

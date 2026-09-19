@@ -85,6 +85,7 @@ impl CompiledRuleMetadata {
             ValidatorKind::GitHub
             | ValidatorKind::GitLab
             | ValidatorKind::Stripe
+            | ValidatorKind::Pan
             | ValidatorKind::Iban
             | ValidatorKind::Cloudflare
             | ValidatorKind::Slack

@@ -78,6 +78,12 @@ function buildScanner(kind) {
     case "default_builtins":
       return new mod.ScanEngine();
 
+    case "financial_builtins": {
+      const builder = new mod.ScanEngineBuilder(false);
+      builder.addFinancialBuiltins();
+      return builder.build();
+    }
+
     default:
       throw new Error(`unknown scanner kind: ${kind}`);
   }

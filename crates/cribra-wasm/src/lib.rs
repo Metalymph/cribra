@@ -98,6 +98,7 @@ impl Default for ScanEngine {
 #[wasm_bindgen]
 pub struct ScanEngineBuilder {
     include_builtins: bool,
+    include_financial_builtins: bool,
     rules: Vec<Rule>,
 }
 
@@ -109,8 +110,15 @@ impl ScanEngineBuilder {
     pub fn new(include_builtins: bool) -> Self {
         Self {
             include_builtins,
+            include_financial_builtins: false,
             rules: Vec::new(),
         }
+    }
+
+    /// Adds Cribra's opt-in financial built-in catalog.
+    #[wasm_bindgen(js_name = addFinancialBuiltins)]
+    pub fn add_financial_builtins(&mut self) {
+        self.include_financial_builtins = true;
     }
 
     /// Adds an exact literal rule.
@@ -182,6 +190,10 @@ impl ScanEngineBuilder {
 
         if self.include_builtins {
             builder = builder.builtins(cribra::builtins::CURRENT);
+        }
+
+        if self.include_financial_builtins {
+            builder = builder.builtins(cribra::builtins::financial::CURRENT);
         }
 
         let scanner = builder
@@ -827,6 +839,24 @@ mod tests {
 
         assert_eq!(engine.rules_count(), cribra::builtins::CURRENT.len() + 1);
         assert_eq!(engine.scan("EXACT_SECRET").finding_count(), 1);
+    }
+
+    #[test]
+    fn typed_builder_can_add_financial_builtins_explicitly() {
+        let mut builder = ScanEngineBuilder::new(false);
+        builder.add_financial_builtins();
+
+        let engine = builder.build().expect("financial scanner should build");
+
+        assert_eq!(
+            engine.rules_count(),
+            cribra::builtins::financial::CURRENT.len()
+        );
+
+        assert_eq!(
+            engine.scan("card_number=1234567890123452").finding_count(),
+            1
+        );
     }
 
     #[test]

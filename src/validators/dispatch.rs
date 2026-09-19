@@ -22,6 +22,7 @@ use crate::{
             netrc::validate_netrc,
             npm_registry::{NpmRegistryCredentialKind, validate_npm_registry},
             nuget::validate_nuget,
+            pan::validate_pan,
             password::{PasswordKind, validate_password},
             pypi::validate_pypi,
             rubygems::validate_rubygems_host_key,
@@ -79,6 +80,7 @@ pub(crate) enum ValidatorKind {
     Gcp,
     DatabaseConnection,
     HttpBasic,
+    Pan,
     Password,
     SensitiveHash,
     GenericCredential,
@@ -122,6 +124,7 @@ impl ValidatorKind {
             | Self::SystemPasswordVerifier
             | Self::HttpBasic
             | Self::WireGuard
+            | Self::Pan
             | Self::Password
             | Self::SensitiveHash
             | Self::GenericCredential
@@ -158,6 +161,7 @@ pub(crate) enum ValidationKind {
     Gcp(GcpCredentialKind),
     DatabaseConnection(DatabaseConnectionKind),
     HttpBasic,
+    Pan,
     Password(PasswordKind),
     SensitiveHash(HashKind),
     GenericCredential(GenericCredentialKind),
@@ -306,6 +310,8 @@ pub(crate) fn validate_candidate(
             .map(|_| ValidationOutcome::new(ValidationKind::HttpBasic, Confidence::High)),
         ValidatorKind::WireGuard => validate_wireguard(&context)
             .map(|v| ValidationOutcome::new(ValidationKind::WireGuard(v.kind()), Confidence::High)),
+        ValidatorKind::Pan => validate_pan(&context)
+            .map(|_| ValidationOutcome::new(ValidationKind::Pan, Confidence::High)),
         ValidatorKind::Password => validate_password(&context).map(|v| {
             ValidationOutcome::new(ValidationKind::Password(v.kind()), Confidence::Medium)
         }),
@@ -385,6 +391,7 @@ mod tests {
             ValidatorKind::SwiftPm,
             ValidatorKind::SwiftPmNetrc,
             ValidatorKind::Gradle,
+            ValidatorKind::Pan,
             ValidatorKind::Password,
             ValidatorKind::SensitiveHash,
             ValidatorKind::GenericCredential,
@@ -488,6 +495,23 @@ mod tests {
         .expect("registry IBAN should validate");
 
         assert_eq!(outcome.kind(), ValidationKind::Iban);
+        assert_eq!(outcome.confidence(), Confidence::High);
+    }
+
+    #[test]
+    fn dispatches_pan_contextual_validator() {
+        let pan = "1234567890123452";
+        let source = format!("card_number={pan}");
+
+        let outcome = validate_candidate(
+            ValidatorKind::Pan,
+            &source,
+            range_of(&source, pan),
+            Confidence::Low,
+        )
+        .expect("contextual PAN should validate");
+
+        assert_eq!(outcome.kind(), ValidationKind::Pan);
         assert_eq!(outcome.confidence(), Confidence::High);
     }
 }
