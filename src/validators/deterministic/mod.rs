@@ -4,6 +4,7 @@
 pub(crate) mod cloudflare;
 pub(crate) mod github;
 pub(crate) mod gitlab;
+pub(crate) mod iban;
 pub(crate) mod jwt;
 pub(super) mod rubygems;
 pub(crate) mod slack;

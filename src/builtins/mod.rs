@@ -5,6 +5,7 @@
 
 mod contextual;
 mod deterministic;
+pub mod financial;
 
 pub use contextual::{
     AUTHORIZATION_BASIC, AUTHORIZATION_BEARER, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY,

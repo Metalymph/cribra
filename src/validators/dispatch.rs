@@ -37,6 +37,7 @@ use crate::{
             cloudflare::{CloudflareTokenKind, validate_cloudflare_token},
             github::{GitHubTokenKind, validate_github_token},
             gitlab::{GitLabTokenKind, validate_gitlab_token},
+            iban::validate_iban,
             jwt::{JwtKind, validate_jwt},
             rubygems::validate_rubygems_api_key,
             slack::{SlackTokenKind, validate_slack_token},
@@ -68,6 +69,7 @@ pub(crate) enum ValidatorKind {
     GitHub,
     GitLab,
     Stripe,
+    Iban,
     Cloudflare,
     Slack,
     Telegram,
@@ -94,6 +96,7 @@ impl ValidatorKind {
             Self::GitHub
             | Self::GitLab
             | Self::Stripe
+            | Self::Iban
             | Self::Cloudflare
             | Self::Slack
             | Self::Telegram
@@ -145,6 +148,7 @@ pub(crate) enum ValidationKind {
     GitHub(GitHubTokenKind),
     GitLab(GitLabTokenKind),
     Stripe(StripeTokenKind),
+    Iban,
     Cloudflare(CloudflareTokenKind),
     Slack(SlackTokenKind),
     TelegramBotToken,
@@ -275,6 +279,8 @@ pub(crate) fn validate_candidate(
             .map(|v| ValidationOutcome::new(ValidationKind::GitLab(v.kind()), Confidence::High)),
         ValidatorKind::Stripe => validate_stripe_token(context.candidate())
             .map(|v| ValidationOutcome::new(ValidationKind::Stripe(v.kind()), Confidence::High)),
+        ValidatorKind::Iban => validate_iban(context.candidate())
+            .map(|_| ValidationOutcome::new(ValidationKind::Iban, Confidence::High)),
         ValidatorKind::Cloudflare => validate_cloudflare_token(context.candidate()).map(|v| {
             ValidationOutcome::new(ValidationKind::Cloudflare(v.kind()), Confidence::High)
         }),
@@ -349,6 +355,7 @@ mod tests {
             ValidatorKind::GitHub,
             ValidatorKind::GitLab,
             ValidatorKind::Stripe,
+            ValidatorKind::Iban,
             ValidatorKind::Cloudflare,
             ValidatorKind::Slack,
             ValidatorKind::Telegram,
@@ -464,6 +471,23 @@ mod tests {
             outcome.kind(),
             ValidationKind::GitLab(GitLabTokenKind::Access)
         ));
+        assert_eq!(outcome.confidence(), Confidence::High);
+    }
+
+    #[test]
+    fn dispatches_iban_validator() {
+        let iban = "IT60X0542811101000000123456";
+        let source = format!("iban={iban}");
+
+        let outcome = validate_candidate(
+            ValidatorKind::Iban,
+            &source,
+            range_of(&source, iban),
+            Confidence::Low,
+        )
+        .expect("registry IBAN should validate");
+
+        assert_eq!(outcome.kind(), ValidationKind::Iban);
         assert_eq!(outcome.confidence(), Confidence::High);
     }
 }
