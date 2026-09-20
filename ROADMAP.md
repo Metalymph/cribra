@@ -195,27 +195,28 @@ This milestone is a coverage-completion release, not a mandate to maximize the
 number of built-in rules. Every candidate remains subject to Cribra's existing
 structural, contextual, false-positive, ownership, and exact-span requirements.
 
-#### 0.4.7-A --- Final coverage audit
+#### A. Final coverage audit — DONE
 
--   [ ] Perform a final cross-catalog audit for materially important credential,
-    secret, financial, personal-identifier, and system-security classes not
-    already represented by Cribra.
--   [ ] Audit structured identity and personal identifiers as the primary
-    remaining sensitive-data candidate family.
--   [ ] Identify country-specific tax and national identifiers only where
-    source content provides sufficiently strong structural or contextual
-    authority.
--   [ ] Audit passport, identity-document, insurance, membership, or comparable
-    identifiers only where reliable static classification is possible.
--   [ ] Re-audit financial/account identifiers not completed by the v0.4.6
-    IBAN/PAN foundation.
--   [ ] Evaluate cryptographic wallet/account identifiers separately from
-    financial identity data.
--   [ ] Record rejected or deferred candidate families when reliable static
-    classification is not possible.
--   [ ] Do not add a detector merely to increase catalog breadth.
+- [x] Audit the existing built-in portfolio and identify genuine residual coverage gaps.
+- [x] Audit structured identity and personal-data identifiers.
+- [x] Audit residual financial and cryptocurrency-sensitive material.
+- [x] Audit Unix and system-security residuals.
+- [x] Consolidate candidates into IMPLEMENT / COVERED / DEFERRED / REFUSED.
+- [x] Freeze semantic ownership, collision, precedence, and span policy.
+- [x] Establish the canonical Coverage Manifest contract, including direct,
+      transitive, deferred, and refused coverage.
 
-#### 0.4.7-B --- Sensitive personal-data completion
+Outcome:
+
+- the final v0.4.7 detector-expansion scope is frozen;
+- broad speculative catalog expansion is explicitly out of scope;
+- deferred categories require evidence-driven reconsideration;
+- refused categories are documented as intentional non-ownership;
+- `docs/COVERAGE.md` is the canonical human-readable coverage and ownership
+  authority and must be reconciled against the released portfolio at the
+  v0.4.7 completion gate.
+
+#### B. Sensitive personal-data completion — ACTIVE
 
 -   [ ] Audit physical-address recognition with conservative contextual or
     candidate semantics.
