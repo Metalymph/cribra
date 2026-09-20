@@ -86,7 +86,7 @@ interoperability work do not by themselves require `0.5`.
 
 ### v0.4.6 --- Sensitive Data Foundation
 
-Status: current.
+Status: completed.
 
 Goal: extend Cribra from a high-confidence secret and credential scanner
 into a high-confidence sensitive-data detection engine without weakening
@@ -174,104 +174,144 @@ Status: completed.
     existing generic and specialized rules.
 -   [x] Run full Rust, C ABI, WebAssembly, MSRV, security, and packaging
     gates.
--   [ ] Complete release documentation and publication preparation.
+-   [x] Complete release documentation and publication preparation.
 
-### v0.4.7 --- Sensitive Data / Expose Readiness
+Release outcome:
 
-Status: planned.
+-   [x] Published Cribra v0.4.6.
+-   [x] Published `cribra-wasm` v0.4.4 with the v0.4.6 financial
+    capability surface.
 
-Goal: expand the validated sensitive-data model where it materially
-improves Cribra as an embeddable engine for exposure analysis, including
-future Silens Expose use cases.
+### v0.4.7 --- Sensitive Data and System Security Completion
 
-Research and implementation candidates:
+Status: next.
 
--   [ ] Physical-address recognition with contextual validation and
-    conservative candidate semantics where authoritative classification
-    is not possible.
--   [ ] Email-address exposure semantics.
--   [ ] Telephone-number exposure semantics with region-aware validation
-    where practical.
--   [ ] Country-specific tax, national, or account identifiers only
-    where structural validation is sufficiently strong.
--   [ ] Additional financial/account identifiers justified by real
-    exposure use cases.
--   [ ] Evaluate cryptographic wallet/account identifiers separately
-    from financial identity data.
--   [ ] Define contextual classification boundaries for web pages,
-    documents, messages, email, logs, and local text.
--   [ ] Expand adversarial corpora for public, example, and reference
-    data that must not be misclassified as personal exposure.
--   [ ] Maintain Rust, C ABI, and WebAssembly semantic parity for every
-    exposed capability.
+Goal: complete Cribra's planned high-confidence detection portfolio across
+sensitive personal data and remaining Unix/system-security material, then move
+the project from planned detector expansion to evidence-driven maintenance and
+ecosystem development.
 
-Principles:
+This milestone is a coverage-completion release, not a mandate to maximize the
+number of built-in rules. Every candidate remains subject to Cribra's existing
+structural, contextual, false-positive, ownership, and exact-span requirements.
 
--   Recognition and sensitive classification are separate decisions.
--   Public, example, organizational, and contextual identifiers must not
-    be treated as personal exposure merely because their syntax is
-    recognizable.
--   `SensitiveCandidate` remains the preferred boundary for useful but
-    ambiguous evidence.
--   Cribra remains deterministic and application-agnostic; exposure
-    correlation, crawling, identity ownership, breach intelligence, and
-    higher-level exposure policy belong to consumers such as Silens
-    Expose.
+#### 0.4.7-A --- Final coverage audit
 
-### v0.4.8 --- Unix/System Security Coverage Gap Closure
+-   [ ] Perform a final cross-catalog audit for materially important credential,
+    secret, financial, personal-identifier, and system-security classes not
+    already represented by Cribra.
+-   [ ] Audit structured identity and personal identifiers as the primary
+    remaining sensitive-data candidate family.
+-   [ ] Identify country-specific tax and national identifiers only where
+    source content provides sufficiently strong structural or contextual
+    authority.
+-   [ ] Audit passport, identity-document, insurance, membership, or comparable
+    identifiers only where reliable static classification is possible.
+-   [ ] Re-audit financial/account identifiers not completed by the v0.4.6
+    IBAN/PAN foundation.
+-   [ ] Evaluate cryptographic wallet/account identifiers separately from
+    financial identity data.
+-   [ ] Record rejected or deferred candidate families when reliable static
+    classification is not possible.
+-   [ ] Do not add a detector merely to increase catalog breadth.
 
-Status: planned.
+#### 0.4.7-B --- Sensitive personal-data completion
 
-Goal: audit and close the remaining high-value Unix and system-security
-credential coverage gaps without duplicating the system, generic,
-provider, or package-ecosystem surfaces already supported by Cribra.
+-   [ ] Audit physical-address recognition with conservative contextual or
+    candidate semantics.
+-   [ ] Audit email-address sensitive-data semantics without turning Cribra
+    into a generic email harvester.
+-   [ ] Audit telephone-number sensitive-data semantics with region-aware
+    validation where practical.
+-   [ ] Implement accepted structured identity/personal identifiers from the
+    final coverage audit.
+-   [ ] Keep recognition and sensitive classification as separate decisions.
+-   [ ] Prefer `SensitiveCandidate` when evidence is useful but insufficient
+    for authoritative classification.
+-   [ ] Preserve exact source spans and metadata-only public results.
+-   [ ] Add adversarial coverage for examples, documentation, public
+    identifiers, malformed values, and ordinary non-sensitive data.
 
-Existing baseline includes Unix shadow password verifiers, htpasswd
-password verifiers, `.netrc` passwords, OpenSSH and common private-key
-formats, WireGuard private and preshared keys, generic
-password/passphrase/auth surfaces, HTTP authentication, and relevant
-container/provider credentials.
+#### 0.4.7-C --- Unix and system-security completion
 
-Remaining work:
+Existing baseline includes Unix shadow password verifiers, htpasswd password
+verifiers, `.netrc` passwords, OpenSSH and common private-key formats,
+WireGuard private and preshared keys, generic password/passphrase/auth
+surfaces, HTTP authentication, and relevant container/provider credentials.
 
--   [ ] Perform a complete Unix/Linux credential-surface gap audit
-    against the existing built-in catalog.
--   [ ] Audit additional system/service authentication formats only
-    where the credential or verifier can be identified from source
-    content with strong structural or contextual evidence.
--   [ ] Audit SSH authentication material not already covered by OpenSSH
-    and generic private-key rules.
--   [ ] Audit common daemon and infrastructure authentication formats
-    not already owned by generic, provider-specific, package-ecosystem,
-    or container rules.
--   [ ] Audit shell and system configuration credential conventions only
-    where source content itself establishes the security contract.
--   [ ] Audit additional password-verifier/hash formats separately from
-    generic sensitive hashes.
+-   [ ] Perform a complete Unix/Linux credential-surface gap audit against the
+    existing built-in catalog.
+-   [ ] Audit additional system/service authentication formats only where the
+    credential or verifier can be identified from source content with strong
+    structural or contextual evidence.
+-   [ ] Audit SSH authentication material not already covered by OpenSSH and
+    generic private-key rules.
+-   [ ] Audit common daemon and infrastructure authentication formats not
+    already owned by generic, provider-specific, package-ecosystem, or
+    container rules.
+-   [ ] Audit shell and system configuration credential conventions only where
+    source content itself establishes the security contract.
+-   [ ] Audit additional password-verifier/hash formats separately from generic
+    sensitive hashes.
 -   [ ] Document rejected Unix/system candidates where reliable static
     classification is not possible.
--   [ ] Add collision and ownership tests for any new system-specific
-    rules.
--   [ ] Add adversarial false-positive coverage for system-like
-    configuration that does not contain credentials.
--   [ ] Maintain Rust, C ABI, and WebAssembly semantic parity for every
-    new capability.
--   [ ] Run full release gates.
+-   [ ] Do not duplicate existing `.netrc`, shadow, htpasswd, private-key,
+    WireGuard, generic-auth, HTTP-auth, container, provider, or
+    package-ecosystem ownership.
+
+#### 0.4.7-D --- Ownership, ambiguity, and adversarial hardening
+
+-   [ ] Define deterministic ownership for every newly accepted rule.
+-   [ ] Add collision regressions against existing generic, provider,
+    ecosystem, financial, and system rules.
+-   [ ] Expand positive, negative, malformed, placeholder, example, and
+    documentation corpora.
+-   [ ] Verify boundary and exact-span behavior for every accepted family.
+-   [ ] Preserve the distinction between credentials, sensitive identifiers,
+    password verifiers, hashes, keys, and merely security-related
+    configuration.
+-   [ ] Prefer deliberate false negatives over noisy classification.
+
+#### 0.4.7-E --- Transformation and interface parity
+
+-   [ ] Verify every accepted capability through the generic redact, template,
+    pseudonymize, and synthesize contracts where applicable.
+-   [ ] Add category-specific transformation semantics only when the generic
+    contract is insufficient.
+-   [ ] Maintain deterministic Rust behavior.
+-   [ ] Maintain complete applicable C ABI semantic parity.
+-   [ ] Maintain complete applicable WebAssembly semantic parity.
+-   [ ] Preserve metadata-only and secret-safe public boundaries.
+
+#### 0.4.7-F --- Portfolio completion gate
+
+-   [ ] Re-audit the complete built-in and opt-in detector portfolio after all
+    accepted v0.4.7 work.
+-   [ ] Verify that no known materially important detector family remains
+    omitted without an explicit accepted reason.
+-   [ ] Run full Rust, C ABI, WebAssembly, MSRV, security, packaging, and
+    publication gates.
+-   [ ] Document the post-v0.4.7 detector evolution policy.
+-   [ ] Publish/tag the completed release only after all gates pass.
 
 Principles:
 
--   Existing `.netrc`, shadow, htpasswd, private-key, WireGuard,
-    generic-auth, HTTP-auth, container, provider, and package-ecosystem
-    coverage must not be duplicated.
--   Filesystem paths are not semantic authority; Cribra classifies
-    source content.
--   Password hashes, password verifiers, credentials, keys, and merely
-    security-related configuration remain distinct concepts.
--   Unix/System coverage is credential and sensitive-material detection,
-    not host posture, vulnerability, or configuration-compliance
-    scanning.
+-   Cribra detects secrets, credentials, and statically recognizable sensitive
+    material; it is not a general-purpose DLP or content-classification
+    platform.
+-   Strong validation and contextual authority take precedence over catalog
+    breadth.
+-   Recognition does not by itself imply sensitive classification.
+-   Filesystem paths, external ownership, account activity, compromise state,
+    and network validation are not semantic authority.
+-   Application-specific correlation, crawling, ownership, and policy remain
+    outside the Cribra core.
+-   v0.4.7 is intended to complete the currently planned detector-expansion
+    phase. Subsequent built-in detector additions must be justified by
+    demonstrated production gaps, important new credential formats, or
+    downstream requirements rather than routine catalog growth.
 
-### v0.4.9 --- Canonical CLI Full Parity and Distribution
+### v0.4.8 --- Canonical CLI Full Parity and Distribution
 
 Status: planned; parity foundation implemented ahead of milestone.
 
@@ -336,9 +376,15 @@ Distribution:
     release version.
 -   [ ] Add packaging/distribution release gates.
 
-### v0.4.10 — Binding-Ready Native FFI
+### v0.4.9 --- Binding-Ready Native FFI and Ecosystem Integrations
 
 Status: planned.
+
+Goal: complete Cribra's native interoperability foundation and expand Cribra
+from a mature detection engine into a broadly consumable developer ecosystem
+without moving application-specific product policy into the OSS core.
+
+#### 0.4.9-A --- Binding-ready native FFI
 
 Goal: make `cribra-ffi` a complete, stable, versioned interoperability
 foundation from which native language bindings can project the full applicable
@@ -373,6 +419,91 @@ Principles:
   the core or FFI.
 - A missing applicable capability is an FFI parity gap, not an accepted binding
   limitation.
+
+#### 0.4.9-B --- GitHub integration
+
+-   [ ] Provide an official GitHub Action over the canonical Cribra interfaces.
+-   [ ] Preserve Cribra detection semantics rather than implementing
+    Action-specific classification.
+-   [ ] Define explicit CI/failure-policy behavior.
+-   [ ] Keep source handling and diagnostics secret-safe.
+-   [ ] Provide deterministic machine-readable findings suitable for CI.
+-   [ ] Validate the Action against the shared Cribra conformance corpus.
+-   [ ] Keep the integration usable without a Silens account or paid service.
+
+#### 0.4.9-C --- Astro integration
+
+-   [ ] Provide an official Astro integration for appropriate development,
+    build, or CI scanning workflows.
+-   [ ] Reuse Cribra's existing portable interfaces rather than implementing
+    detection semantics in JavaScript/TypeScript.
+-   [ ] Define explicit source and lifecycle boundaries.
+-   [ ] Preserve local-first and secret-safe behavior.
+-   [ ] Keep the integration fully usable without a Silens account or paid
+    service.
+-   [ ] Validate semantic equivalence against authoritative Cribra results.
+
+#### 0.4.9-D --- Agent and AI interoperability
+
+-   [ ] Define a minimal official MCP surface over authoritative Cribra
+    capabilities.
+-   [ ] Keep detection and classification deterministic and owned by Cribra;
+    language models may orchestrate or explain results but do not become
+    detection authority.
+-   [ ] Define structured, secret-safe findings, candidates, explanations, and
+    transformation contracts for agent consumers.
+-   [ ] Separate read-only scanning capabilities from explicit transformation
+    or action capabilities.
+-   [ ] Provide an official ChatGPT/Codex-compatible integration over the
+    shared agent contract.
+-   [ ] Provide an official Claude-compatible integration over the shared
+    agent contract.
+-   [ ] Avoid provider-specific detection semantics in the Cribra core.
+-   [ ] Keep the developer-level Cribra agent integration usable independently
+    of Silens commercial services.
+
+#### 0.4.9-E --- Application ecosystem boundary
+
+Cribra developer integrations and Silens application integrations are distinct
+layers.
+
+Cribra-owned developer surfaces such as the CLI, native FFI, WebAssembly,
+GitHub Action, Astro integration, and agent/MCP interoperability remain
+open-source engine and developer integrations.
+
+End-user application integrations are products of the relevant Silens service,
+not premium Cribra editions. They may embed or consume Cribra as their
+authoritative detection engine while providing separate application workflows,
+user experience, account integration, and commercial capabilities.
+
+For example, a WordPress end-user integration belongs to Silens Scan / Scan+
+and may identify Cribra as its underlying detection engine. Cribra itself does
+not withhold built-in detector semantics in order to create application-tier
+gating.
+
+This separation allows broad Cribra adoption to strengthen the visibility and
+trust of products built on it without coupling the OSS engine to commercial
+entitlements.
+
+On market demand:
+
+-   Drupal application integration.
+-   Joomla application integration.
+-   Strapi application integration.
+-   Additional CMS, framework, or application integrations justified by
+    demonstrated demand.
+
+Principles:
+
+-   Engine and developer integrations remain Cribra.
+-   End-user application integrations belong to the corresponding Silens
+    service.
+-   Application integrations are access surfaces, not new subscription
+    products.
+-   Commercial entitlements belong to Silens application capabilities, not to
+    artificially restricted Cribra detector semantics.
+-   Shared infrastructure may be reused across application integrations without
+    collapsing independent Silens services into a single embedded product.
 
 ## Native Bindings
 
@@ -507,6 +638,33 @@ Expected work includes:
 Feature scope remains evidence-driven and may be reduced, deferred, or
 reordered when an audited candidate cannot satisfy Cribra's confidence
 requirements.
+
+### Post-v0.4.7 detector evolution
+
+After v0.4.7, planned catalog expansion is considered complete.
+
+New built-in detection should be added only when at least one of the following
+is demonstrated:
+
+-   a materially important credential or sensitive-material class is missing;
+-   real downstream or production usage exposes a significant coverage gap;
+-   a newly important technology introduces a distinct credential format not
+    represented by existing rules;
+-   an existing rule family cannot safely represent the material without a
+    narrowly justified semantic extension.
+
+Routine catalog growth, speculative provider coverage, and detector-count
+expansion are not roadmap goals.
+
+Post-v0.4.7 development should primarily focus on:
+
+-   bug and security fixes;
+-   false-positive and evidence-backed false-negative hardening;
+-   performance and reliability;
+-   semantic and adapter parity;
+-   compatibility with evolving upstream formats;
+-   CLI, FFI, bindings, packaging, distribution, and ecosystem integrations;
+-   concrete requirements discovered by downstream consumers.
 
 ## Explicit Non-Goals
 
