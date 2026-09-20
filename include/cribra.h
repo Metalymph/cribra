@@ -906,7 +906,15 @@ CribraStatus cribra_batch_results_summary(const struct CribraBatchResults *resul
 CribraStatus cribra_builder_add_current_builtins(struct CribraBuilder *builder);
 
 /**
- * Adds Cribra's opt-in financial built-in catalog to a scanner builder.
+ * Adds Cribra's opt-in financial built-in catalog to a builder.
+ *
+ * This allows native consumers to compose the financial catalog with the
+ * standard catalog and custom rules while preserving scanner-wide rule-ID
+ * validation.
+ *
+ * # Safety
+ *
+ * `builder` must be a live builder handle returned by [`cribra_builder_new`].
  */
 CribraStatus cribra_builder_add_financial_builtins(struct CribraBuilder *builder);
 
