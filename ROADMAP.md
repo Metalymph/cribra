@@ -84,264 +84,97 @@ interoperability work do not by themselves require `0.5`.
 
 ## Current release line
 
-### v0.4.5 --- Developer Ecosystem Credential Coverage
-
-Status: completed.
-
-Goal: consolidate the remaining high-value developer, package, runtime,
-build, and systems credential surfaces into one evidence-driven release
-rather than spreading additive detector work across several releases.
-
-#### 0.4.5-A --- Scope and coverage audit
-
-Status: completed.
-
--   [x] Audit high-value developer/package credential surfaces.
--   [x] Prefer documented credential storage and configuration
-    contracts.
--   [x] Reuse generic, `.netrc`, HTTP-authentication, and provider
-    detectors where they already provide equivalent semantic coverage.
--   [x] Reject ecosystem-specific classification when it would add
-    catalog breadth without stronger semantics.
--   [x] Keep network validation and new parser/runtime dependencies out
-    of scope.
-
-#### 0.4.5-B --- Developer package credentials
-
-Status: completed.
-
--   [x] Cargo / Rust registry authentication.
--   [x] Python / PyPI / `.pypirc` repository tokens.
--   [x] RubyGems credentials, including `GEM_HOST_API_KEY`, with
-    deterministic collision handling against generic credential rules.
--   [x] NuGet / .NET cleartext package-source credentials in
-    `nuget.config`; `NuGetPackageSourceCredentials_{name}` environment
-    credentials remain deferred because exact password projection and
-    source association require additional parsing beyond the bounded B4
-    matcher.
--   [x] Maven repository credentials.
--   [x] Deno authentication tokens audited and deferred.
-    `DENO_AUTH_TOKENS` is a documented security-relevant credential
-    surface, but its multi-entry representation requires reliable
-    per-entry credential discovery and exact span projection that the
-    current rule execution model does not provide without broader
-    parsing or overly generic scanning. No dedicated Deno rule is added
-    in v0.4.5.
-
-Audited surfaces may be rejected or deferred when they cannot satisfy
-Cribra's confidence standard. Gradle, Go, Conan, vcpkg, Nix, and related
-ecosystems do not require dedicated rules merely for catalog coverage
-when existing generic or shared credential surfaces already provide
-equivalent semantics.
-
-#### Transformation Semantic Parity
-
-Status: completed.
-
--   [x] Audit every rule in `builtins::CURRENT`.
--   [x] Give every built-in an explicit synthesis strategy while keeping
-    custom rule fallback separate.
--   [x] Keep structured and encoded synthetic values deliberately
-    invalid under their corresponding detector contracts.
--   [x] Verify redact, template, and pseudonymization parity through
-    their generic span/metadata contracts.
--   [x] Complete the repository validation gates before marking this
-    step complete.
-
-#### 0.4.5-C --- Collision and normalization hardening
-
-Status: completed.
-
--   [x] Verify provider/ecosystem-specific rules deterministically win
-    valid collisions with generic credential rules.
--   [x] Preserve exact finding spans and stable rule attribution.
--   [x] Verify contextual prefilters remain consistent with validator
-    semantics.
--   [x] Keep rule-ID and detection-mode contracts explicit as validator
-    families expand.
-
-#### 0.4.5-D --- Adversarial corpus and false-positive hardening
-
-Status: completed.
-
--   [x] Add positive, negative, malformed, placeholder, documentation,
-    and cross-format fixtures for every accepted family.
--   [x] Add collision regressions for ecosystem-specific versus generic
-    rules.
--   [x] Reject protected references, helper names, paths, registry
-    names, and credential-store references that are not credential
-    material.
--   [x] Preserve Cribra's preference for deliberate false negatives over
-    noisy classification.
-
-#### 0.4.5-E --- Interface and parity validation
-
-Status: completed.
-
--   [x] Validate Rust behavior for every accepted rule.
--   [x] Validate native C ABI exposure and semantic parity.
--   [x] Align `cribra-wasm` with the completed v0.4.5 core semantics.
--   [x] Validate WebAssembly parity for findings, spans, severity,
-    confidence, remediation, candidates, and explanations.
-
-#### 0.4.5-F --- Swift Package Manager credential coverage
-
-Status: completed.
-
-Goal: audit Swift Package Manager credential surfaces and add dedicated
-detection only where SwiftPM provides stronger, documented semantics
-than existing shared credential rules.
-
--   [x] Audit SwiftPM registry authentication and documented credential
-    storage.
--   [x] Audit `SWIFTPM_REGISTRY_TOKEN`, `SWIFTPM_REGISTRY_PASSWORD`,
-    `SWIFTPM_SOURCE_CONTROL_TOKEN`, and `SWIFTPM_NETRC_DATA`.
--   [x] Reuse the existing `.netrc` detector wherever it already
-    provides equivalent semantics.
--   [x] Preserve exact credential-value spans and deterministic
-    collision behavior.
--   [x] Add synthesis semantics and adversarial/collision tests for
-    accepted rules.
--   [x] Do not extract credentials from Keychain or other OS credential
-    stores.
--   [x] Do not add a SwiftPM parser, Swift runtime dependency, network
-    validation, or adapter-specific logic to the core.
-
-#### 0.4.5-G --- Kotlin / Gradle credential audit
-
-Status: completed.
-
-Goal: cover credentials encountered in Kotlin development without
-inventing a Kotlin package-manager category. Repository authentication
-is primarily owned by Gradle, Maven, AWS, and shared credential
-contracts.
-
--   [x] Audit Gradle Groovy and Kotlin DSL repository credential
-    configuration.
--   [x] Audit `PasswordCredentials`, including repository-derived Gradle
-    properties.
--   [x] Audit `HttpHeaderCredentials` and existing generic/HTTP
-    coverage.
--   [x] Audit `AwsCredentials` only for gaps not already covered by AWS
-    rules.
--   [x] Audit Kotlin Multiplatform repository/dependency workflows.
--   [x] Prefer `gradle.*`, `maven.*`, `aws.*`, or existing
-    generic/shared ownership over `kotlin.*` rule IDs.
--   [x] Add rules only when documented context materially improves
-    confidence, attribution, or exact-span semantics.
--   [x] Allow this step to complete with no new detector if existing
-    coverage is sufficient.
-
-#### 0.4.5-H --- PHP / Composer and Dart / pub credential coverage
-
-Status: completed.
-
-Goal: audit the remaining high-value PHP and Dart package/developer
-credential surfaces, adding dedicated detection only where Composer or
-pub provides documented semantics stronger than existing shared
-credential rules.
-
--   [x] Audit Composer authentication surfaces, including `auth.json`,
-    `composer.json` authentication where applicable, and documented
-    environment configuration.
--   [x] Audit Composer `http-basic`, `bearer`, `github-oauth`,
-    `gitlab-oauth`, `gitlab-token`, and other documented authentication
-    families.
--   [x] Reuse existing HTTP, GitHub, GitLab, `.netrc`, and generic
-    credential rules wherever they already provide equivalent semantic
-    coverage.
--   [x] Audit Dart/pub credential surfaces.
-    -   `PUB_HOSTED_URL` is repository configuration, not credential
-        material.
-    -   `dart pub token add` accepts the secret out-of-band; there is no
-        reliable static source representation to detect.
-    -   `dart pub token add --env-var` persists/references an arbitrary
-        environment variable name; the corresponding environment
-        assignment cannot be attributed to Dart/pub from the assignment
-        alone.
-    -   Recognizable provider credentials remain owned by their
-        provider-specific rules.
-    -   Decision: no Dart/pub-specific detector is justified for v0.4.5.
--   [x] Audit authenticated custom package repositories and documented
-    token configuration used by `dart pub`.
--   [x] Prefer `composer.*`, `pub.*`, provider-specific, or existing
-    generic/shared ownership over artificial `php.*` or `dart.*` rule
-    IDs.
--   [x] Preserve exact credential-value spans and deterministic
-    collision behavior for every accepted rule.
--   [x] Add synthesis semantics and adversarial/collision tests for
-    accepted rules.
--   [x] Do not extract credentials from OS credential stores or other
-    protected external storage.
--   [x] Do not add PHP/Dart runtimes, package-manager parsers, network
-    validation, or adapter-specific logic to the core.
-
-#### 0.4.5-I --- Documentation and release gate
-
-Status: completed.
-
--   [x] Update release documentation and public coverage descriptions.
--   [x] Run formatting, workspace check/test, Clippy, docs, MSRV,
-    RustSec, and package publication gates.
--   [x] Run C ABI release gates.
--   [x] Run WebAssembly adapter, optimization, and parity gates.
--   [x] Verify a clean working tree and protected-main release workflow.
--   [x] Publish/tag Cribra v0.4.5 and `cribra-wasm` v0.4.3 after release
-    gates pass.
-
-CLI package-manager distribution was not part of the final v0.4.5
-publication gate and remains planned under the canonical CLI milestone
-below.
-
 ### v0.4.6 --- Sensitive Data Foundation
 
-Status: next.
+Status: current.
 
 Goal: extend Cribra from a high-confidence secret and credential scanner
 into a high-confidence sensitive-data detection engine without weakening
 its false-positive resistance, deterministic semantics, or
 embeddability.
 
--   [ ] Define the sensitive-data taxonomy and public category model.
--   [ ] Define opt-in pack semantics without indiscriminately broadening
-    `builtins::CURRENT`.
--   [ ] Add financial-data detection where strong structural validation
-    is available.
--   [ ] Add IBAN detection with country-aware structural and checksum
+#### 0.4.6-A --- Sensitive-data architecture and authority
+
+Status: completed.
+
+-   [x] Audit the existing public contracts for representing sensitive
+    data without redesigning the core.
+-   [x] Confirm that `RuleSpec`, validators, `Finding`,
+    `SensitiveCandidate`, `DetectionMode`, `Confidence`, `Severity`,
+    `Remediation`, and the existing exact-span pipeline are sufficient
+    for the foundation scope.
+-   [x] Keep `RuleKind` as matching-strategy authority rather than
+    introducing a semantic sensitive-data taxonomy into it.
+-   [x] Reject a new public category model until a concrete consumer
+    requirement demonstrates that rule identity and pack membership are
+    insufficient.
+-   [x] Define opt-in pack semantics through existing static
+    `RuleSpec` collections and `ScannerBuilder::builtins()`.
+-   [x] Keep `builtins::CURRENT` as the existing default credential and
+    security baseline; sensitive financial-data rules remain opt-in.
+-   [x] Reject a new `Pack` type, registry, trait, or runtime pack
+    authority while the existing composition contract is sufficient.
+-   [x] Define classified-versus-ambiguous semantics:
+    accepted validated material becomes a `Finding`, failed validation
+    is rejected, and `SensitiveCandidate` remains an explicit
+    review-only path rather than a fallback for rejected matches.
+-   [x] Confirm that deterministic validation does not imply a fixed
+    confidence level; confidence remains evidence-driven and independent
+    from `DetectionMode`.
+-   [x] Confirm that existing severity semantics and
+    `Remediation::RemoveSensitiveValue` are sufficient for the initial
+    financial-data scope.
+-   [x] Preserve metadata-only results and exact authoritative source
+    spans without introducing matched sensitive values into public
+    metadata.
+
+#### 0.4.6-B --- Financial-data foundation
+
+Status: completed.
+
+-   [x] Define the authoritative financial-data detector portfolio.
+-   [x] Add financial-data detection only where strong structural
+    validation is available.
+-   [x] Add IBAN detection with country-aware structural and checksum
     validation.
--   [ ] Add payment-card PAN detection with structural and checksum
+-   [x] Add payment-card PAN detection with structural and checksum
     validation.
--   [ ] Research additional financial identifiers only where
+-   [x] Research additional financial identifiers only where
     classification can remain high-confidence.
--   [ ] Define when sensitive data is a classified `Finding` versus a
-    `SensitiveCandidate`.
--   [ ] Extend metadata, explanation, confidence, severity, and
-    remediation semantics where required.
--   [ ] Preserve exact authoritative source spans.
--   [ ] Preserve metadata-only public findings; never expose matched
+-   [x] Keep financial-data rules outside `builtins::CURRENT` and expose
+    them through an explicit opt-in built-in pack.
+-   [x] Preserve exact authoritative source spans.
+-   [x] Preserve metadata-only public findings; never expose matched
     sensitive values through result metadata.
--   [ ] Extend synthesis, redaction, template, and pseudonymization
-    support where new categories require it.
--   [ ] Maintain deterministic Rust behavior and full C ABI/WebAssembly
-    semantic parity.
--   [ ] Add adversarial false-positive and false-negative regression
-    coverage.
--   [ ] Run full Rust, C ABI, WebAssembly, MSRV, security, and packaging
+
+#### 0.4.6-C --- Transformation and interface parity
+
+Status: completed.
+
+-   [x] Extend synthesis, redaction, template, and pseudonymization
+    support where new sensitive-data rules require it.
+-   [x] Expose the opt-in financial built-in pack through the C ABI and
+    WebAssembly interfaces.
+-   [x] Maintain deterministic Rust behavior and C ABI/WebAssembly
+    semantic parity for financial-pack selection.
+-   [x] Verify explanations, severity, confidence, remediation, and
+    pack behavior across supported interfaces.
+-   [x] Verify transformation behavior for financial findings across
+    Rust, C ABI, and WebAssembly.
+
+#### 0.4.6-D --- Adversarial validation and release gate
+
+Status: completed.
+
+-   [x] Add adversarial false-positive and false-negative regression
+    coverage for every accepted sensitive-data family.
+-   [x] Validate malformed, checksum-invalid, boundary-invalid,
+    placeholder, example, and cross-format cases.
+-   [x] Verify deterministic collision and ownership behavior against
+    existing generic and specialized rules.
+-   [x] Run full Rust, C ABI, WebAssembly, MSRV, security, and packaging
     gates.
-
-Principles:
-
--   Cribra may intentionally recognize multiple classes of sensitive
-    data, but it must not become a broad low-confidence regex-based DLP
-    classifier.
--   Strong validation is preferred over superficial pattern matching.
--   Checksums are valuable validation signals but do not by themselves
-    justify classification outside the intended data contract.
--   Ambiguous sensitive material remains reviewable through candidate
-    semantics rather than being promoted to a finding without sufficient
-    evidence.
--   Sensitive-data packs outside the default credential baseline are
-    opt-in unless a later release explicitly changes that contract.
+-   [ ] Complete release documentation and publication preparation.
 
 ### v0.4.7 --- Sensitive Data / Expose Readiness
 
@@ -715,6 +548,215 @@ detector when the available evidence is insufficient to distinguish
 sensitive material from ordinary data.
 
 ## Historical Releases
+
+### v0.4.5 --- Developer Ecosystem Credential Coverage
+
+Status: completed.
+
+v0.4.5 consolidated the remaining high-value developer, package, runtime,
+build, and systems credential surfaces into one evidence-driven release
+while preserving Cribra's conservative detection and interoperability
+contracts.
+
+#### 0.4.5-A --- Scope and coverage audit
+
+Status: completed.
+
+-   [x] Audit high-value developer/package credential surfaces.
+-   [x] Prefer documented credential storage and configuration
+    contracts.
+-   [x] Reuse generic, `.netrc`, HTTP-authentication, and provider
+    detectors where they already provide equivalent semantic coverage.
+-   [x] Reject ecosystem-specific classification when it would add
+    catalog breadth without stronger semantics.
+-   [x] Keep network validation and new parser/runtime dependencies out
+    of scope.
+
+#### 0.4.5-B --- Developer package credentials
+
+Status: completed.
+
+-   [x] Cargo / Rust registry authentication.
+-   [x] Python / PyPI / `.pypirc` repository tokens.
+-   [x] RubyGems credentials, including `GEM_HOST_API_KEY`, with
+    deterministic collision handling against generic credential rules.
+-   [x] NuGet / .NET cleartext package-source credentials in
+    `nuget.config`; `NuGetPackageSourceCredentials_{name}` environment
+    credentials remain deferred because exact password projection and
+    source association require additional parsing beyond the bounded B4
+    matcher.
+-   [x] Maven repository credentials.
+-   [x] Deno authentication tokens audited and deferred.
+    `DENO_AUTH_TOKENS` is a documented security-relevant credential
+    surface, but its multi-entry representation requires reliable
+    per-entry credential discovery and exact span projection that the
+    current rule execution model does not provide without broader
+    parsing or overly generic scanning. No dedicated Deno rule is added
+    in v0.4.5.
+
+Audited surfaces may be rejected or deferred when they cannot satisfy
+Cribra's confidence standard. Gradle, Go, Conan, vcpkg, Nix, and related
+ecosystems do not require dedicated rules merely for catalog coverage
+when existing generic or shared credential surfaces already provide
+equivalent semantics.
+
+#### Transformation Semantic Parity
+
+Status: completed.
+
+-   [x] Audit every rule in `builtins::CURRENT`.
+-   [x] Give every built-in an explicit synthesis strategy while keeping
+    custom rule fallback separate.
+-   [x] Keep structured and encoded synthetic values deliberately
+    invalid under their corresponding detector contracts.
+-   [x] Verify redact, template, and pseudonymization parity through
+    their generic span/metadata contracts.
+-   [x] Complete the repository validation gates before marking this
+    step complete.
+
+#### 0.4.5-C --- Collision and normalization hardening
+
+Status: completed.
+
+-   [x] Verify provider/ecosystem-specific rules deterministically win
+    valid collisions with generic credential rules.
+-   [x] Preserve exact finding spans and stable rule attribution.
+-   [x] Verify contextual prefilters remain consistent with validator
+    semantics.
+-   [x] Keep rule-ID and detection-mode contracts explicit as validator
+    families expand.
+
+#### 0.4.5-D --- Adversarial corpus and false-positive hardening
+
+Status: completed.
+
+-   [x] Add positive, negative, malformed, placeholder, documentation,
+    and cross-format fixtures for every accepted family.
+-   [x] Add collision regressions for ecosystem-specific versus generic
+    rules.
+-   [x] Reject protected references, helper names, paths, registry
+    names, and credential-store references that are not credential
+    material.
+-   [x] Preserve Cribra's preference for deliberate false negatives over
+    noisy classification.
+
+#### 0.4.5-E --- Interface and parity validation
+
+Status: completed.
+
+-   [x] Validate Rust behavior for every accepted rule.
+-   [x] Validate native C ABI exposure and semantic parity.
+-   [x] Align `cribra-wasm` with the completed v0.4.5 core semantics.
+-   [x] Validate WebAssembly parity for findings, spans, severity,
+    confidence, remediation, candidates, and explanations.
+
+#### 0.4.5-F --- Swift Package Manager credential coverage
+
+Status: completed.
+
+Goal: audit Swift Package Manager credential surfaces and add dedicated
+detection only where SwiftPM provides stronger, documented semantics
+than existing shared credential rules.
+
+-   [x] Audit SwiftPM registry authentication and documented credential
+    storage.
+-   [x] Audit `SWIFTPM_REGISTRY_TOKEN`, `SWIFTPM_REGISTRY_PASSWORD`,
+    `SWIFTPM_SOURCE_CONTROL_TOKEN`, and `SWIFTPM_NETRC_DATA`.
+-   [x] Reuse the existing `.netrc` detector wherever it already
+    provides equivalent semantics.
+-   [x] Preserve exact credential-value spans and deterministic
+    collision behavior.
+-   [x] Add synthesis semantics and adversarial/collision tests for
+    accepted rules.
+-   [x] Do not extract credentials from Keychain or other OS credential
+    stores.
+-   [x] Do not add a SwiftPM parser, Swift runtime dependency, network
+    validation, or adapter-specific logic to the core.
+
+#### 0.4.5-G --- Kotlin / Gradle credential audit
+
+Status: completed.
+
+Goal: cover credentials encountered in Kotlin development without
+inventing a Kotlin package-manager category. Repository authentication
+is primarily owned by Gradle, Maven, AWS, and shared credential
+contracts.
+
+-   [x] Audit Gradle Groovy and Kotlin DSL repository credential
+    configuration.
+-   [x] Audit `PasswordCredentials`, including repository-derived Gradle
+    properties.
+-   [x] Audit `HttpHeaderCredentials` and existing generic/HTTP
+    coverage.
+-   [x] Audit `AwsCredentials` only for gaps not already covered by AWS
+    rules.
+-   [x] Audit Kotlin Multiplatform repository/dependency workflows.
+-   [x] Prefer `gradle.*`, `maven.*`, `aws.*`, or existing
+    generic/shared ownership over `kotlin.*` rule IDs.
+-   [x] Add rules only when documented context materially improves
+    confidence, attribution, or exact-span semantics.
+-   [x] Allow this step to complete with no new detector if existing
+    coverage is sufficient.
+
+#### 0.4.5-H --- PHP / Composer and Dart / pub credential coverage
+
+Status: completed.
+
+Goal: audit the remaining high-value PHP and Dart package/developer
+credential surfaces, adding dedicated detection only where Composer or
+pub provides documented semantics stronger than existing shared
+credential rules.
+
+-   [x] Audit Composer authentication surfaces, including `auth.json`,
+    `composer.json` authentication where applicable, and documented
+    environment configuration.
+-   [x] Audit Composer `http-basic`, `bearer`, `github-oauth`,
+    `gitlab-oauth`, `gitlab-token`, and other documented authentication
+    families.
+-   [x] Reuse existing HTTP, GitHub, GitLab, `.netrc`, and generic
+    credential rules wherever they already provide equivalent semantic
+    coverage.
+-   [x] Audit Dart/pub credential surfaces.
+    -   `PUB_HOSTED_URL` is repository configuration, not credential
+        material.
+    -   `dart pub token add` accepts the secret out-of-band; there is no
+        reliable static source representation to detect.
+    -   `dart pub token add --env-var` persists/references an arbitrary
+        environment variable name; the corresponding environment
+        assignment cannot be attributed to Dart/pub from the assignment
+        alone.
+    -   Recognizable provider credentials remain owned by their
+        provider-specific rules.
+    -   Decision: no Dart/pub-specific detector is justified for v0.4.5.
+-   [x] Audit authenticated custom package repositories and documented
+    token configuration used by `dart pub`.
+-   [x] Prefer `composer.*`, `pub.*`, provider-specific, or existing
+    generic/shared ownership over artificial `php.*` or `dart.*` rule
+    IDs.
+-   [x] Preserve exact credential-value spans and deterministic
+    collision behavior for every accepted rule.
+-   [x] Add synthesis semantics and adversarial/collision tests for
+    accepted rules.
+-   [x] Do not extract credentials from OS credential stores or other
+    protected external storage.
+-   [x] Do not add PHP/Dart runtimes, package-manager parsers, network
+    validation, or adapter-specific logic to the core.
+
+#### 0.4.5-I --- Documentation and release gate
+
+Status: completed.
+
+-   [x] Update release documentation and public coverage descriptions.
+-   [x] Run formatting, workspace check/test, Clippy, docs, MSRV,
+    RustSec, and package publication gates.
+-   [x] Run C ABI release gates.
+-   [x] Run WebAssembly adapter, optimization, and parity gates.
+-   [x] Verify a clean working tree and protected-main release workflow.
+-   [x] Publish/tag Cribra v0.4.5 and `cribra-wasm` v0.4.3 after release
+    gates pass.
+
+CLI package-manager distribution was not part of the final v0.4.5
+publication gate and remains planned under the canonical CLI milestone.
 
 ### v0.4.4 --- Canonical Cribra CLI
 

@@ -17,6 +17,7 @@ pub(crate) mod maven;
 pub(crate) mod netrc;
 pub(crate) mod npm_registry;
 pub(crate) mod nuget;
+pub(crate) mod pan;
 pub(crate) mod password;
 pub(crate) mod pypi;
 pub(crate) mod rubygems;

@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cribra WASM example</title>
+</head>
+<body>
+  <main>
+    <h1>Cribra WASM</h1>
+
+    <p>
+      This example scans caller-owned text locally in the browser and creates
+      a redacted derivative.
+    </p>
+
+    <label for="source">Source</label>
+    <br>
+    <textarea id="source" rows="8" cols="72">service=checkout
+card_number=1234567890123452
+iban=IT60X0542811101000000123456
+log_level=info</textarea>
+
+    <p>
+      <button id="scan" type="button">Scan locally</button>
+    </p>
+
+    <h2>Findings</h2>
+    <pre id="findings">Not scanned yet.</pre>
+
+    <h2>Safe derivative</h2>
+    <pre id="redacted">Not scanned yet.</pre>
+  </main>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>

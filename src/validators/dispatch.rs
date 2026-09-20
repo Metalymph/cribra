@@ -22,6 +22,7 @@ use crate::{
             netrc::validate_netrc,
             npm_registry::{NpmRegistryCredentialKind, validate_npm_registry},
             nuget::validate_nuget,
+            pan::validate_pan,
             password::{PasswordKind, validate_password},
             pypi::validate_pypi,
             rubygems::validate_rubygems_host_key,
@@ -37,6 +38,7 @@ use crate::{
             cloudflare::{CloudflareTokenKind, validate_cloudflare_token},
             github::{GitHubTokenKind, validate_github_token},
             gitlab::{GitLabTokenKind, validate_gitlab_token},
+            iban::validate_iban,
             jwt::{JwtKind, validate_jwt},
             rubygems::validate_rubygems_api_key,
             slack::{SlackTokenKind, validate_slack_token},
@@ -68,6 +70,7 @@ pub(crate) enum ValidatorKind {
     GitHub,
     GitLab,
     Stripe,
+    Iban,
     Cloudflare,
     Slack,
     Telegram,
@@ -77,6 +80,7 @@ pub(crate) enum ValidatorKind {
     Gcp,
     DatabaseConnection,
     HttpBasic,
+    Pan,
     Password,
     SensitiveHash,
     GenericCredential,
@@ -94,6 +98,7 @@ impl ValidatorKind {
             Self::GitHub
             | Self::GitLab
             | Self::Stripe
+            | Self::Iban
             | Self::Cloudflare
             | Self::Slack
             | Self::Telegram
@@ -119,6 +124,7 @@ impl ValidatorKind {
             | Self::SystemPasswordVerifier
             | Self::HttpBasic
             | Self::WireGuard
+            | Self::Pan
             | Self::Password
             | Self::SensitiveHash
             | Self::GenericCredential
@@ -145,6 +151,7 @@ pub(crate) enum ValidationKind {
     GitHub(GitHubTokenKind),
     GitLab(GitLabTokenKind),
     Stripe(StripeTokenKind),
+    Iban,
     Cloudflare(CloudflareTokenKind),
     Slack(SlackTokenKind),
     TelegramBotToken,
@@ -154,6 +161,7 @@ pub(crate) enum ValidationKind {
     Gcp(GcpCredentialKind),
     DatabaseConnection(DatabaseConnectionKind),
     HttpBasic,
+    Pan,
     Password(PasswordKind),
     SensitiveHash(HashKind),
     GenericCredential(GenericCredentialKind),
@@ -275,6 +283,8 @@ pub(crate) fn validate_candidate(
             .map(|v| ValidationOutcome::new(ValidationKind::GitLab(v.kind()), Confidence::High)),
         ValidatorKind::Stripe => validate_stripe_token(context.candidate())
             .map(|v| ValidationOutcome::new(ValidationKind::Stripe(v.kind()), Confidence::High)),
+        ValidatorKind::Iban => validate_iban(context.candidate())
+            .map(|_| ValidationOutcome::new(ValidationKind::Iban, Confidence::High)),
         ValidatorKind::Cloudflare => validate_cloudflare_token(context.candidate()).map(|v| {
             ValidationOutcome::new(ValidationKind::Cloudflare(v.kind()), Confidence::High)
         }),
@@ -300,6 +310,8 @@ pub(crate) fn validate_candidate(
             .map(|_| ValidationOutcome::new(ValidationKind::HttpBasic, Confidence::High)),
         ValidatorKind::WireGuard => validate_wireguard(&context)
             .map(|v| ValidationOutcome::new(ValidationKind::WireGuard(v.kind()), Confidence::High)),
+        ValidatorKind::Pan => validate_pan(&context)
+            .map(|_| ValidationOutcome::new(ValidationKind::Pan, Confidence::High)),
         ValidatorKind::Password => validate_password(&context).map(|v| {
             ValidationOutcome::new(ValidationKind::Password(v.kind()), Confidence::Medium)
         }),
@@ -349,6 +361,7 @@ mod tests {
             ValidatorKind::GitHub,
             ValidatorKind::GitLab,
             ValidatorKind::Stripe,
+            ValidatorKind::Iban,
             ValidatorKind::Cloudflare,
             ValidatorKind::Slack,
             ValidatorKind::Telegram,
@@ -378,6 +391,7 @@ mod tests {
             ValidatorKind::SwiftPm,
             ValidatorKind::SwiftPmNetrc,
             ValidatorKind::Gradle,
+            ValidatorKind::Pan,
             ValidatorKind::Password,
             ValidatorKind::SensitiveHash,
             ValidatorKind::GenericCredential,
@@ -464,6 +478,40 @@ mod tests {
             outcome.kind(),
             ValidationKind::GitLab(GitLabTokenKind::Access)
         ));
+        assert_eq!(outcome.confidence(), Confidence::High);
+    }
+
+    #[test]
+    fn dispatches_iban_validator() {
+        let iban = "IT60X0542811101000000123456";
+        let source = format!("iban={iban}");
+
+        let outcome = validate_candidate(
+            ValidatorKind::Iban,
+            &source,
+            range_of(&source, iban),
+            Confidence::Low,
+        )
+        .expect("registry IBAN should validate");
+
+        assert_eq!(outcome.kind(), ValidationKind::Iban);
+        assert_eq!(outcome.confidence(), Confidence::High);
+    }
+
+    #[test]
+    fn dispatches_pan_contextual_validator() {
+        let pan = "1234567890123452";
+        let source = format!("card_number={pan}");
+
+        let outcome = validate_candidate(
+            ValidatorKind::Pan,
+            &source,
+            range_of(&source, pan),
+            Confidence::Low,
+        )
+        .expect("contextual PAN should validate");
+
+        assert_eq!(outcome.kind(), ValidationKind::Pan);
         assert_eq!(outcome.confidence(), Confidence::High);
     }
 }
