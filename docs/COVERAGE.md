@@ -384,6 +384,41 @@ Deliberate exclusions:
 The rule is not part of `builtins::CURRENT`. Consumers opt into it through
 `builtins::personal::CURRENT`.
 
+### UK NHS Number — DIRECT
+
+Owner:
+
+- `personal.uk-nhs-number`
+
+Direct coverage:
+
+- compact 10-digit NHS Numbers;
+- canonical 3-3-4 representations using ASCII spaces or hyphens;
+- Modulus 11 check-digit validation;
+- explicit NHS-number field context.
+
+The rule reports the complete source representation of the NHS Number while
+excluding surrounding field context from the finding span.
+
+A checksum-valid numeric sequence alone is not sufficient evidence of
+sensitive NHS data. Classification therefore requires explicit NHS-number
+context and is reported as contextual detection.
+
+Structural validity does not establish that the number was assigned, that a
+patient exists, that the number belongs to a particular person, or that it is
+present in an authoritative NHS registry.
+
+Deliberate exclusions:
+
+- bare checksum-valid 10-digit sequences;
+- generic patient, account, reference, or other numeric identifiers;
+- malformed or noncanonical NHS Number representations;
+- known placeholder values;
+- identifiers from other UK healthcare numbering systems.
+
+The rule is not part of `builtins::CURRENT`. Consumers opt into it through
+`builtins::personal::CURRENT`.
+
 ### Remaining v0.4.7 personal-data scope — PLANNED
 
 The remaining frozen implementation scope includes:

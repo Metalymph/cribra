@@ -39,5 +39,22 @@ pub const PESEL: RuleSpec = RuleSpec::captured_pattern(
 .with_validator(ValidatorKind::Pesel)
 .with_remediation(Remediation::RemoveSensitiveValue);
 
+/// UK NHS Number under explicit NHS-number context.
+///
+/// Discovery supports compact 10-digit values and canonical 3-3-4
+/// representations separated by ASCII spaces or hyphens. Validation requires
+/// an NHS-specific field context and a valid Modulus 11 check digit.
+///
+/// Structural validity does not establish assignment, patient identity, or
+/// presence in an authoritative NHS registry.
+pub const NHS_NUMBER: RuleSpec = RuleSpec::captured_pattern(
+    "personal.uk-nhs-number",
+    r"(?:^|[^A-Za-z0-9])(?P<value>[0-9]{10}|[0-9]{3} [0-9]{3} [0-9]{4}|[0-9]{3}-[0-9]{3}-[0-9]{4})(?:$|[^A-Za-z0-9])",
+    "value",
+    Severity::High,
+)
+.with_validator(ValidatorKind::NhsNumber)
+.with_remediation(Remediation::RemoveSensitiveValue);
+
 /// Structured personal-identifier rules available as an explicit opt-in pack.
-pub const CURRENT: &[RuleSpec] = &[CODICE_FISCALE, PESEL];
+pub const CURRENT: &[RuleSpec] = &[CODICE_FISCALE, PESEL, NHS_NUMBER];

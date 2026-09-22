@@ -84,6 +84,7 @@ impl CompiledRuleMetadata {
             ValidatorKind::Jwt => 300,
             ValidatorKind::CodiceFiscale
             | ValidatorKind::Pesel
+            | ValidatorKind::NhsNumber
             | ValidatorKind::GitHub
             | ValidatorKind::GitLab
             | ValidatorKind::Stripe

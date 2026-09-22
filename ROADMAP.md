@@ -228,7 +228,7 @@ Outcome:
     final coverage audit:
     - [x] Italian Codice Fiscale.
     - [x] Polish PESEL.
-    - [ ] UK NHS Number.
+    - [x] UK NHS Number.
     - [ ] US Social Security Number under strong contextual semantics.
     - [ ] ICAO machine-readable travel-document zones.
 -   [ ] Keep recognition and sensitive classification as separate decisions.
@@ -260,6 +260,16 @@ Progress:
 - PESEL validation is deterministic and structural; assignment, registry
   presence, and holder identity are not claimed.
 - `docs/COVERAGE.md` records PESEL as DIRECT coverage.
+- UK NHS Number detection is complete and exposed through the explicit opt-in
+  `builtins::personal::CURRENT` portfolio.
+- `personal.uk-nhs-number` supports compact and canonical 3-3-4
+  representations, requires Modulus 11 validity and explicit NHS-number
+  context, and preserves the exact source representation as the finding span.
+- NHS Number classification is contextual: a checksum-valid bare 10-digit
+  sequence is deliberately insufficient for classification.
+- Structural validation does not claim assignment, patient identity, or
+  authoritative registry presence.
+- `docs/COVERAGE.md` records NHS Number as DIRECT coverage.
 
 #### 0.4.7-C --- Unix and system-security completion
 

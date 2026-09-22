@@ -20,6 +20,7 @@ use crate::{
             http_basic::validate_http_basic,
             maven::validate_maven,
             netrc::validate_netrc,
+            nhs_number::validate_nhs_number,
             npm_registry::{NpmRegistryCredentialKind, validate_npm_registry},
             nuget::validate_nuget,
             pan::validate_pan,
@@ -70,6 +71,7 @@ pub(crate) enum ValidatorKind {
     SwiftPmNetrc,
     Gradle,
     CodiceFiscale,
+    NhsNumber,
     Pesel,
     GitHub,
     GitLab,
@@ -135,7 +137,8 @@ impl ValidatorKind {
             | Self::SensitiveHash
             | Self::GenericCredential
             | Self::Netrc
-            | Self::Nuget => DetectionMode::Contextual,
+            | Self::Nuget
+            | Self::NhsNumber => DetectionMode::Contextual,
         }
     }
 }
@@ -156,6 +159,7 @@ pub(crate) enum ValidationKind {
     Gradle(GradleCredentialKind),
     CodiceFiscale,
     Pesel,
+    NhsNumber,
     GitHub(GitHubTokenKind),
     GitLab(GitLabTokenKind),
     Stripe(StripeTokenKind),
@@ -287,6 +291,8 @@ pub(crate) fn validate_candidate(
             .map(|_| ValidationOutcome::new(ValidationKind::DockerRegistry, Confidence::High)),
         ValidatorKind::CodiceFiscale => validate_codice_fiscale(context.candidate())
             .map(|_| ValidationOutcome::new(ValidationKind::CodiceFiscale, Confidence::High)),
+        ValidatorKind::NhsNumber => validate_nhs_number(&context)
+            .map(|_| ValidationOutcome::new(ValidationKind::NhsNumber, Confidence::High)),
         ValidatorKind::Pesel => validate_pesel(context.candidate())
             .map(|_| ValidationOutcome::new(ValidationKind::Pesel, Confidence::High)),
         ValidatorKind::GitHub => validate_github_token(context.candidate())
@@ -412,6 +418,7 @@ mod tests {
             ValidatorKind::Netrc,
             ValidatorKind::Nuget,
             ValidatorKind::SystemPasswordVerifier,
+            ValidatorKind::NhsNumber,
         ] {
             assert_eq!(
                 validator.detection_mode(),

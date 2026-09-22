@@ -3492,3 +3492,175 @@ fn personal_pack_preserves_pesel_ownership_when_composed_with_default_builtins()
     assert_eq!(report.findings()[0].rule_id().as_str(), "personal.pl-pesel");
     assert_eq!(matched(pesel, &report.findings()[0]), pesel);
 }
+
+#[test]
+fn personal_nhs_number_is_opt_in_and_not_part_of_default_scanner() {
+    let source = "nhs_number=9434765919";
+
+    let default_results = scan_one(&Scanner::default(), source);
+    let default_report = default_results
+        .single_report()
+        .expect("one fixture was scanned");
+
+    assert!(
+        default_report
+            .findings()
+            .iter()
+            .all(|finding| finding.rule_id().as_str() != "personal.uk-nhs-number")
+    );
+
+    let scanner = scanner_for(builtins::personal::CURRENT.iter().copied());
+    let results = scan_one(&scanner, source);
+    let report = results.single_report().expect("one fixture was scanned");
+
+    assert_eq!(report.len(), 1);
+    assert_eq!(
+        report.findings()[0].rule_id().as_str(),
+        "personal.uk-nhs-number"
+    );
+}
+
+#[test]
+fn personal_nhs_number_reports_exact_compact_span_and_metadata() {
+    let nhs_number = "9434765919";
+    let source = format!("nhs_number=({nhs_number})");
+    let scanner = scanner_for([builtins::personal::NHS_NUMBER]);
+
+    let results = scan_one(&scanner, &source);
+    let report = results.single_report().expect("one fixture was scanned");
+
+    assert_eq!(report.len(), 1);
+
+    let finding = &report.findings()[0];
+
+    assert_eq!(finding.rule_id().as_str(), "personal.uk-nhs-number");
+    assert_eq!(matched(&source, finding), nhs_number);
+    assert_eq!(finding.severity(), Severity::High);
+    assert_eq!(finding.confidence(), Confidence::High);
+    assert_eq!(
+        finding.remediation(),
+        Some(Remediation::RemoveSensitiveValue)
+    );
+}
+
+#[test]
+fn personal_nhs_number_exposes_contextual_detection_metadata() {
+    let scanner = scanner_for([builtins::personal::NHS_NUMBER]);
+
+    let metadata = scanner
+        .rule_metadata()
+        .find(|metadata| metadata.id() == "personal.uk-nhs-number")
+        .expect("NHS Number metadata must be exposed");
+
+    assert_eq!(metadata.detection_mode(), DetectionMode::Contextual);
+}
+
+#[test]
+fn personal_nhs_number_preserves_formatted_source_span() {
+    let scanner = scanner_for([builtins::personal::NHS_NUMBER]);
+
+    for nhs_number in ["943 476 5919", "943-476-5919"] {
+        let source = format!("nhs_number=({nhs_number})");
+
+        let results = scan_one(&scanner, &source);
+        let report = results.single_report().expect("one fixture was scanned");
+
+        assert_eq!(report.len(), 1);
+        assert_eq!(
+            report.findings()[0].rule_id().as_str(),
+            "personal.uk-nhs-number"
+        );
+        assert_eq!(matched(&source, &report.findings()[0]), nhs_number);
+    }
+}
+
+#[test]
+fn personal_nhs_number_rejects_bare_checksum_valid_value() {
+    let nhs_number = "9434765919";
+    let scanner = scanner_for([builtins::personal::NHS_NUMBER]);
+
+    let results = scan_one(&scanner, nhs_number);
+    let report = results.single_report().expect("one fixture was scanned");
+
+    assert!(
+        report.is_empty(),
+        "checksum-valid NHS Number without NHS-specific context must not be classified"
+    );
+}
+
+#[test]
+fn personal_nhs_number_rejects_unrelated_context() {
+    let scanner = scanner_for([builtins::personal::NHS_NUMBER]);
+
+    for source in [
+        "number=9434765919",
+        "patient_number=9434765919",
+        "account_number=9434765919",
+        "reference=9434765919",
+    ] {
+        let results = scan_one(&scanner, source);
+        let report = results.single_report().expect("one fixture was scanned");
+
+        assert!(
+            report.is_empty(),
+            "unrelated numeric context must not classify an NHS Number: {source}"
+        );
+    }
+}
+
+#[test]
+fn personal_nhs_number_rejects_invalid_values_and_noncanonical_formatting() {
+    let scanner = scanner_for([builtins::personal::NHS_NUMBER]);
+
+    for source in [
+        "nhs_number=9434765918",
+        "nhs_number=1234567890",
+        "nhs_number=0123456789",
+        "nhs_number=943 476-5919",
+        "nhs_number=943.476.5919",
+    ] {
+        let results = scan_one(&scanner, source);
+        let report = results.single_report().expect("one fixture was scanned");
+
+        assert!(
+            report.is_empty(),
+            "invalid NHS Number must not be detected: {source}"
+        );
+    }
+}
+
+#[test]
+fn personal_nhs_number_rejects_alphanumeric_adjacency() {
+    let scanner = scanner_for([builtins::personal::NHS_NUMBER]);
+
+    for source in ["nhs_number=X9434765919", "nhs_number=9434765919X"] {
+        let results = scan_one(&scanner, source);
+        let report = results.single_report().expect("one fixture was scanned");
+
+        assert!(
+            report.is_empty(),
+            "NHS Number embedded in a larger alphanumeric token must not be detected"
+        );
+    }
+}
+
+#[test]
+fn personal_pack_preserves_nhs_number_ownership_when_composed_with_default_builtins() {
+    let source = "nhs_number=9434765919";
+
+    let scanner = Scanner::builder()
+        .builtins(builtins::CURRENT)
+        .builtins(builtins::personal::CURRENT)
+        .build()
+        .expect("default and personal packs must compose");
+
+    let results = scan_one(&scanner, source);
+    let report = results.single_report().expect("one fixture was scanned");
+
+    assert_eq!(report.len(), 1);
+    assert_eq!(
+        report.findings()[0].rule_id().as_str(),
+        "personal.uk-nhs-number"
+    );
+    assert_eq!(matched(source, &report.findings()[0]), "9434765919");
+}
