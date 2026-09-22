@@ -10,7 +10,7 @@
 use std::collections::BTreeSet;
 
 use cribra::{
-    Confidence, Remediation, Scanner, Severity, builtins,
+    Confidence, DetectionMode, Remediation, Scanner, Severity, builtins,
     transform::{SynthesisOptions, synthesize},
 };
 
@@ -3177,4 +3177,192 @@ fn financial_pan_rejects_values_outside_supported_length_range() {
             "PAN outside the supported 10..=19 digit range must not be detected"
         );
     }
+}
+
+#[test]
+fn personal_codice_fiscale_is_opt_in_and_not_part_of_default_scanner() {
+    let codice_fiscale = "RSSMRA85T10A562S";
+
+    let default_results = scan_one(&Scanner::default(), codice_fiscale);
+    let default_report = default_results
+        .single_report()
+        .expect("one fixture was scanned");
+
+    assert!(
+        default_report
+            .findings()
+            .iter()
+            .all(|finding| finding.rule_id().as_str() != "personal.it-codice-fiscale")
+    );
+
+    let scanner = scanner_for(builtins::personal::CURRENT.iter().copied());
+    let results = scan_one(&scanner, codice_fiscale);
+    let report = results.single_report().expect("one fixture was scanned");
+
+    assert_eq!(report.len(), 1);
+    assert_eq!(
+        report.findings()[0].rule_id().as_str(),
+        "personal.it-codice-fiscale"
+    );
+}
+
+#[test]
+fn personal_codice_fiscale_reports_exact_span_and_metadata() {
+    let codice_fiscale = "RSSMRA85T10A562S";
+    let source = format!("codice_fiscale=({codice_fiscale})");
+    let scanner = scanner_for([builtins::personal::CODICE_FISCALE]);
+
+    let results = scan_one(&scanner, &source);
+    let report = results.single_report().expect("one fixture was scanned");
+
+    assert_eq!(report.len(), 1);
+
+    let finding = &report.findings()[0];
+
+    assert_eq!(finding.rule_id().as_str(), "personal.it-codice-fiscale");
+    assert_eq!(matched(&source, finding), codice_fiscale);
+    assert_eq!(finding.severity(), Severity::High);
+    assert_eq!(finding.confidence(), Confidence::High);
+    assert_eq!(
+        finding.remediation(),
+        Some(Remediation::RemoveSensitiveValue)
+    );
+}
+
+#[test]
+fn personal_codice_fiscale_accepts_valid_omocodic_representation() {
+    let codice_fiscale = "RSSMRA85T10A56NH";
+    let scanner = scanner_for([builtins::personal::CODICE_FISCALE]);
+
+    let results = scan_one(&scanner, codice_fiscale);
+    let report = results.single_report().expect("one fixture was scanned");
+
+    assert_eq!(report.len(), 1);
+    assert_eq!(
+        report.findings()[0].rule_id().as_str(),
+        "personal.it-codice-fiscale"
+    );
+    assert_eq!(
+        matched(codice_fiscale, &report.findings()[0]),
+        codice_fiscale
+    );
+}
+
+#[test]
+fn personal_codice_fiscale_accepts_punctuation_boundaries_without_including_them() {
+    let codice_fiscale = "RSSMRA85T10A562S";
+    let source = format!("({codice_fiscale}),");
+    let scanner = scanner_for([builtins::personal::CODICE_FISCALE]);
+
+    let results = scan_one(&scanner, &source);
+    let report = results.single_report().expect("one fixture was scanned");
+
+    assert_eq!(report.len(), 1);
+    assert_eq!(matched(&source, &report.findings()[0]), codice_fiscale);
+}
+
+#[test]
+fn personal_codice_fiscale_rejects_alphanumeric_adjacency() {
+    let codice_fiscale = "RSSMRA85T10A562S";
+    let scanner = scanner_for([builtins::personal::CODICE_FISCALE]);
+
+    for source in [format!("X{codice_fiscale}"), format!("{codice_fiscale}X")] {
+        let results = scan_one(&scanner, &source);
+        let report = results.single_report().expect("one fixture was scanned");
+
+        assert!(
+            report.is_empty(),
+            "Codice Fiscale embedded in a larger alphanumeric token must not be detected"
+        );
+    }
+}
+
+#[test]
+fn personal_codice_fiscale_rejects_structurally_invalid_candidates() {
+    let scanner = scanner_for([builtins::personal::CODICE_FISCALE]);
+
+    for source in [
+        "RSSMRA85Z10A562S", // invalid month
+        "RSSMRA85T00A562S", // invalid day
+        "RSSMRA85T32A562S", // invalid male day
+        "RSSMRA85T40A562S", // invalid encoded day
+        "RSSMRA85T72A562S", // invalid female day
+        "RSSMRAW5T10A562S", // invalid omocodia letter in numeric position
+        "RSSMRA85T101562S", // birthplace must start with a letter
+        "RSSMRA85T10AA62S", // birthplace numeric position is malformed
+        "RSSMRA85T10A562A", // invalid control character
+    ] {
+        let results = scan_one(&scanner, source);
+        let report = results.single_report().expect("one fixture was scanned");
+
+        assert!(
+            report.is_empty(),
+            "structurally invalid Codice Fiscale must not be detected: {source}"
+        );
+    }
+}
+
+#[test]
+fn personal_codice_fiscale_does_not_claim_eleven_digit_tax_identifiers() {
+    let scanner = scanner_for([builtins::personal::CODICE_FISCALE]);
+
+    for source in ["12345678901", "codice_fiscale=12345678901"] {
+        let results = scan_one(&scanner, source);
+        let report = results.single_report().expect("one fixture was scanned");
+
+        assert!(
+            report.is_empty(),
+            "11-digit numeric tax identifiers are outside this rule contract"
+        );
+    }
+}
+
+#[test]
+fn personal_pack_composes_with_default_builtins_without_joining_default_pack() {
+    let scanner = Scanner::builder()
+        .builtins(builtins::CURRENT)
+        .builtins(builtins::personal::CURRENT)
+        .build()
+        .expect("default and personal packs must compose");
+
+    assert_eq!(
+        scanner.rules_count(),
+        builtins::CURRENT.len() + builtins::personal::CURRENT.len()
+    );
+}
+
+#[test]
+fn personal_pack_preserves_codice_fiscale_ownership_when_composed_with_default_builtins() {
+    let codice_fiscale = "RSSMRA85T10A562S";
+
+    let scanner = Scanner::builder()
+        .builtins(builtins::CURRENT)
+        .builtins(builtins::personal::CURRENT)
+        .build()
+        .expect("default and personal packs must compose");
+
+    let results = scan_one(&scanner, codice_fiscale);
+    let report = results.single_report().expect("one fixture was scanned");
+
+    assert_eq!(report.len(), 1);
+    assert_eq!(
+        report.findings()[0].rule_id().as_str(),
+        "personal.it-codice-fiscale"
+    );
+    assert_eq!(
+        matched(codice_fiscale, &report.findings()[0]),
+        codice_fiscale
+    );
+}
+
+#[test]
+fn personal_codice_fiscale_exposes_deterministic_detection_metadata() {
+    let scanner = scanner_for([builtins::personal::CODICE_FISCALE]);
+
+    let metadata = scanner
+        .rule_metadata()
+        .find(|metadata| metadata.id() == "personal.it-codice-fiscale")
+        .expect("Codice Fiscale metadata must be exposed");
+
+    assert_eq!(metadata.detection_mode(), DetectionMode::Deterministic);
 }

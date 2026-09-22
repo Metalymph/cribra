@@ -2,6 +2,7 @@
 //! candidate value alone.
 
 pub(crate) mod cloudflare;
+pub(crate) mod codice_fiscale;
 pub(crate) mod github;
 pub(crate) mod gitlab;
 pub(crate) mod iban;

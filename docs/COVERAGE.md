@@ -315,22 +315,52 @@ must not be interpreted as DIRECT coverage.
 
 ## Structured personal-data coverage
 
-Structured personal-data detection is being introduced in v0.4.7.
+Structured personal-data detection is being introduced in v0.4.7 through an
+explicit opt-in portfolio.
 
-The intended public grouping is an explicit opt-in personal-data portfolio.
-Its exact public API must remain aligned with the implementation that lands
-during v0.4.7.
+### Italian Codice Fiscale — DIRECT
 
-Cribra deliberately targets strongly structured personal identifiers rather
-than attempting general PII classification.
+Owner:
 
-The v0.4.7 frozen implementation scope currently includes:
+- `personal.it-codice-fiscale`
 
-- Italian Codice Fiscale;
+Direct coverage:
+
+- canonical 16-character Italian Codice Fiscale for natural persons;
+- ordinary and structurally valid omocodic representations;
+- positional structure;
+- encoded month and day/sex fields;
+- birthplace/cadastral-code structure;
+- final control-character validation.
+
+The rule reports only the authoritative 16-character identifier span.
+
+The detector establishes structural validity only. It does not establish that
+the identifier was assigned, that the represented person exists, that the
+identifier belongs to a particular person, or that it is currently valid in an
+authoritative registry.
+
+Deliberate exclusions:
+
+- 11-digit numeric Italian tax identifiers;
+- Italian VAT numbers as a personal-data category;
+- generic national identifiers;
+- registry or identity lookups.
+
+The rule is not part of `builtins::CURRENT`. Consumers opt into it through
+`builtins::personal::CURRENT`.
+
+### Remaining v0.4.7 personal-data scope — PLANNED
+
+The remaining frozen implementation scope includes:
+
 - Polish PESEL;
 - UK NHS Number;
 - US Social Security Number under strong contextual semantics;
 - ICAO machine-readable travel-document zones.
+
+These families remain planned until their corresponding implementations and
+validation gates land.
 
 These entries become DIRECT only when their implementations and tests land.
 

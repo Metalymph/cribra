@@ -36,6 +36,7 @@ use crate::{
         },
         deterministic::{
             cloudflare::{CloudflareTokenKind, validate_cloudflare_token},
+            codice_fiscale::validate_codice_fiscale,
             github::{GitHubTokenKind, validate_github_token},
             gitlab::{GitLabTokenKind, validate_gitlab_token},
             iban::validate_iban,
@@ -67,6 +68,7 @@ pub(crate) enum ValidatorKind {
     SwiftPm,
     SwiftPmNetrc,
     Gradle,
+    CodiceFiscale,
     GitHub,
     GitLab,
     Stripe,
@@ -95,7 +97,8 @@ impl ValidatorKind {
     pub(crate) const fn detection_mode(self) -> DetectionMode {
         match self {
             Self::None => DetectionMode::MatcherOnly,
-            Self::GitHub
+            Self::CodiceFiscale
+            | Self::GitHub
             | Self::GitLab
             | Self::Stripe
             | Self::Iban
@@ -148,6 +151,7 @@ pub(crate) enum ValidationKind {
     SwiftPm,
     SwiftPmNetrc,
     Gradle(GradleCredentialKind),
+    CodiceFiscale,
     GitHub(GitHubTokenKind),
     GitLab(GitLabTokenKind),
     Stripe(StripeTokenKind),
@@ -277,6 +281,8 @@ pub(crate) fn validate_candidate(
             .map(|v| ValidationOutcome::new(ValidationKind::Gradle(v.kind()), Confidence::High)),
         ValidatorKind::DockerRegistry => validate_docker_registry(&context)
             .map(|_| ValidationOutcome::new(ValidationKind::DockerRegistry, Confidence::High)),
+        ValidatorKind::CodiceFiscale => validate_codice_fiscale(context.candidate())
+            .map(|_| ValidationOutcome::new(ValidationKind::CodiceFiscale, Confidence::High)),
         ValidatorKind::GitHub => validate_github_token(context.candidate())
             .map(|v| ValidationOutcome::new(ValidationKind::GitHub(v.kind()), Confidence::High)),
         ValidatorKind::GitLab => validate_gitlab_token(context.candidate())
@@ -358,6 +364,7 @@ mod tests {
         );
 
         for validator in [
+            ValidatorKind::CodiceFiscale,
             ValidatorKind::GitHub,
             ValidatorKind::GitLab,
             ValidatorKind::Stripe,
