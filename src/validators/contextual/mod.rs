@@ -22,6 +22,7 @@ pub(crate) mod pan;
 pub(crate) mod password;
 pub(crate) mod pypi;
 pub(crate) mod rubygems;
+pub(crate) mod ssn;
 pub(crate) mod swiftpm;
 pub(crate) mod swiftpm_netrc;
 pub(crate) mod system_password_verifier;

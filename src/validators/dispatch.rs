@@ -27,6 +27,7 @@ use crate::{
             password::{PasswordKind, validate_password},
             pypi::validate_pypi,
             rubygems::validate_rubygems_host_key,
+            ssn::validate_ssn,
             swiftpm::validate_swiftpm,
             swiftpm_netrc::validate_swiftpm_netrc,
             system_password_verifier::{
@@ -73,6 +74,7 @@ pub(crate) enum ValidatorKind {
     CodiceFiscale,
     NhsNumber,
     Pesel,
+    Ssn,
     GitHub,
     GitLab,
     Stripe,
@@ -138,7 +140,8 @@ impl ValidatorKind {
             | Self::GenericCredential
             | Self::Netrc
             | Self::Nuget
-            | Self::NhsNumber => DetectionMode::Contextual,
+            | Self::NhsNumber
+            | Self::Ssn => DetectionMode::Contextual,
         }
     }
 }
@@ -159,6 +162,7 @@ pub(crate) enum ValidationKind {
     Gradle(GradleCredentialKind),
     CodiceFiscale,
     Pesel,
+    Ssn,
     NhsNumber,
     GitHub(GitHubTokenKind),
     GitLab(GitLabTokenKind),
@@ -293,6 +297,8 @@ pub(crate) fn validate_candidate(
             .map(|_| ValidationOutcome::new(ValidationKind::CodiceFiscale, Confidence::High)),
         ValidatorKind::NhsNumber => validate_nhs_number(&context)
             .map(|_| ValidationOutcome::new(ValidationKind::NhsNumber, Confidence::High)),
+        ValidatorKind::Ssn => validate_ssn(&context)
+            .map(|_| ValidationOutcome::new(ValidationKind::Ssn, Confidence::High)),
         ValidatorKind::Pesel => validate_pesel(context.candidate())
             .map(|_| ValidationOutcome::new(ValidationKind::Pesel, Confidence::High)),
         ValidatorKind::GitHub => validate_github_token(context.candidate())
@@ -419,6 +425,7 @@ mod tests {
             ValidatorKind::Nuget,
             ValidatorKind::SystemPasswordVerifier,
             ValidatorKind::NhsNumber,
+            ValidatorKind::Ssn,
         ] {
             assert_eq!(
                 validator.detection_mode(),

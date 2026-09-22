@@ -419,6 +419,44 @@ Deliberate exclusions:
 The rule is not part of `builtins::CURRENT`. Consumers opt into it through
 `builtins::personal::CURRENT`.
 
+### US Social Security Number — DIRECT
+
+Owner:
+
+- `personal.us-ssn`
+
+Direct coverage:
+
+- compact nine-digit US Social Security Number representations;
+- canonical `AAA-GG-SSSS` representations;
+- current SSA structural impossibility constraints;
+- explicit SSN or Social Security Number field context.
+
+The rule reports the complete source representation of the SSN while excluding
+surrounding field context from the finding span.
+
+A structurally possible nine-digit value alone is not sufficient evidence of
+sensitive SSN data. Classification therefore requires explicit SSN-specific
+context and is reported as contextual detection.
+
+Structural validity does not establish that the number was assigned, that a
+holder exists, that the number belongs to a particular person, or that it is
+present in authoritative SSA records.
+
+Deliberate exclusions:
+
+- bare structurally possible nine-digit values;
+- generic tax, national, employee, person, or other numeric identifiers;
+- area `000`, `666`, and `900`–`999`;
+- group `00`;
+- serial `0000`;
+- historical geographic inference or High Group validation as a current
+  validity test;
+- assignment or identity verification.
+
+The rule is not part of `builtins::CURRENT`. Consumers opt into it through
+`builtins::personal::CURRENT`.
+
 ### Remaining v0.4.7 personal-data scope — PLANNED
 
 The remaining frozen implementation scope includes:

@@ -56,5 +56,22 @@ pub const NHS_NUMBER: RuleSpec = RuleSpec::captured_pattern(
 .with_validator(ValidatorKind::NhsNumber)
 .with_remediation(Remediation::RemoveSensitiveValue);
 
+/// US Social Security Number under explicit SSN field context.
+///
+/// Discovery supports compact nine-digit values and canonical AAA-GG-SSSS
+/// representations. Validation applies current structural impossibility rules
+/// and requires explicit Social Security Number field context.
+///
+/// Structural validity does not establish assignment, holder identity, or
+/// presence in authoritative SSA records.
+pub const SSN: RuleSpec = RuleSpec::captured_pattern(
+    "personal.us-ssn",
+    r"(?:^|[^A-Za-z0-9])(?P<value>[0-9]{9}|[0-9]{3}-[0-9]{2}-[0-9]{4})(?:$|[^A-Za-z0-9])",
+    "value",
+    Severity::High,
+)
+.with_validator(ValidatorKind::Ssn)
+.with_remediation(Remediation::RemoveSensitiveValue);
+
 /// Structured personal-identifier rules available as an explicit opt-in pack.
-pub const CURRENT: &[RuleSpec] = &[CODICE_FISCALE, PESEL, NHS_NUMBER];
+pub const CURRENT: &[RuleSpec] = &[CODICE_FISCALE, PESEL, NHS_NUMBER, SSN];

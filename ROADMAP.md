@@ -229,7 +229,7 @@ Outcome:
     - [x] Italian Codice Fiscale.
     - [x] Polish PESEL.
     - [x] UK NHS Number.
-    - [ ] US Social Security Number under strong contextual semantics.
+    - [x] US Social Security Number under strong contextual semantics.
     - [ ] ICAO machine-readable travel-document zones.
 -   [ ] Keep recognition and sensitive classification as separate decisions.
 -   [ ] Prefer `SensitiveCandidate` when evidence is useful but insufficient
@@ -270,6 +270,16 @@ Progress:
 - Structural validation does not claim assignment, patient identity, or
   authoritative registry presence.
 - `docs/COVERAGE.md` records NHS Number as DIRECT coverage.
+- US Social Security Number detection is complete and exposed through the
+  explicit opt-in `builtins::personal::CURRENT` portfolio.
+- `personal.us-ssn` supports compact and canonical `AAA-GG-SSSS`
+  representations, applies current SSA structural impossibility constraints,
+  and requires explicit SSN-specific field context.
+- SSN classification is contextual: a structurally possible bare nine-digit
+  value is deliberately insufficient for classification.
+- Structural validation does not claim assignment, holder identity, or
+  authoritative SSA record presence.
+- `docs/COVERAGE.md` records US SSN as DIRECT coverage.
 
 #### 0.4.7-C --- Unix and system-security completion
 
