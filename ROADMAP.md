@@ -227,7 +227,7 @@ Outcome:
 -   [ ] Implement accepted structured identity/personal identifiers from the
     final coverage audit:
     - [x] Italian Codice Fiscale.
-    - [ ] Polish PESEL.
+    - [x] Polish PESEL.
     - [ ] UK NHS Number.
     - [ ] US Social Security Number under strong contextual semantics.
     - [ ] ICAO machine-readable travel-document zones.
@@ -252,6 +252,14 @@ Progress:
 - Default and personal portfolios compose without duplicate ownership.
 - `docs/COVERAGE.md` records the implemented Codice Fiscale family as DIRECT
   coverage.
+- Polish PESEL detection is complete and exposed through the explicit opt-in
+  `builtins::personal::CURRENT` portfolio.
+- `personal.pl-pesel` validates the canonical 11-digit representation,
+  including encoded century/date semantics, Gregorian calendar validity, and
+  checksum.
+- PESEL validation is deterministic and structural; assignment, registry
+  presence, and holder identity are not claimed.
+- `docs/COVERAGE.md` records PESEL as DIRECT coverage.
 
 #### 0.4.7-C --- Unix and system-security completion
 

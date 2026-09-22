@@ -3366,3 +3366,129 @@ fn personal_codice_fiscale_exposes_deterministic_detection_metadata() {
 
     assert_eq!(metadata.detection_mode(), DetectionMode::Deterministic);
 }
+
+#[test]
+fn personal_pesel_is_opt_in_and_not_part_of_default_scanner() {
+    let pesel = "02070803628";
+
+    let default_results = scan_one(&Scanner::default(), pesel);
+    let default_report = default_results
+        .single_report()
+        .expect("one fixture was scanned");
+
+    assert!(
+        default_report
+            .findings()
+            .iter()
+            .all(|finding| finding.rule_id().as_str() != "personal.pl-pesel")
+    );
+
+    let scanner = scanner_for(builtins::personal::CURRENT.iter().copied());
+    let results = scan_one(&scanner, pesel);
+    let report = results.single_report().expect("one fixture was scanned");
+
+    assert_eq!(report.len(), 1);
+    assert_eq!(report.findings()[0].rule_id().as_str(), "personal.pl-pesel");
+}
+
+#[test]
+fn personal_pesel_reports_exact_span_and_metadata() {
+    let pesel = "02070803628";
+    let source = format!("pesel=({pesel})");
+    let scanner = scanner_for([builtins::personal::PESEL]);
+
+    let results = scan_one(&scanner, &source);
+    let report = results.single_report().expect("one fixture was scanned");
+
+    assert_eq!(report.len(), 1);
+
+    let finding = &report.findings()[0];
+
+    assert_eq!(finding.rule_id().as_str(), "personal.pl-pesel");
+    assert_eq!(matched(&source, finding), pesel);
+    assert_eq!(finding.severity(), Severity::High);
+    assert_eq!(finding.confidence(), Confidence::High);
+    assert_eq!(
+        finding.remediation(),
+        Some(Remediation::RemoveSensitiveValue)
+    );
+}
+
+#[test]
+fn personal_pesel_exposes_deterministic_detection_metadata() {
+    let scanner = scanner_for([builtins::personal::PESEL]);
+
+    let metadata = scanner
+        .rule_metadata()
+        .find(|metadata| metadata.id() == "personal.pl-pesel")
+        .expect("PESEL metadata must be exposed");
+
+    assert_eq!(metadata.detection_mode(), DetectionMode::Deterministic);
+}
+
+#[test]
+fn personal_pesel_accepts_punctuation_boundaries_without_including_them() {
+    let pesel = "02070803628";
+    let source = format!("({pesel}),");
+    let scanner = scanner_for([builtins::personal::PESEL]);
+
+    let results = scan_one(&scanner, &source);
+    let report = results.single_report().expect("one fixture was scanned");
+
+    assert_eq!(report.len(), 1);
+    assert_eq!(matched(&source, &report.findings()[0]), pesel);
+}
+
+#[test]
+fn personal_pesel_rejects_alphanumeric_adjacency() {
+    let pesel = "02070803628";
+    let scanner = scanner_for([builtins::personal::PESEL]);
+
+    for source in [format!("X{pesel}"), format!("{pesel}X")] {
+        let results = scan_one(&scanner, &source);
+        let report = results.single_report().expect("one fixture was scanned");
+
+        assert!(
+            report.is_empty(),
+            "PESEL embedded in a larger alphanumeric token must not be detected"
+        );
+    }
+}
+
+#[test]
+fn personal_pesel_rejects_structurally_invalid_candidates() {
+    let scanner = scanner_for([builtins::personal::PESEL]);
+
+    for source in [
+        "02070803629", // wrong checksum
+        "02130803628", // invalid encoded month
+        "02223003628", // impossible February date
+        "02070003628", // day zero
+    ] {
+        let results = scan_one(&scanner, source);
+        let report = results.single_report().expect("one fixture was scanned");
+
+        assert!(
+            report.is_empty(),
+            "structurally invalid PESEL must not be detected: {source}"
+        );
+    }
+}
+
+#[test]
+fn personal_pack_preserves_pesel_ownership_when_composed_with_default_builtins() {
+    let pesel = "02070803628";
+
+    let scanner = Scanner::builder()
+        .builtins(builtins::CURRENT)
+        .builtins(builtins::personal::CURRENT)
+        .build()
+        .expect("default and personal packs must compose");
+
+    let results = scan_one(&scanner, pesel);
+    let report = results.single_report().expect("one fixture was scanned");
+
+    assert_eq!(report.len(), 1);
+    assert_eq!(report.findings()[0].rule_id().as_str(), "personal.pl-pesel");
+    assert_eq!(matched(pesel, &report.findings()[0]), pesel);
+}

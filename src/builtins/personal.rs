@@ -23,5 +23,21 @@ pub const CODICE_FISCALE: RuleSpec = RuleSpec::captured_pattern(
 .with_validator(ValidatorKind::CodiceFiscale)
 .with_remediation(Remediation::RemoveSensitiveValue);
 
+/// Polish 11-digit PESEL identifier.
+///
+/// Discovery accepts an isolated 11-digit candidate. Century/month decoding,
+/// Gregorian birth-date validity, and the checksum remain authoritative in the
+/// deterministic validator.
+///
+/// Structural validity does not establish assignment or registry presence.
+pub const PESEL: RuleSpec = RuleSpec::captured_pattern(
+    "personal.pl-pesel",
+    r"(?:^|[^A-Za-z0-9])(?P<value>[0-9]{11})(?:$|[^A-Za-z0-9])",
+    "value",
+    Severity::High,
+)
+.with_validator(ValidatorKind::Pesel)
+.with_remediation(Remediation::RemoveSensitiveValue);
+
 /// Structured personal-identifier rules available as an explicit opt-in pack.
-pub const CURRENT: &[RuleSpec] = &[CODICE_FISCALE];
+pub const CURRENT: &[RuleSpec] = &[CODICE_FISCALE, PESEL];

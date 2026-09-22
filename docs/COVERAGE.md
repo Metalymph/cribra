@@ -350,11 +350,44 @@ Deliberate exclusions:
 The rule is not part of `builtins::CURRENT`. Consumers opt into it through
 `builtins::personal::CURRENT`.
 
+### Polish PESEL — DIRECT
+
+Owner:
+
+- `personal.pl-pesel`
+
+Direct coverage:
+
+- canonical 11-digit Polish PESEL identifiers;
+- encoded century and birth-month semantics for the supported PESEL range
+  1800–2299;
+- Gregorian birth-date validity, including leap-year handling;
+- final checksum validation.
+
+The rule reports only the authoritative 11-digit identifier span.
+
+The detector establishes structural validity only. It does not establish that
+the identifier was assigned, that the represented person exists, that the
+identifier belongs to a particular person, or that it is currently present in
+the PESEL register.
+
+The sex-encoding digit is structurally accepted for both valid parity classes;
+Cribra does not use the encoded sex as an additional sensitive-classification
+condition.
+
+Deliberate exclusions:
+
+- arbitrary 11-digit numeric identifiers;
+- PESEL-like values with invalid encoded dates or checksums;
+- registry or identity lookups.
+
+The rule is not part of `builtins::CURRENT`. Consumers opt into it through
+`builtins::personal::CURRENT`.
+
 ### Remaining v0.4.7 personal-data scope — PLANNED
 
 The remaining frozen implementation scope includes:
 
-- Polish PESEL;
 - UK NHS Number;
 - US Social Security Number under strong contextual semantics;
 - ICAO machine-readable travel-document zones.

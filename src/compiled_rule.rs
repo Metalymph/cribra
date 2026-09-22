@@ -83,6 +83,7 @@ impl CompiledRuleMetadata {
             | ValidatorKind::SystemPasswordVerifier => 200,
             ValidatorKind::Jwt => 300,
             ValidatorKind::CodiceFiscale
+            | ValidatorKind::Pesel
             | ValidatorKind::GitHub
             | ValidatorKind::GitLab
             | ValidatorKind::Stripe

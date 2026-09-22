@@ -41,6 +41,7 @@ use crate::{
             gitlab::{GitLabTokenKind, validate_gitlab_token},
             iban::validate_iban,
             jwt::{JwtKind, validate_jwt},
+            pesel::validate_pesel,
             rubygems::validate_rubygems_api_key,
             slack::{SlackTokenKind, validate_slack_token},
             stripe::{StripeTokenKind, validate_stripe_token},
@@ -69,6 +70,7 @@ pub(crate) enum ValidatorKind {
     SwiftPmNetrc,
     Gradle,
     CodiceFiscale,
+    Pesel,
     GitHub,
     GitLab,
     Stripe,
@@ -98,6 +100,7 @@ impl ValidatorKind {
         match self {
             Self::None => DetectionMode::MatcherOnly,
             Self::CodiceFiscale
+            | Self::Pesel
             | Self::GitHub
             | Self::GitLab
             | Self::Stripe
@@ -152,6 +155,7 @@ pub(crate) enum ValidationKind {
     SwiftPmNetrc,
     Gradle(GradleCredentialKind),
     CodiceFiscale,
+    Pesel,
     GitHub(GitHubTokenKind),
     GitLab(GitLabTokenKind),
     Stripe(StripeTokenKind),
@@ -283,6 +287,8 @@ pub(crate) fn validate_candidate(
             .map(|_| ValidationOutcome::new(ValidationKind::DockerRegistry, Confidence::High)),
         ValidatorKind::CodiceFiscale => validate_codice_fiscale(context.candidate())
             .map(|_| ValidationOutcome::new(ValidationKind::CodiceFiscale, Confidence::High)),
+        ValidatorKind::Pesel => validate_pesel(context.candidate())
+            .map(|_| ValidationOutcome::new(ValidationKind::Pesel, Confidence::High)),
         ValidatorKind::GitHub => validate_github_token(context.candidate())
             .map(|v| ValidationOutcome::new(ValidationKind::GitHub(v.kind()), Confidence::High)),
         ValidatorKind::GitLab => validate_gitlab_token(context.candidate())
@@ -365,6 +371,7 @@ mod tests {
 
         for validator in [
             ValidatorKind::CodiceFiscale,
+            ValidatorKind::Pesel,
             ValidatorKind::GitHub,
             ValidatorKind::GitLab,
             ValidatorKind::Stripe,
