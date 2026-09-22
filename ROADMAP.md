@@ -216,27 +216,27 @@ Outcome:
   authority and must be reconciled against the released portfolio at the
   v0.4.7 completion gate.
 
-#### B. Sensitive personal-data completion — ACTIVE
+#### B. Sensitive personal-data completion — DONE
 
--   [ ] Audit physical-address recognition with conservative contextual or
+-   [x] Audit physical-address recognition with conservative contextual or
     candidate semantics.
--   [ ] Audit email-address sensitive-data semantics without turning Cribra
+-   [x] Audit email-address sensitive-data semantics without turning Cribra
     into a generic email harvester.
--   [ ] Audit telephone-number sensitive-data semantics with region-aware
+-   [x] Audit telephone-number sensitive-data semantics with region-aware
     validation where practical.
--   [ ] Implement accepted structured identity/personal identifiers from the
+-   [x] Implement accepted structured identity/personal identifiers from the
     final coverage audit:
     - [x] Italian Codice Fiscale.
     - [x] Polish PESEL.
     - [x] UK NHS Number.
     - [x] US Social Security Number under strong contextual semantics.
-    - [ ] ICAO machine-readable travel-document zones.
--   [ ] Keep recognition and sensitive classification as separate decisions.
--   [ ] Prefer `SensitiveCandidate` when evidence is useful but insufficient
+    - [-] ICAO machine-readable travel-document zones — DEFERRED / LOW.
+-   [x] Keep recognition and sensitive classification as separate decisions.
+-   [x] Prefer `SensitiveCandidate` when evidence is useful but insufficient
     for authoritative classification.
--   [ ] Preserve exact source spans and metadata-only public results for the
+-   [x] Preserve exact source spans and metadata-only public results for the
     implemented personal-data portfolio.
--   [ ] Add adversarial coverage for examples, documentation, public
+-   [x] Add adversarial coverage for examples, documentation, public
     identifiers, malformed values, and ordinary non-sensitive data.
 
 Progress:
