@@ -225,13 +225,33 @@ Outcome:
 -   [ ] Audit telephone-number sensitive-data semantics with region-aware
     validation where practical.
 -   [ ] Implement accepted structured identity/personal identifiers from the
-    final coverage audit.
+    final coverage audit:
+    - [x] Italian Codice Fiscale.
+    - [ ] Polish PESEL.
+    - [ ] UK NHS Number.
+    - [ ] US Social Security Number under strong contextual semantics.
+    - [ ] ICAO machine-readable travel-document zones.
 -   [ ] Keep recognition and sensitive classification as separate decisions.
 -   [ ] Prefer `SensitiveCandidate` when evidence is useful but insufficient
     for authoritative classification.
--   [ ] Preserve exact source spans and metadata-only public results.
+-   [ ] Preserve exact source spans and metadata-only public results for the
+    implemented personal-data portfolio.
 -   [ ] Add adversarial coverage for examples, documentation, public
     identifiers, malformed values, and ordinary non-sensitive data.
+
+Progress:
+
+- Italian Codice Fiscale detection is complete and exposed through the
+  explicit opt-in `builtins::personal::CURRENT` portfolio.
+- `personal.it-codice-fiscale` owns canonical 16-character natural-person
+  identifiers, including structurally valid omocodic representations.
+- Validation is deterministic and structural: positional semantics, encoded
+  birth fields, birthplace-code structure, and control character are
+  authoritative; registry assignment or holder identity is not claimed.
+- Codice Fiscale remains outside `builtins::CURRENT`.
+- Default and personal portfolios compose without duplicate ownership.
+- `docs/COVERAGE.md` records the implemented Codice Fiscale family as DIRECT
+  coverage.
 
 #### 0.4.7-C --- Unix and system-security completion
 
