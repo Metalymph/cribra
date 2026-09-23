@@ -293,15 +293,35 @@ surfaces, HTTP authentication, and relevant container/provider credentials.
 -   [ ] Audit additional system/service authentication formats only where the
     credential or verifier can be identified from source content with strong
     structural or contextual evidence.
--   [ ] Audit SSH authentication material not already covered by OpenSSH and
-    generic private-key rules.
+-   [x] Audit SSH authentication material not already covered by OpenSSH and
+    generic private-key rules:
+    - [x] retain private-key ownership with the corresponding OpenSSH, PKCS#8,
+          RSA, EC, or other supported private-key representation rather than
+          adding SSH-specific duplicate Findings;
+    - [x] keep SSH public keys, `authorized_keys`, `known_hosts`, and public SSH
+          certificate material outside the sensitive-secret contract;
+    - [x] treat `IdentityFile`, `IdentityAgent`, and related SSH configuration
+          as references or configuration rather than credential material;
+    - [x] do not add an SSH-specific detector where source content provides no
+          stronger secret semantics than an existing private-key or passphrase
+          owner.
 -   [ ] Audit common daemon and infrastructure authentication formats not
     already owned by generic, provider-specific, package-ecosystem, or
     container rules.
 -   [ ] Audit shell and system configuration credential conventions only where
     source content itself establishes the security contract.
--   [ ] Audit additional password-verifier/hash formats separately from generic
-    sensitive hashes.
+-   [x] Audit additional password-verifier/hash formats separately from generic
+    sensitive hashes:
+    - [x] retain dedicated structured ownership for supported `/etc/shadow`
+          SHA-256 crypt, SHA-512 crypt, and yescrypt verifiers;
+    - [x] retain dedicated structured ownership for supported `.htpasswd`
+          APR1 and bcrypt verifiers;
+    - [x] keep `generic.sensitive-hash` limited to explicit sensitive-hash
+          context rather than treating arbitrary password-hash syntax as a
+          Finding;
+    - [x] do not expand the built-in portfolio merely to recognize additional
+          crypt, Argon2, PBKDF2, scrypt, or other verifier syntax without a
+          stronger source-level security contract.
 -   [x] Implement TOTP/HOTP shared provisioning-secret detection:
     - [x] support `otpauth://totp` and `otpauth://hotp` provisioning material;
     - [x] support explicit OTP-secret configuration fields;

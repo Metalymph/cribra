@@ -507,6 +507,11 @@ fn builtin_synthetic_value(
             original_len,
             random,
         )),
+        // NATS NKeys preserve their top-level secret family marker while
+        // deliberately violating the Base32 alphabet. Seed subtypes are not
+        // recovered from the original secret during synthesis.
+        "nats.nkey-seed" => Some(prefixed_invalid("S", original_len, '!', random)),
+        "nats.nkey-private-key" => Some(prefixed_invalid("P", original_len, '!', random)),
 
         _ => None,
     }

@@ -224,6 +224,28 @@ pub const SIGNED_JWT: RuleSpec = RuleSpec::pattern(
 .with_validator(ValidatorKind::Jwt)
 .with_remediation(Remediation::RemoveSensitiveValue);
 
+/// NATS NKey encoded seed.
+///
+/// NKey seeds carry private key-generation material. Structural validation
+/// verifies the canonical Base32 representation, embedded NKey type, encoded
+/// seed length, and CRC16-XMODEM checksum.
+pub const NATS_NKEY_SEED: RuleSpec =
+    RuleSpec::pattern("nats.nkey-seed", r"\bS[A-Z2-7]{57}\b", Severity::Critical)
+        .with_validator(ValidatorKind::Nats)
+        .with_remediation(Remediation::ReplacePrivateKey);
+
+/// NATS NKey encoded private key.
+///
+/// Public NKeys are deliberately not classified. This rule owns only the
+/// canonical encoded private-key representation after structural validation.
+pub const NATS_NKEY_PRIVATE_KEY: RuleSpec = RuleSpec::pattern(
+    "nats.nkey-private-key",
+    r"\bP[A-Z2-7]{107}\b",
+    Severity::Critical,
+)
+.with_validator(ValidatorKind::Nats)
+.with_remediation(Remediation::ReplacePrivateKey);
+
 /// Generic PKCS#8 private key in PEM form.
 pub const PKCS8_PRIVATE_KEY: RuleSpec = RuleSpec::pattern(
     "generic.pkcs8-private-key",

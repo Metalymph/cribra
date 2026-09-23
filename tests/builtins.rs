@@ -4067,3 +4067,151 @@ fn tailscale_malformed_and_placeholder_credentials_remain_clean() {
         );
     }
 }
+
+#[test]
+fn nats_nkey_seeds_detect_supported_key_families() {
+    let scanner = scanner_for([builtins::NATS_NKEY_SEED]);
+
+    let seeds = [
+        "SOAAFO5ZRYMBOV7KYNBJPWVKOQLFAPZ6SFRKXNVF32UCPXFDM45HEND4CI",
+        "SAAJLVGE25HRQK54T5PZYGDRKOVGMCJE52WWGSM62HAMFCF3QYHM67X6AU",
+        "SUAB6M5NSNGSXV6SQ3TV6LQUH6S2OFHGJDZ2ENNZ4W5VBKBX3Z6TH3RW4E",
+        "SNAOT4DTIVCCG2M5K6ULYL6AAQGVKKCA7FMWRFPVSXEPWKQHFM3MHMYX6Q",
+        "SCAJDZXJG5BZPAGESTVK7KPW26224MWTPNJGL2LKKSWG7V5FMGUTI37PBM",
+        "SXAKXOYU7YPLRQS3SK3QXCOTEZJWYLKODMQI4SD6QXNG6PD2FYSEEA3YDI",
+    ];
+
+    for seed in seeds {
+        let source = format!("credential={seed}");
+        let results = scan_one(&scanner, &source);
+        let report = results.single_report().expect("one source");
+        let finding = report
+            .findings()
+            .iter()
+            .find(|finding| finding.rule_id().as_str() == "nats.nkey-seed")
+            .expect("NATS NKey seed");
+
+        assert_eq!(matched(&source, finding), seed);
+        assert_eq!(finding.severity(), Severity::Critical);
+        assert_eq!(finding.remediation(), Some(Remediation::ReplacePrivateKey));
+        assert_eq!(finding.confidence(), Confidence::High);
+    }
+}
+
+#[test]
+fn nats_nkey_private_keys_detect_supported_ed25519_private_material() {
+    let scanner = scanner_for([builtins::NATS_NKEY_PRIVATE_KEY]);
+
+    let private_keys = [
+        "PABLXOMODALVP2WDIKL5VKTUCZID6PURMKV3NJO6VAT5ZI3HHJZDIV3SFWBNBPBXDWW6PWBHH7AZLFHUXJ6LU3EKRKNG5J7NQOKJ6XILM3TA",
+        "PCK5JRGXJ4MCXPE7L6OBQ4KTVJTASJHOVVRUTHWRYDBIRO4GB3HX5JEZRNIR4QL3RJQOYWTMDBAUYZO4PB6FKVSATYTLRFU22UAM2LOP727A",
+        "PAPTHLMTJUV5PUUG45PS4FB7UWTRJZSI6ORDLOPFXNIKQN66PUZ643EZEJTANHFEISPCGO7UDKTNOP23PA6OC4HZ2ME3EILIECQDBEY4VWAA",
+        "PDU7A42FIQRWTHKXVC6C7QAEBVKSQQHZLFUJL5MVZD5SUBZLG3B3HEV74XJGHPSDEEUCYQAR5UHWQ6ETSKQJP52OVNIKOD6M7P7CXD3YNRGA",
+        "PCI6N2JXIOLYBREU5KX2T5WXWWXDFU33KJS6S2SUVRX5PJLBVE2G7STXVVMH4MMXCEPJW6WVZZQKPYK3C73RK6SEND3V7OLMYBGZWZWEUCKA",
+    ];
+
+    for private_key in private_keys {
+        let source = format!("credential={private_key}");
+        let results = scan_one(&scanner, &source);
+        let report = results.single_report().expect("one source");
+        let finding = report
+            .findings()
+            .iter()
+            .find(|finding| finding.rule_id().as_str() == "nats.nkey-private-key")
+            .expect("NATS NKey private key");
+
+        assert_eq!(matched(&source, finding), private_key);
+        assert_eq!(finding.severity(), Severity::Critical);
+        assert_eq!(finding.remediation(), Some(Remediation::ReplacePrivateKey));
+        assert_eq!(finding.confidence(), Confidence::High);
+    }
+}
+
+#[test]
+fn nats_public_nkeys_are_not_sensitive_findings() {
+    let scanner = scanner_for([builtins::NATS_NKEY_SEED, builtins::NATS_NKEY_PRIVATE_KEY]);
+
+    for public_key in [
+        "OBLXELMC2C6DOHNN47MCOP6BSWKPJOT4XJWIVCU2N2T63A4UT5OQXB6K",
+        "ACSJTC2RDZAXXCTA5RNGYGCBJRS5Y6D4KVLEBHRGXCLJVVIAZUW46XQV",
+        "UBWJSITGA2OKIRE6EM57IGVG247VW6B44FYPTUYJWIQWQIFAGCJRY6BQ",
+        "NCJL7ZOSMO7EGIJIFRABD3IPNB4JHEVAS73U5K2QU4H4Z676FOHXQINS",
+        "CDFHPLKYPYYZOEI6TN5NLTTAU7QVWF7XCV5EI2HXL64WZQCNTNTMJYIN",
+        "XDLP2A24SL6AYUERAEGNYDNSR2NEHLWTRRQWWZEZ2XERVNUIP7WVOFGZ",
+    ] {
+        let results = scan_one(&scanner, public_key);
+        let report = results.single_report().expect("one source");
+
+        assert!(
+            report.findings().is_empty(),
+            "public NKey must not be classified as sensitive: {public_key}"
+        );
+    }
+}
+
+#[test]
+fn nats_nkeys_reject_corrupted_or_noncanonical_material() {
+    let scanner = scanner_for([builtins::NATS_NKEY_SEED, builtins::NATS_NKEY_PRIVATE_KEY]);
+
+    for source in [
+        // Valid shape, corrupted CRC.
+        "SOAAFO5ZRYMBOV7KYNBJPWVKOQLFAPZ6SFRKXNVF32UCPXFDM45HEND4CJ",
+        "PABLXOMODALVP2WDIKL5VKTUCZID6PURMKV3NJO6VAT5ZI3HHJZDIV3SFWBNBPBXDWW6PWBHH7AZLFHUXJ6LU3EKRKNG5J7NQOKJ6XILM3TB",
+        // NKeys use canonical uppercase Base32.
+        "suaafo5zrymbov7kynbjpwvkoqlfapz6sfrkxnvf32ucpxfdm45hend4ci",
+        // Invalid RFC 4648 Base32 alphabet.
+        "SOAAFO5ZRYMBOV7KYNBJPWVKOQLFAPZ6SFRKXNVF32UCPXFDM45HEND40I",
+        // Wrong lengths.
+        "SOAAFO5ZRYMBOV7KYNBJPWVKOQLFAPZ6SFRKXNVF32UCPXFDM45HEND4C",
+        "PABLXOMODALVP2WDIKL5VKTUCZID6PURMKV3NJO6VAT5ZI3HHJZDIV3SFWBNBPBXDWW6PWBHH7AZLFHUXJ6LU3EKRKNG5J7NQOKJ6XILM3T",
+    ] {
+        let results = scan_one(&scanner, source);
+        let report = results.single_report().expect("one source");
+
+        assert!(
+            report.findings().is_empty(),
+            "invalid NKey must be rejected: {source}"
+        );
+    }
+}
+
+#[test]
+fn nats_nkey_synthesis_is_invalid_under_normal_validation_on_rescan() {
+    let scanner = scanner_for([builtins::NATS_NKEY_SEED, builtins::NATS_NKEY_PRIVATE_KEY]);
+
+    for secret in [
+        "SUAB6M5NSNGSXV6SQ3TV6LQUH6S2OFHGJDZ2ENNZ4W5VBKBX3Z6TH3RW4E",
+        "PAPTHLMTJUV5PUUG45PS4FB7UWTRJZSI6ORDLOPFXNIKQN66PUZ643EZEJTANHFEISPCGO7UDKTNOP23PA6OC4HZ2ME3EILIECQDBEY4VWAA",
+    ] {
+        let results = scan_one(&scanner, secret);
+        let report = results.single_report().expect("one source was scanned");
+
+        assert_eq!(report.len(), 1);
+
+        let synthesized = synthesize(secret, report, &SynthesisOptions::new([93; 32]))
+            .expect("NATS NKey synthesis should succeed");
+
+        assert_eq!(synthesized.len(), secret.len());
+        assert_ne!(synthesized, secret);
+        assert!(synthesized.contains('!'));
+
+        if secret.starts_with('S') {
+            assert!(synthesized.starts_with("S!"));
+        } else {
+            assert!(synthesized.starts_with("P!"));
+        }
+
+        let rescanned_results = scan_one(&scanner, &synthesized);
+        let rescanned = rescanned_results
+            .single_report()
+            .expect("one synthesized source was scanned");
+
+        assert!(
+            rescanned
+                .findings()
+                .iter()
+                .all(|finding| !finding.rule_id().as_str().starts_with("nats.")),
+            "synthetic NATS NKey must not validate as real NKey material",
+        );
+    }
+}

@@ -81,7 +81,7 @@ impl CompiledRuleMetadata {
             | ValidatorKind::NpmRegistry
             | ValidatorKind::Netrc
             | ValidatorKind::SystemPasswordVerifier => 200,
-            ValidatorKind::Jwt => 300,
+            ValidatorKind::Jwt | ValidatorKind::Nats => 300,
             ValidatorKind::CodiceFiscale
             | ValidatorKind::Pesel
             | ValidatorKind::NhsNumber

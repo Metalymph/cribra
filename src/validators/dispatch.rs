@@ -44,6 +44,7 @@ use crate::{
             gitlab::{GitLabTokenKind, validate_gitlab_token},
             iban::validate_iban,
             jwt::{JwtKind, validate_jwt},
+            nats::{NatsNkeyKind, validate_nats_nkey},
             pesel::validate_pesel,
             rubygems::validate_rubygems_api_key,
             slack::{SlackTokenKind, validate_slack_token},
@@ -87,6 +88,7 @@ pub(crate) enum ValidatorKind {
     Slack,
     Telegram,
     Jwt,
+    Nats,
     Aws,
     Azure,
     Gcp,
@@ -117,6 +119,7 @@ impl ValidatorKind {
             | Self::Slack
             | Self::Telegram
             | Self::Jwt
+            | Self::Nats
             | Self::RubyGems
             | Self::Tailscale => DetectionMode::Deterministic,
             Self::Aws
@@ -180,6 +183,7 @@ pub(crate) enum ValidationKind {
     Slack(SlackTokenKind),
     TelegramBotToken,
     Jwt(JwtKind),
+    Nats(NatsNkeyKind),
     Aws(AwsCredentialKind),
     Azure(AzureCredentialKind),
     Gcp(GcpCredentialKind),
@@ -333,6 +337,8 @@ pub(crate) fn validate_candidate(
             .map(|_| ValidationOutcome::new(ValidationKind::TelegramBotToken, Confidence::High)),
         ValidatorKind::Jwt => validate_jwt(context.candidate())
             .map(|v| ValidationOutcome::new(ValidationKind::Jwt(v.kind()), Confidence::Medium)),
+        ValidatorKind::Nats => validate_nats_nkey(context.candidate())
+            .map(|v| ValidationOutcome::new(ValidationKind::Nats(v.kind()), Confidence::High)),
         ValidatorKind::Aws => validate_aws(&context)
             .map(|v| ValidationOutcome::new(ValidationKind::Aws(v.kind()), Confidence::High)),
         ValidatorKind::Azure => validate_azure(&context)
@@ -407,6 +413,7 @@ mod tests {
             ValidatorKind::Slack,
             ValidatorKind::Telegram,
             ValidatorKind::Jwt,
+            ValidatorKind::Nats,
             ValidatorKind::RubyGems,
             ValidatorKind::Tailscale,
         ] {

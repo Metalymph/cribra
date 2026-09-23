@@ -236,6 +236,28 @@ Direct coverage includes:
 
 System configuration itself is not automatically sensitive material.
 
+#### Password-verifier ownership
+
+Password verifiers are classified separately from generic sensitive hashes.
+
+`system.shadow-password-verifier` directly owns the supported verifier families
+when they occupy the password field of a structurally valid `/etc/shadow`-style
+record. Current supported families are SHA-256 crypt, SHA-512 crypt, and
+yescrypt.
+
+`system.htpasswd-password-verifier` directly owns supported APR1 and bcrypt
+verifiers when they occupy the verifier field of an Apache
+`.htpasswd`-style record.
+
+`generic.sensitive-hash` instead requires explicit sensitive-hash field
+semantics and does not act as a generic password-hash fingerprinting rule.
+
+Cribra deliberately does not promote arbitrary modular-crypt, Argon2, PBKDF2,
+scrypt, bcrypt, or other password-verifier syntax solely because the algorithm
+or encoding is recognizable. Additional verifier families require sufficiently
+strong source-level authentication semantics and meaningful incremental
+coverage before receiving built-in ownership.
+
 ### Signed JWTs
 
 Structurally valid signed JWT material has a direct owner.
@@ -546,6 +568,48 @@ documentation placeholders are rejected.
 
 Cribra does not infer undocumented Tailscale credential formats from opaque
 values.
+
+## NATS NKeys
+
+Sensitive NATS NKey material is directly covered by the default credential
+portfolio.
+
+Current direct coverage includes:
+
+- encoded NKey seeds as `nats.nkey-seed`;
+- encoded Ed25519 private keys as `nats.nkey-private-key`.
+
+Detection is deterministic and validates the NKey representation itself rather
+than relying on surrounding configuration context.
+
+Seed validation requires the canonical NATS seed encoding, a supported public
+key family, the expected 32-byte seed payload, and a valid CRC16/XMODEM
+checksum.
+
+Supported seed families are:
+
+- operator;
+- account;
+- user;
+- server;
+- cluster;
+- curve/X25519.
+
+Encoded NKey private-key validation requires the NATS private-key prefix, the
+expected 64-byte Ed25519 private-key payload, canonical Base32 encoding, and a
+valid CRC16/XMODEM checksum.
+
+Public NKeys are deliberately not findings. Operator, account, user, server,
+cluster, and curve public keys identify public cryptographic material rather
+than sensitive credential material.
+
+Malformed encodings, invalid Base32, incorrect lengths, unsupported seed
+families, invalid prefix encodings, non-canonical representations, and checksum
+failures are rejected.
+
+Synthetic replacements preserve the top-level NKey secret-family marker while
+deliberately violating the Base32 alphabet, so synthesized NKey material cannot
+validate as a real NATS credential when rescanned.
 
 ## Transitive coverage index
 
