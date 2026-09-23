@@ -286,11 +286,12 @@ Progress:
 Existing baseline includes Unix shadow password verifiers, htpasswd password
 verifiers, `.netrc` passwords, OpenSSH and common private-key formats,
 WireGuard private and preshared keys, generic password/passphrase/auth
-surfaces, HTTP authentication, and relevant container/provider credentials.
+surfaces, HTTP authentication, relevant container/provider credentials, and
+validated NATS NKey secret material.
 
--   [ ] Perform a complete Unix/Linux credential-surface gap audit against the
+-   [x] Perform a complete Unix/Linux credential-surface gap audit against the
     existing built-in catalog.
--   [ ] Audit additional system/service authentication formats only where the
+-   [x] Audit additional system/service authentication formats only where the
     credential or verifier can be identified from source content with strong
     structural or contextual evidence.
 -   [x] Audit SSH authentication material not already covered by OpenSSH and
@@ -305,10 +306,18 @@ surfaces, HTTP authentication, and relevant container/provider credentials.
     - [x] do not add an SSH-specific detector where source content provides no
           stronger secret semantics than an existing private-key or passphrase
           owner.
--   [ ] Audit common daemon and infrastructure authentication formats not
+-   [x] Audit common daemon and infrastructure authentication formats not
     already owned by generic, provider-specific, package-ecosystem, or
-    container rules.
--   [ ] Audit shell and system configuration credential conventions only where
+    container rules:
+    - [x] add deterministic NATS NKey seed detection with structural decoding,
+          supported key-family validation, and checksum validation;
+    - [x] add deterministic NATS encoded private-key detection with structural
+          decoding and checksum validation;
+    - [x] keep NATS public operator, account, user, server, cluster, and curve
+          NKeys outside the sensitive-secret contract;
+    - [x] reject malformed, corrupted, non-canonical, and unsupported NKey
+          material.
+-   [x] Audit shell and system configuration credential conventions only where
     source content itself establishes the security contract.
 -   [x] Audit additional password-verifier/hash formats separately from generic
     sensitive hashes:
@@ -332,9 +341,9 @@ surfaces, HTTP authentication, and relevant container/provider credentials.
           semantics.
 -   [x] Implement accepted Tailscale credential formats with specific semantic
     ownership for authoritative credential prefixes.
--   [ ] Document rejected Unix/system candidates where reliable static
+-   [x] Document rejected Unix/system candidates where reliable static
     classification is not possible.
--   [ ] Do not duplicate existing `.netrc`, shadow, htpasswd, private-key,
+-   [x] Do not duplicate existing `.netrc`, shadow, htpasswd, private-key,
     WireGuard, generic-auth, HTTP-auth, container, provider, or
     package-ecosystem ownership.
 
