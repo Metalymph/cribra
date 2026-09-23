@@ -28,6 +28,22 @@ impl TailscaleValidation {
     }
 }
 
+fn is_tailscale_placeholder(value: &str) -> bool {
+    if is_obvious_placeholder(value) {
+        return true;
+    }
+
+    matches!(
+        value.trim().to_ascii_lowercase().as_str(),
+        "your_key"
+            | "your_key_here"
+            | "example_key"
+            | "example_key_here"
+            | "replace_me"
+            | "replace_me_here"
+    )
+}
+
 /// Validates a structurally recognizable Tailscale credential.
 pub(crate) fn validate_tailscale_credential(candidate: &str) -> Option<TailscaleValidation> {
     if candidate.len() > MAX_TOKEN_LEN
@@ -53,7 +69,7 @@ pub(crate) fn validate_tailscale_credential(candidate: &str) -> Option<Tailscale
         )
     };
 
-    if is_obvious_placeholder(candidate) || is_obvious_placeholder(payload) {
+    if is_tailscale_placeholder(payload) {
         return None;
     }
 
@@ -127,8 +143,13 @@ mod tests {
             "tskey-api-your_token_here",
             "tskey-auth-example_token_here",
             "tskey-client-xxxxxxxx",
+            "tskey-scim-your_key_here",
+            "tskey-webhook-example_key_here",
         ] {
-            assert!(validate_tailscale_credential(candidate).is_none());
+            assert!(
+                validate_tailscale_credential(candidate).is_none(),
+                "documentation placeholder unexpectedly validated: {candidate:?}",
+            );
         }
     }
 }

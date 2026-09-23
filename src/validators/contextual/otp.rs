@@ -9,6 +9,8 @@ use super::{
     utils::{DEFAULT_KEY_WINDOW, key_matches_any, nearest_key},
 };
 
+use crate::validators::utils::is_obvious_placeholder;
+
 const OTP_SECRET_KEYS: &[&str] = &["otp_secret", "totp_secret", "hotp_secret"];
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
@@ -18,7 +20,9 @@ pub(crate) struct OtpProvisioningSecretValidation;
 pub(crate) fn validate_otp_provisioning_secret(
     context: &ValidationContext<'_>,
 ) -> Option<OtpProvisioningSecretValidation> {
-    if !valid_base32_secret(context.candidate()) {
+    let candidate = context.candidate();
+
+    if is_obvious_placeholder(candidate) || !valid_base32_secret(candidate) {
         return None;
     }
 
@@ -244,6 +248,23 @@ mod tests {
             assert!(
                 validate_otp_provisioning_secret(&context(&source, secret)).is_none(),
                 "unexpected acceptance for invalid padding {secret:?}",
+            );
+        }
+    }
+
+    #[test]
+    fn rejects_obvious_placeholders_in_authoritative_context() {
+        for secret in [
+            "xxxxxxxxxxxxxxxx",
+            "XXXXXXXXXXXXXXXX",
+            "aaaaaaaaaaaaaaaa",
+            "AAAAAAAAAAAAAAAA",
+        ] {
+            let source = format!("otp_secret={secret}");
+
+            assert!(
+                validate_otp_provisioning_secret(&context(&source, secret)).is_none(),
+                "placeholder OTP secret unexpectedly validated: {secret:?}",
             );
         }
     }

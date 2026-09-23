@@ -349,16 +349,16 @@ validated NATS NKey secret material.
 
 #### 0.4.7-D --- Ownership, ambiguity, and adversarial hardening
 
--   [ ] Define deterministic ownership for every newly accepted rule.
--   [ ] Add collision regressions against existing generic, provider,
+-   [x] Define deterministic ownership for every newly accepted rule.
+-   [x] Add collision regressions against existing generic, provider,
     ecosystem, financial, and system rules.
--   [ ] Expand positive, negative, malformed, placeholder, example, and
+-   [x] Expand positive, negative, malformed, placeholder, example, and
     documentation corpora.
--   [ ] Verify boundary and exact-span behavior for every accepted family.
--   [ ] Preserve the distinction between credentials, sensitive identifiers,
+-   [x] Verify boundary and exact-span behavior for every accepted family.
+-   [x] Preserve the distinction between credentials, sensitive identifiers,
     password verifiers, hashes, keys, and merely security-related
     configuration.
--   [ ] Prefer deliberate false negatives over noisy classification.
+-   [x] Prefer deliberate false negatives over noisy classification.
 
 #### 0.4.7-E --- Transformation and interface parity
 
@@ -373,7 +373,7 @@ validated NATS NKey secret material.
 
 #### 0.4.7-F --- Portfolio completion gate
 
--   [ ] Re-audit the complete built-in and opt-in detector portfolio after all
+-   [x] Re-audit the complete built-in and opt-in detector portfolio after all
     accepted v0.4.7 work.
 -   [ ] Verify that no known materially important detector family remains
     omitted without an explicit accepted reason.
