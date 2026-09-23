@@ -414,6 +414,17 @@ fn builtin_synthetic_value(
             random,
         )),
 
+        // Structured personal identifiers preserve their broad representation
+        // family and byte length while deliberately violating the alphabet
+        // accepted by their validators. Synthetic values never derive material
+        // from the source identifier.
+        "personal.it-codice-fiscale" => {
+            Some(synthetic_invalid_personal_identifier(original_len, random))
+        }
+        "personal.pl-pesel" => Some(synthetic_invalid_personal_identifier(original_len, random)),
+        "personal.uk-nhs-number" => Some(synthetic_invalid_nhs_number(original_len, random)),
+        "personal.us-ssn" => Some(synthetic_invalid_ssn(original_len, random)),
+
         // Financial identifiers preserve a recognizable family shape while
         // deliberately violating the structural checksum accepted by their
         // validators. Synthetic values never derive material from the source.
@@ -644,6 +655,49 @@ impl SyntheticBytes {
     }
 }
 
+fn synthetic_invalid_personal_identifier(total_len: usize, random: &mut SyntheticBytes) -> String {
+    // Preserve the identifier width while deliberately introducing a
+    // non-alphanumeric character that cannot satisfy either the Codice Fiscale
+    // or PESEL validator.
+    prefixed_invalid("", total_len, '!', random)
+}
+
+fn synthetic_invalid_nhs_number(total_len: usize, random: &mut SyntheticBytes) -> String {
+    // NHS Numbers are either compact 10-digit values or canonical 3-3-4
+    // representations. Preserve that broad visual family while forcing an
+    // invalid character into the first group so the result cannot validate.
+    if total_len == 12 {
+        let mut output = String::with_capacity(total_len);
+        output.push('!');
+        push_random_ascii_digits(&mut output, 2, random);
+        output.push('-');
+        push_random_ascii_digits(&mut output, 3, random);
+        output.push('-');
+        push_random_ascii_digits(&mut output, 4, random);
+        return output;
+    }
+
+    prefixed_invalid("", total_len, '!', random)
+}
+
+fn synthetic_invalid_ssn(total_len: usize, random: &mut SyntheticBytes) -> String {
+    // SSNs are either compact 9-digit values or canonical AAA-GG-SSSS
+    // representations. Preserve that broad visual family while forcing an
+    // invalid character into the area component.
+    if total_len == 11 {
+        let mut output = String::with_capacity(total_len);
+        output.push('!');
+        push_random_ascii_digits(&mut output, 2, random);
+        output.push('-');
+        push_random_ascii_digits(&mut output, 2, random);
+        output.push('-');
+        push_random_ascii_digits(&mut output, 4, random);
+        return output;
+    }
+
+    prefixed_invalid("", total_len, '!', random)
+}
+
 fn synthetic_invalid_iban(total_len: usize, random: &mut SyntheticBytes) -> String {
     // The financial IBAN rule currently discovers electronic representations
     // only. Preserve the conventional CCdd... shape when the source width can
@@ -744,6 +798,19 @@ mod tests {
             assert!(
                 builtin_synthetic_value(spec.id(), 96, "cribra_synthetic", &mut random).is_some(),
                 "built-in rule `{}` must have explicit synthesis semantics",
+                spec.id(),
+            );
+        }
+    }
+
+    #[test]
+    fn personal_opt_in_builtins_have_explicit_synthesis_semantics() {
+        for spec in crate::builtins::personal::CURRENT {
+            let mut random = SyntheticBytes::new(&[0x31; 32], spec.id(), 10, 42);
+
+            assert!(
+                builtin_synthetic_value(spec.id(), 16, "cribra_synthetic", &mut random,).is_some(),
+                "personal built-in `{}` must have explicit synthesis semantics",
                 spec.id(),
             );
         }

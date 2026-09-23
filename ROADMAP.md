@@ -184,7 +184,7 @@ Release outcome:
 
 ### v0.4.7 --- Sensitive Data and System Security Completion
 
-Status: next.
+Status: active.
 
 Goal: complete Cribra's planned high-confidence detection portfolio across
 sensitive personal data and remaining Unix/system-security material, then move
@@ -281,7 +281,7 @@ Progress:
   authoritative SSA record presence.
 - `docs/COVERAGE.md` records US SSN as DIRECT coverage.
 
-#### 0.4.7-C --- Unix and system-security completion — ACTIVE
+#### 0.4.7-C --- Unix and system-security completion — DONE
 
 Existing baseline includes Unix shadow password verifiers, htpasswd password
 verifiers, `.netrc` passwords, OpenSSH and common private-key formats,
