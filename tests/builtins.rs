@@ -3835,3 +3835,138 @@ fn personal_pack_preserves_ssn_ownership_when_composed_with_default_builtins() {
     assert_eq!(report.findings()[0].rule_id().as_str(), "personal.us-ssn");
     assert_eq!(matched(source, &report.findings()[0]), "123-45-6789");
 }
+
+#[test]
+fn otp_provisioning_secret_is_part_of_default_security_portfolio() {
+    let secret = "JBSWY3DPEHPK3PXP";
+    let source = format!("totp_secret={secret}");
+
+    let results = scan_one(&Scanner::default(), &source);
+    let report = results.single_report().expect("one fixture was scanned");
+
+    let finding = report
+        .findings()
+        .iter()
+        .find(|finding| finding.rule_id().as_str() == "mfa.otp-provisioning-secret")
+        .expect("OTP provisioning secret");
+
+    assert_eq!(matched(&source, finding), secret);
+    assert_eq!(finding.severity(), Severity::Critical);
+    assert_eq!(finding.confidence(), Confidence::High);
+    assert_eq!(finding.remediation(), Some(Remediation::RotateCredential));
+}
+
+#[test]
+fn otp_provisioning_secret_projects_only_secret_from_totp_uri() {
+    let secret = "JBSWY3DPEHPK3PXP";
+    let source = format!("otpauth://totp/example:user@example.com?secret={secret}&issuer=Example");
+
+    let results = scan_one(&Scanner::default(), &source);
+    let report = results.single_report().expect("one fixture was scanned");
+
+    let finding = report
+        .findings()
+        .iter()
+        .find(|finding| finding.rule_id().as_str() == "mfa.otp-provisioning-secret")
+        .expect("OTP provisioning secret");
+
+    assert_eq!(matched(&source, finding), secret);
+}
+
+#[test]
+fn otp_provisioning_secret_projects_only_secret_from_hotp_uri() {
+    let secret = "JBSWY3DPEHPK3PXP";
+    let source = format!("otpauth://hotp/example?counter=0&secret={secret}&issuer=Example");
+
+    let results = scan_one(&Scanner::default(), &source);
+    let report = results.single_report().expect("one fixture was scanned");
+
+    let finding = report
+        .findings()
+        .iter()
+        .find(|finding| finding.rule_id().as_str() == "mfa.otp-provisioning-secret")
+        .expect("OTP provisioning secret");
+
+    assert_eq!(matched(&source, finding), secret);
+}
+
+#[test]
+fn otp_provisioning_secret_supports_explicit_otp_fields() {
+    let secret = "JBSWY3DPEHPK3PXP";
+
+    for key in ["otp_secret", "totp_secret", "hotp_secret"] {
+        let source = format!("{key}={secret}");
+        let results = scan_one(&Scanner::default(), &source);
+        let report = results.single_report().expect("one fixture was scanned");
+
+        let matching: Vec<_> = report
+            .findings()
+            .iter()
+            .filter(|finding| finding.rule_id().as_str() == "mfa.otp-provisioning-secret")
+            .collect();
+
+        assert_eq!(matching.len(), 1, "unexpected result for {key:?}");
+        assert_eq!(matched(&source, matching[0]), secret);
+    }
+}
+
+#[test]
+fn otp_provisioning_secret_rejects_bare_base32_material() {
+    let source = "JBSWY3DPEHPK3PXP";
+
+    let results = scan_one(&Scanner::default(), source);
+    let report = results.single_report().expect("one fixture was scanned");
+
+    assert!(
+        report
+            .findings()
+            .iter()
+            .all(|finding| finding.rule_id().as_str() != "mfa.otp-provisioning-secret")
+    );
+}
+
+#[test]
+fn otp_provisioning_secret_rejects_non_otp_uri_context() {
+    let secret = "JBSWY3DPEHPK3PXP";
+    let source = format!("https://example.com/account?secret={secret}");
+
+    let results = scan_one(&Scanner::default(), &source);
+    let report = results.single_report().expect("one fixture was scanned");
+
+    assert!(
+        report
+            .findings()
+            .iter()
+            .all(|finding| finding.rule_id().as_str() != "mfa.otp-provisioning-secret")
+    );
+}
+
+#[test]
+fn otp_provisioning_secret_outranks_generic_secret_for_same_span() {
+    let secret = "JBSWY3DPEHPK3PXP";
+    let source = format!("otp_secret={secret}");
+
+    let scanner = scanner_for([builtins::GENERIC_SECRET, builtins::OTP_PROVISIONING_SECRET]);
+
+    let results = scan_one(&scanner, &source);
+    let report = results.single_report().expect("one fixture was scanned");
+
+    assert_eq!(report.len(), 1);
+    assert_eq!(
+        report.findings()[0].rule_id().as_str(),
+        "mfa.otp-provisioning-secret"
+    );
+    assert_eq!(matched(&source, &report.findings()[0]), secret);
+}
+
+#[test]
+fn otp_provisioning_secret_exposes_contextual_detection_metadata() {
+    let scanner = scanner_for([builtins::OTP_PROVISIONING_SECRET]);
+
+    let metadata = scanner
+        .rule_metadata()
+        .find(|metadata| metadata.id() == "mfa.otp-provisioning-secret")
+        .expect("OTP provisioning metadata");
+
+    assert_eq!(metadata.detection_mode(), DetectionMode::Contextual);
+}

@@ -23,6 +23,7 @@ use crate::{
             nhs_number::validate_nhs_number,
             npm_registry::{NpmRegistryCredentialKind, validate_npm_registry},
             nuget::validate_nuget,
+            otp::validate_otp_provisioning_secret,
             pan::validate_pan,
             password::{PasswordKind, validate_password},
             pypi::validate_pypi,
@@ -75,6 +76,7 @@ pub(crate) enum ValidatorKind {
     NhsNumber,
     Pesel,
     Ssn,
+    OtpProvisioningSecret,
     GitHub,
     GitLab,
     Stripe,
@@ -141,7 +143,8 @@ impl ValidatorKind {
             | Self::Netrc
             | Self::Nuget
             | Self::NhsNumber
-            | Self::Ssn => DetectionMode::Contextual,
+            | Self::Ssn
+            | Self::OtpProvisioningSecret => DetectionMode::Contextual,
         }
     }
 }
@@ -164,6 +167,7 @@ pub(crate) enum ValidationKind {
     Pesel,
     Ssn,
     NhsNumber,
+    OtpProvisioningSecret,
     GitHub(GitHubTokenKind),
     GitLab(GitLabTokenKind),
     Stripe(StripeTokenKind),
@@ -301,6 +305,11 @@ pub(crate) fn validate_candidate(
             .map(|_| ValidationOutcome::new(ValidationKind::Ssn, Confidence::High)),
         ValidatorKind::Pesel => validate_pesel(context.candidate())
             .map(|_| ValidationOutcome::new(ValidationKind::Pesel, Confidence::High)),
+        ValidatorKind::OtpProvisioningSecret => {
+            validate_otp_provisioning_secret(&context).map(|_| {
+                ValidationOutcome::new(ValidationKind::OtpProvisioningSecret, Confidence::High)
+            })
+        }
         ValidatorKind::GitHub => validate_github_token(context.candidate())
             .map(|v| ValidationOutcome::new(ValidationKind::GitHub(v.kind()), Confidence::High)),
         ValidatorKind::GitLab => validate_gitlab_token(context.candidate())

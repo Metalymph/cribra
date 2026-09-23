@@ -461,6 +461,12 @@ fn builtin_synthetic_value(
             random,
         )),
         "generic.secret" => Some(contextual_marker(marker, "secret", original_len, random)),
+        "mfa.otp-provisioning-secret" => Some(contextual_marker(
+            marker,
+            "otp_provisioning_secret",
+            original_len,
+            random,
+        )),
         "wireguard.private-key" => Some(contextual_marker(
             marker,
             "wireguard_private_key",
@@ -831,5 +837,22 @@ mod tests {
         for byte in expected {
             assert_eq!(actual.next(), byte);
         }
+    }
+
+    #[test]
+    fn otp_provisioning_secret_uses_explicit_invalid_contextual_synthesis() {
+        let mut random = SyntheticBytes::new(&[19; 32], "mfa.otp-provisioning-secret", 0, 32);
+
+        let output = builtin_synthetic_value(
+            "mfa.otp-provisioning-secret",
+            32,
+            "cribra_synthetic",
+            &mut random,
+        )
+        .expect("OTP provisioning secret must have synthesis semantics");
+
+        assert_eq!(output.len(), 32);
+        assert!(output.starts_with("cribra_synthetic"));
+        assert!(output.contains('_'));
     }
 }

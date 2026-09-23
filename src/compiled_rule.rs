@@ -86,6 +86,7 @@ impl CompiledRuleMetadata {
             | ValidatorKind::Pesel
             | ValidatorKind::NhsNumber
             | ValidatorKind::Ssn
+            | ValidatorKind::OtpProvisioningSecret
             | ValidatorKind::GitHub
             | ValidatorKind::GitLab
             | ValidatorKind::Stripe
