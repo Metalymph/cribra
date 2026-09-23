@@ -1,7 +1,8 @@
 # Cribra
 
-Embeddable, local-first Rust engine for detecting, reviewing, and safely
-transforming secrets and sensitive data.
+Embeddable, local-first Rust engine for detecting, classifying, and safely transforming secrets and sensitive data. Use it directly as a Rust crate, through the CLI as a process boundary, via C ABI or WebAssembly, or through language-specific bindings. Integrate it into scripts and pipelines, use it inside APIs before data is stored, logged, or transmitted, or build complete security and data-handling products on top of it.
+
+*Cribra provides the primitives; the surrounding tool decides the workflow*ch
 
 Cribra is application-agnostic. Callers provide UTF-8 text and retain control
 of I/O, storage, persistence, presentation, and policy. The core owns detection,
