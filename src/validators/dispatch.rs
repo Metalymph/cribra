@@ -48,6 +48,7 @@ use crate::{
             rubygems::validate_rubygems_api_key,
             slack::{SlackTokenKind, validate_slack_token},
             stripe::{StripeTokenKind, validate_stripe_token},
+            tailscale::{TailscaleCredentialKind, validate_tailscale_credential},
             telegram::validate_telegram_bot_token,
         },
     },
@@ -77,6 +78,7 @@ pub(crate) enum ValidatorKind {
     Pesel,
     Ssn,
     OtpProvisioningSecret,
+    Tailscale,
     GitHub,
     GitLab,
     Stripe,
@@ -115,7 +117,8 @@ impl ValidatorKind {
             | Self::Slack
             | Self::Telegram
             | Self::Jwt
-            | Self::RubyGems => DetectionMode::Deterministic,
+            | Self::RubyGems
+            | Self::Tailscale => DetectionMode::Deterministic,
             Self::Aws
             | Self::Azure
             | Self::Gcp
@@ -168,6 +171,7 @@ pub(crate) enum ValidationKind {
     Ssn,
     NhsNumber,
     OtpProvisioningSecret,
+    Tailscale(TailscaleCredentialKind),
     GitHub(GitHubTokenKind),
     GitLab(GitLabTokenKind),
     Stripe(StripeTokenKind),
@@ -310,6 +314,8 @@ pub(crate) fn validate_candidate(
                 ValidationOutcome::new(ValidationKind::OtpProvisioningSecret, Confidence::High)
             })
         }
+        ValidatorKind::Tailscale => validate_tailscale_credential(context.candidate())
+            .map(|v| ValidationOutcome::new(ValidationKind::Tailscale(v.kind()), Confidence::High)),
         ValidatorKind::GitHub => validate_github_token(context.candidate())
             .map(|v| ValidationOutcome::new(ValidationKind::GitHub(v.kind()), Confidence::High)),
         ValidatorKind::GitLab => validate_gitlab_token(context.candidate())
@@ -402,6 +408,7 @@ mod tests {
             ValidatorKind::Telegram,
             ValidatorKind::Jwt,
             ValidatorKind::RubyGems,
+            ValidatorKind::Tailscale,
         ] {
             assert_eq!(
                 validator.detection_mode(),
@@ -435,6 +442,7 @@ mod tests {
             ValidatorKind::SystemPasswordVerifier,
             ValidatorKind::NhsNumber,
             ValidatorKind::Ssn,
+            ValidatorKind::OtpProvisioningSecret,
         ] {
             assert_eq!(
                 validator.detection_mode(),

@@ -467,6 +467,22 @@ fn builtin_synthetic_value(
             original_len,
             random,
         )),
+        // Tailscale credentials preserve their capability-specific prefix while
+        // deliberately violating the opaque credential body.
+        "tailscale.api-access-token" => {
+            Some(prefixed_invalid("tskey-api-", original_len, '!', random))
+        }
+        "tailscale.auth-key" => Some(prefixed_invalid("tskey-auth-", original_len, '!', random)),
+        "tailscale.oauth-client-secret" => {
+            Some(prefixed_invalid("tskey-client-", original_len, '!', random))
+        }
+        "tailscale.scim-key" => Some(prefixed_invalid("tskey-scim-", original_len, '!', random)),
+        "tailscale.webhook-key" => Some(prefixed_invalid(
+            "tskey-webhook-",
+            original_len,
+            '!',
+            random,
+        )),
         "wireguard.private-key" => Some(contextual_marker(
             marker,
             "wireguard_private_key",

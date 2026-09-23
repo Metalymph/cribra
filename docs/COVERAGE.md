@@ -459,16 +459,13 @@ The rule is not part of `builtins::CURRENT`. Consumers opt into it through
 
 ### Remaining v0.4.7 personal-data scope — PLANNED
 
-The remaining frozen implementation scope includes:
+The remaining frozen personal-data implementation scope includes:
 
-- UK NHS Number;
-- US Social Security Number under strong contextual semantics;
 - ICAO machine-readable travel-document zones.
 
-These families remain planned until their corresponding implementations and
-validation gates land.
+This family remains planned until its implementation and validation gates land.
 
-These entries become DIRECT only when their implementations and tests land.
+It becomes DIRECT only when the corresponding implementation and tests land.
 
 ### ICAO MRZ ownership
 
@@ -500,32 +497,55 @@ They become DIRECT only after implementation and validation.
 
 ## MFA material
 
-TOTP/HOTP shared provisioning secrets are authentication credentials.
+### TOTP/HOTP provisioning secrets — DIRECT
 
-The v0.4.7 scope includes structured or sufficiently contextual provisioning
-material, including `otpauth` representations where the secret value can be
-reliably isolated.
+**Owner:** `mfa.otp-provisioning-secret`
 
-The sensitive span should be the shared secret value rather than the complete
-provisioning URI where the representation permits that distinction.
+TOTP/HOTP shared provisioning secrets are authentication credentials directly
+covered by the default security portfolio.
 
-Bare arbitrary Base32 strings are not sufficient evidence of an OTP secret.
+Direct coverage includes:
 
-This coverage becomes DIRECT only after implementation and validation.
+- shared secrets carried by `otpauth://totp` provisioning material;
+- shared secrets carried by `otpauth://hotp` provisioning material;
+- explicit OTP-secret configuration fields.
+
+Detection is contextual. Base32 structure alone is insufficient to establish
+OTP credential semantics.
+
+The finding projects only the shared-secret value rather than the complete
+provisioning URI or surrounding configuration field.
+
+Bare arbitrary Base32 strings and Base32 material in unrelated secret contexts
+are deliberately rejected.
+
+The specialized MFA owner takes precedence over generic secret ownership for
+the same accepted source span.
 
 ## Tailscale credentials
 
-Tailscale credential formats with authoritative, distinct credential prefixes
-have passed the v0.4.7 audit for inclusion in the default credential portfolio.
+Tailscale credentials with authoritative capability-specific prefixes are
+directly covered by the default credential portfolio.
 
-Specific credential capabilities should retain specific semantic ownership
-where their official representations distinguish them.
+Current direct coverage includes:
 
-A single generic `tailscale.credential` owner should not erase meaningful
-credential semantics.
+- `tskey-api-` as `tailscale.api-access-token`;
+- `tskey-auth-` as `tailscale.auth-key`;
+- `tskey-client-` as `tailscale.oauth-client-secret`;
+- `tskey-scim-` as `tailscale.scim-key`;
+- `tskey-webhook-` as `tailscale.webhook-key`.
 
-Exact RuleIds and supported prefixes become authoritative when the
-implementation lands.
+These formats are structurally classified from the credential value itself and
+expose deterministic detection metadata.
+
+Capability-specific semantic ownership is preserved rather than collapsing
+these formats into a single generic Tailscale credential rule.
+
+Malformed values, unsupported prefixes, case-changed prefixes, and obvious
+documentation placeholders are rejected.
+
+Cribra does not infer undocumented Tailscale credential formats from opaque
+values.
 
 ## Transitive coverage index
 

@@ -281,7 +281,7 @@ Progress:
   authoritative SSA record presence.
 - `docs/COVERAGE.md` records US SSN as DIRECT coverage.
 
-#### 0.4.7-C --- Unix and system-security completion
+#### 0.4.7-C --- Unix and system-security completion — ACTIVE
 
 Existing baseline includes Unix shadow password verifiers, htpasswd password
 verifiers, `.netrc` passwords, OpenSSH and common private-key formats,
@@ -302,6 +302,16 @@ surfaces, HTTP authentication, and relevant container/provider credentials.
     source content itself establishes the security contract.
 -   [ ] Audit additional password-verifier/hash formats separately from generic
     sensitive hashes.
+-   [x] Implement TOTP/HOTP shared provisioning-secret detection:
+    - [x] support `otpauth://totp` and `otpauth://hotp` provisioning material;
+    - [x] support explicit OTP-secret configuration fields;
+    - [x] expose only the shared-secret value as the sensitive span;
+    - [x] reject arbitrary bare Base32 values;
+    - [x] keep contextual ownership distinct from generic secret detection;
+    - [x] define explicit remediation, precedence, metadata, and synthesis
+          semantics.
+-   [x] Implement accepted Tailscale credential formats with specific semantic
+    ownership for authoritative credential prefixes.
 -   [ ] Document rejected Unix/system candidates where reliable static
     classification is not possible.
 -   [ ] Do not duplicate existing `.netrc`, shadow, htpasswd, private-key,

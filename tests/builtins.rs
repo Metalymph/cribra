@@ -3970,3 +3970,100 @@ fn otp_provisioning_secret_exposes_contextual_detection_metadata() {
 
     assert_eq!(metadata.detection_mode(), DetectionMode::Contextual);
 }
+
+#[test]
+fn tailscale_credentials_are_detected_without_context() {
+    let cases = [
+        ("tskey-api-a1B2c3D4e5F6", "tailscale.api-access-token"),
+        ("tskey-auth-a1B2c3D4e5F6", "tailscale.auth-key"),
+        ("tskey-client-a1B2c3D4e5F6", "tailscale.oauth-client-secret"),
+        ("tskey-scim-a1B2c3D4e5F6", "tailscale.scim-key"),
+        ("tskey-webhook-a1B2c3D4e5F6", "tailscale.webhook-key"),
+    ];
+
+    for (credential, expected_rule) in cases {
+        let results = scan_one(&Scanner::default(), credential);
+        let report = results.single_report().expect("one fixture was scanned");
+
+        let matching = report
+            .findings()
+            .iter()
+            .filter(|finding| finding.rule_id().as_str() == expected_rule)
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            matching.len(),
+            1,
+            "unexpected Tailscale result for {credential:?}"
+        );
+        assert_eq!(matched(credential, matching[0]), credential);
+        assert_eq!(matching[0].severity(), Severity::Critical);
+        assert_eq!(
+            matching[0].remediation(),
+            Some(Remediation::RevokeAndRotateCredential)
+        );
+    }
+}
+
+#[test]
+fn tailscale_credentials_expose_deterministic_detection_metadata() {
+    let scanner = scanner_for([
+        builtins::TAILSCALE_API_ACCESS_TOKEN,
+        builtins::TAILSCALE_AUTH_KEY,
+        builtins::TAILSCALE_OAUTH_CLIENT_SECRET,
+        builtins::TAILSCALE_SCIM_KEY,
+        builtins::TAILSCALE_WEBHOOK_KEY,
+    ]);
+
+    let metadata = scanner
+        .rule_metadata()
+        .map(|metadata| (metadata.id(), metadata.detection_mode()))
+        .collect::<std::collections::BTreeMap<_, _>>();
+
+    for id in [
+        "tailscale.api-access-token",
+        "tailscale.auth-key",
+        "tailscale.oauth-client-secret",
+        "tailscale.scim-key",
+        "tailscale.webhook-key",
+    ] {
+        assert_eq!(
+            metadata.get(id),
+            Some(&DetectionMode::Deterministic),
+            "unexpected detection mode for {id}",
+        );
+    }
+}
+
+#[test]
+fn tailscale_malformed_and_placeholder_credentials_remain_clean() {
+    for source in [
+        "tskey-api-",
+        "tskey-auth-",
+        "tskey-client-",
+        "tskey-scim-",
+        "tskey-webhook-",
+        "tskey-unknown-a1B2c3D4e5F6",
+        "tskey-API-a1B2c3D4e5F6",
+        "tskey-api-your_token_here",
+        "tskey-auth-example_token_here",
+        "tskey-client-xxxxxxxx",
+    ] {
+        let results = scan_one(&Scanner::default(), source);
+        let report = results.single_report().expect("one fixture was scanned");
+
+        assert!(
+            report
+                .findings()
+                .iter()
+                .all(|finding| !finding.rule_id().as_str().starts_with("tailscale.")),
+            "invalid Tailscale candidate unexpectedly produced a Tailscale finding for \
+             {source:?}: {:?}",
+            report
+                .findings()
+                .iter()
+                .map(|finding| finding.rule_id().as_str())
+                .collect::<Vec<_>>(),
+        );
+    }
+}

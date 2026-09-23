@@ -277,3 +277,42 @@ pub const RUBYGEMS_API_KEY: RuleSpec =
     RuleSpec::prefix("rubygems.api-key", "rubygems_", Severity::Critical)
         .with_validator(ValidatorKind::RubyGems)
         .with_remediation(Remediation::RevokeAndRotateCredential);
+
+/// Tailscale API access token.
+pub const TAILSCALE_API_ACCESS_TOKEN: RuleSpec = RuleSpec::prefix(
+    "tailscale.api-access-token",
+    "tskey-api-",
+    Severity::Critical,
+)
+.with_validator(ValidatorKind::Tailscale)
+.with_remediation(Remediation::RevokeAndRotateCredential);
+
+/// Tailscale pre-authentication key.
+pub const TAILSCALE_AUTH_KEY: RuleSpec =
+    RuleSpec::prefix("tailscale.auth-key", "tskey-auth-", Severity::Critical)
+        .with_validator(ValidatorKind::Tailscale)
+        .with_remediation(Remediation::RevokeAndRotateCredential);
+
+/// Tailscale OAuth client secret.
+pub const TAILSCALE_OAUTH_CLIENT_SECRET: RuleSpec = RuleSpec::prefix(
+    "tailscale.oauth-client-secret",
+    "tskey-client-",
+    Severity::Critical,
+)
+.with_validator(ValidatorKind::Tailscale)
+.with_remediation(Remediation::RevokeAndRotateCredential);
+
+/// Tailscale SCIM credential.
+pub const TAILSCALE_SCIM_KEY: RuleSpec =
+    RuleSpec::prefix("tailscale.scim-key", "tskey-scim-", Severity::Critical)
+        .with_validator(ValidatorKind::Tailscale)
+        .with_remediation(Remediation::RevokeAndRotateCredential);
+
+/// Tailscale webhook credential.
+pub const TAILSCALE_WEBHOOK_KEY: RuleSpec = RuleSpec::prefix(
+    "tailscale.webhook-key",
+    "tskey-webhook-",
+    Severity::Critical,
+)
+.with_validator(ValidatorKind::Tailscale)
+.with_remediation(Remediation::RevokeAndRotateCredential);

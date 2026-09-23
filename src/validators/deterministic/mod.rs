@@ -11,4 +11,5 @@ pub(crate) mod pesel;
 pub(super) mod rubygems;
 pub(crate) mod slack;
 pub(crate) mod stripe;
+pub(crate) mod tailscale;
 pub(crate) mod telegram;
