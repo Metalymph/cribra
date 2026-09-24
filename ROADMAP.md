@@ -380,7 +380,7 @@ validated NATS NKey secret material.
 -   [x] Run full Rust, C ABI, WebAssembly, MSRV, security, packaging, and
     publication gates.
 -   [x] Document the post-v0.4.7 detector evolution policy.
--   [ ] Publish/tag the completed release only after all gates pass.
+-   [x] Publish/tag the completed release only after all gates pass.
 
 Principles:
 
