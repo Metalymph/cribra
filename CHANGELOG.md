@@ -9,6 +9,138 @@ history.
 
 ## [Unreleased]
 
+## [0.4.7] - 2026-09-24
+
+Cribra 0.4.7 completes the currently planned broad detector-expansion phase
+with high-confidence personal-data, financial, OTP, Tailscale, NATS, and
+system-security coverage, while preserving conservative classification,
+deterministic ownership, and explicit opt-in boundaries for sensitive-data
+catalogs.
+
+### Added
+
+- Added the opt-in `builtins::personal::CURRENT` catalog for structured
+  personal identifiers.
+- Added `personal.it-codice-fiscale` detection for Italian natural-person
+  Codice Fiscale values, including structurally valid omocodic
+  representations, positional semantics, encoded birth data, birthplace-code
+  structure, and control-character validation.
+- Added `personal.pl-pesel` detection with encoded century/date semantics,
+  Gregorian date validation, and checksum validation.
+- Added contextual `personal.uk-nhs-number` detection for compact and
+  canonical 3-3-4 NHS Number representations with Modulus 11 validation.
+- Added contextual `personal.us-ssn` detection for compact and canonical
+  `AAA-GG-SSSS` representations with structural impossibility checks.
+- Added `financial.card-verification-code` to the opt-in financial catalog for
+  three- and four-digit payment-card verification codes under explicit
+  card-verification context.
+- Added contextual `mfa.otp-provisioning-secret` detection for TOTP/HOTP
+  provisioning material, including `otpauth` provisioning and explicit
+  OTP-secret configuration contexts.
+- Added deterministic NATS NKey seed and encoded private-key detection with
+  structural decoding, supported key-family validation, and checksum
+  validation.
+- Added dedicated Tailscale credential coverage for API access tokens, auth
+  keys, OAuth client secrets, SCIM keys, and webhook keys.
+- Added native C ABI composition of the personal-data catalog through
+  `cribra_builder_add_personal_builtins`.
+- Added WebAssembly composition of the personal-data catalog through
+  `ScanEngineBuilder.addPersonalBuiltins()`.
+- Added `docs/COVERAGE.md` as the canonical human-readable coverage,
+  ownership, transitive-coverage, deferred-category, and refused-category
+  manifest.
+
+### Changed
+
+- Completed the planned broad detector-expansion phase. Future built-in
+  detector additions are evidence-driven rather than routine catalog growth.
+- Formalized `DIRECT`, `TRANSITIVE`, `DEFERRED`, and `REFUSED` coverage states
+  for reasoning about detector ownership and gaps.
+- Kept personal and financial sensitive-data catalogs explicitly opt-in;
+  `builtins::CURRENT` remains the default security and credential portfolio.
+- Expanded the default security portfolio with authoritative OTP, NATS NKey,
+  and Tailscale credential coverage.
+- Strengthened semantic ownership and collision policy across generic,
+  provider, ecosystem, financial, personal, and system-security rules.
+- Preserved the distinction between credentials, private material, password
+  verifiers, sensitive identifiers, public identifiers, and security-related
+  configuration.
+- Clarified Cribra's integration model: the engine provides application-
+  agnostic detection, classification, explanation, and transformation
+  primitives while surrounding tools retain workflow and policy authority.
+- Established post-v0.4.7 development priorities around correctness,
+  false-positive and evidence-backed false-negative hardening, performance,
+  reliability, interface parity, compatibility, CLI/FFI maturity, bindings,
+  packaging, distribution, and downstream integration requirements.
+
+### Security
+
+- Personal identifiers require structural or contextual authority appropriate
+  to each representation and do not claim registry assignment, holder
+  identity, or external record existence.
+- NHS Number and US SSN classification require explicit identifier-specific
+  context; structurally plausible bare numeric values are deliberately
+  insufficient.
+- Card verification codes require explicit payment-card verification context;
+  bare three- or four-digit numeric values are not classified.
+- OTP provisioning detection exposes only the shared secret as the sensitive
+  span and rejects arbitrary bare Base32 material.
+- NATS NKey secret detection validates encoded structure, supported key
+  families, and checksums while deliberately excluding public NKeys from the
+  sensitive-secret contract.
+- Tailscale credentials retain dedicated ownership for authoritative
+  credential formats rather than relying on weaker generic classification.
+- Public SSH keys, `authorized_keys`, `known_hosts`, TLS certificates, public
+  NATS NKeys, public blockchain addresses, and other intentionally public
+  identifiers remain outside the sensitive-secret contract.
+- Generic email addresses, phone numbers, physical addresses, arbitrary
+  high-entropy blobs, and generic configuration values are not promoted to
+  Findings merely because they are recognizable.
+- Detection remains local and does not claim external ownership, account
+  activity, compromise state, registry presence, or network authority.
+
+### Transformation
+
+- Verified redact, template, pseudonymize, and synthesize behavior across the
+  applicable v0.4.7 detector portfolio.
+- Added deterministic synthesis semantics for newly supported structured
+  personal identifiers while preventing synthesized values from remaining
+  valid instances of the corresponding detector.
+- Added invalid-by-construction synthesis for payment-card verification codes
+  while preserving source width.
+- Preserved deterministic transformation behavior and metadata-only,
+  secret-safe public boundaries.
+
+### Interoperability
+
+- Rust remains the sole semantic authority for the new detector families.
+- Native C ABI and WebAssembly consumers can explicitly compose the
+  personal-data catalog without reimplementing detection semantics.
+- C ABI semantic projections preserve the applicable v0.4.7 finding,
+  remediation, contextual-detection, and explanation behavior.
+- WebAssembly preserves the same catalog composition and detector semantics as
+  the Rust core.
+- Prepared `cribra-wasm` v0.4.5 with Cribra v0.4.7 semantic parity and the
+  new personal-data catalog composition surface.
+- Personal and financial opt-in catalogs compose with the default portfolio
+  while retaining distinct rule ownership and stable rule IDs.
+
+### Validation
+
+- Added positive, negative, malformed, placeholder, documentation, boundary,
+  exact-span, and adversarial regressions for the accepted v0.4.7 detector
+  families.
+- Added collision coverage across generic, provider, package-ecosystem,
+  financial, personal, and system-security detectors.
+- Added transformation regressions ensuring synthesized sensitive identifiers
+  are not rediscovered as valid instances of their originating rules.
+- Added Rust, C ABI, and WebAssembly semantic-parity coverage for applicable
+  v0.4.7 capabilities.
+- Re-audited the complete built-in and opt-in portfolio and documented
+  materially relevant omitted, transitive, deferred, and refused categories.
+- Verified the full Rust, native C ABI, WebAssembly, MSRV, dependency-audit,
+  packaging, and publication dry-run release gates.
+
 ## [0.4.6] - 2026-09-19
 
 Cribra 0.4.6 adds the first opt-in sensitive-data family

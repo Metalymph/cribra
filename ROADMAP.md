@@ -184,7 +184,7 @@ Release outcome:
 
 ### v0.4.7 --- Sensitive Data and System Security Completion
 
-Status: active.
+Status: completed.
 
 Goal: complete Cribra's planned high-confidence detection portfolio across
 sensitive personal data and remaining Unix/system-security material, then move
