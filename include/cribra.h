@@ -919,6 +919,19 @@ CribraStatus cribra_builder_add_current_builtins(struct CribraBuilder *builder);
 CribraStatus cribra_builder_add_financial_builtins(struct CribraBuilder *builder);
 
 /**
+ * Adds Cribra's opt-in personal-data built-in catalog to a builder.
+ *
+ * This allows native consumers to compose the personal-data catalog with the
+ * standard catalog and custom rules while preserving scanner-wide rule-ID
+ * validation.
+ *
+ * # Safety
+ *
+ * `builder` must be a live builder handle returned by [`cribra_builder_new`].
+ */
+CribraStatus cribra_builder_add_personal_builtins(struct CribraBuilder *builder);
+
+/**
  * Adds one public custom rule to a scanner builder.
  *
  * `id` and `value` are copied into Rust-owned rule storage before this function
