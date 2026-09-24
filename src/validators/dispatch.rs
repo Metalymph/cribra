@@ -9,6 +9,7 @@ use crate::{
             ValidationContext,
             aws::{AwsCredentialKind, validate_aws},
             azure::{AzureCredentialKind, validate_azure},
+            card_verification_code::validate_card_verification_code,
             cargo_registry::validate_cargo_registry,
             composer::{ComposerCredentialKind, validate_composer},
             database_connection::{DatabaseConnectionKind, validate_database_connection},
@@ -78,6 +79,7 @@ pub(crate) enum ValidatorKind {
     NhsNumber,
     Pesel,
     Ssn,
+    CardVerificationCode,
     OtpProvisioningSecret,
     Tailscale,
     GitHub,
@@ -150,6 +152,7 @@ impl ValidatorKind {
             | Self::Nuget
             | Self::NhsNumber
             | Self::Ssn
+            | Self::CardVerificationCode
             | Self::OtpProvisioningSecret => DetectionMode::Contextual,
         }
     }
@@ -172,6 +175,7 @@ pub(crate) enum ValidationKind {
     CodiceFiscale,
     Pesel,
     Ssn,
+    CardVerificationCode,
     NhsNumber,
     OtpProvisioningSecret,
     Tailscale(TailscaleCredentialKind),
@@ -311,6 +315,11 @@ pub(crate) fn validate_candidate(
             .map(|_| ValidationOutcome::new(ValidationKind::NhsNumber, Confidence::High)),
         ValidatorKind::Ssn => validate_ssn(&context)
             .map(|_| ValidationOutcome::new(ValidationKind::Ssn, Confidence::High)),
+        ValidatorKind::CardVerificationCode => {
+            validate_card_verification_code(&context).map(|_| {
+                ValidationOutcome::new(ValidationKind::CardVerificationCode, Confidence::High)
+            })
+        }
         ValidatorKind::Pesel => validate_pesel(context.candidate())
             .map(|_| ValidationOutcome::new(ValidationKind::Pesel, Confidence::High)),
         ValidatorKind::OtpProvisioningSecret => {
@@ -449,6 +458,7 @@ mod tests {
             ValidatorKind::SystemPasswordVerifier,
             ValidatorKind::NhsNumber,
             ValidatorKind::Ssn,
+            ValidatorKind::CardVerificationCode,
             ValidatorKind::OtpProvisioningSecret,
         ] {
             assert_eq!(
@@ -564,6 +574,23 @@ mod tests {
         .expect("contextual PAN should validate");
 
         assert_eq!(outcome.kind(), ValidationKind::Pan);
+        assert_eq!(outcome.confidence(), Confidence::High);
+    }
+
+    #[test]
+    fn dispatches_card_verification_code_contextual_validator() {
+        let code = "123";
+        let source = format!("cvv={code}");
+
+        let outcome = validate_candidate(
+            ValidatorKind::CardVerificationCode,
+            &source,
+            range_of(&source, code),
+            Confidence::Low,
+        )
+        .expect("contextual card verification code should validate");
+
+        assert_eq!(outcome.kind(), ValidationKind::CardVerificationCode);
         assert_eq!(outcome.confidence(), Confidence::High);
     }
 }

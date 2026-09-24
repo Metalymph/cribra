@@ -430,6 +430,10 @@ fn builtin_synthetic_value(
         // validators. Synthetic values never derive material from the source.
         "financial.iban" => Some(synthetic_invalid_iban(original_len, random)),
         "financial.pan" => Some(synthetic_invalid_pan(original_len, random)),
+        "financial.card-verification-code" => Some(synthetic_invalid_card_verification_code(
+            original_len,
+            random,
+        )),
 
         // Contextual generic families.
         "generic.password-field" => {
@@ -732,6 +736,17 @@ fn synthetic_invalid_pan(total_len: usize, random: &mut SyntheticBytes) -> Strin
     output
 }
 
+fn synthetic_invalid_card_verification_code(
+    total_len: usize,
+    random: &mut SyntheticBytes,
+) -> String {
+    // Card verification codes have no checksum or other intrinsic structure
+    // beyond their numeric width. Preserve the source width while deliberately
+    // violating the numeric alphabet so synthesis cannot create another valid
+    // code in the same authoritative context.
+    prefixed_invalid("", total_len, '!', random)
+}
+
 fn luhn_check_digit_for_prefix(digits: &[u8]) -> u8 {
     debug_assert!(!digits.is_empty());
 
@@ -870,6 +885,31 @@ mod tests {
         let mut different_key = SyntheticBytes::new(&[0x42; 32], "financial.pan", 0, 16);
 
         assert_ne!(value, synthetic_invalid_pan(16, &mut different_key),);
+    }
+
+    #[test]
+    fn synthetic_card_verification_code_preserves_width_and_is_intentionally_invalid() {
+        for len in [3, 4] {
+            let mut random =
+                SyntheticBytes::new(&[0x41; 32], "financial.card-verification-code", 0, len);
+
+            let value = synthetic_invalid_card_verification_code(len, &mut random);
+
+            assert_eq!(value.len(), len);
+            assert!(value.starts_with('!'));
+            assert!(
+                !value.bytes().all(|byte| byte.is_ascii_digit()),
+                "synthetic card verification code must not remain structurally valid"
+            );
+
+            let mut second =
+                SyntheticBytes::new(&[0x41; 32], "financial.card-verification-code", 0, len);
+
+            assert_eq!(
+                value,
+                synthetic_invalid_card_verification_code(len, &mut second)
+            );
+        }
     }
 
     #[test]
@@ -1138,5 +1178,35 @@ mod tests {
                 .all(|finding| finding.rule_id().as_str() != "financial.pan"),
             "synthetic PAN must not remain a valid financial.pan finding",
         );
+    }
+
+    #[test]
+    fn synthesized_card_verification_code_is_not_rediscovered_by_financial_scanner() {
+        for source in ["cvv=123", "cid=1234"] {
+            let scanner = crate::Scanner::builder()
+                .builtins(crate::builtins::financial::CURRENT)
+                .build()
+                .expect("financial scanner must build");
+
+            let results = scanner.scan([("source", source)]);
+            let report = results.single_report().expect("one source report");
+
+            assert!(report.findings().iter().any(|finding| {
+                finding.rule_id().as_str() == "financial.card-verification-code"
+            }));
+
+            let synthesized = synthesize(source, report, &SynthesisOptions::new([0x41; 32]))
+                .expect("card verification code synthesis must succeed");
+
+            let rescanned = scanner.scan([("source", synthesized.as_str())]);
+            let report = rescanned.single_report().expect("one synthesized report");
+
+            assert!(
+                report.findings().iter().all(|finding| {
+                    finding.rule_id().as_str() != "financial.card-verification-code"
+                }),
+                "synthetic card verification code must not remain a valid finding",
+            );
+        }
     }
 }

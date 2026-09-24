@@ -362,24 +362,24 @@ validated NATS NKey secret material.
 
 #### 0.4.7-E --- Transformation and interface parity
 
--   [ ] Verify every accepted capability through the generic redact, template,
+-   [x] Verify every accepted capability through the generic redact, template,
     pseudonymize, and synthesize contracts where applicable.
--   [ ] Add category-specific transformation semantics only when the generic
+-   [x] Add category-specific transformation semantics only when the generic
     contract is insufficient.
--   [ ] Maintain deterministic Rust behavior.
--   [ ] Maintain complete applicable C ABI semantic parity.
--   [ ] Maintain complete applicable WebAssembly semantic parity.
--   [ ] Preserve metadata-only and secret-safe public boundaries.
+-   [x] Maintain deterministic Rust behavior.
+-   [x] Maintain complete applicable C ABI semantic parity.
+-   [x] Maintain complete applicable WebAssembly semantic parity.
+-   [x] Preserve metadata-only and secret-safe public boundaries.
 
 #### 0.4.7-F --- Portfolio completion gate
 
 -   [x] Re-audit the complete built-in and opt-in detector portfolio after all
     accepted v0.4.7 work.
--   [ ] Verify that no known materially important detector family remains
+-   [x] Verify that no known materially important detector family remains
     omitted without an explicit accepted reason.
--   [ ] Run full Rust, C ABI, WebAssembly, MSRV, security, packaging, and
+-   [x] Run full Rust, C ABI, WebAssembly, MSRV, security, packaging, and
     publication gates.
--   [ ] Document the post-v0.4.7 detector evolution policy.
+-   [x] Document the post-v0.4.7 detector evolution policy.
 -   [ ] Publish/tag the completed release only after all gates pass.
 
 Principles:

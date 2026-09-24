@@ -164,6 +164,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "card_number=1234567890123452".to_owned(),
     )?);
 
+    cases.push(case_oracle(
+        "v047-financial-card-verification-code".to_owned(),
+        ScannerKind::FinancialBuiltins,
+        &financial_scanner,
+        "cvv=123".to_owned(),
+    )?);
+
     for (name, source) in [
         ("v043-gitlab", "GITLAB_TOKEN=glpat-0123456789abcdefghij"),
         (

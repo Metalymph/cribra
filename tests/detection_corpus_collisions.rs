@@ -215,7 +215,8 @@ fn v047_families_preserve_semantic_ownership_when_composed() {
          tailscale_auth_key={TAILSCALE_AUTH_KEY}\n\
          nats_seed={NATS_SEED}\n\
          ssn=123-45-6789\n\
-         card_number=4111111111111111\n"
+         card_number=4111111111111111\n\
+         cvv=123\n"
     );
 
     let scanner = Scanner::builder()
@@ -234,6 +235,7 @@ fn v047_families_preserve_semantic_ownership_when_composed() {
         (NATS_SEED, "nats.nkey-seed"),
         ("123-45-6789", "personal.us-ssn"),
         ("4111111111111111", "financial.pan"),
+        ("123", "financial.card-verification-code"),
     ] {
         let matching = report
             .findings()
@@ -477,6 +479,7 @@ fn v047_personal_and_financial_valid_values_keep_exact_semantic_ownership() {
         "ssn=(123-45-6789)\n",
         "iban=[GB82WEST12345698765432]\n",
         "card_number=(4111111111111111)\n",
+        "cvv=123\n",
     );
 
     let scanner = Scanner::builder()
@@ -496,6 +499,7 @@ fn v047_personal_and_financial_valid_values_keep_exact_semantic_ownership() {
         ("123-45-6789", "personal.us-ssn"),
         ("GB82WEST12345698765432", "financial.iban"),
         ("4111111111111111", "financial.pan"),
+        ("123", "financial.card-verification-code"),
     ] {
         let matching = report
             .findings()
@@ -566,6 +570,7 @@ fn v047_context_required_identifiers_do_not_promote_bare_values() {
         "9434765919\n",
         "123-45-6789\n",
         "4111111111111111\n",
+        "123\n",
     );
 
     let scanner = Scanner::builder()
@@ -578,7 +583,12 @@ fn v047_context_required_identifiers_do_not_promote_bare_values() {
     let results = scanner.scan([("v047-context-required", source)]);
     let report = results.single_report().expect("one source");
 
-    for rule_id in ["personal.uk-nhs-number", "personal.us-ssn", "financial.pan"] {
+    for rule_id in [
+        "personal.uk-nhs-number",
+        "personal.us-ssn",
+        "financial.pan",
+        "financial.card-verification-code",
+    ] {
         assert!(
             report
                 .findings()

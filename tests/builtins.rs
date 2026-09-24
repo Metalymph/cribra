@@ -3130,13 +3130,14 @@ fn financial_pack_preserves_financial_rule_ownership_when_composed_with_default_
 
     let source = concat!(
         "iban=IT60X0542811101000000123456\n",
-        "card_number=1234567890123452"
+        "card_number=1234567890123452\n",
+        "cvv=123"
     );
 
     let results = scan_one(&scanner, source);
     let report = results.single_report().expect("one fixture was scanned");
 
-    assert_eq!(report.len(), 2);
+    assert_eq!(report.len(), 3);
 
     let ids: Vec<_> = report
         .findings()
@@ -3144,7 +3145,14 @@ fn financial_pack_preserves_financial_rule_ownership_when_composed_with_default_
         .map(|finding| finding.rule_id().as_str())
         .collect();
 
-    assert_eq!(ids, ["financial.iban", "financial.pan"]);
+    assert_eq!(
+        ids,
+        [
+            "financial.iban",
+            "financial.pan",
+            "financial.card-verification-code",
+        ]
+    );
 }
 
 #[test]
@@ -3175,6 +3183,125 @@ fn financial_pan_rejects_values_outside_supported_length_range() {
         assert!(
             report.is_empty(),
             "PAN outside the supported 10..=19 digit range must not be detected"
+        );
+    }
+}
+
+#[test]
+fn financial_card_verification_code_is_opt_in_and_not_part_of_default_scanner() {
+    let source = "cvv=123";
+
+    let default_results = scan_one(&Scanner::default(), source);
+    let default_report = default_results
+        .single_report()
+        .expect("one fixture was scanned");
+
+    assert!(
+        default_report
+            .findings()
+            .iter()
+            .all(|finding| { finding.rule_id().as_str() != "financial.card-verification-code" })
+    );
+
+    let scanner = scanner_for(builtins::financial::CURRENT.iter().copied());
+    let results = scan_one(&scanner, source);
+    let report = results.single_report().expect("one fixture was scanned");
+
+    assert_eq!(report.len(), 1);
+    assert_eq!(
+        report.findings()[0].rule_id().as_str(),
+        "financial.card-verification-code"
+    );
+}
+
+#[test]
+fn financial_card_verification_code_reports_exact_span_and_metadata() {
+    let code = "123";
+    let source = format!("cvv=({code}),");
+    let scanner = scanner_for([builtins::financial::CARD_VERIFICATION_CODE]);
+
+    let results = scan_one(&scanner, &source);
+    let report = results.single_report().expect("one fixture was scanned");
+
+    assert_eq!(report.len(), 1);
+
+    let finding = &report.findings()[0];
+
+    assert_eq!(
+        finding.rule_id().as_str(),
+        "financial.card-verification-code"
+    );
+    assert_eq!(matched(&source, finding), code);
+    assert_eq!(finding.severity(), Severity::High);
+    assert_eq!(finding.confidence(), Confidence::High);
+    assert_eq!(
+        finding.remediation(),
+        Some(Remediation::RemoveSensitiveValue)
+    );
+}
+
+#[test]
+fn financial_card_verification_code_requires_explicit_context() {
+    let scanner = scanner_for([builtins::financial::CARD_VERIFICATION_CODE]);
+
+    for key in [
+        "code",
+        "security_code",
+        "verification_code",
+        "pin",
+        "card",
+        "card_code",
+    ] {
+        let source = format!("{key}=123");
+        let results = scan_one(&scanner, &source);
+        let report = results.single_report().expect("one fixture was scanned");
+
+        assert!(
+            report.is_empty(),
+            "weak context {key:?} must not establish card-verification authority"
+        );
+    }
+}
+
+#[test]
+fn financial_card_verification_code_accepts_explicit_normalized_contexts() {
+    let scanner = scanner_for([builtins::financial::CARD_VERIFICATION_CODE]);
+
+    for (key, code) in [
+        ("cvv", "123"),
+        ("CVV2", "123"),
+        ("cvc", "123"),
+        ("cvc2", "123"),
+        ("cid", "1234"),
+        ("card-verification-code", "123"),
+        ("card.verification.value", "123"),
+        ("card_security_code", "123"),
+        ("card-security-value", "1234"),
+    ] {
+        let source = format!("{key}={code}");
+        let results = scan_one(&scanner, &source);
+        let report = results.single_report().expect("one fixture was scanned");
+
+        assert_eq!(
+            report.len(),
+            1,
+            "explicit card-verification context {key:?} should be accepted"
+        );
+        assert_eq!(matched(&source, &report.findings()[0]), code);
+    }
+}
+
+#[test]
+fn financial_card_verification_code_rejects_wrong_width_and_longer_numeric_tokens() {
+    let scanner = scanner_for([builtins::financial::CARD_VERIFICATION_CODE]);
+
+    for source in ["cvv=12", "cvv=12345", "cvv=91234", "cid=12345"] {
+        let results = scan_one(&scanner, source);
+        let report = results.single_report().expect("one fixture was scanned");
+
+        assert!(
+            report.is_empty(),
+            "invalid card-verification width must not be detected for {source:?}"
         );
     }
 }

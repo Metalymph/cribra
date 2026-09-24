@@ -4,6 +4,7 @@ mod context;
 
 pub(crate) mod aws;
 pub(crate) mod azure;
+pub(crate) mod card_verification_code;
 pub(crate) mod cargo_registry;
 pub(crate) mod composer;
 pub(crate) mod database_connection;

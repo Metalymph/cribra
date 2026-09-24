@@ -869,6 +869,9 @@ mod tests {
             engine.scan("card_number=1234567890123452").finding_count(),
             1
         );
+
+        assert_eq!(engine.scan("cvv=123").finding_count(), 1);
+        assert_eq!(engine.scan("123").finding_count(), 0);
     }
 
     #[test]
