@@ -99,6 +99,7 @@ impl Default for ScanEngine {
 pub struct ScanEngineBuilder {
     include_builtins: bool,
     include_financial_builtins: bool,
+    include_personal_builtins: bool,
     rules: Vec<Rule>,
 }
 
@@ -111,6 +112,7 @@ impl ScanEngineBuilder {
         Self {
             include_builtins,
             include_financial_builtins: false,
+            include_personal_builtins: false,
             rules: Vec::new(),
         }
     }
@@ -119,6 +121,12 @@ impl ScanEngineBuilder {
     #[wasm_bindgen(js_name = addFinancialBuiltins)]
     pub fn add_financial_builtins(&mut self) {
         self.include_financial_builtins = true;
+    }
+
+    /// Adds Cribra's opt-in personal-data built-in catalog.
+    #[wasm_bindgen(js_name = addPersonalBuiltins)]
+    pub fn add_personal_builtins(&mut self) {
+        self.include_personal_builtins = true;
     }
 
     /// Adds an exact literal rule.
@@ -194,6 +202,10 @@ impl ScanEngineBuilder {
 
         if self.include_financial_builtins {
             builder = builder.builtins(cribra::builtins::financial::CURRENT);
+        }
+
+        if self.include_personal_builtins {
+            builder = builder.builtins(cribra::builtins::personal::CURRENT);
         }
 
         let scanner = builder
@@ -857,6 +869,25 @@ mod tests {
             engine.scan("card_number=1234567890123452").finding_count(),
             1
         );
+
+        assert_eq!(engine.scan("cvv=123").finding_count(), 1);
+        assert_eq!(engine.scan("123").finding_count(), 0);
+    }
+
+    #[test]
+    fn typed_builder_can_add_personal_builtins_explicitly() {
+        let mut builder = ScanEngineBuilder::new(false);
+        builder.add_personal_builtins();
+
+        let engine = builder.build().expect("personal scanner should build");
+
+        assert_eq!(
+            engine.rules_count(),
+            cribra::builtins::personal::CURRENT.len()
+        );
+
+        assert_eq!(engine.scan("ssn=123-45-6789").finding_count(), 1);
+        assert_eq!(engine.scan("123-45-6789").finding_count(), 0);
     }
 
     #[test]

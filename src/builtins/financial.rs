@@ -39,5 +39,20 @@ pub const PAN: RuleSpec = RuleSpec::captured_pattern(
 .with_validator(ValidatorKind::Pan)
 .with_remediation(Remediation::RemoveSensitiveValue);
 
+/// Payment-card verification code.
+///
+/// Discovery is deliberately limited to three or four consecutive ASCII
+/// digits. Validation additionally requires explicit payment-card verification
+/// context because a bare short numeric value has no authoritative financial
+/// semantics.
+pub const CARD_VERIFICATION_CODE: RuleSpec = RuleSpec::captured_pattern(
+    "financial.card-verification-code",
+    r"(?:^|[^0-9])(?P<value>[0-9]{3,4})(?:$|[^0-9])",
+    "value",
+    Severity::High,
+)
+.with_validator(ValidatorKind::CardVerificationCode)
+.with_remediation(Remediation::RemoveSensitiveValue);
+
 /// Financial identifier rules available as an explicit opt-in pack.
-pub const CURRENT: &[RuleSpec] = &[IBAN, PAN];
+pub const CURRENT: &[RuleSpec] = &[IBAN, PAN, CARD_VERIFICATION_CODE];

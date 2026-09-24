@@ -203,3 +203,398 @@ fn v043_detection_families_are_serial_parallel_equivalent() {
 
     assert_eq!(serial, parallel);
 }
+
+#[test]
+fn v047_families_preserve_semantic_ownership_when_composed() {
+    const OTP_SECRET: &str = "JBSWY3DPEHPK3PXP";
+    const TAILSCALE_AUTH_KEY: &str = "tskey-auth-a1B2c3D4e5F6";
+    const NATS_SEED: &str = "SUAB6M5NSNGSXV6SQ3TV6LQUH6S2OFHGJDZ2ENNZ4W5VBKBX3Z6TH3RW4E";
+
+    let source = format!(
+        "otp_secret={OTP_SECRET}\n\
+         tailscale_auth_key={TAILSCALE_AUTH_KEY}\n\
+         nats_seed={NATS_SEED}\n\
+         ssn=123-45-6789\n\
+         card_number=4111111111111111\n\
+         cvv=123\n"
+    );
+
+    let scanner = Scanner::builder()
+        .builtins(builtins::CURRENT)
+        .builtins(builtins::personal::CURRENT)
+        .builtins(builtins::financial::CURRENT)
+        .build()
+        .expect("default, personal, and financial packs must compose");
+
+    let results = scanner.scan([("source", source.as_str())]);
+    let report = results.single_report().expect("one source");
+
+    for (value, expected_rule) in [
+        (OTP_SECRET, "mfa.otp-provisioning-secret"),
+        (TAILSCALE_AUTH_KEY, "tailscale.auth-key"),
+        (NATS_SEED, "nats.nkey-seed"),
+        ("123-45-6789", "personal.us-ssn"),
+        ("4111111111111111", "financial.pan"),
+        ("123", "financial.card-verification-code"),
+    ] {
+        let matching = report
+            .findings()
+            .iter()
+            .filter(|finding| &source[finding.location().byte_range()] == value)
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            matching.len(),
+            1,
+            "expected exactly one semantic owner for {value:?}; got {:?}",
+            matching
+                .iter()
+                .map(|finding| finding.rule_id().as_str())
+                .collect::<Vec<_>>(),
+        );
+        assert_eq!(matching[0].rule_id().as_str(), expected_rule);
+    }
+}
+
+#[test]
+fn v047_specific_security_rules_win_exact_span_generic_collisions() {
+    const OTP_SECRET: &str = "JBSWY3DPEHPK3PXP";
+    const TAILSCALE_AUTH_KEY: &str = "tskey-auth-a1B2c3D4e5F6";
+
+    let cases = [
+        (
+            format!("secret=ordinary-value\notp_secret={OTP_SECRET}"),
+            OTP_SECRET,
+            "mfa.otp-provisioning-secret",
+        ),
+        (
+            format!("token={TAILSCALE_AUTH_KEY}"),
+            TAILSCALE_AUTH_KEY,
+            "tailscale.auth-key",
+        ),
+    ];
+
+    for (source, value, expected_rule) in cases {
+        let scanner = Scanner::default();
+        let results = scanner.scan([("source", source.as_str())]);
+        let report = results.single_report().expect("one source");
+
+        let matching = report
+            .findings()
+            .iter()
+            .filter(|finding| &source[finding.location().byte_range()] == value)
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            matching.len(),
+            1,
+            "expected exactly one owner for exact span {value:?}; got {:?}",
+            matching
+                .iter()
+                .map(|finding| finding.rule_id().as_str())
+                .collect::<Vec<_>>(),
+        );
+
+        assert_eq!(matching[0].rule_id().as_str(), expected_rule);
+    }
+}
+
+#[test]
+fn v047_identifier_and_verifier_categories_do_not_collapse_into_generic_credentials() {
+    let source = concat!(
+        "ssn=123-45-6789\n",
+        "nhs_number=9434765919\n",
+        "alice:$6$abcdefghijklmnop$0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789:20000:0:99999:7:::\n",
+        "bob:$apr1$hfT7jp2q$2VbDVlM1QY3wP1uQYxJYB/\n",
+    );
+
+    let scanner = Scanner::builder()
+        .builtins(builtins::CURRENT)
+        .builtins(builtins::personal::CURRENT)
+        .build()
+        .expect("default and personal packs must compose");
+
+    let results = scanner.scan([("source", source)]);
+    let report = results.single_report().expect("one source");
+
+    for expected in [
+        "personal.us-ssn",
+        "personal.uk-nhs-number",
+        "system.shadow-password-verifier",
+        "system.htpasswd-password-verifier",
+    ] {
+        assert!(
+            report
+                .findings()
+                .iter()
+                .any(|finding| finding.rule_id().as_str() == expected),
+            "missing semantic owner {expected}",
+        );
+    }
+
+    for finding in report.findings() {
+        let id = finding.rule_id().as_str();
+
+        if matches!(
+            id,
+            "personal.us-ssn"
+                | "personal.uk-nhs-number"
+                | "system.shadow-password-verifier"
+                | "system.htpasswd-password-verifier"
+        ) {
+            assert!(
+                !id.starts_with("generic."),
+                "specific identifier/verifier semantics collapsed into generic ownership"
+            );
+        }
+    }
+}
+
+#[test]
+fn v047_security_references_placeholders_and_public_material_remain_clean() {
+    for source in [
+        "totp_secret=YOUR_SECRET_HERE",
+        "hotp_secret=EXAMPLE_SECRET",
+        "otp_secret=xxxxxxxxxxxxxxxx",
+        "tskey-api-your_token_here",
+        "tskey-auth-example_token_here",
+        "tskey-client-xxxxxxxx",
+        "tskey-scim-your_key_here",
+        "tskey-webhook-example_key",
+        // Public NKey: valid public material, not a credential.
+        "OBLXELMC2C6DOHNN47MCOP6BSWKPJOT4XJWIVCU2N2T63A4UT5OQXB6K",
+    ] {
+        let results = Scanner::default().scan([("source", source)]);
+        let report = results.single_report().expect("one source");
+
+        assert!(
+            report.findings().is_empty(),
+            "reference/placeholder/configuration material produced findings for {source:?}: {:?}",
+            report
+                .findings()
+                .iter()
+                .map(|finding| finding.rule_id().as_str())
+                .collect::<Vec<_>>(),
+        );
+    }
+}
+
+#[test]
+fn v047_malformed_security_material_is_not_promoted() {
+    let source = concat!(
+        // Tailscale near misses.
+        "tskey-auth-\n",
+        "tskey-unknown-a1B2c3D4e5F6\n",
+        "tskey-AUTH-a1B2c3D4e5F6\n",
+        // OTP-like material without authoritative OTP context.
+        "JBSWY3DPEHPK3PXP\n",
+        "https://example.com/?secret=JBSWY3DPEHPK3PXP\n",
+        // NKey near misses / noncanonical material.
+        "suaafo5zrymbov7kynbjpwvkoqlfapz6sfrkxnvf32ucpxfdm45hend4ci\n",
+        "SOAAFO5ZRYMBOV7KYNBJPWVKOQLFAPZ6SFRKXNVF32UCPXFDM45HEND40I\n",
+        // Password-verifier-looking material without its required representation.
+        "$apr1$hfT7jp2q$2VbDVlM1QY3wP1uQYxJYB/\n",
+        "$6$abcdefghijklmnop$0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789\n",
+    );
+
+    let scanner = Scanner::default();
+    let results = scanner.scan([("v047-malformed", source)]);
+    let report = results.single_report().expect("one source");
+
+    assert!(
+        report.findings().iter().all(|finding| {
+            !matches!(
+                finding.rule_id().as_str(),
+                "mfa.otp-provisioning-secret"
+                    | "tailscale.api-access-token"
+                    | "tailscale.auth-key"
+                    | "tailscale.oauth-client-secret"
+                    | "tailscale.scim-key"
+                    | "tailscale.webhook-key"
+                    | "nats.nkey-seed"
+                    | "nats.nkey-private-key"
+            )
+        }),
+        "malformed/non-authoritative material was promoted to specific ownership: {:?}",
+        report
+            .findings()
+            .iter()
+            .map(|finding| finding.rule_id().as_str())
+            .collect::<Vec<_>>()
+    );
+
+    assert!(
+        report.candidates().is_empty(),
+        "malformed/non-authoritative material produced review candidates"
+    );
+}
+
+#[test]
+fn v047_valid_security_material_survives_adversarial_surroundings_with_exact_spans() {
+    const OTP: &str = "JBSWY3DPEHPK3PXP";
+    const TAILSCALE: &str = "tskey-auth-a1B2c3D4e5F6";
+    const NATS: &str = "SUAB6M5NSNGSXV6SQ3TV6LQUH6S2OFHGJDZ2ENNZ4W5VBKBX3Z6TH3RW4E";
+
+    let source = format!(
+        "docs say TOTP_SECRET is required\n\
+         totp_secret=({OTP})\n\
+         tailscale_auth_key=\"{TAILSCALE}\"\n\
+         nats_seed=[{NATS}]\n"
+    );
+
+    let scanner = Scanner::default();
+    let results = scanner.scan([("v047-boundaries", source.as_str())]);
+    let report = results.single_report().expect("one source");
+
+    for (value, expected_rule) in [
+        (OTP, "mfa.otp-provisioning-secret"),
+        (TAILSCALE, "tailscale.auth-key"),
+        (NATS, "nats.nkey-seed"),
+    ] {
+        let matching = report
+            .findings()
+            .iter()
+            .filter(|finding| &source[finding.location().byte_range()] == value)
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            matching.len(),
+            1,
+            "expected one exact-span finding for {value:?}; got {:?}",
+            matching
+                .iter()
+                .map(|finding| finding.rule_id().as_str())
+                .collect::<Vec<_>>(),
+        );
+        assert_eq!(matching[0].rule_id().as_str(), expected_rule);
+    }
+}
+
+#[test]
+fn v047_personal_and_financial_valid_values_keep_exact_semantic_ownership() {
+    let source = concat!(
+        "codice_fiscale=(RSSMRA85T10A562S)\n",
+        "pesel=[02070803628]\n",
+        "nhs_number=\"943 476 5919\"\n",
+        "ssn=(123-45-6789)\n",
+        "iban=[GB82WEST12345698765432]\n",
+        "card_number=(4111111111111111)\n",
+        "cvv=123\n",
+    );
+
+    let scanner = Scanner::builder()
+        .builtins(builtins::CURRENT)
+        .builtins(builtins::personal::CURRENT)
+        .builtins(builtins::financial::CURRENT)
+        .build()
+        .expect("default, personal, and financial packs must compose");
+
+    let results = scanner.scan([("v047-structured-positive", source)]);
+    let report = results.single_report().expect("one source");
+
+    for (value, expected_rule) in [
+        ("RSSMRA85T10A562S", "personal.it-codice-fiscale"),
+        ("02070803628", "personal.pl-pesel"),
+        ("943 476 5919", "personal.uk-nhs-number"),
+        ("123-45-6789", "personal.us-ssn"),
+        ("GB82WEST12345698765432", "financial.iban"),
+        ("4111111111111111", "financial.pan"),
+        ("123", "financial.card-verification-code"),
+    ] {
+        let matching = report
+            .findings()
+            .iter()
+            .filter(|finding| &source[finding.location().byte_range()] == value)
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            matching.len(),
+            1,
+            "expected exactly one semantic owner for {value:?}; got {:?}",
+            matching
+                .iter()
+                .map(|finding| finding.rule_id().as_str())
+                .collect::<Vec<_>>(),
+        );
+        assert_eq!(matching[0].rule_id().as_str(), expected_rule);
+    }
+}
+
+#[test]
+fn v047_structured_identifiers_reject_invalid_and_unrelated_near_misses() {
+    let source = concat!(
+        // Codice Fiscale: invalid control/structure.
+        "codice_fiscale=RSSMRA85T10A562A\n",
+        // PESEL: invalid checksum.
+        "pesel=02070803629\n",
+        // NHS: invalid checksum.
+        "nhs_number=9434765918\n",
+        // SSN: structurally impossible groups.
+        "ssn=000-45-6789\n",
+        "ssn=123-00-6789\n",
+        "ssn=123-45-0000\n",
+        // IBAN: invalid checksum.
+        "iban=GB82WEST12345698765431\n",
+        // PAN: invalid Luhn.
+        "card_number=4111111111111112\n",
+    );
+
+    let scanner = Scanner::builder()
+        .builtins(builtins::CURRENT)
+        .builtins(builtins::personal::CURRENT)
+        .builtins(builtins::financial::CURRENT)
+        .build()
+        .expect("default, personal, and financial packs must compose");
+
+    let results = scanner.scan([("v047-structured-invalid", source)]);
+    let report = results.single_report().expect("one source");
+
+    assert!(
+        report.findings().iter().all(|finding| {
+            !finding.rule_id().as_str().starts_with("personal.")
+                && !finding.rule_id().as_str().starts_with("financial.")
+        }),
+        "invalid structured identifiers were promoted: {:?}",
+        report
+            .findings()
+            .iter()
+            .map(|finding| finding.rule_id().as_str())
+            .collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn v047_context_required_identifiers_do_not_promote_bare_values() {
+    let source = concat!(
+        // Structurally plausible/valid but context-sensitive.
+        "9434765919\n",
+        "123-45-6789\n",
+        "4111111111111111\n",
+        "123\n",
+    );
+
+    let scanner = Scanner::builder()
+        .builtins(builtins::CURRENT)
+        .builtins(builtins::personal::CURRENT)
+        .builtins(builtins::financial::CURRENT)
+        .build()
+        .expect("default, personal, and financial packs must compose");
+
+    let results = scanner.scan([("v047-context-required", source)]);
+    let report = results.single_report().expect("one source");
+
+    for rule_id in [
+        "personal.uk-nhs-number",
+        "personal.us-ssn",
+        "financial.pan",
+        "financial.card-verification-code",
+    ] {
+        assert!(
+            report
+                .findings()
+                .iter()
+                .all(|finding| finding.rule_id().as_str() != rule_id),
+            "{rule_id} must require authoritative context"
+        );
+    }
+}

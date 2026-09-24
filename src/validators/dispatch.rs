@@ -9,6 +9,7 @@ use crate::{
             ValidationContext,
             aws::{AwsCredentialKind, validate_aws},
             azure::{AzureCredentialKind, validate_azure},
+            card_verification_code::validate_card_verification_code,
             cargo_registry::validate_cargo_registry,
             composer::{ComposerCredentialKind, validate_composer},
             database_connection::{DatabaseConnectionKind, validate_database_connection},
@@ -20,12 +21,15 @@ use crate::{
             http_basic::validate_http_basic,
             maven::validate_maven,
             netrc::validate_netrc,
+            nhs_number::validate_nhs_number,
             npm_registry::{NpmRegistryCredentialKind, validate_npm_registry},
             nuget::validate_nuget,
+            otp::validate_otp_provisioning_secret,
             pan::validate_pan,
             password::{PasswordKind, validate_password},
             pypi::validate_pypi,
             rubygems::validate_rubygems_host_key,
+            ssn::validate_ssn,
             swiftpm::validate_swiftpm,
             swiftpm_netrc::validate_swiftpm_netrc,
             system_password_verifier::{
@@ -36,13 +40,17 @@ use crate::{
         },
         deterministic::{
             cloudflare::{CloudflareTokenKind, validate_cloudflare_token},
+            codice_fiscale::validate_codice_fiscale,
             github::{GitHubTokenKind, validate_github_token},
             gitlab::{GitLabTokenKind, validate_gitlab_token},
             iban::validate_iban,
             jwt::{JwtKind, validate_jwt},
+            nats::{NatsNkeyKind, validate_nats_nkey},
+            pesel::validate_pesel,
             rubygems::validate_rubygems_api_key,
             slack::{SlackTokenKind, validate_slack_token},
             stripe::{StripeTokenKind, validate_stripe_token},
+            tailscale::{TailscaleCredentialKind, validate_tailscale_credential},
             telegram::validate_telegram_bot_token,
         },
     },
@@ -67,6 +75,13 @@ pub(crate) enum ValidatorKind {
     SwiftPm,
     SwiftPmNetrc,
     Gradle,
+    CodiceFiscale,
+    NhsNumber,
+    Pesel,
+    Ssn,
+    CardVerificationCode,
+    OtpProvisioningSecret,
+    Tailscale,
     GitHub,
     GitLab,
     Stripe,
@@ -75,6 +90,7 @@ pub(crate) enum ValidatorKind {
     Slack,
     Telegram,
     Jwt,
+    Nats,
     Aws,
     Azure,
     Gcp,
@@ -95,7 +111,9 @@ impl ValidatorKind {
     pub(crate) const fn detection_mode(self) -> DetectionMode {
         match self {
             Self::None => DetectionMode::MatcherOnly,
-            Self::GitHub
+            Self::CodiceFiscale
+            | Self::Pesel
+            | Self::GitHub
             | Self::GitLab
             | Self::Stripe
             | Self::Iban
@@ -103,7 +121,9 @@ impl ValidatorKind {
             | Self::Slack
             | Self::Telegram
             | Self::Jwt
-            | Self::RubyGems => DetectionMode::Deterministic,
+            | Self::Nats
+            | Self::RubyGems
+            | Self::Tailscale => DetectionMode::Deterministic,
             Self::Aws
             | Self::Azure
             | Self::Gcp
@@ -129,7 +149,11 @@ impl ValidatorKind {
             | Self::SensitiveHash
             | Self::GenericCredential
             | Self::Netrc
-            | Self::Nuget => DetectionMode::Contextual,
+            | Self::Nuget
+            | Self::NhsNumber
+            | Self::Ssn
+            | Self::CardVerificationCode
+            | Self::OtpProvisioningSecret => DetectionMode::Contextual,
         }
     }
 }
@@ -148,6 +172,13 @@ pub(crate) enum ValidationKind {
     SwiftPm,
     SwiftPmNetrc,
     Gradle(GradleCredentialKind),
+    CodiceFiscale,
+    Pesel,
+    Ssn,
+    CardVerificationCode,
+    NhsNumber,
+    OtpProvisioningSecret,
+    Tailscale(TailscaleCredentialKind),
     GitHub(GitHubTokenKind),
     GitLab(GitLabTokenKind),
     Stripe(StripeTokenKind),
@@ -156,6 +187,7 @@ pub(crate) enum ValidationKind {
     Slack(SlackTokenKind),
     TelegramBotToken,
     Jwt(JwtKind),
+    Nats(NatsNkeyKind),
     Aws(AwsCredentialKind),
     Azure(AzureCredentialKind),
     Gcp(GcpCredentialKind),
@@ -277,6 +309,26 @@ pub(crate) fn validate_candidate(
             .map(|v| ValidationOutcome::new(ValidationKind::Gradle(v.kind()), Confidence::High)),
         ValidatorKind::DockerRegistry => validate_docker_registry(&context)
             .map(|_| ValidationOutcome::new(ValidationKind::DockerRegistry, Confidence::High)),
+        ValidatorKind::CodiceFiscale => validate_codice_fiscale(context.candidate())
+            .map(|_| ValidationOutcome::new(ValidationKind::CodiceFiscale, Confidence::High)),
+        ValidatorKind::NhsNumber => validate_nhs_number(&context)
+            .map(|_| ValidationOutcome::new(ValidationKind::NhsNumber, Confidence::High)),
+        ValidatorKind::Ssn => validate_ssn(&context)
+            .map(|_| ValidationOutcome::new(ValidationKind::Ssn, Confidence::High)),
+        ValidatorKind::CardVerificationCode => {
+            validate_card_verification_code(&context).map(|_| {
+                ValidationOutcome::new(ValidationKind::CardVerificationCode, Confidence::High)
+            })
+        }
+        ValidatorKind::Pesel => validate_pesel(context.candidate())
+            .map(|_| ValidationOutcome::new(ValidationKind::Pesel, Confidence::High)),
+        ValidatorKind::OtpProvisioningSecret => {
+            validate_otp_provisioning_secret(&context).map(|_| {
+                ValidationOutcome::new(ValidationKind::OtpProvisioningSecret, Confidence::High)
+            })
+        }
+        ValidatorKind::Tailscale => validate_tailscale_credential(context.candidate())
+            .map(|v| ValidationOutcome::new(ValidationKind::Tailscale(v.kind()), Confidence::High)),
         ValidatorKind::GitHub => validate_github_token(context.candidate())
             .map(|v| ValidationOutcome::new(ValidationKind::GitHub(v.kind()), Confidence::High)),
         ValidatorKind::GitLab => validate_gitlab_token(context.candidate())
@@ -294,6 +346,8 @@ pub(crate) fn validate_candidate(
             .map(|_| ValidationOutcome::new(ValidationKind::TelegramBotToken, Confidence::High)),
         ValidatorKind::Jwt => validate_jwt(context.candidate())
             .map(|v| ValidationOutcome::new(ValidationKind::Jwt(v.kind()), Confidence::Medium)),
+        ValidatorKind::Nats => validate_nats_nkey(context.candidate())
+            .map(|v| ValidationOutcome::new(ValidationKind::Nats(v.kind()), Confidence::High)),
         ValidatorKind::Aws => validate_aws(&context)
             .map(|v| ValidationOutcome::new(ValidationKind::Aws(v.kind()), Confidence::High)),
         ValidatorKind::Azure => validate_azure(&context)
@@ -358,6 +412,8 @@ mod tests {
         );
 
         for validator in [
+            ValidatorKind::CodiceFiscale,
+            ValidatorKind::Pesel,
             ValidatorKind::GitHub,
             ValidatorKind::GitLab,
             ValidatorKind::Stripe,
@@ -366,7 +422,9 @@ mod tests {
             ValidatorKind::Slack,
             ValidatorKind::Telegram,
             ValidatorKind::Jwt,
+            ValidatorKind::Nats,
             ValidatorKind::RubyGems,
+            ValidatorKind::Tailscale,
         ] {
             assert_eq!(
                 validator.detection_mode(),
@@ -398,6 +456,10 @@ mod tests {
             ValidatorKind::Netrc,
             ValidatorKind::Nuget,
             ValidatorKind::SystemPasswordVerifier,
+            ValidatorKind::NhsNumber,
+            ValidatorKind::Ssn,
+            ValidatorKind::CardVerificationCode,
+            ValidatorKind::OtpProvisioningSecret,
         ] {
             assert_eq!(
                 validator.detection_mode(),
@@ -512,6 +574,23 @@ mod tests {
         .expect("contextual PAN should validate");
 
         assert_eq!(outcome.kind(), ValidationKind::Pan);
+        assert_eq!(outcome.confidence(), Confidence::High);
+    }
+
+    #[test]
+    fn dispatches_card_verification_code_contextual_validator() {
+        let code = "123";
+        let source = format!("cvv={code}");
+
+        let outcome = validate_candidate(
+            ValidatorKind::CardVerificationCode,
+            &source,
+            range_of(&source, code),
+            Confidence::Low,
+        )
+        .expect("contextual card verification code should validate");
+
+        assert_eq!(outcome.kind(), ValidationKind::CardVerificationCode);
         assert_eq!(outcome.confidence(), Confidence::High);
     }
 }

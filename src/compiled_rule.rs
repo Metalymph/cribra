@@ -81,8 +81,15 @@ impl CompiledRuleMetadata {
             | ValidatorKind::NpmRegistry
             | ValidatorKind::Netrc
             | ValidatorKind::SystemPasswordVerifier => 200,
-            ValidatorKind::Jwt => 300,
-            ValidatorKind::GitHub
+            ValidatorKind::Jwt | ValidatorKind::Nats => 300,
+            ValidatorKind::CodiceFiscale
+            | ValidatorKind::Pesel
+            | ValidatorKind::NhsNumber
+            | ValidatorKind::Ssn
+            | ValidatorKind::CardVerificationCode
+            | ValidatorKind::OtpProvisioningSecret
+            | ValidatorKind::Tailscale
+            | ValidatorKind::GitHub
             | ValidatorKind::GitLab
             | ValidatorKind::Stripe
             | ValidatorKind::Pan

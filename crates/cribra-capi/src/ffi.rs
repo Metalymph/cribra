@@ -467,6 +467,35 @@ pub unsafe extern "C" fn cribra_builder_add_financial_builtins(
     })
 }
 
+/// Adds Cribra's opt-in personal-data built-in catalog to a builder.
+///
+/// This allows native consumers to compose the personal-data catalog with the
+/// standard catalog and custom rules while preserving scanner-wide rule-ID
+/// validation.
+///
+/// # Safety
+///
+/// `builder` must be a live builder handle returned by [`cribra_builder_new`].
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cribra_builder_add_personal_builtins(
+    builder: *mut CribraBuilder,
+) -> CribraStatus {
+    contain_status(|| {
+        if builder.is_null() {
+            return CRIBRA_INVALID_ARGUMENT;
+        }
+
+        // SAFETY: caller guarantees unique access to a live builder handle.
+        let builder = unsafe { &mut *builder };
+        let Some(inner) = builder.inner.take() else {
+            return CRIBRA_INVALID_ARGUMENT;
+        };
+
+        builder.inner = Some(inner.builtins(builtins::personal::CURRENT));
+        CRIBRA_OK
+    })
+}
+
 /// Adds one public custom rule to a scanner builder.
 ///
 /// `id` and `value` are copied into Rust-owned rule storage before this function
@@ -2840,6 +2869,201 @@ mod tests {
                 explanation.candidate_evidence,
                 CRIBRA_CANDIDATE_EVIDENCE_NONE
             );
+
+            cribra_report_free(report);
+            cribra_scanner_free(scanner);
+        }
+    }
+
+    #[test]
+    fn financial_builtins_preserve_card_verification_code_semantics_through_c_abi() {
+        let mut builder = ptr::null_mut();
+        let mut scanner = ptr::null_mut();
+        let mut report = ptr::null_mut();
+        let code = b"123";
+        let source = b"cvv=123";
+
+        unsafe {
+            assert_eq!(cribra_builder_new(&mut builder), CRIBRA_OK);
+            assert_eq!(cribra_builder_add_financial_builtins(builder), CRIBRA_OK);
+            assert_eq!(
+                cribra_builder_build(builder, &mut scanner, ptr::null_mut()),
+                CRIBRA_OK
+            );
+            assert_eq!(
+                cribra_scanner_scan(
+                    scanner,
+                    source.as_ptr(),
+                    source.len(),
+                    &mut report,
+                    ptr::null_mut(),
+                ),
+                CRIBRA_OK
+            );
+
+            let mut count = 0;
+            assert_eq!(cribra_report_finding_count(report, &mut count), CRIBRA_OK);
+            assert_eq!(count, 1);
+
+            let mut finding = CribraFindingView::default();
+            assert_eq!(cribra_report_finding_at(report, 0, &mut finding), CRIBRA_OK);
+
+            assert_eq!(finding.severity, CRIBRA_SEVERITY_HIGH);
+            assert_eq!(finding.confidence, CRIBRA_CONFIDENCE_HIGH);
+            assert_eq!(
+                finding.remediation,
+                CRIBRA_REMEDIATION_REMOVE_SENSITIVE_VALUE
+            );
+
+            assert_eq!(&source[finding.start..finding.end], code);
+
+            let rule_id = std::slice::from_raw_parts(finding.rule_id.ptr, finding.rule_id.len);
+            assert_eq!(rule_id, b"financial.card-verification-code");
+
+            let mut explanation = CribraExplanationView::default();
+            assert_eq!(
+                cribra_scanner_explain_finding(
+                    scanner,
+                    report,
+                    0,
+                    &mut explanation,
+                    ptr::null_mut(),
+                ),
+                CRIBRA_OK
+            );
+
+            assert_eq!(explanation.kind, CRIBRA_EXPLANATION_CLASSIFIED);
+            assert_eq!(explanation.detection_mode, CRIBRA_DETECTION_MODE_CONTEXTUAL);
+            assert_eq!(
+                explanation.candidate_evidence,
+                CRIBRA_CANDIDATE_EVIDENCE_NONE
+            );
+
+            cribra_report_free(report);
+
+            report = ptr::null_mut();
+            let bare = b"123";
+
+            assert_eq!(
+                cribra_scanner_scan(
+                    scanner,
+                    bare.as_ptr(),
+                    bare.len(),
+                    &mut report,
+                    ptr::null_mut(),
+                ),
+                CRIBRA_OK
+            );
+
+            count = usize::MAX;
+            assert_eq!(cribra_report_finding_count(report, &mut count), CRIBRA_OK);
+            assert_eq!(
+                count, 0,
+                "bare short numeric value must not acquire card-verification semantics"
+            );
+
+            cribra_report_free(report);
+            cribra_scanner_free(scanner);
+        }
+    }
+
+    #[test]
+    fn personal_builtins_preserve_ssn_semantics_through_c_abi() {
+        let mut builder = ptr::null_mut();
+        let mut scanner = ptr::null_mut();
+        let mut report = ptr::null_mut();
+        let ssn = b"123-45-6789";
+        let source = b"ssn=123-45-6789";
+
+        unsafe {
+            assert_eq!(cribra_builder_new(&mut builder), CRIBRA_OK);
+            assert_eq!(cribra_builder_add_personal_builtins(builder), CRIBRA_OK);
+            assert_eq!(
+                cribra_builder_build(builder, &mut scanner, ptr::null_mut()),
+                CRIBRA_OK
+            );
+            assert_eq!(
+                cribra_scanner_scan(
+                    scanner,
+                    source.as_ptr(),
+                    source.len(),
+                    &mut report,
+                    ptr::null_mut(),
+                ),
+                CRIBRA_OK
+            );
+
+            let mut count = 0;
+            assert_eq!(cribra_report_finding_count(report, &mut count), CRIBRA_OK);
+            assert_eq!(count, 1);
+
+            let mut finding = CribraFindingView::default();
+            assert_eq!(cribra_report_finding_at(report, 0, &mut finding), CRIBRA_OK);
+
+            assert_eq!(finding.severity, CRIBRA_SEVERITY_HIGH);
+            assert_eq!(finding.confidence, CRIBRA_CONFIDENCE_HIGH);
+            assert_eq!(
+                finding.remediation,
+                CRIBRA_REMEDIATION_REMOVE_SENSITIVE_VALUE
+            );
+
+            assert_eq!(&source[finding.start..finding.end], ssn);
+
+            let rule_id = std::slice::from_raw_parts(finding.rule_id.ptr, finding.rule_id.len);
+            assert_eq!(rule_id, b"personal.us-ssn");
+
+            let mut explanation = CribraExplanationView::default();
+            assert_eq!(
+                cribra_scanner_explain_finding(
+                    scanner,
+                    report,
+                    0,
+                    &mut explanation,
+                    ptr::null_mut(),
+                ),
+                CRIBRA_OK
+            );
+
+            assert_eq!(explanation.kind, CRIBRA_EXPLANATION_CLASSIFIED);
+            assert_eq!(explanation.detection_mode, CRIBRA_DETECTION_MODE_CONTEXTUAL);
+            assert_eq!(
+                explanation.candidate_evidence,
+                CRIBRA_CANDIDATE_EVIDENCE_NONE
+            );
+
+            cribra_report_free(report);
+            cribra_scanner_free(scanner);
+        }
+    }
+
+    #[test]
+    fn personal_builtins_do_not_promote_bare_ssn_through_c_abi() {
+        let mut builder = ptr::null_mut();
+        let mut scanner = ptr::null_mut();
+        let mut report = ptr::null_mut();
+        let source = b"123-45-6789";
+
+        unsafe {
+            assert_eq!(cribra_builder_new(&mut builder), CRIBRA_OK);
+            assert_eq!(cribra_builder_add_personal_builtins(builder), CRIBRA_OK);
+            assert_eq!(
+                cribra_builder_build(builder, &mut scanner, ptr::null_mut()),
+                CRIBRA_OK
+            );
+            assert_eq!(
+                cribra_scanner_scan(
+                    scanner,
+                    source.as_ptr(),
+                    source.len(),
+                    &mut report,
+                    ptr::null_mut(),
+                ),
+                CRIBRA_OK
+            );
+
+            let mut count = usize::MAX;
+            assert_eq!(cribra_report_finding_count(report, &mut count), CRIBRA_OK);
+            assert_eq!(count, 0);
 
             cribra_report_free(report);
             cribra_scanner_free(scanner);

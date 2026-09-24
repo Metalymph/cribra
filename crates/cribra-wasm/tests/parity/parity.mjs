@@ -78,6 +78,12 @@ function buildScanner(kind) {
     case "default_builtins":
       return new mod.ScanEngine();
 
+    case "personal_builtins": {
+      const builder = new mod.ScanEngineBuilder(false);
+      builder.addPersonalBuiltins();
+      return builder.build();
+    }
+
     case "financial_builtins": {
       const builder = new mod.ScanEngineBuilder(false);
       builder.addFinancialBuiltins();

@@ -184,7 +184,7 @@ Release outcome:
 
 ### v0.4.7 --- Sensitive Data and System Security Completion
 
-Status: next.
+Status: completed.
 
 Goal: complete Cribra's planned high-confidence detection portfolio across
 sensitive personal data and remaining Unix/system-security material, then move
@@ -195,103 +195,191 @@ This milestone is a coverage-completion release, not a mandate to maximize the
 number of built-in rules. Every candidate remains subject to Cribra's existing
 structural, contextual, false-positive, ownership, and exact-span requirements.
 
-#### 0.4.7-A --- Final coverage audit
+#### A. Final coverage audit — DONE
 
--   [ ] Perform a final cross-catalog audit for materially important credential,
-    secret, financial, personal-identifier, and system-security classes not
-    already represented by Cribra.
--   [ ] Audit structured identity and personal identifiers as the primary
-    remaining sensitive-data candidate family.
--   [ ] Identify country-specific tax and national identifiers only where
-    source content provides sufficiently strong structural or contextual
-    authority.
--   [ ] Audit passport, identity-document, insurance, membership, or comparable
-    identifiers only where reliable static classification is possible.
--   [ ] Re-audit financial/account identifiers not completed by the v0.4.6
-    IBAN/PAN foundation.
--   [ ] Evaluate cryptographic wallet/account identifiers separately from
-    financial identity data.
--   [ ] Record rejected or deferred candidate families when reliable static
-    classification is not possible.
--   [ ] Do not add a detector merely to increase catalog breadth.
+- [x] Audit the existing built-in portfolio and identify genuine residual coverage gaps.
+- [x] Audit structured identity and personal-data identifiers.
+- [x] Audit residual financial and cryptocurrency-sensitive material.
+- [x] Audit Unix and system-security residuals.
+- [x] Consolidate candidates into IMPLEMENT / COVERED / DEFERRED / REFUSED.
+- [x] Freeze semantic ownership, collision, precedence, and span policy.
+- [x] Establish the canonical Coverage Manifest contract, including direct,
+      transitive, deferred, and refused coverage.
 
-#### 0.4.7-B --- Sensitive personal-data completion
+Outcome:
 
--   [ ] Audit physical-address recognition with conservative contextual or
+- the final v0.4.7 detector-expansion scope is frozen;
+- broad speculative catalog expansion is explicitly out of scope;
+- deferred categories require evidence-driven reconsideration;
+- refused categories are documented as intentional non-ownership;
+- `docs/COVERAGE.md` is the canonical human-readable coverage and ownership
+  authority and must be reconciled against the released portfolio at the
+  v0.4.7 completion gate.
+
+#### B. Sensitive personal-data completion — DONE
+
+-   [x] Audit physical-address recognition with conservative contextual or
     candidate semantics.
--   [ ] Audit email-address sensitive-data semantics without turning Cribra
+-   [x] Audit email-address sensitive-data semantics without turning Cribra
     into a generic email harvester.
--   [ ] Audit telephone-number sensitive-data semantics with region-aware
+-   [x] Audit telephone-number sensitive-data semantics with region-aware
     validation where practical.
--   [ ] Implement accepted structured identity/personal identifiers from the
-    final coverage audit.
--   [ ] Keep recognition and sensitive classification as separate decisions.
--   [ ] Prefer `SensitiveCandidate` when evidence is useful but insufficient
+-   [x] Implement accepted structured identity/personal identifiers from the
+    final coverage audit:
+    - [x] Italian Codice Fiscale.
+    - [x] Polish PESEL.
+    - [x] UK NHS Number.
+    - [x] US Social Security Number under strong contextual semantics.
+    - [-] ICAO machine-readable travel-document zones — DEFERRED / LOW.
+-   [x] Keep recognition and sensitive classification as separate decisions.
+-   [x] Prefer `SensitiveCandidate` when evidence is useful but insufficient
     for authoritative classification.
--   [ ] Preserve exact source spans and metadata-only public results.
--   [ ] Add adversarial coverage for examples, documentation, public
+-   [x] Preserve exact source spans and metadata-only public results for the
+    implemented personal-data portfolio.
+-   [x] Add adversarial coverage for examples, documentation, public
     identifiers, malformed values, and ordinary non-sensitive data.
 
-#### 0.4.7-C --- Unix and system-security completion
+Progress:
+
+- Italian Codice Fiscale detection is complete and exposed through the
+  explicit opt-in `builtins::personal::CURRENT` portfolio.
+- `personal.it-codice-fiscale` owns canonical 16-character natural-person
+  identifiers, including structurally valid omocodic representations.
+- Validation is deterministic and structural: positional semantics, encoded
+  birth fields, birthplace-code structure, and control character are
+  authoritative; registry assignment or holder identity is not claimed.
+- Codice Fiscale remains outside `builtins::CURRENT`.
+- Default and personal portfolios compose without duplicate ownership.
+- `docs/COVERAGE.md` records the implemented Codice Fiscale family as DIRECT
+  coverage.
+- Polish PESEL detection is complete and exposed through the explicit opt-in
+  `builtins::personal::CURRENT` portfolio.
+- `personal.pl-pesel` validates the canonical 11-digit representation,
+  including encoded century/date semantics, Gregorian calendar validity, and
+  checksum.
+- PESEL validation is deterministic and structural; assignment, registry
+  presence, and holder identity are not claimed.
+- `docs/COVERAGE.md` records PESEL as DIRECT coverage.
+- UK NHS Number detection is complete and exposed through the explicit opt-in
+  `builtins::personal::CURRENT` portfolio.
+- `personal.uk-nhs-number` supports compact and canonical 3-3-4
+  representations, requires Modulus 11 validity and explicit NHS-number
+  context, and preserves the exact source representation as the finding span.
+- NHS Number classification is contextual: a checksum-valid bare 10-digit
+  sequence is deliberately insufficient for classification.
+- Structural validation does not claim assignment, patient identity, or
+  authoritative registry presence.
+- `docs/COVERAGE.md` records NHS Number as DIRECT coverage.
+- US Social Security Number detection is complete and exposed through the
+  explicit opt-in `builtins::personal::CURRENT` portfolio.
+- `personal.us-ssn` supports compact and canonical `AAA-GG-SSSS`
+  representations, applies current SSA structural impossibility constraints,
+  and requires explicit SSN-specific field context.
+- SSN classification is contextual: a structurally possible bare nine-digit
+  value is deliberately insufficient for classification.
+- Structural validation does not claim assignment, holder identity, or
+  authoritative SSA record presence.
+- `docs/COVERAGE.md` records US SSN as DIRECT coverage.
+
+#### 0.4.7-C --- Unix and system-security completion — DONE
 
 Existing baseline includes Unix shadow password verifiers, htpasswd password
 verifiers, `.netrc` passwords, OpenSSH and common private-key formats,
 WireGuard private and preshared keys, generic password/passphrase/auth
-surfaces, HTTP authentication, and relevant container/provider credentials.
+surfaces, HTTP authentication, relevant container/provider credentials, and
+validated NATS NKey secret material.
 
--   [ ] Perform a complete Unix/Linux credential-surface gap audit against the
+-   [x] Perform a complete Unix/Linux credential-surface gap audit against the
     existing built-in catalog.
--   [ ] Audit additional system/service authentication formats only where the
+-   [x] Audit additional system/service authentication formats only where the
     credential or verifier can be identified from source content with strong
     structural or contextual evidence.
--   [ ] Audit SSH authentication material not already covered by OpenSSH and
-    generic private-key rules.
--   [ ] Audit common daemon and infrastructure authentication formats not
+-   [x] Audit SSH authentication material not already covered by OpenSSH and
+    generic private-key rules:
+    - [x] retain private-key ownership with the corresponding OpenSSH, PKCS#8,
+          RSA, EC, or other supported private-key representation rather than
+          adding SSH-specific duplicate Findings;
+    - [x] keep SSH public keys, `authorized_keys`, `known_hosts`, and public SSH
+          certificate material outside the sensitive-secret contract;
+    - [x] treat `IdentityFile`, `IdentityAgent`, and related SSH configuration
+          as references or configuration rather than credential material;
+    - [x] do not add an SSH-specific detector where source content provides no
+          stronger secret semantics than an existing private-key or passphrase
+          owner.
+-   [x] Audit common daemon and infrastructure authentication formats not
     already owned by generic, provider-specific, package-ecosystem, or
-    container rules.
--   [ ] Audit shell and system configuration credential conventions only where
+    container rules:
+    - [x] add deterministic NATS NKey seed detection with structural decoding,
+          supported key-family validation, and checksum validation;
+    - [x] add deterministic NATS encoded private-key detection with structural
+          decoding and checksum validation;
+    - [x] keep NATS public operator, account, user, server, cluster, and curve
+          NKeys outside the sensitive-secret contract;
+    - [x] reject malformed, corrupted, non-canonical, and unsupported NKey
+          material.
+-   [x] Audit shell and system configuration credential conventions only where
     source content itself establishes the security contract.
--   [ ] Audit additional password-verifier/hash formats separately from generic
-    sensitive hashes.
--   [ ] Document rejected Unix/system candidates where reliable static
+-   [x] Audit additional password-verifier/hash formats separately from generic
+    sensitive hashes:
+    - [x] retain dedicated structured ownership for supported `/etc/shadow`
+          SHA-256 crypt, SHA-512 crypt, and yescrypt verifiers;
+    - [x] retain dedicated structured ownership for supported `.htpasswd`
+          APR1 and bcrypt verifiers;
+    - [x] keep `generic.sensitive-hash` limited to explicit sensitive-hash
+          context rather than treating arbitrary password-hash syntax as a
+          Finding;
+    - [x] do not expand the built-in portfolio merely to recognize additional
+          crypt, Argon2, PBKDF2, scrypt, or other verifier syntax without a
+          stronger source-level security contract.
+-   [x] Implement TOTP/HOTP shared provisioning-secret detection:
+    - [x] support `otpauth://totp` and `otpauth://hotp` provisioning material;
+    - [x] support explicit OTP-secret configuration fields;
+    - [x] expose only the shared-secret value as the sensitive span;
+    - [x] reject arbitrary bare Base32 values;
+    - [x] keep contextual ownership distinct from generic secret detection;
+    - [x] define explicit remediation, precedence, metadata, and synthesis
+          semantics.
+-   [x] Implement accepted Tailscale credential formats with specific semantic
+    ownership for authoritative credential prefixes.
+-   [x] Document rejected Unix/system candidates where reliable static
     classification is not possible.
--   [ ] Do not duplicate existing `.netrc`, shadow, htpasswd, private-key,
+-   [x] Do not duplicate existing `.netrc`, shadow, htpasswd, private-key,
     WireGuard, generic-auth, HTTP-auth, container, provider, or
     package-ecosystem ownership.
 
 #### 0.4.7-D --- Ownership, ambiguity, and adversarial hardening
 
--   [ ] Define deterministic ownership for every newly accepted rule.
--   [ ] Add collision regressions against existing generic, provider,
+-   [x] Define deterministic ownership for every newly accepted rule.
+-   [x] Add collision regressions against existing generic, provider,
     ecosystem, financial, and system rules.
--   [ ] Expand positive, negative, malformed, placeholder, example, and
+-   [x] Expand positive, negative, malformed, placeholder, example, and
     documentation corpora.
--   [ ] Verify boundary and exact-span behavior for every accepted family.
--   [ ] Preserve the distinction between credentials, sensitive identifiers,
+-   [x] Verify boundary and exact-span behavior for every accepted family.
+-   [x] Preserve the distinction between credentials, sensitive identifiers,
     password verifiers, hashes, keys, and merely security-related
     configuration.
--   [ ] Prefer deliberate false negatives over noisy classification.
+-   [x] Prefer deliberate false negatives over noisy classification.
 
 #### 0.4.7-E --- Transformation and interface parity
 
--   [ ] Verify every accepted capability through the generic redact, template,
+-   [x] Verify every accepted capability through the generic redact, template,
     pseudonymize, and synthesize contracts where applicable.
--   [ ] Add category-specific transformation semantics only when the generic
+-   [x] Add category-specific transformation semantics only when the generic
     contract is insufficient.
--   [ ] Maintain deterministic Rust behavior.
--   [ ] Maintain complete applicable C ABI semantic parity.
--   [ ] Maintain complete applicable WebAssembly semantic parity.
--   [ ] Preserve metadata-only and secret-safe public boundaries.
+-   [x] Maintain deterministic Rust behavior.
+-   [x] Maintain complete applicable C ABI semantic parity.
+-   [x] Maintain complete applicable WebAssembly semantic parity.
+-   [x] Preserve metadata-only and secret-safe public boundaries.
 
 #### 0.4.7-F --- Portfolio completion gate
 
--   [ ] Re-audit the complete built-in and opt-in detector portfolio after all
+-   [x] Re-audit the complete built-in and opt-in detector portfolio after all
     accepted v0.4.7 work.
--   [ ] Verify that no known materially important detector family remains
+-   [x] Verify that no known materially important detector family remains
     omitted without an explicit accepted reason.
--   [ ] Run full Rust, C ABI, WebAssembly, MSRV, security, packaging, and
+-   [x] Run full Rust, C ABI, WebAssembly, MSRV, security, packaging, and
     publication gates.
--   [ ] Document the post-v0.4.7 detector evolution policy.
+-   [x] Document the post-v0.4.7 detector evolution policy.
 -   [ ] Publish/tag the completed release only after all gates pass.
 
 Principles:

@@ -10,7 +10,7 @@
 use std::collections::BTreeSet;
 
 use cribra::{
-    Confidence, Remediation, Scanner, Severity, builtins,
+    Confidence, DetectionMode, Remediation, Scanner, Severity, builtins,
     transform::{SynthesisOptions, synthesize},
 };
 
@@ -3130,13 +3130,14 @@ fn financial_pack_preserves_financial_rule_ownership_when_composed_with_default_
 
     let source = concat!(
         "iban=IT60X0542811101000000123456\n",
-        "card_number=1234567890123452"
+        "card_number=1234567890123452\n",
+        "cvv=123"
     );
 
     let results = scan_one(&scanner, source);
     let report = results.single_report().expect("one fixture was scanned");
 
-    assert_eq!(report.len(), 2);
+    assert_eq!(report.len(), 3);
 
     let ids: Vec<_> = report
         .findings()
@@ -3144,7 +3145,14 @@ fn financial_pack_preserves_financial_rule_ownership_when_composed_with_default_
         .map(|finding| finding.rule_id().as_str())
         .collect();
 
-    assert_eq!(ids, ["financial.iban", "financial.pan"]);
+    assert_eq!(
+        ids,
+        [
+            "financial.iban",
+            "financial.pan",
+            "financial.card-verification-code",
+        ]
+    );
 }
 
 #[test]
@@ -3175,6 +3183,1162 @@ fn financial_pan_rejects_values_outside_supported_length_range() {
         assert!(
             report.is_empty(),
             "PAN outside the supported 10..=19 digit range must not be detected"
+        );
+    }
+}
+
+#[test]
+fn financial_card_verification_code_is_opt_in_and_not_part_of_default_scanner() {
+    let source = "cvv=123";
+
+    let default_results = scan_one(&Scanner::default(), source);
+    let default_report = default_results
+        .single_report()
+        .expect("one fixture was scanned");
+
+    assert!(
+        default_report
+            .findings()
+            .iter()
+            .all(|finding| { finding.rule_id().as_str() != "financial.card-verification-code" })
+    );
+
+    let scanner = scanner_for(builtins::financial::CURRENT.iter().copied());
+    let results = scan_one(&scanner, source);
+    let report = results.single_report().expect("one fixture was scanned");
+
+    assert_eq!(report.len(), 1);
+    assert_eq!(
+        report.findings()[0].rule_id().as_str(),
+        "financial.card-verification-code"
+    );
+}
+
+#[test]
+fn financial_card_verification_code_reports_exact_span_and_metadata() {
+    let code = "123";
+    let source = format!("cvv=({code}),");
+    let scanner = scanner_for([builtins::financial::CARD_VERIFICATION_CODE]);
+
+    let results = scan_one(&scanner, &source);
+    let report = results.single_report().expect("one fixture was scanned");
+
+    assert_eq!(report.len(), 1);
+
+    let finding = &report.findings()[0];
+
+    assert_eq!(
+        finding.rule_id().as_str(),
+        "financial.card-verification-code"
+    );
+    assert_eq!(matched(&source, finding), code);
+    assert_eq!(finding.severity(), Severity::High);
+    assert_eq!(finding.confidence(), Confidence::High);
+    assert_eq!(
+        finding.remediation(),
+        Some(Remediation::RemoveSensitiveValue)
+    );
+}
+
+#[test]
+fn financial_card_verification_code_requires_explicit_context() {
+    let scanner = scanner_for([builtins::financial::CARD_VERIFICATION_CODE]);
+
+    for key in [
+        "code",
+        "security_code",
+        "verification_code",
+        "pin",
+        "card",
+        "card_code",
+    ] {
+        let source = format!("{key}=123");
+        let results = scan_one(&scanner, &source);
+        let report = results.single_report().expect("one fixture was scanned");
+
+        assert!(
+            report.is_empty(),
+            "weak context {key:?} must not establish card-verification authority"
+        );
+    }
+}
+
+#[test]
+fn financial_card_verification_code_accepts_explicit_normalized_contexts() {
+    let scanner = scanner_for([builtins::financial::CARD_VERIFICATION_CODE]);
+
+    for (key, code) in [
+        ("cvv", "123"),
+        ("CVV2", "123"),
+        ("cvc", "123"),
+        ("cvc2", "123"),
+        ("cid", "1234"),
+        ("card-verification-code", "123"),
+        ("card.verification.value", "123"),
+        ("card_security_code", "123"),
+        ("card-security-value", "1234"),
+    ] {
+        let source = format!("{key}={code}");
+        let results = scan_one(&scanner, &source);
+        let report = results.single_report().expect("one fixture was scanned");
+
+        assert_eq!(
+            report.len(),
+            1,
+            "explicit card-verification context {key:?} should be accepted"
+        );
+        assert_eq!(matched(&source, &report.findings()[0]), code);
+    }
+}
+
+#[test]
+fn financial_card_verification_code_rejects_wrong_width_and_longer_numeric_tokens() {
+    let scanner = scanner_for([builtins::financial::CARD_VERIFICATION_CODE]);
+
+    for source in ["cvv=12", "cvv=12345", "cvv=91234", "cid=12345"] {
+        let results = scan_one(&scanner, source);
+        let report = results.single_report().expect("one fixture was scanned");
+
+        assert!(
+            report.is_empty(),
+            "invalid card-verification width must not be detected for {source:?}"
+        );
+    }
+}
+
+#[test]
+fn personal_codice_fiscale_is_opt_in_and_not_part_of_default_scanner() {
+    let codice_fiscale = "RSSMRA85T10A562S";
+
+    let default_results = scan_one(&Scanner::default(), codice_fiscale);
+    let default_report = default_results
+        .single_report()
+        .expect("one fixture was scanned");
+
+    assert!(
+        default_report
+            .findings()
+            .iter()
+            .all(|finding| finding.rule_id().as_str() != "personal.it-codice-fiscale")
+    );
+
+    let scanner = scanner_for(builtins::personal::CURRENT.iter().copied());
+    let results = scan_one(&scanner, codice_fiscale);
+    let report = results.single_report().expect("one fixture was scanned");
+
+    assert_eq!(report.len(), 1);
+    assert_eq!(
+        report.findings()[0].rule_id().as_str(),
+        "personal.it-codice-fiscale"
+    );
+}
+
+#[test]
+fn personal_codice_fiscale_reports_exact_span_and_metadata() {
+    let codice_fiscale = "RSSMRA85T10A562S";
+    let source = format!("codice_fiscale=({codice_fiscale})");
+    let scanner = scanner_for([builtins::personal::CODICE_FISCALE]);
+
+    let results = scan_one(&scanner, &source);
+    let report = results.single_report().expect("one fixture was scanned");
+
+    assert_eq!(report.len(), 1);
+
+    let finding = &report.findings()[0];
+
+    assert_eq!(finding.rule_id().as_str(), "personal.it-codice-fiscale");
+    assert_eq!(matched(&source, finding), codice_fiscale);
+    assert_eq!(finding.severity(), Severity::High);
+    assert_eq!(finding.confidence(), Confidence::High);
+    assert_eq!(
+        finding.remediation(),
+        Some(Remediation::RemoveSensitiveValue)
+    );
+}
+
+#[test]
+fn personal_codice_fiscale_accepts_valid_omocodic_representation() {
+    let codice_fiscale = "RSSMRA85T10A56NH";
+    let scanner = scanner_for([builtins::personal::CODICE_FISCALE]);
+
+    let results = scan_one(&scanner, codice_fiscale);
+    let report = results.single_report().expect("one fixture was scanned");
+
+    assert_eq!(report.len(), 1);
+    assert_eq!(
+        report.findings()[0].rule_id().as_str(),
+        "personal.it-codice-fiscale"
+    );
+    assert_eq!(
+        matched(codice_fiscale, &report.findings()[0]),
+        codice_fiscale
+    );
+}
+
+#[test]
+fn personal_codice_fiscale_accepts_punctuation_boundaries_without_including_them() {
+    let codice_fiscale = "RSSMRA85T10A562S";
+    let source = format!("({codice_fiscale}),");
+    let scanner = scanner_for([builtins::personal::CODICE_FISCALE]);
+
+    let results = scan_one(&scanner, &source);
+    let report = results.single_report().expect("one fixture was scanned");
+
+    assert_eq!(report.len(), 1);
+    assert_eq!(matched(&source, &report.findings()[0]), codice_fiscale);
+}
+
+#[test]
+fn personal_codice_fiscale_rejects_alphanumeric_adjacency() {
+    let codice_fiscale = "RSSMRA85T10A562S";
+    let scanner = scanner_for([builtins::personal::CODICE_FISCALE]);
+
+    for source in [format!("X{codice_fiscale}"), format!("{codice_fiscale}X")] {
+        let results = scan_one(&scanner, &source);
+        let report = results.single_report().expect("one fixture was scanned");
+
+        assert!(
+            report.is_empty(),
+            "Codice Fiscale embedded in a larger alphanumeric token must not be detected"
+        );
+    }
+}
+
+#[test]
+fn personal_codice_fiscale_rejects_structurally_invalid_candidates() {
+    let scanner = scanner_for([builtins::personal::CODICE_FISCALE]);
+
+    for source in [
+        "RSSMRA85Z10A562S", // invalid month
+        "RSSMRA85T00A562S", // invalid day
+        "RSSMRA85T32A562S", // invalid male day
+        "RSSMRA85T40A562S", // invalid encoded day
+        "RSSMRA85T72A562S", // invalid female day
+        "RSSMRAW5T10A562S", // invalid omocodia letter in numeric position
+        "RSSMRA85T101562S", // birthplace must start with a letter
+        "RSSMRA85T10AA62S", // birthplace numeric position is malformed
+        "RSSMRA85T10A562A", // invalid control character
+    ] {
+        let results = scan_one(&scanner, source);
+        let report = results.single_report().expect("one fixture was scanned");
+
+        assert!(
+            report.is_empty(),
+            "structurally invalid Codice Fiscale must not be detected: {source}"
+        );
+    }
+}
+
+#[test]
+fn personal_codice_fiscale_does_not_claim_eleven_digit_tax_identifiers() {
+    let scanner = scanner_for([builtins::personal::CODICE_FISCALE]);
+
+    for source in ["12345678901", "codice_fiscale=12345678901"] {
+        let results = scan_one(&scanner, source);
+        let report = results.single_report().expect("one fixture was scanned");
+
+        assert!(
+            report.is_empty(),
+            "11-digit numeric tax identifiers are outside this rule contract"
+        );
+    }
+}
+
+#[test]
+fn personal_pack_composes_with_default_builtins_without_joining_default_pack() {
+    let scanner = Scanner::builder()
+        .builtins(builtins::CURRENT)
+        .builtins(builtins::personal::CURRENT)
+        .build()
+        .expect("default and personal packs must compose");
+
+    assert_eq!(
+        scanner.rules_count(),
+        builtins::CURRENT.len() + builtins::personal::CURRENT.len()
+    );
+}
+
+#[test]
+fn personal_pack_preserves_codice_fiscale_ownership_when_composed_with_default_builtins() {
+    let codice_fiscale = "RSSMRA85T10A562S";
+
+    let scanner = Scanner::builder()
+        .builtins(builtins::CURRENT)
+        .builtins(builtins::personal::CURRENT)
+        .build()
+        .expect("default and personal packs must compose");
+
+    let results = scan_one(&scanner, codice_fiscale);
+    let report = results.single_report().expect("one fixture was scanned");
+
+    assert_eq!(report.len(), 1);
+    assert_eq!(
+        report.findings()[0].rule_id().as_str(),
+        "personal.it-codice-fiscale"
+    );
+    assert_eq!(
+        matched(codice_fiscale, &report.findings()[0]),
+        codice_fiscale
+    );
+}
+
+#[test]
+fn personal_codice_fiscale_exposes_deterministic_detection_metadata() {
+    let scanner = scanner_for([builtins::personal::CODICE_FISCALE]);
+
+    let metadata = scanner
+        .rule_metadata()
+        .find(|metadata| metadata.id() == "personal.it-codice-fiscale")
+        .expect("Codice Fiscale metadata must be exposed");
+
+    assert_eq!(metadata.detection_mode(), DetectionMode::Deterministic);
+}
+
+#[test]
+fn personal_pesel_is_opt_in_and_not_part_of_default_scanner() {
+    let pesel = "02070803628";
+
+    let default_results = scan_one(&Scanner::default(), pesel);
+    let default_report = default_results
+        .single_report()
+        .expect("one fixture was scanned");
+
+    assert!(
+        default_report
+            .findings()
+            .iter()
+            .all(|finding| finding.rule_id().as_str() != "personal.pl-pesel")
+    );
+
+    let scanner = scanner_for(builtins::personal::CURRENT.iter().copied());
+    let results = scan_one(&scanner, pesel);
+    let report = results.single_report().expect("one fixture was scanned");
+
+    assert_eq!(report.len(), 1);
+    assert_eq!(report.findings()[0].rule_id().as_str(), "personal.pl-pesel");
+}
+
+#[test]
+fn personal_pesel_reports_exact_span_and_metadata() {
+    let pesel = "02070803628";
+    let source = format!("pesel=({pesel})");
+    let scanner = scanner_for([builtins::personal::PESEL]);
+
+    let results = scan_one(&scanner, &source);
+    let report = results.single_report().expect("one fixture was scanned");
+
+    assert_eq!(report.len(), 1);
+
+    let finding = &report.findings()[0];
+
+    assert_eq!(finding.rule_id().as_str(), "personal.pl-pesel");
+    assert_eq!(matched(&source, finding), pesel);
+    assert_eq!(finding.severity(), Severity::High);
+    assert_eq!(finding.confidence(), Confidence::High);
+    assert_eq!(
+        finding.remediation(),
+        Some(Remediation::RemoveSensitiveValue)
+    );
+}
+
+#[test]
+fn personal_pesel_exposes_deterministic_detection_metadata() {
+    let scanner = scanner_for([builtins::personal::PESEL]);
+
+    let metadata = scanner
+        .rule_metadata()
+        .find(|metadata| metadata.id() == "personal.pl-pesel")
+        .expect("PESEL metadata must be exposed");
+
+    assert_eq!(metadata.detection_mode(), DetectionMode::Deterministic);
+}
+
+#[test]
+fn personal_pesel_accepts_punctuation_boundaries_without_including_them() {
+    let pesel = "02070803628";
+    let source = format!("({pesel}),");
+    let scanner = scanner_for([builtins::personal::PESEL]);
+
+    let results = scan_one(&scanner, &source);
+    let report = results.single_report().expect("one fixture was scanned");
+
+    assert_eq!(report.len(), 1);
+    assert_eq!(matched(&source, &report.findings()[0]), pesel);
+}
+
+#[test]
+fn personal_pesel_rejects_alphanumeric_adjacency() {
+    let pesel = "02070803628";
+    let scanner = scanner_for([builtins::personal::PESEL]);
+
+    for source in [format!("X{pesel}"), format!("{pesel}X")] {
+        let results = scan_one(&scanner, &source);
+        let report = results.single_report().expect("one fixture was scanned");
+
+        assert!(
+            report.is_empty(),
+            "PESEL embedded in a larger alphanumeric token must not be detected"
+        );
+    }
+}
+
+#[test]
+fn personal_pesel_rejects_structurally_invalid_candidates() {
+    let scanner = scanner_for([builtins::personal::PESEL]);
+
+    for source in [
+        "02070803629", // wrong checksum
+        "02130803628", // invalid encoded month
+        "02223003628", // impossible February date
+        "02070003628", // day zero
+    ] {
+        let results = scan_one(&scanner, source);
+        let report = results.single_report().expect("one fixture was scanned");
+
+        assert!(
+            report.is_empty(),
+            "structurally invalid PESEL must not be detected: {source}"
+        );
+    }
+}
+
+#[test]
+fn personal_pack_preserves_pesel_ownership_when_composed_with_default_builtins() {
+    let pesel = "02070803628";
+
+    let scanner = Scanner::builder()
+        .builtins(builtins::CURRENT)
+        .builtins(builtins::personal::CURRENT)
+        .build()
+        .expect("default and personal packs must compose");
+
+    let results = scan_one(&scanner, pesel);
+    let report = results.single_report().expect("one fixture was scanned");
+
+    assert_eq!(report.len(), 1);
+    assert_eq!(report.findings()[0].rule_id().as_str(), "personal.pl-pesel");
+    assert_eq!(matched(pesel, &report.findings()[0]), pesel);
+}
+
+#[test]
+fn personal_nhs_number_is_opt_in_and_not_part_of_default_scanner() {
+    let source = "nhs_number=9434765919";
+
+    let default_results = scan_one(&Scanner::default(), source);
+    let default_report = default_results
+        .single_report()
+        .expect("one fixture was scanned");
+
+    assert!(
+        default_report
+            .findings()
+            .iter()
+            .all(|finding| finding.rule_id().as_str() != "personal.uk-nhs-number")
+    );
+
+    let scanner = scanner_for(builtins::personal::CURRENT.iter().copied());
+    let results = scan_one(&scanner, source);
+    let report = results.single_report().expect("one fixture was scanned");
+
+    assert_eq!(report.len(), 1);
+    assert_eq!(
+        report.findings()[0].rule_id().as_str(),
+        "personal.uk-nhs-number"
+    );
+}
+
+#[test]
+fn personal_nhs_number_reports_exact_compact_span_and_metadata() {
+    let nhs_number = "9434765919";
+    let source = format!("nhs_number=({nhs_number})");
+    let scanner = scanner_for([builtins::personal::NHS_NUMBER]);
+
+    let results = scan_one(&scanner, &source);
+    let report = results.single_report().expect("one fixture was scanned");
+
+    assert_eq!(report.len(), 1);
+
+    let finding = &report.findings()[0];
+
+    assert_eq!(finding.rule_id().as_str(), "personal.uk-nhs-number");
+    assert_eq!(matched(&source, finding), nhs_number);
+    assert_eq!(finding.severity(), Severity::High);
+    assert_eq!(finding.confidence(), Confidence::High);
+    assert_eq!(
+        finding.remediation(),
+        Some(Remediation::RemoveSensitiveValue)
+    );
+}
+
+#[test]
+fn personal_nhs_number_exposes_contextual_detection_metadata() {
+    let scanner = scanner_for([builtins::personal::NHS_NUMBER]);
+
+    let metadata = scanner
+        .rule_metadata()
+        .find(|metadata| metadata.id() == "personal.uk-nhs-number")
+        .expect("NHS Number metadata must be exposed");
+
+    assert_eq!(metadata.detection_mode(), DetectionMode::Contextual);
+}
+
+#[test]
+fn personal_nhs_number_preserves_formatted_source_span() {
+    let scanner = scanner_for([builtins::personal::NHS_NUMBER]);
+
+    for nhs_number in ["943 476 5919", "943-476-5919"] {
+        let source = format!("nhs_number=({nhs_number})");
+
+        let results = scan_one(&scanner, &source);
+        let report = results.single_report().expect("one fixture was scanned");
+
+        assert_eq!(report.len(), 1);
+        assert_eq!(
+            report.findings()[0].rule_id().as_str(),
+            "personal.uk-nhs-number"
+        );
+        assert_eq!(matched(&source, &report.findings()[0]), nhs_number);
+    }
+}
+
+#[test]
+fn personal_nhs_number_rejects_bare_checksum_valid_value() {
+    let nhs_number = "9434765919";
+    let scanner = scanner_for([builtins::personal::NHS_NUMBER]);
+
+    let results = scan_one(&scanner, nhs_number);
+    let report = results.single_report().expect("one fixture was scanned");
+
+    assert!(
+        report.is_empty(),
+        "checksum-valid NHS Number without NHS-specific context must not be classified"
+    );
+}
+
+#[test]
+fn personal_nhs_number_rejects_unrelated_context() {
+    let scanner = scanner_for([builtins::personal::NHS_NUMBER]);
+
+    for source in [
+        "number=9434765919",
+        "patient_number=9434765919",
+        "account_number=9434765919",
+        "reference=9434765919",
+    ] {
+        let results = scan_one(&scanner, source);
+        let report = results.single_report().expect("one fixture was scanned");
+
+        assert!(
+            report.is_empty(),
+            "unrelated numeric context must not classify an NHS Number: {source}"
+        );
+    }
+}
+
+#[test]
+fn personal_nhs_number_rejects_invalid_values_and_noncanonical_formatting() {
+    let scanner = scanner_for([builtins::personal::NHS_NUMBER]);
+
+    for source in [
+        "nhs_number=9434765918",
+        "nhs_number=1234567890",
+        "nhs_number=0123456789",
+        "nhs_number=943 476-5919",
+        "nhs_number=943.476.5919",
+    ] {
+        let results = scan_one(&scanner, source);
+        let report = results.single_report().expect("one fixture was scanned");
+
+        assert!(
+            report.is_empty(),
+            "invalid NHS Number must not be detected: {source}"
+        );
+    }
+}
+
+#[test]
+fn personal_nhs_number_rejects_alphanumeric_adjacency() {
+    let scanner = scanner_for([builtins::personal::NHS_NUMBER]);
+
+    for source in ["nhs_number=X9434765919", "nhs_number=9434765919X"] {
+        let results = scan_one(&scanner, source);
+        let report = results.single_report().expect("one fixture was scanned");
+
+        assert!(
+            report.is_empty(),
+            "NHS Number embedded in a larger alphanumeric token must not be detected"
+        );
+    }
+}
+
+#[test]
+fn personal_pack_preserves_nhs_number_ownership_when_composed_with_default_builtins() {
+    let source = "nhs_number=9434765919";
+
+    let scanner = Scanner::builder()
+        .builtins(builtins::CURRENT)
+        .builtins(builtins::personal::CURRENT)
+        .build()
+        .expect("default and personal packs must compose");
+
+    let results = scan_one(&scanner, source);
+    let report = results.single_report().expect("one fixture was scanned");
+
+    assert_eq!(report.len(), 1);
+    assert_eq!(
+        report.findings()[0].rule_id().as_str(),
+        "personal.uk-nhs-number"
+    );
+    assert_eq!(matched(source, &report.findings()[0]), "9434765919");
+}
+
+#[test]
+fn personal_ssn_is_opt_in_and_not_part_of_default_scanner() {
+    let source = "ssn=123-45-6789";
+
+    let default_results = scan_one(&Scanner::default(), source);
+    let default_report = default_results
+        .single_report()
+        .expect("one fixture was scanned");
+
+    assert!(
+        default_report
+            .findings()
+            .iter()
+            .all(|finding| finding.rule_id().as_str() != "personal.us-ssn")
+    );
+
+    let scanner = scanner_for(builtins::personal::CURRENT.iter().copied());
+    let results = scan_one(&scanner, source);
+    let report = results.single_report().expect("one fixture was scanned");
+
+    assert_eq!(report.len(), 1);
+    assert_eq!(report.findings()[0].rule_id().as_str(), "personal.us-ssn");
+}
+
+#[test]
+fn personal_ssn_reports_exact_span_and_metadata() {
+    let ssn = "123-45-6789";
+    let source = format!("ssn=({ssn})");
+    let scanner = scanner_for([builtins::personal::SSN]);
+
+    let results = scan_one(&scanner, &source);
+    let report = results.single_report().expect("one fixture was scanned");
+
+    assert_eq!(report.len(), 1);
+
+    let finding = &report.findings()[0];
+
+    assert_eq!(finding.rule_id().as_str(), "personal.us-ssn");
+    assert_eq!(matched(&source, finding), ssn);
+    assert_eq!(finding.severity(), Severity::High);
+    assert_eq!(finding.confidence(), Confidence::High);
+    assert_eq!(
+        finding.remediation(),
+        Some(Remediation::RemoveSensitiveValue)
+    );
+}
+
+#[test]
+fn personal_ssn_exposes_contextual_detection_metadata() {
+    let scanner = scanner_for([builtins::personal::SSN]);
+
+    let metadata = scanner
+        .rule_metadata()
+        .find(|metadata| metadata.id() == "personal.us-ssn")
+        .expect("SSN metadata must be exposed");
+
+    assert_eq!(metadata.detection_mode(), DetectionMode::Contextual);
+}
+
+#[test]
+fn personal_ssn_preserves_compact_and_hyphenated_source_spans() {
+    let scanner = scanner_for([builtins::personal::SSN]);
+
+    for ssn in ["123456789", "123-45-6789"] {
+        let source = format!("ssn=({ssn})");
+
+        let results = scan_one(&scanner, &source);
+        let report = results.single_report().expect("one fixture was scanned");
+
+        assert_eq!(report.len(), 1);
+        assert_eq!(report.findings()[0].rule_id().as_str(), "personal.us-ssn");
+        assert_eq!(matched(&source, &report.findings()[0]), ssn);
+    }
+}
+
+#[test]
+fn personal_ssn_rejects_bare_structurally_valid_values() {
+    let scanner = scanner_for([builtins::personal::SSN]);
+
+    for ssn in ["123456789", "123-45-6789"] {
+        let results = scan_one(&scanner, ssn);
+        let report = results.single_report().expect("one fixture was scanned");
+
+        assert!(
+            report.is_empty(),
+            "bare structurally valid SSN-like value must not be classified: {ssn}"
+        );
+    }
+}
+
+#[test]
+fn personal_ssn_rejects_unrelated_context() {
+    let scanner = scanner_for([builtins::personal::SSN]);
+
+    for source in [
+        "number=123-45-6789",
+        "tax_id=123-45-6789",
+        "national_id=123-45-6789",
+        "employee_id=123-45-6789",
+        "social_security=123-45-6789",
+    ] {
+        let results = scan_one(&scanner, source);
+        let report = results.single_report().expect("one fixture was scanned");
+
+        assert!(
+            report.is_empty(),
+            "unrelated context must not classify an SSN: {source}"
+        );
+    }
+}
+
+#[test]
+fn personal_ssn_rejects_structurally_impossible_values() {
+    let scanner = scanner_for([builtins::personal::SSN]);
+
+    for source in [
+        "ssn=000-45-6789",
+        "ssn=666-45-6789",
+        "ssn=900-45-6789",
+        "ssn=999-45-6789",
+        "ssn=123-00-6789",
+        "ssn=123-45-0000",
+    ] {
+        let results = scan_one(&scanner, source);
+        let report = results.single_report().expect("one fixture was scanned");
+
+        assert!(
+            report.is_empty(),
+            "structurally impossible SSN must not be detected: {source}"
+        );
+    }
+}
+
+#[test]
+fn personal_ssn_rejects_alphanumeric_adjacency() {
+    let scanner = scanner_for([builtins::personal::SSN]);
+
+    for source in [
+        "ssn=X123456789",
+        "ssn=123456789X",
+        "ssn=X123-45-6789",
+        "ssn=123-45-6789X",
+    ] {
+        let results = scan_one(&scanner, source);
+        let report = results.single_report().expect("one fixture was scanned");
+
+        assert!(
+            report.is_empty(),
+            "SSN embedded in a larger alphanumeric token must not be detected"
+        );
+    }
+}
+
+#[test]
+fn personal_pack_preserves_ssn_ownership_when_composed_with_default_builtins() {
+    let source = "ssn=123-45-6789";
+
+    let scanner = Scanner::builder()
+        .builtins(builtins::CURRENT)
+        .builtins(builtins::personal::CURRENT)
+        .build()
+        .expect("default and personal packs must compose");
+
+    let results = scan_one(&scanner, source);
+    let report = results.single_report().expect("one fixture was scanned");
+
+    assert_eq!(report.len(), 1);
+    assert_eq!(report.findings()[0].rule_id().as_str(), "personal.us-ssn");
+    assert_eq!(matched(source, &report.findings()[0]), "123-45-6789");
+}
+
+#[test]
+fn otp_provisioning_secret_is_part_of_default_security_portfolio() {
+    let secret = "JBSWY3DPEHPK3PXP";
+    let source = format!("totp_secret={secret}");
+
+    let results = scan_one(&Scanner::default(), &source);
+    let report = results.single_report().expect("one fixture was scanned");
+
+    let finding = report
+        .findings()
+        .iter()
+        .find(|finding| finding.rule_id().as_str() == "mfa.otp-provisioning-secret")
+        .expect("OTP provisioning secret");
+
+    assert_eq!(matched(&source, finding), secret);
+    assert_eq!(finding.severity(), Severity::Critical);
+    assert_eq!(finding.confidence(), Confidence::High);
+    assert_eq!(finding.remediation(), Some(Remediation::RotateCredential));
+}
+
+#[test]
+fn otp_provisioning_secret_projects_only_secret_from_totp_uri() {
+    let secret = "JBSWY3DPEHPK3PXP";
+    let source = format!("otpauth://totp/example:user@example.com?secret={secret}&issuer=Example");
+
+    let results = scan_one(&Scanner::default(), &source);
+    let report = results.single_report().expect("one fixture was scanned");
+
+    let finding = report
+        .findings()
+        .iter()
+        .find(|finding| finding.rule_id().as_str() == "mfa.otp-provisioning-secret")
+        .expect("OTP provisioning secret");
+
+    assert_eq!(matched(&source, finding), secret);
+}
+
+#[test]
+fn otp_provisioning_secret_projects_only_secret_from_hotp_uri() {
+    let secret = "JBSWY3DPEHPK3PXP";
+    let source = format!("otpauth://hotp/example?counter=0&secret={secret}&issuer=Example");
+
+    let results = scan_one(&Scanner::default(), &source);
+    let report = results.single_report().expect("one fixture was scanned");
+
+    let finding = report
+        .findings()
+        .iter()
+        .find(|finding| finding.rule_id().as_str() == "mfa.otp-provisioning-secret")
+        .expect("OTP provisioning secret");
+
+    assert_eq!(matched(&source, finding), secret);
+}
+
+#[test]
+fn otp_provisioning_secret_supports_explicit_otp_fields() {
+    let secret = "JBSWY3DPEHPK3PXP";
+
+    for key in ["otp_secret", "totp_secret", "hotp_secret"] {
+        let source = format!("{key}={secret}");
+        let results = scan_one(&Scanner::default(), &source);
+        let report = results.single_report().expect("one fixture was scanned");
+
+        let matching: Vec<_> = report
+            .findings()
+            .iter()
+            .filter(|finding| finding.rule_id().as_str() == "mfa.otp-provisioning-secret")
+            .collect();
+
+        assert_eq!(matching.len(), 1, "unexpected result for {key:?}");
+        assert_eq!(matched(&source, matching[0]), secret);
+    }
+}
+
+#[test]
+fn otp_provisioning_secret_rejects_bare_base32_material() {
+    let source = "JBSWY3DPEHPK3PXP";
+
+    let results = scan_one(&Scanner::default(), source);
+    let report = results.single_report().expect("one fixture was scanned");
+
+    assert!(
+        report
+            .findings()
+            .iter()
+            .all(|finding| finding.rule_id().as_str() != "mfa.otp-provisioning-secret")
+    );
+}
+
+#[test]
+fn otp_provisioning_secret_rejects_non_otp_uri_context() {
+    let secret = "JBSWY3DPEHPK3PXP";
+    let source = format!("https://example.com/account?secret={secret}");
+
+    let results = scan_one(&Scanner::default(), &source);
+    let report = results.single_report().expect("one fixture was scanned");
+
+    assert!(
+        report
+            .findings()
+            .iter()
+            .all(|finding| finding.rule_id().as_str() != "mfa.otp-provisioning-secret")
+    );
+}
+
+#[test]
+fn otp_provisioning_secret_outranks_generic_secret_for_same_span() {
+    let secret = "JBSWY3DPEHPK3PXP";
+    let source = format!("otp_secret={secret}");
+
+    let scanner = scanner_for([builtins::GENERIC_SECRET, builtins::OTP_PROVISIONING_SECRET]);
+
+    let results = scan_one(&scanner, &source);
+    let report = results.single_report().expect("one fixture was scanned");
+
+    assert_eq!(report.len(), 1);
+    assert_eq!(
+        report.findings()[0].rule_id().as_str(),
+        "mfa.otp-provisioning-secret"
+    );
+    assert_eq!(matched(&source, &report.findings()[0]), secret);
+}
+
+#[test]
+fn otp_provisioning_secret_exposes_contextual_detection_metadata() {
+    let scanner = scanner_for([builtins::OTP_PROVISIONING_SECRET]);
+
+    let metadata = scanner
+        .rule_metadata()
+        .find(|metadata| metadata.id() == "mfa.otp-provisioning-secret")
+        .expect("OTP provisioning metadata");
+
+    assert_eq!(metadata.detection_mode(), DetectionMode::Contextual);
+}
+
+#[test]
+fn tailscale_credentials_are_detected_without_context() {
+    let cases = [
+        ("tskey-api-a1B2c3D4e5F6", "tailscale.api-access-token"),
+        ("tskey-auth-a1B2c3D4e5F6", "tailscale.auth-key"),
+        ("tskey-client-a1B2c3D4e5F6", "tailscale.oauth-client-secret"),
+        ("tskey-scim-a1B2c3D4e5F6", "tailscale.scim-key"),
+        ("tskey-webhook-a1B2c3D4e5F6", "tailscale.webhook-key"),
+    ];
+
+    for (credential, expected_rule) in cases {
+        let results = scan_one(&Scanner::default(), credential);
+        let report = results.single_report().expect("one fixture was scanned");
+
+        let matching = report
+            .findings()
+            .iter()
+            .filter(|finding| finding.rule_id().as_str() == expected_rule)
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            matching.len(),
+            1,
+            "unexpected Tailscale result for {credential:?}"
+        );
+        assert_eq!(matched(credential, matching[0]), credential);
+        assert_eq!(matching[0].severity(), Severity::Critical);
+        assert_eq!(
+            matching[0].remediation(),
+            Some(Remediation::RevokeAndRotateCredential)
+        );
+    }
+}
+
+#[test]
+fn tailscale_credentials_expose_deterministic_detection_metadata() {
+    let scanner = scanner_for([
+        builtins::TAILSCALE_API_ACCESS_TOKEN,
+        builtins::TAILSCALE_AUTH_KEY,
+        builtins::TAILSCALE_OAUTH_CLIENT_SECRET,
+        builtins::TAILSCALE_SCIM_KEY,
+        builtins::TAILSCALE_WEBHOOK_KEY,
+    ]);
+
+    let metadata = scanner
+        .rule_metadata()
+        .map(|metadata| (metadata.id(), metadata.detection_mode()))
+        .collect::<std::collections::BTreeMap<_, _>>();
+
+    for id in [
+        "tailscale.api-access-token",
+        "tailscale.auth-key",
+        "tailscale.oauth-client-secret",
+        "tailscale.scim-key",
+        "tailscale.webhook-key",
+    ] {
+        assert_eq!(
+            metadata.get(id),
+            Some(&DetectionMode::Deterministic),
+            "unexpected detection mode for {id}",
+        );
+    }
+}
+
+#[test]
+fn tailscale_malformed_and_placeholder_credentials_remain_clean() {
+    for source in [
+        "tskey-api-",
+        "tskey-auth-",
+        "tskey-client-",
+        "tskey-scim-",
+        "tskey-webhook-",
+        "tskey-unknown-a1B2c3D4e5F6",
+        "tskey-API-a1B2c3D4e5F6",
+        "tskey-api-your_token_here",
+        "tskey-auth-example_token_here",
+        "tskey-client-xxxxxxxx",
+    ] {
+        let results = scan_one(&Scanner::default(), source);
+        let report = results.single_report().expect("one fixture was scanned");
+
+        assert!(
+            report
+                .findings()
+                .iter()
+                .all(|finding| !finding.rule_id().as_str().starts_with("tailscale.")),
+            "invalid Tailscale candidate unexpectedly produced a Tailscale finding for \
+             {source:?}: {:?}",
+            report
+                .findings()
+                .iter()
+                .map(|finding| finding.rule_id().as_str())
+                .collect::<Vec<_>>(),
+        );
+    }
+}
+
+#[test]
+fn nats_nkey_seeds_detect_supported_key_families() {
+    let scanner = scanner_for([builtins::NATS_NKEY_SEED]);
+
+    let seeds = [
+        "SOAAFO5ZRYMBOV7KYNBJPWVKOQLFAPZ6SFRKXNVF32UCPXFDM45HEND4CI",
+        "SAAJLVGE25HRQK54T5PZYGDRKOVGMCJE52WWGSM62HAMFCF3QYHM67X6AU",
+        "SUAB6M5NSNGSXV6SQ3TV6LQUH6S2OFHGJDZ2ENNZ4W5VBKBX3Z6TH3RW4E",
+        "SNAOT4DTIVCCG2M5K6ULYL6AAQGVKKCA7FMWRFPVSXEPWKQHFM3MHMYX6Q",
+        "SCAJDZXJG5BZPAGESTVK7KPW26224MWTPNJGL2LKKSWG7V5FMGUTI37PBM",
+        "SXAKXOYU7YPLRQS3SK3QXCOTEZJWYLKODMQI4SD6QXNG6PD2FYSEEA3YDI",
+    ];
+
+    for seed in seeds {
+        let source = format!("credential={seed}");
+        let results = scan_one(&scanner, &source);
+        let report = results.single_report().expect("one source");
+        let finding = report
+            .findings()
+            .iter()
+            .find(|finding| finding.rule_id().as_str() == "nats.nkey-seed")
+            .expect("NATS NKey seed");
+
+        assert_eq!(matched(&source, finding), seed);
+        assert_eq!(finding.severity(), Severity::Critical);
+        assert_eq!(finding.remediation(), Some(Remediation::ReplacePrivateKey));
+        assert_eq!(finding.confidence(), Confidence::High);
+    }
+}
+
+#[test]
+fn nats_nkey_private_keys_detect_supported_ed25519_private_material() {
+    let scanner = scanner_for([builtins::NATS_NKEY_PRIVATE_KEY]);
+
+    let private_keys = [
+        "PABLXOMODALVP2WDIKL5VKTUCZID6PURMKV3NJO6VAT5ZI3HHJZDIV3SFWBNBPBXDWW6PWBHH7AZLFHUXJ6LU3EKRKNG5J7NQOKJ6XILM3TA",
+        "PCK5JRGXJ4MCXPE7L6OBQ4KTVJTASJHOVVRUTHWRYDBIRO4GB3HX5JEZRNIR4QL3RJQOYWTMDBAUYZO4PB6FKVSATYTLRFU22UAM2LOP727A",
+        "PAPTHLMTJUV5PUUG45PS4FB7UWTRJZSI6ORDLOPFXNIKQN66PUZ643EZEJTANHFEISPCGO7UDKTNOP23PA6OC4HZ2ME3EILIECQDBEY4VWAA",
+        "PDU7A42FIQRWTHKXVC6C7QAEBVKSQQHZLFUJL5MVZD5SUBZLG3B3HEV74XJGHPSDEEUCYQAR5UHWQ6ETSKQJP52OVNIKOD6M7P7CXD3YNRGA",
+        "PCI6N2JXIOLYBREU5KX2T5WXWWXDFU33KJS6S2SUVRX5PJLBVE2G7STXVVMH4MMXCEPJW6WVZZQKPYK3C73RK6SEND3V7OLMYBGZWZWEUCKA",
+    ];
+
+    for private_key in private_keys {
+        let source = format!("credential={private_key}");
+        let results = scan_one(&scanner, &source);
+        let report = results.single_report().expect("one source");
+        let finding = report
+            .findings()
+            .iter()
+            .find(|finding| finding.rule_id().as_str() == "nats.nkey-private-key")
+            .expect("NATS NKey private key");
+
+        assert_eq!(matched(&source, finding), private_key);
+        assert_eq!(finding.severity(), Severity::Critical);
+        assert_eq!(finding.remediation(), Some(Remediation::ReplacePrivateKey));
+        assert_eq!(finding.confidence(), Confidence::High);
+    }
+}
+
+#[test]
+fn nats_public_nkeys_are_not_sensitive_findings() {
+    let scanner = scanner_for([builtins::NATS_NKEY_SEED, builtins::NATS_NKEY_PRIVATE_KEY]);
+
+    for public_key in [
+        "OBLXELMC2C6DOHNN47MCOP6BSWKPJOT4XJWIVCU2N2T63A4UT5OQXB6K",
+        "ACSJTC2RDZAXXCTA5RNGYGCBJRS5Y6D4KVLEBHRGXCLJVVIAZUW46XQV",
+        "UBWJSITGA2OKIRE6EM57IGVG247VW6B44FYPTUYJWIQWQIFAGCJRY6BQ",
+        "NCJL7ZOSMO7EGIJIFRABD3IPNB4JHEVAS73U5K2QU4H4Z676FOHXQINS",
+        "CDFHPLKYPYYZOEI6TN5NLTTAU7QVWF7XCV5EI2HXL64WZQCNTNTMJYIN",
+        "XDLP2A24SL6AYUERAEGNYDNSR2NEHLWTRRQWWZEZ2XERVNUIP7WVOFGZ",
+    ] {
+        let results = scan_one(&scanner, public_key);
+        let report = results.single_report().expect("one source");
+
+        assert!(
+            report.findings().is_empty(),
+            "public NKey must not be classified as sensitive: {public_key}"
+        );
+    }
+}
+
+#[test]
+fn nats_nkeys_reject_corrupted_or_noncanonical_material() {
+    let scanner = scanner_for([builtins::NATS_NKEY_SEED, builtins::NATS_NKEY_PRIVATE_KEY]);
+
+    for source in [
+        // Valid shape, corrupted CRC.
+        "SOAAFO5ZRYMBOV7KYNBJPWVKOQLFAPZ6SFRKXNVF32UCPXFDM45HEND4CJ",
+        "PABLXOMODALVP2WDIKL5VKTUCZID6PURMKV3NJO6VAT5ZI3HHJZDIV3SFWBNBPBXDWW6PWBHH7AZLFHUXJ6LU3EKRKNG5J7NQOKJ6XILM3TB",
+        // NKeys use canonical uppercase Base32.
+        "suaafo5zrymbov7kynbjpwvkoqlfapz6sfrkxnvf32ucpxfdm45hend4ci",
+        // Invalid RFC 4648 Base32 alphabet.
+        "SOAAFO5ZRYMBOV7KYNBJPWVKOQLFAPZ6SFRKXNVF32UCPXFDM45HEND40I",
+        // Wrong lengths.
+        "SOAAFO5ZRYMBOV7KYNBJPWVKOQLFAPZ6SFRKXNVF32UCPXFDM45HEND4C",
+        "PABLXOMODALVP2WDIKL5VKTUCZID6PURMKV3NJO6VAT5ZI3HHJZDIV3SFWBNBPBXDWW6PWBHH7AZLFHUXJ6LU3EKRKNG5J7NQOKJ6XILM3T",
+    ] {
+        let results = scan_one(&scanner, source);
+        let report = results.single_report().expect("one source");
+
+        assert!(
+            report.findings().is_empty(),
+            "invalid NKey must be rejected: {source}"
+        );
+    }
+}
+
+#[test]
+fn nats_nkey_synthesis_is_invalid_under_normal_validation_on_rescan() {
+    let scanner = scanner_for([builtins::NATS_NKEY_SEED, builtins::NATS_NKEY_PRIVATE_KEY]);
+
+    for secret in [
+        "SUAB6M5NSNGSXV6SQ3TV6LQUH6S2OFHGJDZ2ENNZ4W5VBKBX3Z6TH3RW4E",
+        "PAPTHLMTJUV5PUUG45PS4FB7UWTRJZSI6ORDLOPFXNIKQN66PUZ643EZEJTANHFEISPCGO7UDKTNOP23PA6OC4HZ2ME3EILIECQDBEY4VWAA",
+    ] {
+        let results = scan_one(&scanner, secret);
+        let report = results.single_report().expect("one source was scanned");
+
+        assert_eq!(report.len(), 1);
+
+        let synthesized = synthesize(secret, report, &SynthesisOptions::new([93; 32]))
+            .expect("NATS NKey synthesis should succeed");
+
+        assert_eq!(synthesized.len(), secret.len());
+        assert_ne!(synthesized, secret);
+        assert!(synthesized.contains('!'));
+
+        if secret.starts_with('S') {
+            assert!(synthesized.starts_with("S!"));
+        } else {
+            assert!(synthesized.starts_with("P!"));
+        }
+
+        let rescanned_results = scan_one(&scanner, &synthesized);
+        let rescanned = rescanned_results
+            .single_report()
+            .expect("one synthesized source was scanned");
+
+        assert!(
+            rescanned
+                .findings()
+                .iter()
+                .all(|finding| !finding.rule_id().as_str().starts_with("nats.")),
+            "synthetic NATS NKey must not validate as real NKey material",
         );
     }
 }

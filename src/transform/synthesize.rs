@@ -414,6 +414,27 @@ fn builtin_synthetic_value(
             random,
         )),
 
+        // Structured personal identifiers preserve their broad representation
+        // family and byte length while deliberately violating the alphabet
+        // accepted by their validators. Synthetic values never derive material
+        // from the source identifier.
+        "personal.it-codice-fiscale" => {
+            Some(synthetic_invalid_personal_identifier(original_len, random))
+        }
+        "personal.pl-pesel" => Some(synthetic_invalid_personal_identifier(original_len, random)),
+        "personal.uk-nhs-number" => Some(synthetic_invalid_nhs_number(original_len, random)),
+        "personal.us-ssn" => Some(synthetic_invalid_ssn(original_len, random)),
+
+        // Financial identifiers preserve a recognizable family shape while
+        // deliberately violating the structural checksum accepted by their
+        // validators. Synthetic values never derive material from the source.
+        "financial.iban" => Some(synthetic_invalid_iban(original_len, random)),
+        "financial.pan" => Some(synthetic_invalid_pan(original_len, random)),
+        "financial.card-verification-code" => Some(synthetic_invalid_card_verification_code(
+            original_len,
+            random,
+        )),
+
         // Contextual generic families.
         "generic.password-field" => {
             Some(contextual_marker(marker, "password", original_len, random))
@@ -461,6 +482,28 @@ fn builtin_synthetic_value(
             random,
         )),
         "generic.secret" => Some(contextual_marker(marker, "secret", original_len, random)),
+        "mfa.otp-provisioning-secret" => Some(contextual_marker(
+            marker,
+            "otp_provisioning_secret",
+            original_len,
+            random,
+        )),
+        // Tailscale credentials preserve their capability-specific prefix while
+        // deliberately violating the opaque credential body.
+        "tailscale.api-access-token" => {
+            Some(prefixed_invalid("tskey-api-", original_len, '!', random))
+        }
+        "tailscale.auth-key" => Some(prefixed_invalid("tskey-auth-", original_len, '!', random)),
+        "tailscale.oauth-client-secret" => {
+            Some(prefixed_invalid("tskey-client-", original_len, '!', random))
+        }
+        "tailscale.scim-key" => Some(prefixed_invalid("tskey-scim-", original_len, '!', random)),
+        "tailscale.webhook-key" => Some(prefixed_invalid(
+            "tskey-webhook-",
+            original_len,
+            '!',
+            random,
+        )),
         "wireguard.private-key" => Some(contextual_marker(
             marker,
             "wireguard_private_key",
@@ -485,6 +528,11 @@ fn builtin_synthetic_value(
             original_len,
             random,
         )),
+        // NATS NKeys preserve their top-level secret family marker while
+        // deliberately violating the Base32 alphabet. Seed subtypes are not
+        // recovered from the original secret during synthesis.
+        "nats.nkey-seed" => Some(prefixed_invalid("S", original_len, '!', random)),
+        "nats.nkey-private-key" => Some(prefixed_invalid("P", original_len, '!', random)),
 
         _ => None,
     }
@@ -611,6 +659,124 @@ impl SyntheticBytes {
     }
 }
 
+fn synthetic_invalid_personal_identifier(total_len: usize, random: &mut SyntheticBytes) -> String {
+    // Preserve the identifier width while deliberately introducing a
+    // non-alphanumeric character that cannot satisfy either the Codice Fiscale
+    // or PESEL validator.
+    prefixed_invalid("", total_len, '!', random)
+}
+
+fn synthetic_invalid_nhs_number(total_len: usize, random: &mut SyntheticBytes) -> String {
+    // NHS Numbers are either compact 10-digit values or canonical 3-3-4
+    // representations. Preserve that broad visual family while forcing an
+    // invalid character into the first group so the result cannot validate.
+    if total_len == 12 {
+        let mut output = String::with_capacity(total_len);
+        output.push('!');
+        push_random_ascii_digits(&mut output, 2, random);
+        output.push('-');
+        push_random_ascii_digits(&mut output, 3, random);
+        output.push('-');
+        push_random_ascii_digits(&mut output, 4, random);
+        return output;
+    }
+
+    prefixed_invalid("", total_len, '!', random)
+}
+
+fn synthetic_invalid_ssn(total_len: usize, random: &mut SyntheticBytes) -> String {
+    // SSNs are either compact 9-digit values or canonical AAA-GG-SSSS
+    // representations. Preserve that broad visual family while forcing an
+    // invalid character into the area component.
+    if total_len == 11 {
+        let mut output = String::with_capacity(total_len);
+        output.push('!');
+        push_random_ascii_digits(&mut output, 2, random);
+        output.push('-');
+        push_random_ascii_digits(&mut output, 2, random);
+        output.push('-');
+        push_random_ascii_digits(&mut output, 4, random);
+        return output;
+    }
+
+    prefixed_invalid("", total_len, '!', random)
+}
+
+fn synthetic_invalid_iban(total_len: usize, random: &mut SyntheticBytes) -> String {
+    // The financial IBAN rule currently discovers electronic representations
+    // only. Preserve the conventional CCdd... shape when the source width can
+    // contain one, but use the unsupported synthetic country code ZZ so the
+    // result cannot validate as an IBAN.
+    if total_len < 4 {
+        return fixed_or_padded("ZZ00", total_len, random);
+    }
+
+    let mut output = String::with_capacity(total_len);
+    output.push_str("ZZ00");
+    push_random_ascii_digits(&mut output, total_len - 4, random);
+    output
+}
+
+fn synthetic_invalid_pan(total_len: usize, random: &mut SyntheticBytes) -> String {
+    // Preserve a numeric PAN-like representation. Generate all but the final
+    // digit from keyed material, then choose a final digit that deliberately
+    // fails Luhn. Widths outside the validator's supported PAN range are
+    // already structurally invalid.
+    let mut output = String::with_capacity(total_len);
+    push_random_ascii_digits(&mut output, total_len, random);
+
+    if (10..=19).contains(&total_len) {
+        let valid_check_digit = luhn_check_digit_for_prefix(output.as_bytes());
+
+        let invalid_check_digit = (valid_check_digit + 1) % 10;
+        output.pop();
+        output.push(char::from(b'0' + invalid_check_digit));
+    }
+
+    output
+}
+
+fn synthetic_invalid_card_verification_code(
+    total_len: usize,
+    random: &mut SyntheticBytes,
+) -> String {
+    // Card verification codes have no checksum or other intrinsic structure
+    // beyond their numeric width. Preserve the source width while deliberately
+    // violating the numeric alphabet so synthesis cannot create another valid
+    // code in the same authoritative context.
+    prefixed_invalid("", total_len, '!', random)
+}
+
+fn luhn_check_digit_for_prefix(digits: &[u8]) -> u8 {
+    debug_assert!(!digits.is_empty());
+
+    let total_len = digits.len();
+    let parity = total_len % 2;
+    let mut sum = 0_u32;
+
+    for (index, byte) in digits[..total_len - 1].iter().copied().enumerate() {
+        let mut digit = u32::from(byte - b'0');
+
+        if index % 2 == parity {
+            digit *= 2;
+
+            if digit > 9 {
+                digit -= 9;
+            }
+        }
+
+        sum += digit;
+    }
+
+    ((10 - (sum % 10)) % 10) as u8
+}
+
+fn push_random_ascii_digits(output: &mut String, count: usize, random: &mut SyntheticBytes) {
+    for _ in 0..count {
+        output.push(char::from(b'0' + random.next() % 10));
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -648,6 +814,100 @@ mod tests {
                 builtin_synthetic_value(spec.id(), 96, "cribra_synthetic", &mut random).is_some(),
                 "built-in rule `{}` must have explicit synthesis semantics",
                 spec.id(),
+            );
+        }
+    }
+
+    #[test]
+    fn personal_opt_in_builtins_have_explicit_synthesis_semantics() {
+        for spec in crate::builtins::personal::CURRENT {
+            let mut random = SyntheticBytes::new(&[0x31; 32], spec.id(), 10, 42);
+
+            assert!(
+                builtin_synthetic_value(spec.id(), 16, "cribra_synthetic", &mut random,).is_some(),
+                "personal built-in `{}` must have explicit synthesis semantics",
+                spec.id(),
+            );
+        }
+    }
+
+    #[test]
+    fn financial_opt_in_builtins_have_explicit_synthesis_semantics() {
+        for spec in crate::builtins::financial::CURRENT {
+            let mut random = SyntheticBytes::new(&[0x41; 32], spec.id(), 10, 42);
+
+            assert!(
+                builtin_synthetic_value(spec.id(), 32, "cribra_synthetic", &mut random,).is_some(),
+                "financial built-in {} must define explicit synthesis semantics",
+                spec.id(),
+            );
+        }
+    }
+
+    #[test]
+    fn synthetic_iban_preserves_shape_and_is_intentionally_invalid() {
+        let mut random = SyntheticBytes::new(&[0x41; 32], "financial.iban", 0, 27);
+
+        let value = synthetic_invalid_iban(27, &mut random);
+
+        assert_eq!(value.len(), 27);
+        assert!(value.starts_with("ZZ00"));
+        assert!(value.bytes().all(|byte| byte.is_ascii_alphanumeric()));
+
+        let mut second = SyntheticBytes::new(&[0x41; 32], "financial.iban", 0, 27);
+
+        assert_eq!(value, synthetic_invalid_iban(27, &mut second));
+
+        let mut different_key = SyntheticBytes::new(&[0x42; 32], "financial.iban", 0, 27);
+
+        assert_ne!(value, synthetic_invalid_iban(27, &mut different_key),);
+    }
+
+    #[test]
+    fn synthetic_pan_preserves_numeric_shape_and_fails_luhn() {
+        let mut random = SyntheticBytes::new(&[0x41; 32], "financial.pan", 0, 16);
+
+        let value = synthetic_invalid_pan(16, &mut random);
+
+        assert_eq!(value.len(), 16);
+        assert!(value.bytes().all(|byte| byte.is_ascii_digit()));
+
+        // Recompute the only Luhn-valid final digit for this generated prefix.
+        let valid_check_digit = luhn_check_digit_for_prefix(value.as_bytes());
+        let actual_check_digit = value.as_bytes()[15] - b'0';
+
+        assert_ne!(actual_check_digit, valid_check_digit);
+
+        let mut second = SyntheticBytes::new(&[0x41; 32], "financial.pan", 0, 16);
+
+        assert_eq!(value, synthetic_invalid_pan(16, &mut second));
+
+        let mut different_key = SyntheticBytes::new(&[0x42; 32], "financial.pan", 0, 16);
+
+        assert_ne!(value, synthetic_invalid_pan(16, &mut different_key),);
+    }
+
+    #[test]
+    fn synthetic_card_verification_code_preserves_width_and_is_intentionally_invalid() {
+        for len in [3, 4] {
+            let mut random =
+                SyntheticBytes::new(&[0x41; 32], "financial.card-verification-code", 0, len);
+
+            let value = synthetic_invalid_card_verification_code(len, &mut random);
+
+            assert_eq!(value.len(), len);
+            assert!(value.starts_with('!'));
+            assert!(
+                !value.bytes().all(|byte| byte.is_ascii_digit()),
+                "synthetic card verification code must not remain structurally valid"
+            );
+
+            let mut second =
+                SyntheticBytes::new(&[0x41; 32], "financial.card-verification-code", 0, len);
+
+            assert_eq!(
+                value,
+                synthetic_invalid_card_verification_code(len, &mut second)
             );
         }
     }
@@ -830,6 +1090,123 @@ mod tests {
 
         for byte in expected {
             assert_eq!(actual.next(), byte);
+        }
+    }
+
+    #[test]
+    fn otp_provisioning_secret_uses_explicit_invalid_contextual_synthesis() {
+        let mut random = SyntheticBytes::new(&[19; 32], "mfa.otp-provisioning-secret", 0, 32);
+
+        let output = builtin_synthetic_value(
+            "mfa.otp-provisioning-secret",
+            32,
+            "cribra_synthetic",
+            &mut random,
+        )
+        .expect("OTP provisioning secret must have synthesis semantics");
+
+        assert_eq!(output.len(), 32);
+        assert!(output.starts_with("cribra_synthetic"));
+        assert!(output.contains('_'));
+    }
+
+    #[test]
+    fn synthesized_iban_is_not_rediscovered_by_financial_scanner() {
+        let source = "iban=IT60X0542811101000000123456";
+        let scanner = crate::Scanner::builder()
+            .builtins(crate::builtins::financial::CURRENT)
+            .build()
+            .expect("financial scanner must build");
+
+        let results = scanner.scan([("source", source)]);
+        let report = results.single_report().expect("one source report");
+
+        assert!(
+            report
+                .findings()
+                .iter()
+                .any(|finding| finding.rule_id().as_str() == "financial.iban")
+        );
+
+        let synthesized = synthesize(source, report, &SynthesisOptions::new([0x41; 32]))
+            .expect("IBAN synthesis must succeed");
+
+        assert!(!synthesized.contains("IT60X0542811101000000123456"));
+
+        let rescanned = scanner.scan([("source", synthesized.as_str())]);
+        let report = rescanned.single_report().expect("one synthesized report");
+
+        assert!(
+            report
+                .findings()
+                .iter()
+                .all(|finding| finding.rule_id().as_str() != "financial.iban"),
+            "synthetic IBAN must not remain a valid financial.iban finding",
+        );
+    }
+
+    #[test]
+    fn synthesized_pan_is_not_rediscovered_by_financial_scanner() {
+        let source = "card_number=4111111111111111";
+        let scanner = crate::Scanner::builder()
+            .builtins(crate::builtins::financial::CURRENT)
+            .build()
+            .expect("financial scanner must build");
+
+        let results = scanner.scan([("source", source)]);
+        let report = results.single_report().expect("one source report");
+
+        assert!(
+            report
+                .findings()
+                .iter()
+                .any(|finding| finding.rule_id().as_str() == "financial.pan")
+        );
+
+        let synthesized = synthesize(source, report, &SynthesisOptions::new([0x41; 32]))
+            .expect("PAN synthesis must succeed");
+
+        assert!(!synthesized.contains("4111111111111111"));
+
+        let rescanned = scanner.scan([("source", synthesized.as_str())]);
+        let report = rescanned.single_report().expect("one synthesized report");
+
+        assert!(
+            report
+                .findings()
+                .iter()
+                .all(|finding| finding.rule_id().as_str() != "financial.pan"),
+            "synthetic PAN must not remain a valid financial.pan finding",
+        );
+    }
+
+    #[test]
+    fn synthesized_card_verification_code_is_not_rediscovered_by_financial_scanner() {
+        for source in ["cvv=123", "cid=1234"] {
+            let scanner = crate::Scanner::builder()
+                .builtins(crate::builtins::financial::CURRENT)
+                .build()
+                .expect("financial scanner must build");
+
+            let results = scanner.scan([("source", source)]);
+            let report = results.single_report().expect("one source report");
+
+            assert!(report.findings().iter().any(|finding| {
+                finding.rule_id().as_str() == "financial.card-verification-code"
+            }));
+
+            let synthesized = synthesize(source, report, &SynthesisOptions::new([0x41; 32]))
+                .expect("card verification code synthesis must succeed");
+
+            let rescanned = scanner.scan([("source", synthesized.as_str())]);
+            let report = rescanned.single_report().expect("one synthesized report");
+
+            assert!(
+                report.findings().iter().all(|finding| {
+                    finding.rule_id().as_str() != "financial.card-verification-code"
+                }),
+                "synthetic card verification code must not remain a valid finding",
+            );
         }
     }
 }

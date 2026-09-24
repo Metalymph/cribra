@@ -546,3 +546,16 @@ pub const HTPASSWD_PASSWORD_VERIFIER: RuleSpec = RuleSpec::captured_pattern(
 )
 .with_validator(ValidatorKind::SystemPasswordVerifier)
 .with_remediation(Remediation::ReviewPasswordVerifier);
+
+/// TOTP/HOTP shared provisioning secret.
+///
+/// Base32 structure alone is insufficient for classification. Validation
+/// requires an `otpauth` provisioning URI or an explicit OTP-secret field.
+pub const OTP_PROVISIONING_SECRET: RuleSpec = RuleSpec::captured_pattern(
+    "mfa.otp-provisioning-secret",
+    r"(?i)(?:^|[^A-Za-z0-9])(?P<value>[A-Z2-7]{16,}(?:={1,6})?)(?:$|[^A-Za-z0-9=])",
+    "value",
+    Severity::Critical,
+)
+.with_validator(ValidatorKind::OtpProvisioningSecret)
+.with_remediation(Remediation::RotateCredential);

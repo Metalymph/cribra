@@ -41,6 +41,7 @@ struct CaseOracle {
 enum ScannerKind {
     CanonicalCustom,
     DefaultBuiltins,
+    PersonalBuiltins,
     FinancialBuiltins,
 }
 
@@ -90,6 +91,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let canonical_scanner = canonical_equivalent_scanner()?;
     let default_scanner = Scanner::default();
+    let personal_scanner = Scanner::builder()
+        .builtins(cribra::builtins::personal::CURRENT)
+        .build()?;
     let mut cases = Vec::new();
 
     let financial_scanner = Scanner::builder()
@@ -133,6 +137,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     )?);
 
     cases.push(case_oracle(
+        "v047-personal-codice-fiscale".to_owned(),
+        ScannerKind::PersonalBuiltins,
+        &personal_scanner,
+        "RSSMRA85T10A562S".to_owned(),
+    )?);
+
+    cases.push(case_oracle(
+        "v047-personal-us-ssn".to_owned(),
+        ScannerKind::PersonalBuiltins,
+        &personal_scanner,
+        "ssn=123-45-6789".to_owned(),
+    )?);
+
+    cases.push(case_oracle(
         "v046-financial-iban".to_owned(),
         ScannerKind::FinancialBuiltins,
         &financial_scanner,
@@ -144,6 +162,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ScannerKind::FinancialBuiltins,
         &financial_scanner,
         "card_number=1234567890123452".to_owned(),
+    )?);
+
+    cases.push(case_oracle(
+        "v047-financial-card-verification-code".to_owned(),
+        ScannerKind::FinancialBuiltins,
+        &financial_scanner,
+        "cvv=123".to_owned(),
     )?);
 
     for (name, source) in [
