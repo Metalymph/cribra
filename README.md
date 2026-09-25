@@ -304,7 +304,7 @@ cribra
 The standalone binary is a thin adapter over the reusable library surface.
 Downstream consumers may embed `cribra-cli` directly when they need canonical
 Cribra CLI behavior; they should not independently reimplement the same command
-semantics.s
+semantics.
 
 The capability relationship between the public Rust core and the canonical CLI,
 including explicit parity gaps and deliberate non-parity, is documented in
