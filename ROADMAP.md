@@ -98,13 +98,99 @@ that can process large or incrementally supplied sources with bounded memory,
 without introducing a second detection implementation or weakening the
 deterministic semantics of the existing scanner.
 
-The detailed architecture, invariants, compatibility contract, migration
-strategy, and implementation phases are defined below in the dedicated v0.5
-roadmap.
-
 The existing whole-source API remains an important compatibility surface.
 Streaming is an architectural extension of the authoritative Rust core, not a
 separate scanner with independent detection semantics.
+
+The v0.5 architecture is developed in ordered phases. Semantic equivalence and
+explicit boundedness are established before public streaming APIs are frozen.
+
+#### 0.5-A --- Streaming semantic contract
+
+Status: planned.
+
+Goal: define the semantic invariants that every streaming implementation must
+preserve before introducing chunked execution into the scanner.
+
+The current whole-source scanner is the reference behavior for inputs whose
+rules and validators are semantically applicable to streaming. Changing how
+source bytes arrive must not silently change what Cribra detects or how an
+accepted result is represented.
+
+Required invariants:
+
+-   [ ] Define whole-source versus streamed equivalence for findings and
+    sensitive candidates.
+-   [ ] Preserve rule identity, severity, confidence, remediation, detection
+    mode, and explanation semantics independently of source partitioning.
+-   [ ] Preserve exact global half-open byte spans for accepted findings and
+    candidates.
+-   [ ] Preserve one-based line and Unicode-scalar column coordinates relative
+    to the complete logical source.
+-   [ ] Preserve deterministic finding and candidate ordering independently of
+    chunk size and chunk boundaries.
+-   [ ] Preserve the existing deterministic normalization and exact-span
+    ownership rules.
+-   [ ] Guarantee that a logical match crossing one or more chunk boundaries is
+    emitted exactly once.
+-   [ ] Guarantee that changing chunk boundaries cannot create an otherwise
+    invalid finding or suppress an otherwise valid finding.
+-   [ ] Preserve contextual-validator semantics when required evidence occurs
+    before or after a candidate across chunk boundaries.
+-   [ ] Preserve UTF-8 correctness when transport reads divide a multi-byte
+    scalar across read boundaries.
+-   [ ] Distinguish transport/read boundaries from semantic source boundaries;
+    callers must not be required to align chunks to UTF-8 scalars, lines,
+    tokens, matches, or validator context.
+-   [ ] Define end-of-stream as an explicit semantic boundary so rules requiring
+    trailing evidence can be finalized deterministically.
+-   [ ] Define reset and failure behavior so state from one logical source can
+    never influence another source.
+-   [ ] Keep secret material caller-owned and avoid introducing public
+    intermediate representations that expose matched values.
+-   [ ] Preserve the existing distinction between confirmed findings and
+    ambiguous `SensitiveCandidate` values.
+-   [ ] Document any existing whole-source behavior that cannot be preserved
+    under bounded-memory execution before implementation begins.
+
+Non-goals for this phase:
+
+-   no public reader or chunk API;
+-   no CLI streaming surface;
+-   no C ABI, WebAssembly, or language-binding propagation;
+-   no detector catalog expansion;
+-   no parallelization of a single logical source;
+-   no second streaming-specific rule or validator implementation.
+
+Architectural constraints:
+
+-   The compiled rule set remains the detection authority. Streaming may change
+    execution strategy but must not fork rule semantics.
+-   Validators remain authoritative for candidate acceptance. Streaming
+    infrastructure supplies sufficient source context rather than weakening or
+    duplicating validator policy.
+-   Chunk boundaries are an implementation detail and must not become part of
+    detection semantics.
+-   Bounded memory must be demonstrated from explicit retained-state bounds,
+    not inferred merely from processing the input in smaller reads.
+-   Rules whose current semantics require potentially unbounded source material
+    must be identified explicitly and redesigned, bounded, or classified before
+    the streaming core can claim general bounded-memory behavior.
+-   The existing `Scanner::scan` contract remains valid. v0.5 must not require
+    existing callers with in-memory UTF-8 sources to adopt the streaming API.
+
+Acceptance gate:
+
+-   [ ] The streaming equivalence contract is documented precisely enough that
+    implementation tests can determine pass or fail without relying on
+    implementation-specific chunk sizes.
+-   [ ] Every current matching and validation family can be classified by the
+    source history, lookahead, and candidate extent required to preserve its
+    semantics.
+-   [ ] Unbounded or not-yet-bounded cases are explicit rather than hidden
+    behind an arbitrary overlap size.
+-   [ ] No public API is frozen before these invariants and classifications are
+    complete.
 
 ## Completed 0.4 release line
 
