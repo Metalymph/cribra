@@ -1345,6 +1345,541 @@ Design outcome:
 - public API size remains deliberately minimal until implementation proves the
   architecture.
 
+#### 0.5-D --- Implementation and conformance gate
+
+Status: design complete; implementation pending.
+
+Goal: turn the semantic, execution, and public API contracts defined by 0.5-A
+through 0.5-C into an ordered implementation plan with explicit conformance
+gates, so the streaming core can be introduced incrementally without weakening
+whole-source semantics, bounded-memory guarantees, source isolation, or public
+compatibility.
+
+This phase does not introduce a fourth definition of streaming behavior.
+0.5-A remains the semantic authority, 0.5-B defines the internal execution
+architecture, and 0.5-C defines the public ownership and lifecycle contract.
+
+0.5-D defines how those contracts are implemented and proven.
+
+The implementation rule is:
+
+```text
+implement one semantic slice
+        |
+        v
+prove whole-source parity
+        |
+        v
+prove partition invariance
+        |
+        v
+prove retained-state bounds
+        |
+        v
+advance to the next slice
+```
+
+A later slice must not compensate for an unresolved semantic defect in an
+earlier slice.
+
+The implementation may refine internal type names, module boundaries, and local
+algorithms where required by evidence from the code, but any change to the
+semantic or architectural contracts established in 0.5-A through 0.5-C must be
+made explicitly in the roadmap rather than introduced accidentally during
+implementation.
+
+##### 0.5-D1 --- Source-session foundation
+
+Goal: introduce the internal lifecycle and state ownership required for one
+streamed logical source without yet requiring every matcher family to execute
+incrementally.
+
+Required work:
+
+-   [ ] Introduce an internal source-local execution session owned separately
+    from immutable scanner configuration.
+-   [ ] Keep `CompiledRuleSet` and rule metadata immutable and reusable across
+    independent sessions.
+-   [ ] Represent source lifecycle explicitly, including active, successfully
+    completed, and terminally failed execution.
+-   [ ] Track total accepted source bytes independently of individual transport
+    chunk sizes.
+-   [ ] Establish source-local ownership for matcher, validator, candidate,
+    normalization, and location state.
+-   [ ] Permit multiple independent source sessions to originate from one
+    scanner configuration.
+-   [ ] Ensure dropping an unfinished session cannot affect later scans or
+    another active session.
+-   [ ] Keep all new execution machinery internal until the primitive semantics
+    are proven.
+
+Acceptance gate:
+
+-   [ ] Two or more independent sessions can coexist without state leakage.
+-   [ ] Completion, abandonment, and terminal failure cannot cause state from
+    one logical source to influence another.
+-   [ ] No mutable source state has been moved into shared compiled scanner
+    configuration.
+-   [ ] Existing whole-source behavior remains unchanged.
+
+##### 0.5-D2 --- UTF-8 transport and source coordinates
+
+Goal: make arbitrary byte partitioning semantically invisible before detection
+families are migrated onto incremental execution.
+
+Required work:
+
+-   [ ] Accept arbitrary byte fragments internally.
+-   [ ] Retain only incomplete trailing UTF-8 bytes required to reconstruct a
+    scalar divided across transport calls.
+-   [ ] Distinguish temporarily incomplete UTF-8 from definitively malformed
+    UTF-8.
+-   [ ] Reject malformed complete input deterministically and independently of
+    partition layout.
+-   [ ] Reject incomplete UTF-8 deterministically at end-of-stream.
+-   [ ] Track global byte position incrementally.
+-   [ ] Track one-based line numbers incrementally.
+-   [ ] Track one-based Unicode-scalar columns incrementally.
+-   [ ] Ensure a scalar divided across chunks advances source coordinates
+    exactly once.
+-   [ ] Treat empty chunks as transport no-ops rather than semantic completion.
+
+Acceptance gate:
+
+-   [ ] Valid UTF-8 has identical validity under every tested partition.
+-   [ ] Invalid UTF-8 has identical failure semantics under every tested
+    partition.
+-   [ ] Single-byte transport reads preserve source coordinates.
+-   [ ] Splits inside multi-byte scalars preserve source coordinates.
+-   [ ] Empty chunks cannot advance coordinates or finalize pending state.
+-   [ ] UTF-8 carry remains bounded independently of total source length.
+
+##### 0.5-D3 --- Literal and prefix streaming parity
+
+Goal: migrate literal and prefix matching onto incremental execution while
+preserving whole-source matching, boundary, validation, span, and ordering
+semantics.
+
+Required work:
+
+-   [ ] Preserve literal matcher continuation across arbitrary transport
+    boundaries.
+-   [ ] Detect literal matches crossing one or multiple chunks exactly once.
+-   [ ] Preserve prefix leading-boundary semantics.
+-   [ ] Keep prefix candidates unresolved while later bytes can still extend or
+    invalidate the relevant token.
+-   [ ] Preserve exact global byte spans.
+-   [ ] Preserve whole-source validation behavior.
+-   [ ] Preserve rule identity and metadata.
+-   [ ] Avoid a generic copied overlap window when compact matcher state is
+    sufficient.
+
+Acceptance gate:
+
+-   [ ] Literal fixtures produce semantic output identical to whole-source
+    execution for adversarial partitions.
+-   [ ] Prefix fixtures produce semantic output identical to whole-source
+    execution for adversarial partitions.
+-   [ ] Matcher prefixes divided at every relevant byte position are handled
+    correctly.
+-   [ ] Logical matches are neither duplicated nor suppressed by chunk
+    placement.
+-   [ ] Retained literal and prefix source-dependent state has an explicit
+    bound.
+
+##### 0.5-D4 --- Suffix streaming parity
+
+Goal: migrate suffix matching while preserving reverse token-boundary semantics
+without retaining an unbounded token or source prefix.
+
+Required work:
+
+-   [ ] Preserve enough bounded token history to recover candidate starts when a
+    suffix is recognized.
+-   [ ] Preserve trailing-boundary semantics independently of transport
+    boundaries.
+-   [ ] Keep unresolved suffix candidates pending while later input can change
+    their validity.
+-   [ ] Preserve exact global spans and source coordinates.
+-   [ ] Preserve validator behavior and rule metadata.
+-   [ ] Make any maximum retained token or candidate extent explicit and
+    testable.
+
+Acceptance gate:
+
+-   [ ] Suffix matches crossing arbitrary chunk boundaries are equivalent to
+    whole-source results.
+-   [ ] Leading and trailing token-boundary cases preserve existing behavior.
+-   [ ] Chunk boundaries cannot create false suffix findings.
+-   [ ] Chunk boundaries cannot suppress valid suffix findings.
+-   [ ] Suffix retained source-dependent state has an explicit semantic bound.
+
+##### 0.5-D5 --- Pattern and captured-pattern streaming parity
+
+Goal: migrate pattern-based matching, including projected capture spans, onto a
+bounded incremental execution strategy.
+
+Required work:
+
+-   [ ] Implement bounded incremental execution for the existing pattern
+    portfolio.
+-   [ ] Preserve whole-match semantics where validators depend on the complete
+    pattern match.
+-   [ ] Preserve projected capture spans for captured-pattern rules.
+-   [ ] Support matches whose complete match and capture cross different
+    transport chunks.
+-   [ ] Preserve exact global byte spans after capture projection.
+-   [ ] Preserve source coordinates after projection.
+-   [ ] Make matcher-specific history, lookahead, and unresolved candidate
+    bounds explicit.
+-   [ ] Do not introduce an implementation-wide arbitrary overlap constant as
+    the correctness mechanism.
+
+If implementation discovers a current pattern whose existing semantics cannot
+be represented with bounded retained source state, implementation of that case
+must stop and the exception must be made explicit before general streaming
+parity is claimed.
+
+Acceptance gate:
+
+-   [ ] Every stream-compatible pattern rule produces whole-source-equivalent
+    results under adversarial partitions.
+-   [ ] Captured-pattern spans remain exact across chunk boundaries.
+-   [ ] End-of-source pattern finalization preserves existing semantics.
+-   [ ] Pattern execution has explicit retained-state bounds.
+-   [ ] No unsupported unbounded case is hidden behind a large overlap buffer.
+
+##### 0.5-D6 --- Contextual validation and prefilter parity
+
+Goal: preserve validator authority and contextual detection semantics when
+candidate evidence and contextual evidence arrive in different transport
+chunks.
+
+Required work:
+
+-   [ ] Preserve the existing validator as the authority for candidate
+    acceptance or rejection.
+-   [ ] Supply validators with equivalent bounded evidence independently of
+    chunk placement.
+-   [ ] Preserve contextual evidence that occurs before a candidate.
+-   [ ] Preserve contextual evidence that occurs after a candidate.
+-   [ ] Preserve rule-specific contextual prefilter behavior.
+-   [ ] Preserve the shared contextual-pattern gate semantics.
+-   [ ] Prefer compact incremental semantic state where complete source regions
+    need not be retained.
+-   [ ] Define and test validator-specific retained history and lookahead bounds.
+-   [ ] Preserve end-of-source evidence where absence of additional input is
+    semantically significant.
+
+Acceptance gate:
+
+-   [ ] Contextual findings are identical to whole-source findings under
+    adversarial partitions.
+-   [ ] Splitting a candidate from its contextual evidence cannot change its
+    semantic result.
+-   [ ] Prefilter behavior cannot suppress an otherwise valid streamed finding.
+-   [ ] Validators are not duplicated or weakened for streaming.
+-   [ ] Validator source-dependent state has explicit bounds.
+
+##### 0.5-D7 --- Finalization, normalization, and SensitiveCandidate parity
+
+Goal: introduce the finalization frontier required to release source-dependent
+state while preserving exact-span ownership, normalization, classification, and
+deterministic ordering.
+
+Required work:
+
+-   [ ] Represent unresolved matcher and validator candidates separately from
+    finalized semantic results.
+-   [ ] Advance results across the finalization frontier only when later input
+    can no longer alter their semantic outcome.
+-   [ ] Preserve exact-span collision ownership.
+-   [ ] Preserve rule-priority semantics when generic and provider-specific
+    detections collide.
+-   [ ] Preserve deterministic normalization.
+-   [ ] Preserve deterministic final ordering.
+-   [ ] Preserve the distinction between confirmed `Finding` values and
+    ambiguous `SensitiveCandidate` values.
+-   [ ] Ensure temporary uncertainty caused solely by incomplete transport input
+    never becomes a public `SensitiveCandidate`.
+-   [ ] Release source material when no unresolved semantic decision still
+    requires it.
+-   [ ] Finalize all remaining resolvable state deterministically at
+    end-of-stream.
+
+Acceptance gate:
+
+-   [ ] Finding parity is exact between whole-source and streamed execution.
+-   [ ] `SensitiveCandidate` parity is exact between whole-source and streamed
+    execution.
+-   [ ] Exact-span ownership is independent of candidate discovery order and
+    chunk layout.
+-   [ ] Final result ordering is independent of chunk layout.
+-   [ ] Pending source material does not remain retained after its semantic
+    dependencies have been finalized.
+-   [ ] End-of-stream resolves all remaining valid pending state exactly once.
+
+##### 0.5-D8 --- Public streaming surface
+
+Goal: expose the smallest public Rust API capable of expressing the proven
+streaming contract without leaking internal execution details.
+
+Required work:
+
+-   [ ] Expose creation of a source-local streaming session from an immutable
+    scanner.
+-   [ ] Expose borrowed byte-oriented input.
+-   [ ] Keep empty input distinct from end-of-stream.
+-   [ ] Expose explicit finalization producing the existing `ScanReport`.
+-   [ ] Prefer consuming or otherwise irreversible successful finalization.
+-   [ ] Prevent accidental input after successful completion.
+-   [ ] Make terminal streaming errors invalidate the current source execution.
+-   [ ] Keep matcher, validator, normalization, and retained-source internals
+    private.
+-   [ ] Keep caller buffers caller-owned after each input operation returns.
+-   [ ] Avoid exposing raw matched secret material through public streaming
+    state, errors, or debug output.
+-   [ ] Keep the core API synchronous and runtime-independent.
+-   [ ] Do not require caller-managed overlap, reset, callbacks, channels,
+    iterators, or incremental result delivery.
+
+Exact public type, method, and error names must be chosen from the implementation
+that satisfies these requirements rather than copied mechanically from roadmap
+examples.
+
+Acceptance gate:
+
+-   [ ] The minimal public surface expresses the 0.5-C ownership and lifecycle
+    contract without unnecessary operations.
+-   [ ] Rust ownership prevents or clearly rejects invalid post-completion use.
+-   [ ] Public errors do not expose scanned secret material.
+-   [ ] The API has no dependency on an asynchronous runtime.
+-   [ ] Chunk size remains a performance choice rather than a correctness
+    parameter.
+-   [ ] Existing whole-source callers are not required to migrate.
+
+##### 0.5-D9 --- Whole-source convergence
+
+Goal: ensure whole-source and streaming execution use one semantic authority
+rather than becoming independently evolving scanners.
+
+Required work:
+
+-   [ ] Integrate the existing whole-source path with the new execution
+    machinery where doing so removes duplicated semantic authority.
+-   [ ] Preserve existing `Scanner::scan` behavior and result types.
+-   [ ] Preserve identified-source orchestration and input ordering.
+-   [ ] Preserve source-length semantics.
+-   [ ] Preserve existing parallelism across independent whole sources.
+-   [ ] Keep source identity outside low-level matcher and streaming state.
+-   [ ] Remove or isolate superseded detection paths that would otherwise create
+    two definitions of matching, validation, normalization, or ownership.
+-   [ ] Retain optimized whole-buffer entry paths only where they share the same
+    semantic decisions as streaming execution.
+
+Acceptance gate:
+
+-   [ ] Whole-source regression tests remain green.
+-   [ ] Streaming and whole-source reports are semantically identical for the
+    same logical source.
+-   [ ] No matching or validation family has two independently maintained
+    semantic implementations.
+-   [ ] Existing public whole-source contracts remain source-compatible unless a
+    separately justified breaking change is explicitly documented.
+-   [ ] Multi-source ordering and source identity remain unchanged.
+
+##### 0.5-D10 --- Adversarial partition and bounded-memory conformance
+
+Goal: prove the complete streaming implementation against the partition
+invariance and boundedness contracts rather than against a small set of
+preferred chunk sizes.
+
+Required conformance coverage:
+
+-   [ ] Empty logical source.
+-   [ ] One chunk containing the complete source.
+-   [ ] One-byte chunks.
+-   [ ] Empty chunks interspersed with non-empty chunks.
+-   [ ] Every byte boundary for bounded representative fixtures.
+-   [ ] Splits inside multi-byte UTF-8 scalars.
+-   [ ] Splits inside matcher prefixes and suffixes.
+-   [ ] Splits inside complete pattern matches.
+-   [ ] Splits inside captured values.
+-   [ ] Splits between candidates and required contextual evidence.
+-   [ ] Splits immediately before and after token boundaries.
+-   [ ] Splits immediately before and after line boundaries.
+-   [ ] Findings requiring end-of-stream finalization.
+-   [ ] Incomplete UTF-8 completed by later input.
+-   [ ] Definitively invalid UTF-8.
+-   [ ] Incomplete UTF-8 at end-of-stream.
+-   [ ] Exact-span collision and ownership cases.
+-   [ ] `SensitiveCandidate` cases.
+-   [ ] Multiple independent sessions from one scanner.
+-   [ ] Abandoned unfinished sessions.
+-   [ ] Terminal failure followed by a clean independent session.
+-   [ ] Multiple partition layouts producing identical final semantic output.
+
+Bounded-memory proof must classify retained source-dependent state by family:
+
+```text
+utf8_carry
++ matcher_continuation
++ bounded_history
++ bounded_lookahead
++ unresolved_candidate_material
++ validator_context
++ normalization_pending_state
+```
+
+For each component, tests or implementation invariants must demonstrate that
+retention is derived from semantic bounds rather than total logical-source
+length.
+
+Compact finalized report metadata may scale with the number of reportable
+results required by `ScanReport`. That is not equivalent to retaining the
+logical source and does not weaken the bounded source-state requirement.
+
+Acceptance gate:
+
+-   [ ] Partition-equivalence tests cover every implemented matching and
+    validation family.
+-   [ ] No correctness test depends on one preferred transport chunk size.
+-   [ ] Source-dependent retained state does not grow as
+    `O(total_source_length)` merely because a source is long.
+-   [ ] Every retained-state bound is attributable to an explicit matcher,
+    validator, transport, or normalization requirement.
+-   [ ] No arbitrary global overlap size acts as an undocumented semantic
+    dependency.
+-   [ ] Large-source tests demonstrate that processing does not require retaining
+    the complete source.
+
+##### 0.5-D11 --- Release compatibility and v0.5 closure
+
+Goal: close the architectural release only after the implementation proves all
+contracts established by 0.5-A through 0.5-D.
+
+Required release gate:
+
+-   [ ] All 0.5-A semantic invariants are implemented and covered by
+    conformance tests.
+-   [ ] All 0.5-B execution-architecture requirements are represented by the
+    implementation or explicitly superseded by an equivalent documented design.
+-   [ ] The public streaming surface satisfies 0.5-C.
+-   [ ] D1 through D10 acceptance gates are green.
+-   [ ] Whole-source scanner regressions are green.
+-   [ ] Streaming versus whole-source semantic parity is green across all
+    supported rule and validator families.
+-   [ ] UTF-8 validity and source coordinates are partition-invariant.
+-   [ ] Exact spans, rule identity, severity, confidence, remediation,
+    detection mode, explanations, normalization, ownership, candidates, and
+    ordering preserve existing semantics.
+-   [ ] Source-session isolation is demonstrated across success, abandonment,
+    and terminal failure.
+-   [ ] Bounded retained source state is demonstrated rather than inferred from
+    chunked input.
+-   [ ] No second independently evolving detection engine exists.
+-   [ ] Public streaming state and errors introduce no new secret-exposure
+    surface.
+-   [ ] Public API documentation describes ownership, input, completion,
+    errors, UTF-8 behavior, and compatibility.
+-   [ ] Relevant examples demonstrate streaming without teaching callers to
+    depend on a particular chunk size.
+-   [ ] Formatting, linting, unit tests, integration tests, documentation tests,
+    and the repository's supported CI matrix are green.
+-   [ ] The release notes describe the streaming core as an architectural
+    extension while preserving the existing whole-source compatibility surface.
+
+The following remain outside the v0.5 closure gate unless implementation
+evidence establishes that one is required for correctness:
+
+- async runtime integration;
+- async reader adapters;
+- incremental public result delivery;
+- callbacks or result channels;
+- serialization or persistence of active sessions;
+- pause/resume;
+- public reset;
+- intra-source parallelism;
+- C ABI propagation;
+- WebAssembly propagation;
+- language-binding propagation;
+- CLI streaming UX;
+- detector catalog expansion unrelated to streaming;
+- packaging or distribution work unrelated to the core architectural change.
+
+A synchronous `std::io::Read` convenience adapter may be evaluated after the
+primitive byte-oriented public session is stable. It is not permitted to become
+a second semantic execution path.
+
+##### Implementation discipline
+
+The implementation branch should progress through D1 to D11 in small,
+independently reviewable slices.
+
+Each slice should normally follow:
+
+```text
+implementation
+    |
+targeted tests
+    |
+whole-source parity tests
+    |
+partition-equivalence tests where applicable
+    |
+boundedness/lifecycle gate where applicable
+    |
+commit
+```
+
+A slice may be divided into smaller commits when that improves reviewability,
+but a later semantic family should not be migrated merely to hide a failing
+acceptance gate in an earlier family.
+
+If implementation evidence invalidates an architectural assumption, the correct
+response is to update the relevant 0.5 contract explicitly and review that
+change before continuing. The implementation must not silently redefine the
+roadmap.
+
+##### Final acceptance gate
+
+v0.5 architecture is implementation-complete only when:
+
+```text
+whole-source semantics
+        ==
+streaming semantics under arbitrary valid partitioning
+```
+
+for every supported streaming-compatible rule and validator family, while
+source-dependent retained memory remains bounded by explicit semantic state
+rather than complete logical-source length.
+
+At that point:
+
+- source partitioning is semantically invisible;
+- whole-source and streaming execution share one detection authority;
+- streamed input preserves exact global source coordinates;
+- validator authority is unchanged;
+- normalization and exact-span ownership are unchanged;
+- `SensitiveCandidate` semantics are unchanged;
+- end-of-stream finalization is deterministic;
+- source sessions are isolated;
+- the public API remains minimal and runtime-independent;
+- existing whole-source callers retain their compatibility surface;
+- bounded-memory streaming is a demonstrated property of the core rather than a
+  consequence assumed from reading input in chunks.
+
+Design outcome:
+
+- 0.5-A defines what streaming must mean;
+- 0.5-B defines how streaming execution is structured;
+- 0.5-C defines how callers interact with it;
+- 0.5-D defines how the implementation is introduced and proven;
+- D1 through D11 provide the ordered implementation gates for the v0.5
+  development branch;
+- passing D11 closes the v0.5 Streaming Core architectural line.
+
 ## Completed 0.4 release line
 
 ### v0.4.6 --- Sensitive Data Foundation
