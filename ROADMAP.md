@@ -105,7 +105,7 @@ separate scanner with independent detection semantics.
 The v0.5 architecture is developed in ordered phases. Semantic equivalence and
 explicit boundedness are established before public streaming APIs are frozen.
 
-##### 0.5-A --- Streaming semantic contract
+#### 0.5-A --- Streaming semantic contract
 
 Status: design complete; implementation pending.
 
