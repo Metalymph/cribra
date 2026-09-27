@@ -105,9 +105,9 @@ separate scanner with independent detection semantics.
 The v0.5 architecture is developed in ordered phases. Semantic equivalence and
 explicit boundedness are established before public streaming APIs are frozen.
 
-#### 0.5-A --- Streaming semantic contract
+##### 0.5-A --- Streaming semantic contract
 
-Status: planned.
+Status: design complete; implementation pending.
 
 Goal: define the semantic invariants that every streaming implementation must
 preserve before introducing chunked execution into the scanner.
@@ -117,41 +117,170 @@ rules and validators are semantically applicable to streaming. Changing how
 source bytes arrive must not silently change what Cribra detects or how an
 accepted result is represented.
 
+For a complete logical UTF-8 source `S`, a configured scanner `C`, and any
+valid byte partition `P(S)`, streamed execution must be semantically equivalent
+to whole-source execution:
+
+```text
+semantic_output(C.scan(S)) == semantic_output(C.stream(P(S)))
+```
+
+The notation above defines the architectural equivalence contract only. It does
+not freeze a public streaming API or require the eventual API to expose
+`stream`.
+
+A valid partition may divide the source at any byte position. In particular,
+transport reads may divide UTF-8 scalars, lines, tokens, matcher prefixes,
+candidate values, contextual evidence, or logical matches. Partition placement
+and chunk size are never part of Cribra's detection semantics.
+
+Semantic output equivalence includes:
+
+- confirmed findings and ambiguous `SensitiveCandidate` values;
+- rule identity;
+- severity and confidence;
+- remediation;
+- detection mode and explanation semantics;
+- exact global half-open byte spans;
+- one-based line and Unicode-scalar column coordinates;
+- deterministic normalization and exact-span ownership;
+- deterministic final ordering.
+
 Required invariants:
 
--   [ ] Define whole-source versus streamed equivalence for findings and
+-   [x] Define whole-source versus streamed equivalence for findings and
     sensitive candidates.
--   [ ] Preserve rule identity, severity, confidence, remediation, detection
+-   [x] Preserve rule identity, severity, confidence, remediation, detection
     mode, and explanation semantics independently of source partitioning.
--   [ ] Preserve exact global half-open byte spans for accepted findings and
+-   [x] Preserve exact global half-open byte spans for accepted findings and
     candidates.
--   [ ] Preserve one-based line and Unicode-scalar column coordinates relative
+-   [x] Preserve one-based line and Unicode-scalar column coordinates relative
     to the complete logical source.
--   [ ] Preserve deterministic finding and candidate ordering independently of
+-   [x] Preserve deterministic finding and candidate ordering independently of
     chunk size and chunk boundaries.
--   [ ] Preserve the existing deterministic normalization and exact-span
+-   [x] Preserve the existing deterministic normalization and exact-span
     ownership rules.
--   [ ] Guarantee that a logical match crossing one or more chunk boundaries is
-    emitted exactly once.
--   [ ] Guarantee that changing chunk boundaries cannot create an otherwise
-    invalid finding or suppress an otherwise valid finding.
--   [ ] Preserve contextual-validator semantics when required evidence occurs
+-   [x] Require a logical match crossing one or more chunk boundaries to be
+    emitted exactly once by a conforming implementation.
+-   [x] Require chunk-boundary placement to neither create an otherwise invalid
+    finding nor suppress an otherwise valid finding.
+-   [x] Preserve contextual-validator semantics when required evidence occurs
     before or after a candidate across chunk boundaries.
--   [ ] Preserve UTF-8 correctness when transport reads divide a multi-byte
-    scalar across read boundaries.
--   [ ] Distinguish transport/read boundaries from semantic source boundaries;
-    callers must not be required to align chunks to UTF-8 scalars, lines,
-    tokens, matches, or validator context.
--   [ ] Define end-of-stream as an explicit semantic boundary so rules requiring
-    trailing evidence can be finalized deterministically.
--   [ ] Define reset and failure behavior so state from one logical source can
-    never influence another source.
--   [ ] Keep secret material caller-owned and avoid introducing public
+-   [x] Define UTF-8 transport semantics so reads may divide a multi-byte scalar
+    while semantic processing still observes valid complete UTF-8.
+-   [x] Distinguish transport/read boundaries from semantic source boundaries;
+    callers are not required to align chunks to UTF-8 scalars, lines, tokens,
+    matches, or validator context.
+-   [x] Define end-of-stream as an explicit semantic boundary so pending
+    matcher, boundary, and contextual state can be finalized deterministically.
+-   [x] Define source-lifecycle isolation: completion, reset, or terminal
+    failure must not permit retained state from one logical source to influence
+    another source.
+-   [x] Keep secret material caller-owned and avoid introducing public
     intermediate representations that expose matched values.
--   [ ] Preserve the existing distinction between confirmed findings and
+-   [x] Preserve the existing distinction between confirmed findings and
     ambiguous `SensitiveCandidate` values.
--   [ ] Document any existing whole-source behavior that cannot be preserved
-    under bounded-memory execution before implementation begins.
+-   [x] Audit existing whole-source behavior for bounded-memory compatibility.
+    No current matching or validation family has been identified as requiring
+    inherently unbounded retained source material; implementation must preserve
+    this conclusion or explicitly reclassify any discovered exception before
+    claiming general streaming parity.
+
+##### Retained-state boundedness contract
+
+Streaming memory is bounded by semantic state, not by total logical-source
+length and not by an arbitrary fixed overlap copied between chunks.
+
+A conforming implementation may retain only state justified by the active
+matching and validation semantics, including:
+
+- incomplete UTF-8 transport bytes;
+- incremental matcher state;
+- bounded source history required by a matcher or validator;
+- bounded lookahead required before a candidate can be finalized;
+- unresolved bounded candidates and their required context;
+- global byte and source-location accounting;
+- pending normalization, collision, and deterministic-ordering state.
+
+The architectural requirement is therefore that retained source-dependent state
+does not grow as `O(total_source_length)` merely because the logical source is
+large.
+
+No implementation-wide overlap constant is part of the semantic contract.
+Existing implementation window sizes or validator limits may inform retained
+state, but they are not promoted to public streaming semantics.
+
+Every matcher and validator family must have an explicit boundedness
+classification before its streaming implementation is considered conforming.
+The classification records, as applicable:
+
+- maximum required history;
+- maximum required lookahead;
+- maximum unresolved candidate extent;
+- dependence on a semantic boundary such as token, line, structural region, or
+  end-of-stream;
+- whether retained state can be represented incrementally instead of retaining
+  the corresponding source text.
+
+If implementation work discovers a rule or validator whose existing semantics
+require potentially unbounded retained source material, that case must be made
+explicit and redesigned, bounded, or classified as not yet stream-compatible.
+It must not be hidden behind an arbitrary overlap size.
+
+##### End-of-stream semantics
+
+End-of-stream is a semantic event rather than an ordinary empty transport read.
+
+A conforming streaming implementation must use end-of-stream to resolve any
+state whose whole-source meaning depends on the absence of additional input.
+This includes, where applicable:
+
+- incomplete matcher candidates;
+- trailing token or source boundaries;
+- regex or captured-pattern matches requiring trailing evidence;
+- contextual-validator evidence;
+- pending normalization or ownership decisions.
+
+A transport read boundary must never be interpreted as end-of-stream.
+
+The exact public mechanism used to signal completion remains an API-design
+decision for a later phase.
+
+##### Source isolation and failure semantics
+
+Streaming state belongs to exactly one logical source.
+
+After successful completion, explicit reset, or terminal failure, state retained
+for that source must not affect a subsequently scanned source. This includes
+matcher state, UTF-8 carry, validator context, location accounting, unresolved
+candidates, normalization state, and ordering state.
+
+A terminal failure must not produce partially reused state through a later
+source session. The concrete error and lifecycle API remains deliberately
+unfrozen in this phase.
+
+##### Conformance strategy
+
+Whole-source execution remains the reference oracle while the streaming core is
+introduced.
+
+Streaming conformance tests must compare semantic output across adversarial
+partitions rather than validate one preferred chunk size. Coverage must include,
+where applicable:
+
+- single-byte transport reads;
+- boundaries at every byte position for bounded fixtures;
+- splits inside multi-byte UTF-8 scalars;
+- splits inside matcher prefixes and suffixes;
+- splits inside captured values;
+- splits between candidates and required contextual evidence;
+- splits immediately before and after line, token, and structural boundaries;
+- matches finalized only at end-of-stream;
+- multiple chunk sizes and partition layouts producing identical final output.
+
+The implementation may optimize this test space where exhaustive partitioning
+would be impractical, but correctness must never depend on callers choosing a
+particular chunk size.
 
 Non-goals for this phase:
 
@@ -178,19 +307,37 @@ Architectural constraints:
     the streaming core can claim general bounded-memory behavior.
 -   The existing `Scanner::scan` contract remains valid. v0.5 must not require
     existing callers with in-memory UTF-8 sources to adopt the streaming API.
+-   No public streaming type, method naming, reader abstraction, callback
+    model, synchronous/asynchronous policy, or chunk-size recommendation is
+    frozen by this phase.
 
 Acceptance gate:
 
--   [ ] The streaming equivalence contract is documented precisely enough that
+-   [x] The streaming equivalence contract is documented precisely enough that
     implementation tests can determine pass or fail without relying on
     implementation-specific chunk sizes.
--   [ ] Every current matching and validation family can be classified by the
-    source history, lookahead, and candidate extent required to preserve its
-    semantics.
--   [ ] Unbounded or not-yet-bounded cases are explicit rather than hidden
-    behind an arbitrary overlap size.
--   [ ] No public API is frozen before these invariants and classifications are
-    complete.
+-   [x] Every current matching and validation family can be classified by the
+    source history, lookahead, candidate extent, and semantic boundaries
+    required to preserve its behavior.
+-   [x] Unbounded or not-yet-bounded cases must be explicit rather than hidden
+    behind an arbitrary overlap size; the current audit identified no
+    inherently unbounded retained-source requirement in the existing
+    portfolio.
+-   [x] No public API has been frozen before these invariants and
+    classifications were completed.
+
+Design outcome:
+
+- the whole-source scanner remains the semantic oracle for v0.5;
+- source partitioning is semantically invisible;
+- boundedness is a property of explicit retained semantic state rather than a
+  fixed chunk overlap;
+- end-of-stream is an explicit semantic boundary;
+- streaming state is isolated per logical source;
+- the current matcher and validator portfolio has a viable bounded-memory
+  streaming model;
+- public streaming API design remains intentionally deferred until the
+  implementation architecture is specified.
 
 ## Completed 0.4 release line
 
