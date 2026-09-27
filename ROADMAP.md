@@ -73,16 +73,40 @@ detection and classification semantics remain owned by Cribra.
 
 ## Release-line policy
 
-Cribra remains on the `0.4.x` release line while changes are additive
-and preserve the current core architecture and public semantic
-contracts.
+Cribra's `0.4.x` line established the current detection, validation,
+transformation, and interoperability foundation while preserving the original
+whole-source scanning architecture and public semantic contracts.
 
-A future `0.5` release is reserved for a deliberate architectural or
-public-contract change significant enough to justify a new minor line.
-New detectors, hardening, CLI work, bindings, packaging, and additive
-interoperability work do not by themselves require `0.5`.
+The `0.5` line is the next architectural development line. Its defining change
+is a bounded-memory streaming core for incremental source processing while
+preserving Cribra's deterministic detection and validation semantics wherever
+those semantics are applicable to streamed input.
 
-## Current release line
+CLI parity, native FFI parity, language bindings, packaging, distribution, and
+developer integrations remain important project workstreams, but they do not
+define the core release-line numbering. They may progress independently from
+the architectural `0.5` work where their dependencies permit.
+
+## Current architectural line
+
+### v0.5 --- Streaming Core
+
+Status: planned.
+
+Goal: evolve Cribra from a whole-source UTF-8 scanning engine into an engine
+that can process large or incrementally supplied sources with bounded memory,
+without introducing a second detection implementation or weakening the
+deterministic semantics of the existing scanner.
+
+The detailed architecture, invariants, compatibility contract, migration
+strategy, and implementation phases are defined below in the dedicated v0.5
+roadmap.
+
+The existing whole-source API remains an important compatibility surface.
+Streaming is an architectural extension of the authoritative Rust core, not a
+separate scanner with independent detection semantics.
+
+## Completed 0.4 release line
 
 ### v0.4.6 --- Sensitive Data Foundation
 
@@ -399,7 +423,7 @@ Principles:
     demonstrated production gaps, important new credential formats, or
     downstream requirements rather than routine catalog growth.
 
-### v0.4.8 --- Canonical CLI Full Parity and Distribution
+## CLI Core Parity and Distribution
 
 Status: planned; parity foundation implemented ahead of milestone.
 
@@ -464,7 +488,7 @@ Distribution:
     release version.
 -   [ ] Add packaging/distribution release gates.
 
-### v0.4.9 --- Binding-Ready Native FFI and Ecosystem Integrations
+## Bindings and Integrations
 
 Status: planned.
 
@@ -472,7 +496,7 @@ Goal: complete Cribra's native interoperability foundation and expand Cribra
 from a mature detection engine into a broadly consumable developer ecosystem
 without moving application-specific product policy into the OSS core.
 
-#### 0.4.9-A --- Binding-ready native FFI
+### Binding-ready native FFI
 
 Goal: make `cribra-ffi` a complete, stable, versioned interoperability
 foundation from which native language bindings can project the full applicable
@@ -508,7 +532,7 @@ Principles:
 - A missing applicable capability is an FFI parity gap, not an accepted binding
   limitation.
 
-#### 0.4.9-B --- GitHub integration
+### GitHub integration
 
 -   [ ] Provide an official GitHub Action over the canonical Cribra interfaces.
 -   [ ] Preserve Cribra detection semantics rather than implementing
@@ -519,7 +543,7 @@ Principles:
 -   [ ] Validate the Action against the shared Cribra conformance corpus.
 -   [ ] Keep the integration usable without a Silens account or paid service.
 
-#### 0.4.9-C --- Astro integration
+### Astro integration
 
 -   [ ] Provide an official Astro integration for appropriate development,
     build, or CI scanning workflows.
@@ -531,7 +555,7 @@ Principles:
     service.
 -   [ ] Validate semantic equivalence against authoritative Cribra results.
 
-#### 0.4.9-D --- Agent and AI interoperability
+### Agent and AI interoperability
 
 -   [ ] Define a minimal official MCP surface over authoritative Cribra
     capabilities.
@@ -550,7 +574,7 @@ Principles:
 -   [ ] Keep the developer-level Cribra agent integration usable independently
     of Silens commercial services.
 
-#### 0.4.9-E --- Application ecosystem boundary
+### Application ecosystem boundary
 
 Cribra developer integrations and Silens application integrations are distinct
 layers.

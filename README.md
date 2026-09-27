@@ -362,15 +362,20 @@ contracts.
 
 ## Release status
 
-The active release line is `0.4.x`.
+The completed `0.4.x` line established Cribra's current detection, validation,
+transformation, C ABI, WebAssembly, and downstream-consumer foundation.
 
-The current development line extends Cribra conservatively through additive
-detectors, opt-in detection packs, interoperability improvements, and
-downstream-consumer readiness while preserving the existing public semantic
-contracts.
+The active architectural development line is `0.5`, beginning with the
+Streaming Core: bounded-memory incremental source processing that preserves
+Cribra's authoritative detection and validation semantics without introducing
+a second scanner implementation.
 
-A future `0.5` is reserved for a deliberate architectural or public-contract
-change significant enough to justify a new minor line.
+CLI parity, native FFI parity, language bindings, packaging, distribution, and
+developer integrations continue as independent project workstreams rather than
+defining sequential core release numbers.
+
+See `ROADMAP.md` for the architectural v0.5 plan and the independent interface
+and ecosystem workstreams.
 
 ## Examples
 
