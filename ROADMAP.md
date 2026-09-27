@@ -339,6 +339,419 @@ Design outcome:
 - public streaming API design remains intentionally deferred until the
   implementation architecture is specified.
 
+#### 0.5-B --- Streaming execution architecture
+
+Status: design complete; implementation pending.
+
+Goal: define the internal execution architecture that can satisfy the streaming
+semantic contract from 0.5-A with bounded retained state, without creating a
+second detection engine or freezing the public streaming API prematurely.
+
+The existing compiled rule set remains immutable scanner configuration.
+Streaming introduces source-local execution state around that compiled
+configuration rather than moving mutable stream state into `CompiledRuleSet`.
+
+The architectural separation is:
+
+```text
+Scanner
+  |
+  +-- CompiledRuleSet              immutable detection authority
+  |
+  +-- source execution session     mutable state for one logical source
+        |
+        +-- UTF-8 transport state
+        +-- global source-position state
+        +-- matcher execution state
+        +-- validator/context state
+        +-- unresolved candidate state
+        +-- normalization/finalization state
+```
+
+The exact internal type names are intentionally not frozen by this roadmap.
+The implementation may split or combine these responsibilities where doing so
+improves clarity or performance, provided their ownership and lifecycle remain
+explicit.
+
+Required architecture:
+
+-   [x] Keep `CompiledRuleSet` immutable after scanner construction.
+-   [x] Keep rule metadata and compiled matching configuration shared across
+    source sessions.
+-   [x] Introduce mutable execution state scoped to exactly one logical source.
+-   [x] Separate transport chunk boundaries from semantic processing
+    boundaries.
+-   [x] Decode arbitrarily partitioned UTF-8 transport input without requiring
+    callers to provide scalar-aligned chunks.
+-   [x] Track global byte offsets, line numbers, and Unicode-scalar columns
+    incrementally.
+-   [x] Represent matcher continuation explicitly where a logical candidate may
+    cross transport chunks.
+-   [x] Retain only bounded history and lookahead justified by matcher or
+    validator semantics.
+-   [x] Keep unresolved candidates explicit until sufficient evidence exists to
+    accept, reject, or classify them.
+-   [x] Delay externally observable emission until the result is semantically
+    final with respect to later source input.
+-   [x] Preserve exact-span ownership and deterministic normalization across
+    incrementally discovered candidates.
+-   [x] Treat end-of-stream as an explicit finalization event.
+-   [x] Make successful completion, reset, and terminal failure destroy or
+    invalidate all source-local execution state.
+-   [x] Preserve `Scanner::scan` as a whole-source compatibility path using the
+    same semantic authority as streamed execution.
+
+##### Immutable compiled configuration
+
+`CompiledRuleSet` continues to own the scanner's immutable rule metadata and
+compiled matching configuration.
+
+Source-local mutable state must not be stored in a way that makes the compiled
+rule set itself specific to one active source. A scanner must remain capable of
+creating independent source executions from the same compiled configuration.
+
+The current internal execution groups remain useful architectural inputs:
+
+- literal and prefix rules use shared multi-pattern matching;
+- suffix rules have reverse token-boundary semantics;
+- pattern rules use compiled regular expressions;
+- contextual pattern rules may use rule-specific prefilters;
+- the shared contextual-pattern gate avoids unnecessary rule execution.
+
+v0.5 may replace or specialize the implementation of any of these groups where
+incremental execution requires it. Their current concrete representation is not
+a compatibility contract.
+
+What remains authoritative is the rule behavior observed through the semantic
+contract, not the particular whole-source algorithm currently used to produce
+it.
+
+##### Source execution state
+
+One execution session owns all mutable state required to process one logical
+source.
+
+At minimum, the architecture must account explicitly for:
+
+- incomplete UTF-8 transport bytes;
+- total accepted source-byte position;
+- current one-based line and Unicode-scalar column state;
+- matcher continuation state;
+- bounded history needed to determine leading boundaries;
+- bounded lookahead needed to determine trailing boundaries;
+- unresolved matches or captured spans;
+- validator-specific contextual evidence;
+- pending `Finding` and `SensitiveCandidate` classification;
+- normalization and exact-span collision state;
+- deterministic output-order state;
+- end-of-stream and terminal lifecycle state.
+
+The implementation should prefer compact semantic state over retaining source
+text. Source bytes may be retained only when a matcher or validator genuinely
+requires those bytes to preserve existing semantics.
+
+No state belonging to one logical source may be reused implicitly by another.
+
+##### UTF-8 transport and source coordinates
+
+Transport input is a byte stream. Semantic matching continues to operate on
+valid UTF-8 text.
+
+A chunk may terminate after any byte, including inside a multi-byte UTF-8
+scalar. The execution session therefore owns a small UTF-8 carry containing
+only the incomplete trailing scalar bytes required to join the next transport
+chunk.
+
+Complete valid UTF-8 is then presented to semantic execution independently of
+the original transport partition.
+
+Invalid UTF-8 handling must remain deterministic and explicit. Streaming must
+not silently replace malformed input, reinterpret bytes, or make validity
+depend on chunk placement.
+
+Global source coordinates are maintained incrementally:
+
+- byte spans are offsets in the complete logical source;
+- lines remain one-based;
+- columns remain one-based Unicode-scalar positions;
+- a scalar divided across transport reads advances the column exactly once;
+- newline handling must produce the same location as whole-source execution.
+
+Transport-local offsets must never escape into final findings or candidates.
+
+##### Matcher continuation model
+
+Each matching family requires an incremental strategy derived from its actual
+semantics rather than from a common copied overlap window.
+
+Literal and prefix matching may preserve automaton continuation state across
+input segments. Prefix findings additionally require enough boundary state to
+establish the leading token boundary and must remain unresolved while the token
+can still extend.
+
+Suffix matching requires enough token history to recover the candidate start
+when the suffix is recognized and enough trailing information to establish the
+suffix boundary.
+
+Pattern matching must use a streaming strategy whose retained state is derived
+from the pattern's bounded language requirements. Existing built-in patterns
+already impose bounded candidate or contextual extents where required by the
+0.5-A audit.
+
+Captured-pattern execution must preserve the exact projected capture span even
+when the complete regex match and its capture cross different transport
+chunks.
+
+A matcher result is therefore not necessarily a finalized finding. Discovery
+and finalization are separate execution events.
+
+##### Validator and contextual state
+
+Validators remain the authority for accepting matcher candidates.
+
+Streaming infrastructure must provide each validator with semantically
+equivalent evidence to the whole-source scanner. It must not weaken validation
+because some evidence arrived in an earlier or later transport chunk.
+
+Validator execution may therefore use:
+
+- the candidate span and candidate bytes while unresolved;
+- bounded source history;
+- bounded lookahead;
+- compact parser-like or structural state;
+- explicit semantic-boundary state;
+- end-of-stream when absence of further evidence is significant.
+
+Where contextual evidence can be represented incrementally, the implementation
+should retain that semantic state instead of the complete source region.
+
+Validator-specific retained-state bounds belong to internal implementation
+contracts and tests. They are not public chunk-size requirements.
+
+##### Finalization frontier
+
+Streaming execution needs an explicit notion of which portion of the logical
+source can no longer be affected by future input.
+
+Call this architectural concept the finalization frontier. The name does not
+require a public type or API.
+
+A candidate may cross the frontier only when later bytes can no longer:
+
+- extend or invalidate its matcher span;
+- change a required token, line, or structural boundary;
+- provide validator evidence that changes acceptance or rejection;
+- alter exact-span ownership;
+- create a higher-priority collision affecting normalization;
+- change whether the result is a confirmed finding or an ambiguous candidate;
+- change deterministic ordering relative to another unresolved result.
+
+Once all semantic decisions affecting a result are final, source bytes retained
+solely for that result may be released.
+
+The frontier may advance at different rates for different matching or
+validation families. The implementation must not force all rules to retain the
+largest possible common history if their semantics allow earlier release.
+
+End-of-stream advances the frontier through all remaining resolvable state.
+
+##### Incremental normalization and ordering
+
+Whole-source execution currently discovers internal findings before applying
+validation, exact-span ownership, normalization, and deterministic result
+ordering.
+
+Streaming must preserve the resulting semantics without requiring all source
+text or all raw matcher candidates to remain resident until end-of-stream.
+
+Pending results may therefore remain buffered while another unresolved
+candidate can still affect their ownership or ordering.
+
+Once a result lies behind the finalization frontier and no unresolved candidate
+can alter its semantic outcome, it may be committed to finalized result state.
+
+Exact-span collisions continue to use the existing rule-priority semantics.
+Provider-specific validated rules must not lose ownership merely because a
+generic candidate happened to be discovered or finalized from a different
+transport chunk.
+
+Final ordering must be identical to whole-source ordering for the same logical
+source regardless of partition layout.
+
+The implementation may initially retain finalized metadata until source
+completion if required by the existing report API. Bounded-memory claims apply
+to retained source-dependent material; compact result metadata necessarily
+scales with the number of reportable results unless a later public incremental
+result API defines different ownership.
+
+##### SensitiveCandidate integration
+
+`SensitiveCandidate` remains a first-class semantic output and is not treated
+as an implementation fallback for streaming uncertainty.
+
+Temporary uncertainty caused only by incomplete input remains internal pending
+state.
+
+A pending matcher or validator candidate becomes a public
+`SensitiveCandidate` only when the same complete logical source would produce
+that candidate under whole-source semantics.
+
+Chunk boundaries must therefore never create additional ambiguous candidates.
+
+##### End-of-stream and lifecycle
+
+End-of-stream performs semantic finalization, not merely buffer flushing.
+
+Completion must:
+
+1. resolve or reject incomplete UTF-8 according to the defined input-validity
+   contract;
+2. finalize matcher state that depends on source termination;
+3. provide end-of-source evidence to validators that require it;
+4. resolve remaining normalization and exact-span ownership decisions;
+5. produce deterministic final result ordering;
+6. transition the source session into a completed state from which additional
+   input cannot be accepted accidentally.
+
+Reset abandons all unresolved state and returns execution to a clean
+source-independent state.
+
+Terminal failure invalidates the current source session. Reusing partially
+processed matcher, validator, location, or normalization state after terminal
+failure is forbidden.
+
+The concrete public methods and error types implementing these lifecycle events
+remain deferred.
+
+##### Whole-source compatibility path
+
+The existing whole-source API remains supported.
+
+Architecturally, whole-source and streamed execution must converge on the same
+semantic machinery rather than evolve as independent scanners.
+
+The implementation may migrate `Scanner::scan_source` and related whole-source
+paths onto the new execution session once parity is demonstrated. It may also
+retain optimized whole-buffer entry paths where they reuse the same compiled
+rules and semantic decisions.
+
+What is forbidden is maintaining two independently evolving definitions of
+matching, validation, normalization, or ownership.
+
+##### Implementation sequence
+
+The internal streaming core should be introduced in narrow, testable slices:
+
+1. source-session lifecycle and global position accounting;
+2. UTF-8 transport carry and adversarial partition tests;
+3. literal and prefix incremental execution;
+4. suffix incremental execution;
+5. deterministic pattern execution with bounded retained state;
+6. captured-pattern projection;
+7. contextual prefilter and validator integration;
+8. incremental finalization and normalization;
+9. `SensitiveCandidate` parity;
+10. whole-source compatibility integration;
+11. complete cross-family partition-equivalence suite.
+
+A later slice may reorder implementation details where dependencies require it,
+but semantic parity must be demonstrated after each matching family is moved
+onto the streaming path.
+
+##### Memory model
+
+The primary bounded-memory requirement is:
+
+```text
+retained_source_state =
+    utf8_carry
+  + matcher_state
+  + bounded_history
+  + bounded_lookahead
+  + unresolved_candidate_material
+  + validator_context
+  + normalization_pending_state
+```
+
+None of those source-dependent components may grow merely because the logical
+source continues indefinitely.
+
+Finalized report metadata may grow with the number of findings and candidates
+required by the existing report-returning API. That growth is distinct from
+retaining the scanned source and does not justify retaining matched secret
+material.
+
+A future incremental-consumer API may permit finalized metadata to be handed
+off earlier, but such an API is not required to establish the internal
+streaming architecture.
+
+Non-goals for this phase:
+
+-   no public streaming API design;
+-   no `Read`, async-reader, iterator, callback, or channel commitment;
+-   no CLI streaming interface;
+-   no C ABI, WebAssembly, Swift, Kotlin, Python, or other binding surface;
+-   no source-level parallelism within one logical source;
+-   no detector-catalog expansion;
+-   no arbitrary fixed chunk overlap presented as the streaming architecture;
+-   no weakening of validators to simplify incremental execution;
+-   no requirement to expose internal pending candidates or retained context.
+
+Architectural constraints:
+
+-   One immutable compiled rule configuration may serve multiple independent
+    source executions.
+-   Mutable execution state is source-local.
+-   Source bytes remain caller-owned except for bounded internal material whose
+    retention is semantically required.
+-   Internal retained secret material must be released as soon as its semantic
+    dependency is finalized.
+-   Chunk size and chunk placement must not affect semantic output.
+-   The implementation must be explainable in terms of explicit state bounds.
+-   Existing rule identifiers, metadata, validation authority, normalization,
+    and result semantics remain authoritative.
+-   Performance optimizations must preserve the 0.5-A equivalence contract.
+
+Acceptance gate:
+
+-   [x] Immutable compiled configuration and mutable per-source execution state
+    have distinct ownership.
+-   [x] UTF-8 carry and global coordinate accounting have an explicit
+    partition-independent model.
+-   [x] Every matcher family has an incremental continuation strategy without
+    relying on one implementation-wide overlap constant.
+-   [x] Validator context can be supplied from bounded retained or incremental
+    semantic state.
+-   [x] Discovery, validation, normalization, and finalization are modeled as
+    distinct concerns.
+-   [x] A finalization frontier defines when later input can no longer change a
+    result.
+-   [x] `SensitiveCandidate` semantics distinguish genuine source ambiguity from
+    temporary streaming incompleteness.
+-   [x] End-of-stream, reset, completion, and terminal failure have explicit
+    architectural semantics.
+-   [x] Whole-source compatibility converges on the same semantic authority.
+-   [x] Bounded-memory claims distinguish source-dependent retained material
+    from compact finalized report metadata.
+-   [x] No public streaming API has been frozen by this phase.
+
+Design outcome:
+
+- `CompiledRuleSet` remains immutable scanner configuration;
+- one logical source owns one isolated mutable execution session;
+- transport partitioning is absorbed below semantic matching;
+- UTF-8 and global location accounting are incremental and partition-independent;
+- matcher and validator continuation uses explicit bounded semantic state;
+- discovery does not imply immediate emission;
+- the finalization frontier determines when results and retained source material
+  become irrevocable;
+- normalization and exact-span ownership remain deterministic across chunks;
+- temporary streaming uncertainty never leaks as a `SensitiveCandidate`;
+- whole-source scanning remains compatible and converges on the same semantic
+  engine;
+- the architecture is sufficiently specified to begin implementation without
+  prematurely committing Cribra to a public streaming API shape.
+
 ## Completed 0.4 release line
 
 ### v0.4.6 --- Sensitive Data Foundation
