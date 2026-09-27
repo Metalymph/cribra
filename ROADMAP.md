@@ -752,6 +752,599 @@ Design outcome:
 - the architecture is sufficiently specified to begin implementation without
   prematurely committing Cribra to a public streaming API shape.
 
+#### 0.5-C --- Public streaming API contract
+
+Status: design complete; implementation pending.
+
+Goal: define the public ownership, lifecycle, input, completion, error, and
+compatibility contract for streaming scans without exposing internal matcher
+state or coupling Cribra to a particular I/O or asynchronous runtime.
+
+The public streaming model follows directly from the semantic contract in 0.5-A
+and the execution architecture in 0.5-B:
+
+```text
+immutable Scanner
+      |
+      +-- create source-local streaming session
+                    |
+                    +-- accept arbitrary byte chunks
+                    +-- retain bounded semantic state
+                    +-- explicit end-of-stream finalization
+                    |
+                    +-- ScanReport
+```
+
+The exact public type and method names remain implementation decisions until the
+first implementation slice demonstrates that the contract can be expressed
+without unnecessary complexity.
+
+The architectural API shape, however, is fixed by this phase.
+
+Required public contract:
+
+-   [x] Keep `Scanner` immutable and reusable across whole-source and streaming
+    scans.
+-   [x] Represent one active streamed logical source with a separate
+    source-local session object.
+-   [x] Accept transport input as bytes rather than requiring every individual
+    chunk to be valid `&str`.
+-   [x] Permit transport chunks to end at arbitrary byte positions, including
+    inside a multi-byte UTF-8 scalar.
+-   [x] Make end-of-stream an explicit operation rather than inferring it from
+    an empty chunk.
+-   [x] Make successful finalization consume or otherwise irreversibly complete
+    the source session.
+-   [x] Prevent additional input after successful completion.
+-   [x] Treat terminal input or execution errors as terminating the current
+    logical-source session.
+-   [x] Return the same semantic `ScanReport` produced by whole-source scanning
+    for the equivalent complete UTF-8 source.
+-   [x] Keep transport adapters such as `std::io::Read` above the primitive
+    byte-oriented streaming contract.
+-   [x] Keep asynchronous runtime integration outside the core streaming
+    contract.
+-   [x] Avoid exposing matcher, validator, normalization, or retained-source
+    internals through the public API.
+-   [x] Avoid requiring callers to choose a semantically significant chunk
+    size.
+-   [x] Keep chunk memory caller-owned except for bounded material that Cribra
+    must retain to preserve detection semantics.
+-   [x] Do not require a public reset operation for the initial streaming API;
+    a new logical source uses a new source session.
+
+##### Scanner and session ownership
+
+`Scanner` remains immutable scanner configuration.
+
+Creating a streaming execution must not move, mutate, or otherwise make the
+scanner unavailable for additional scans. Multiple independent source sessions
+may therefore originate from the same scanner configuration.
+
+Conceptually:
+
+```rust
+let scanner = Scanner::default();
+
+let mut first = scanner.stream();
+let mut second = scanner.stream();
+```
+
+The notation illustrates ownership only. It does not freeze `stream` as the
+eventual public method name.
+
+Each session owns the mutable state for exactly one logical source. It may
+borrow immutable scanner configuration or share it through the scanner's
+existing compiled-rule ownership model.
+
+The public contract must permit independent sessions to coexist without their
+source-local state influencing one another.
+
+Whether a particular session type is `Send` or `Sync` must follow from its
+actual implementation and safety properties rather than being promised by the
+roadmap. The immutable scanner should retain its existing ability to be reused
+across independent scans.
+
+##### Primitive input contract
+
+The primitive streaming operation accepts a borrowed byte slice representing
+the next transport fragment of the same logical source.
+
+Conceptually:
+
+```rust
+session.push(bytes)?;
+```
+
+The exact method name remains unfrozen.
+
+`&[u8]` is the primitive input rather than `&str` because transport boundaries
+are not semantic UTF-8 boundaries. Requiring every chunk to be independently
+valid UTF-8 would contradict the partition invariance established in 0.5-A.
+
+A call may contain:
+
+- zero bytes;
+- one byte;
+- one or more complete UTF-8 scalars;
+- a complete logical source;
+- the beginning or end of a multi-byte scalar;
+- bytes completing a scalar begun by an earlier call;
+- arbitrary divisions of matcher, token, line, capture, or contextual regions.
+
+An empty input chunk is a no-op transport event. It does not represent
+end-of-stream and must not cause pending semantic state to finalize.
+
+No minimum, preferred, or correctness-critical chunk size is part of the public
+contract.
+
+Implementations and documentation may recommend chunk sizes for throughput, but
+changing the chunk size must not change semantic output.
+
+##### Borrowing and retained input
+
+Passing a byte slice does not transfer ownership of the caller's input buffer to
+Cribra.
+
+After the input operation returns, the caller may reuse, mutate, or release its
+buffer according to normal Rust borrowing rules.
+
+The streaming implementation may internally copy only material that must survive
+the call in order to preserve semantics, such as:
+
+- incomplete UTF-8 bytes;
+- bounded matcher history;
+- unresolved candidate material;
+- bounded validator evidence;
+- other explicitly classified source-dependent state from 0.5-A and 0.5-B.
+
+The API does not promise zero-copy processing across calls. Such a promise would
+conflict with the need to retain bounded fragments whose lifetime exceeds the
+borrowed input slice.
+
+Likewise, the API must not require retaining caller-owned chunks until
+end-of-stream.
+
+##### Completion contract
+
+End-of-stream is explicit.
+
+Conceptually:
+
+```rust
+let report = session.finish()?;
+```
+
+The preferred Rust ownership model is consuming finalization:
+
+```rust
+fn finish(self) -> Result<ScanReport, StreamError>;
+```
+
+The names and concrete error type shown above are illustrative, but the
+ownership property is architectural: successful completion must make accidental
+continued use of the same source execution impossible or structurally
+unrepresentable.
+
+Completion performs all semantic work defined for end-of-stream in 0.5-A and
+0.5-B, including:
+
+1. resolving any pending UTF-8 transport state;
+2. finalizing matcher state that depends on source termination;
+3. resolving pending token, line, and structural boundaries;
+4. providing end-of-source evidence to validators;
+5. resolving remaining findings and `SensitiveCandidate` values;
+6. completing exact-span ownership and deterministic normalization;
+7. producing deterministic final ordering;
+8. materializing the final `ScanReport`.
+
+An empty logical source is valid:
+
+```text
+create session
+finish session
+```
+
+Its report must be semantically equivalent to whole-source scanning of the empty
+UTF-8 string.
+
+##### UTF-8 validity and errors
+
+Transport chunks are arbitrary bytes, but the complete logical source scanned by
+the UTF-8 scanner must satisfy the scanner's UTF-8 input contract.
+
+A byte sequence split across calls is not invalid merely because an intermediate
+chunk ends inside a UTF-8 scalar.
+
+The implementation must distinguish:
+
+```text
+temporarily incomplete UTF-8
+```
+
+from:
+
+```text
+definitively invalid UTF-8
+```
+
+Temporarily incomplete trailing bytes remain pending until additional input or
+end-of-stream.
+
+A definitively malformed sequence produces a deterministic terminal input error.
+
+If end-of-stream occurs while an incomplete scalar remains pending, completion
+fails deterministically rather than replacing, dropping, or reinterpretating
+the bytes.
+
+Chunk partitioning must not change whether a complete byte sequence is accepted
+as valid UTF-8.
+
+The public error surface must not expose retained secret material or include
+matched source contents merely to explain the failure.
+
+##### Terminal failure semantics
+
+An unrecoverable streaming error terminates the current logical-source
+execution.
+
+After terminal failure, the session must not silently resume using partially
+retained:
+
+- UTF-8 state;
+- matcher state;
+- validator state;
+- unresolved candidates;
+- source coordinates;
+- normalization state.
+
+The initial API does not provide recovery by resetting a failed session.
+
+The caller creates a new session for a new logical source.
+
+This intentionally keeps source isolation structural and avoids a public
+lifecycle in which callers must know which internal state is safe to reset.
+
+##### Report equivalence
+
+The initial public streaming API is report-oriented.
+
+For every valid complete logical UTF-8 source `S` and every valid partition
+`P(S)`:
+
+```text
+semantic_output(scanner.scan(S))
+    ==
+semantic_output(scanner.stream(P(S)).finish())
+```
+
+The notation is architectural rather than literal Rust syntax.
+
+Streaming therefore returns the existing semantic result model rather than
+introducing a second report type.
+
+The resulting `ScanReport` must preserve:
+
+- findings;
+- `SensitiveCandidate` values;
+- rule identifiers;
+- severity;
+- confidence;
+- remediation;
+- exact global byte spans;
+- one-based line and Unicode-scalar columns;
+- normalization and ownership decisions;
+- deterministic ordering.
+
+Source length recorded by higher-level identified-source APIs must represent the
+complete logical source length, not the size of the final transport chunk.
+
+##### Result emission policy
+
+The first public streaming surface is intentionally completion-oriented.
+
+It does not require findings to be emitted incrementally while chunks are being
+accepted.
+
+This separates two concerns:
+
+```text
+bounded-memory source processing
+```
+
+from:
+
+```text
+incremental result delivery
+```
+
+They are related but not equivalent.
+
+A scanner can process source material with bounded retained source state while
+still returning one final compact `ScanReport`.
+
+Introducing callbacks, iterators, channels, polling, event streams, or
+backpressure before the finalization semantics are proven would unnecessarily
+expand the first public contract.
+
+A later API may expose results that have crossed the finalization frontier
+defined in 0.5-B, but doing so must preserve the same ownership,
+normalization, ordering, and security guarantees.
+
+##### `std::io::Read` integration
+
+`std::io::Read` is an adapter opportunity, not the primitive semantic API.
+
+A convenience operation may repeatedly:
+
+1. read bytes into a caller- or Cribra-owned bounded buffer;
+2. submit the bytes to the primitive source session;
+3. signal completion after the reader reaches genuine EOF;
+4. return the final `ScanReport`.
+
+Conceptually:
+
+```text
+Read
+  |
+bounded buffer
+  |
+streaming session
+  |
+ScanReport
+```
+
+Reader buffer size is therefore a throughput choice, not a detection-semantic
+choice.
+
+I/O failures and scanner failures must remain distinguishable enough for callers
+to handle them correctly without exposing source contents.
+
+The exact adapter shape is deferred until the primitive session API exists.
+
+##### Async integration
+
+The core streaming scanner remains runtime-independent.
+
+The primitive operation accepts already-available bytes and performs scanner
+work synchronously. It does not depend on Tokio, async-std, futures executors,
+or another asynchronous runtime.
+
+Async applications can perform asynchronous I/O externally and submit completed
+byte buffers to the same streaming session:
+
+```text
+async transport
+      |
+      | await read
+      v
+available bytes
+      |
+      v
+Cribra streaming session
+```
+
+This keeps detection semantics independent of scheduling and avoids introducing
+a runtime dependency into the core library.
+
+A future optional async adapter may improve ergonomics, but it must remain an
+adapter over the same semantic engine.
+
+##### Concurrency contract
+
+One source session represents one sequential logical byte stream.
+
+Calls contributing bytes to that session have a defined source order and must
+not be interpreted as independently reorderable work items.
+
+Parallelism across independent logical sources remains compatible with the
+architecture:
+
+```text
+Scanner
+  |
+  +-- source A session
+  +-- source B session
+  +-- source C session
+```
+
+The implementation may later optimize work inside one session where doing so
+preserves deterministic stream order and semantics, but the public API does not
+require or expose intra-source parallel execution.
+
+The existing whole-source parallel scanning model remains a separate
+higher-level capability.
+
+##### Identified-source integration
+
+The current `Scanner::scan` API associates each complete source with a
+caller-owned key and returns `ScanResults<K>` preserving input order.
+
+Streaming must not force source identity into the low-level matcher state.
+
+The primitive source session scans one logical source and produces one
+`ScanReport`.
+
+Higher-level APIs may associate a key, path, identifier, or source length with
+that completed report without changing detection semantics.
+
+This preserves the current separation:
+
+```text
+source identity / collection orchestration
+                |
+                v
+         per-source scanning
+                |
+                v
+           ScanReport
+```
+
+and avoids coupling the streaming core to filesystem paths, network resources,
+or application-specific identifiers.
+
+##### Security properties
+
+The public streaming surface must preserve Cribra's existing secret-handling
+direction.
+
+In particular:
+
+- input buffers remain caller-owned;
+- source contents are not exposed through streaming-state inspection;
+- internal pending candidates are not public findings;
+- error messages must not include matched secret values;
+- debug representations of public streaming state must not expose retained
+  source material;
+- dropping a session must not cause retained source material to become publicly
+  observable;
+- transport adapters must not introduce logging of scanned chunks;
+- no public intermediate representation may require callers to handle raw
+  matched secret values.
+
+Memory clearing guarantees, if introduced, must be explicit and technically
+enforceable rather than implied merely because a session has been dropped.
+
+##### API evolution constraints
+
+The first implementation should expose the smallest surface capable of
+expressing the contract.
+
+The likely minimum conceptual operations are:
+
+```text
+Scanner
+  -> create source session
+
+source session
+  -> accept bytes
+  -> finish into ScanReport
+```
+
+This phase deliberately does not freeze:
+
+- exact type names;
+- exact method names;
+- concrete streaming error names or variants;
+- a `Read` convenience method;
+- async adapters;
+- callbacks;
+- incremental result iterators;
+- event streams;
+- result channels;
+- user-configurable chunk sizes;
+- explicit reset;
+- pause/resume persistence;
+- serialization of active source state.
+
+Those features may be evaluated only after the primitive session implementation
+demonstrates semantic parity.
+
+##### Implementation sequence
+
+The public API should be introduced only after the corresponding internal
+execution slices from 0.5-B exist.
+
+Recommended sequence:
+
+1. implement an internal source session;
+2. prove arbitrary byte-partition and UTF-8 carry behavior;
+3. migrate matching families incrementally;
+4. prove validator and normalization parity;
+5. prove `SensitiveCandidate` parity;
+6. prove end-of-stream behavior;
+7. expose the minimal public byte-oriented session;
+8. add compile-time and runtime lifecycle tests;
+9. integrate whole-source compatibility where appropriate;
+10. evaluate `Read` convenience only after the primitive API is stable.
+
+This prevents public API pressure from dictating an incorrect internal
+architecture.
+
+##### Required conformance tests
+
+The public streaming contract requires tests covering at least:
+
+- empty logical source;
+- one chunk containing the complete source;
+- one-byte chunks;
+- empty chunks interspersed with non-empty chunks;
+- every byte boundary for bounded fixtures;
+- UTF-8 scalars divided across calls;
+- incomplete UTF-8 completed by a later call;
+- invalid UTF-8 detected independently of partition layout;
+- incomplete UTF-8 at end-of-stream;
+- matches crossing one or multiple chunk boundaries;
+- contextual evidence crossing chunk boundaries;
+- captured spans crossing chunk boundaries;
+- findings finalized only at end-of-stream;
+- `SensitiveCandidate` parity;
+- exact-span ownership parity;
+- deterministic ordering parity;
+- multiple independent sessions created from one scanner;
+- dropping an unfinished session without affecting later sessions;
+- terminal failure followed by creation of a clean new session;
+- equivalence between whole-source and streamed reports.
+
+Where lifecycle invalidity can be made impossible through Rust ownership, a
+compile-fail test or equivalent API-level proof is preferable to a runtime
+state check.
+
+##### Non-goals for this phase
+
+- freezing exact public type and method names before implementation validates
+  them;
+- asynchronous I/O in the core scanner;
+- choosing an async runtime;
+- making filesystem or network I/O part of detection semantics;
+- exposing internal matcher or validator state;
+- exposing partially validated candidates;
+- promising zero-copy processing across calls;
+- requiring caller-managed overlap buffers;
+- introducing a public reset protocol;
+- serializing or resuming active stream sessions;
+- incremental public finding delivery;
+- changing `ScanReport` semantics;
+- changing existing whole-source `Scanner::scan` behavior.
+
+##### Acceptance gate
+
+-   [x] The ownership relationship between immutable scanner configuration and
+    mutable per-source execution is explicit.
+-   [x] The primitive input is byte-oriented and compatible with arbitrary
+    transport partitioning.
+-   [x] Empty chunks and end-of-stream have distinct semantics.
+-   [x] Successful completion has an irreversible lifecycle transition.
+-   [x] Terminal failure cannot permit state reuse across logical sources.
+-   [x] UTF-8 validity is independent of transport partitioning.
+-   [x] Input-buffer ownership and retained-data expectations are explicit.
+-   [x] The initial output remains the existing `ScanReport`.
+-   [x] Whole-source versus streaming report equivalence is explicit.
+-   [x] `Read` and async I/O are adapters rather than semantic authorities.
+-   [x] No async runtime dependency is required by the core contract.
+-   [x] Incremental result delivery is explicitly separated from bounded-memory
+    source processing.
+-   [x] The initial API does not require reset, callbacks, channels, or
+    caller-managed overlap.
+-   [x] Security constraints prevent the streaming API from becoming a new
+    secret-exposure surface.
+-   [x] Exact public naming remains deferred until implementation validates the
+    minimal surface.
+
+Design outcome:
+
+- `Scanner` remains immutable, reusable compiled configuration;
+- each streamed logical source has isolated mutable execution state;
+- arbitrary `&[u8]` transport fragments are the primitive input model;
+- UTF-8 reconstruction belongs to the source session rather than the caller;
+- end-of-stream is explicit and finalization is irreversible;
+- the first streaming API remains report-oriented;
+- whole-source and streamed execution share one semantic authority;
+- I/O adapters remain layered above the core;
+- async runtime policy remains outside Cribra's detection engine;
+- public API size remains deliberately minimal until implementation proves the
+  architecture.
+
 ## Completed 0.4 release line
 
 ### v0.4.6 --- Sensitive Data Foundation
