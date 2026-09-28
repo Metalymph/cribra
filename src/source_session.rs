@@ -2,6 +2,17 @@ use std::sync::Arc;
 
 use crate::compiled_rule::CompiledRuleSet;
 
+/// Mutable execution state owned by one logical source.
+///
+/// Streaming execution state belongs here rather than in the shared compiled
+/// scanner configuration. Later streaming slices extend this boundary with the
+/// concrete matcher, validator, candidate, normalization, and location state
+/// they require.
+#[derive(Debug, Default)]
+struct SourceExecutionState {
+    accepted_bytes: usize,
+}
+
 /// Mutable execution state for one logical source.
 ///
 /// A source session owns all state that may change while processing a single
@@ -11,7 +22,7 @@ use crate::compiled_rule::CompiledRuleSet;
 pub(crate) struct SourceSession {
     rules: Arc<CompiledRuleSet>,
     lifecycle: SourceLifecycle,
-    accepted_bytes: usize,
+    state: SourceExecutionState,
 }
 
 /// Lifecycle of one logical-source execution.
@@ -33,12 +44,12 @@ impl SourceSession {
         Self {
             rules,
             lifecycle: SourceLifecycle::Active,
-            accepted_bytes: 0,
+            state: SourceExecutionState::default(),
         }
     }
 
     pub(crate) fn accepted_bytes(&self) -> usize {
-        self.accepted_bytes
+        self.state.accepted_bytes
     }
 
     pub(crate) fn lifecycle(&self) -> SourceLifecycle {
@@ -47,7 +58,7 @@ impl SourceSession {
 
     pub(crate) fn accept_bytes(&mut self, count: usize) -> Result<(), SourceSessionStateError> {
         self.ensure_active()?;
-        self.accepted_bytes += count;
+        self.state.accepted_bytes += count;
         Ok(())
     }
 
@@ -170,5 +181,52 @@ mod tests {
         assert_eq!(session.fail(), Err(SourceSessionStateError::NotActive));
         assert_eq!(session.accepted_bytes(), 13);
         assert_eq!(session.lifecycle(), SourceLifecycle::Failed);
+    }
+
+    #[test]
+    fn completing_one_session_does_not_affect_another_active_session() {
+        let scanner = Scanner::default();
+
+        let mut first = scanner.source_session();
+        let mut second = scanner.source_session();
+
+        first.accept_bytes(11).unwrap();
+        second.accept_bytes(7).unwrap();
+        first.accept_bytes(13).unwrap();
+        second.accept_bytes(5).unwrap();
+
+        assert_eq!(first.accepted_bytes(), 24);
+        assert_eq!(second.accepted_bytes(), 12);
+
+        first.complete().unwrap();
+
+        assert_eq!(first.lifecycle(), SourceLifecycle::Completed);
+        assert_eq!(second.lifecycle(), SourceLifecycle::Active);
+
+        second.accept_bytes(3).unwrap();
+
+        assert_eq!(first.accepted_bytes(), 24);
+        assert_eq!(second.accepted_bytes(), 15);
+    }
+
+    #[test]
+    fn failing_one_session_does_not_affect_another_active_session() {
+        let scanner = Scanner::default();
+
+        let mut first = scanner.source_session();
+        let mut second = scanner.source_session();
+
+        first.accept_bytes(19).unwrap();
+        second.accept_bytes(5).unwrap();
+
+        first.fail().unwrap();
+
+        assert_eq!(first.lifecycle(), SourceLifecycle::Failed);
+        assert_eq!(second.lifecycle(), SourceLifecycle::Active);
+
+        second.accept_bytes(7).unwrap();
+
+        assert_eq!(first.accepted_bytes(), 19);
+        assert_eq!(second.accepted_bytes(), 12);
     }
 }
