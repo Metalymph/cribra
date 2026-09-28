@@ -13,6 +13,7 @@ use crate::{
     scan_report::ScanReport,
     scan_results::ScanResults,
     scanner_builder::ScannerBuilder,
+    source_session::SourceSession,
     validators::dispatch::validate_candidate,
 };
 
@@ -71,6 +72,10 @@ impl ScanDiagnostics {
 impl Scanner {
     pub(crate) fn new(rules: Arc<CompiledRuleSet>) -> Self {
         Self { rules }
+    }
+
+    pub(crate) fn source_session(&self) -> SourceSession {
+        SourceSession::new(Arc::clone(&self.rules))
     }
 
     /// Creates an empty builder for configuring a scanner.

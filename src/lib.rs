@@ -174,6 +174,7 @@ mod scanner;
 mod scanner_builder;
 mod sensitive_candidate;
 mod severity;
+mod source_session;
 pub mod transform;
 mod validators;
 pub use confidence::Confidence;
