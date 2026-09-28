@@ -174,6 +174,10 @@ mod scanner;
 mod scanner_builder;
 mod sensitive_candidate;
 mod severity;
+#[cfg_attr(
+    not(test),
+    allow(dead_code, reason = "wired incrementally during streaming 0.5-D")
+)]
 mod source_session;
 pub mod transform;
 mod validators;

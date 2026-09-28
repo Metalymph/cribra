@@ -22,6 +22,12 @@ pub(crate) enum SourceLifecycle {
     Failed,
 }
 
+/// Invalid mutation of a source session that is no longer active.
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub(crate) enum SourceSessionStateError {
+    NotActive,
+}
+
 impl SourceSession {
     pub(crate) fn new(rules: Arc<CompiledRuleSet>) -> Self {
         Self {
@@ -39,19 +45,30 @@ impl SourceSession {
         self.lifecycle
     }
 
-    pub(crate) fn accept_bytes(&mut self, count: usize) {
-        debug_assert_eq!(self.lifecycle, SourceLifecycle::Active);
+    pub(crate) fn accept_bytes(&mut self, count: usize) -> Result<(), SourceSessionStateError> {
+        self.ensure_active()?;
         self.accepted_bytes += count;
+        Ok(())
     }
 
-    pub(crate) fn complete(&mut self) {
-        debug_assert_eq!(self.lifecycle, SourceLifecycle::Active);
+    pub(crate) fn complete(&mut self) -> Result<(), SourceSessionStateError> {
+        self.ensure_active()?;
         self.lifecycle = SourceLifecycle::Completed;
+        Ok(())
     }
 
-    pub(crate) fn fail(&mut self) {
-        debug_assert_eq!(self.lifecycle, SourceLifecycle::Active);
+    pub(crate) fn fail(&mut self) -> Result<(), SourceSessionStateError> {
+        self.ensure_active()?;
         self.lifecycle = SourceLifecycle::Failed;
+        Ok(())
+    }
+
+    fn ensure_active(&self) -> Result<(), SourceSessionStateError> {
+        if self.lifecycle == SourceLifecycle::Active {
+            Ok(())
+        } else {
+            Err(SourceSessionStateError::NotActive)
+        }
     }
 
     #[cfg(test)]
@@ -82,7 +99,7 @@ mod tests {
         let mut first = scanner.source_session();
         let second = scanner.source_session();
 
-        first.accept_bytes(17);
+        first.accept_bytes(17).unwrap();
 
         assert_eq!(first.accepted_bytes(), 17);
         assert_eq!(second.accepted_bytes(), 0);
@@ -96,7 +113,7 @@ mod tests {
 
         {
             let mut abandoned = scanner.source_session();
-            abandoned.accept_bytes(23);
+            abandoned.accept_bytes(23).unwrap();
         }
 
         let later = scanner.source_session();
@@ -110,12 +127,48 @@ mod tests {
         let scanner = Scanner::default();
 
         let mut completed = scanner.source_session();
-        completed.complete();
+        completed.complete().unwrap();
 
         let mut failed = scanner.source_session();
-        failed.fail();
+        failed.fail().unwrap();
 
         assert_eq!(completed.lifecycle(), SourceLifecycle::Completed);
         assert_eq!(failed.lifecycle(), SourceLifecycle::Failed);
+    }
+
+    #[test]
+    fn completed_session_rejects_further_mutation() {
+        let scanner = Scanner::default();
+        let mut session = scanner.source_session();
+
+        session.accept_bytes(11).unwrap();
+        session.complete().unwrap();
+
+        assert_eq!(
+            session.accept_bytes(7),
+            Err(SourceSessionStateError::NotActive)
+        );
+        assert_eq!(session.complete(), Err(SourceSessionStateError::NotActive));
+        assert_eq!(session.fail(), Err(SourceSessionStateError::NotActive));
+        assert_eq!(session.accepted_bytes(), 11);
+        assert_eq!(session.lifecycle(), SourceLifecycle::Completed);
+    }
+
+    #[test]
+    fn failed_session_rejects_further_mutation() {
+        let scanner = Scanner::default();
+        let mut session = scanner.source_session();
+
+        session.accept_bytes(13).unwrap();
+        session.fail().unwrap();
+
+        assert_eq!(
+            session.accept_bytes(5),
+            Err(SourceSessionStateError::NotActive)
+        );
+        assert_eq!(session.complete(), Err(SourceSessionStateError::NotActive));
+        assert_eq!(session.fail(), Err(SourceSessionStateError::NotActive));
+        assert_eq!(session.accepted_bytes(), 13);
+        assert_eq!(session.lifecycle(), SourceLifecycle::Failed);
     }
 }
