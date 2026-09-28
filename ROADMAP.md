@@ -1396,31 +1396,31 @@ incrementally.
 
 Required work:
 
--   [ ] Introduce an internal source-local execution session owned separately
+-   [x] Introduce an internal source-local execution session owned separately
     from immutable scanner configuration.
--   [ ] Keep `CompiledRuleSet` and rule metadata immutable and reusable across
+-   [x] Keep `CompiledRuleSet` and rule metadata immutable and reusable across
     independent sessions.
--   [ ] Represent source lifecycle explicitly, including active, successfully
+-   [x] Represent source lifecycle explicitly, including active, successfully
     completed, and terminally failed execution.
--   [ ] Track total accepted source bytes independently of individual transport
+-   [x] Track total accepted source bytes independently of individual transport
     chunk sizes.
--   [ ] Establish source-local ownership for matcher, validator, candidate,
+-   [x] Establish source-local ownership for matcher, validator, candidate,
     normalization, and location state.
--   [ ] Permit multiple independent source sessions to originate from one
+-   [x] Permit multiple independent source sessions to originate from one
     scanner configuration.
--   [ ] Ensure dropping an unfinished session cannot affect later scans or
+-   [x] Ensure dropping an unfinished session cannot affect later scans or
     another active session.
--   [ ] Keep all new execution machinery internal until the primitive semantics
+-   [x] Keep all new execution machinery internal until the primitive semantics
     are proven.
 
 Acceptance gate:
 
--   [ ] Two or more independent sessions can coexist without state leakage.
--   [ ] Completion, abandonment, and terminal failure cannot cause state from
+-   [x] Two or more independent sessions can coexist without state leakage.
+-   [x] Completion, abandonment, and terminal failure cannot cause state from
     one logical source to influence another.
--   [ ] No mutable source state has been moved into shared compiled scanner
+-   [x] No mutable source state has been moved into shared compiled scanner
     configuration.
--   [ ] Existing whole-source behavior remains unchanged.
+-   [x] Existing whole-source behavior remains unchanged.
 
 ##### 0.5-D2 --- UTF-8 transport and source coordinates
 
