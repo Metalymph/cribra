@@ -32,10 +32,9 @@ pub(crate) struct SourceSession {
 
 /// Lifecycle of one logical-source execution.
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
-pub(crate) enum SourceLifecycle {
+enum SourceLifecycle {
     Active,
     Completed,
-    Failed,
 }
 
 /// Invalid mutation of a source session that is no longer active.
@@ -86,7 +85,8 @@ impl SourceSession {
         Ok(())
     }
 
-    pub(crate) fn lifecycle(&self) -> SourceLifecycle {
+    #[cfg(test)]
+    fn lifecycle(&self) -> SourceLifecycle {
         self.lifecycle
     }
 
@@ -106,12 +106,6 @@ impl SourceSession {
 
         self.lifecycle = SourceLifecycle::Completed;
 
-        Ok(())
-    }
-
-    pub(crate) fn fail(&mut self) -> Result<(), SourceSessionError> {
-        self.ensure_active()?;
-        self.lifecycle = SourceLifecycle::Failed;
         Ok(())
     }
 
