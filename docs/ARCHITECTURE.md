@@ -2,29 +2,70 @@
 
 ## Scope
 
-`cribra` is a reusable, privacy-first Rust library. Callers own input, I/O,
-storage, persistence and presentation.
+`cribra` is a reusable, local-first Rust engine for deterministic sensitive-data
+detection, validation, classification, review, and safe transformation.
+
+Cribra is application-agnostic. Callers own source acquisition, I/O, storage,
+persistence, presentation, and policy. The engine operates on caller-provided
+data and does not define the surrounding product workflow.
 
 It owns:
 
-- scanning orchestration;
 - compiled detection rules and built-in detector knowledge;
+- deterministic matcher execution;
 - deterministic and contextual validation;
 - classified `Finding` results;
 - review-only `SensitiveCandidate` results;
-- source locations, severity, confidence and remediation metadata;
-- presentation-safe rule metadata and typed explainability;
+- source locations, severity, confidence, and remediation metadata;
 - deterministic result normalization;
-- share-safe transformation contracts.
+- presentation-safe rule metadata and typed explainability;
+- querying and aggregate result semantics;
+- explicit share-safe transformation contracts;
+- source-local execution state required by incremental processing.
 
 It does not own:
 
-- filesystem or repository traversal;
+- filesystem, directory, glob, or repository traversal;
 - network access or uploads;
-- terminal, browser or desktop presentation;
+- source persistence;
+- terminal, browser, mobile, or desktop presentation;
+- application policy;
 - authentication or cloud synchronization;
-- persistence or subscription logic;
+- subscription or entitlement logic;
 - Silens Siren monitoring.
+
+`Scanner` and `ScannerBuilder` are the primary Rust APIs for configuring and
+executing Cribra's detection capability. They are not the architectural boundary
+of the project: detection is one capability of the engine alongside validation,
+review, reporting, querying, explainability, and transformation.
+
+## Engine model
+
+```text
+caller-owned data
+        │
+        ▼
+┌──────────────────────────────────────────┐
+│                  Cribra                  │
+│                                          │
+│  detection ──────▶ validation            │
+│      │                 │                 │
+│      └─────────────────┴──▶ normalization│
+│                              │           │
+│                              ▼           │
+│                       reports / queries  │
+│                              │           │
+│                              ▼           │
+│                         transformation   │
+└──────────────────────────────────────────┘
+        │
+        ▼
+caller-owned policy / storage / output
+```
+
+Source acquisition and destination policy remain outside the engine. This keeps
+the same core reusable inside Rust applications, services, CLIs, WebAssembly
+hosts, native bindings, and higher-level security products.
 
 ## Detection and review authority
 
@@ -52,55 +93,117 @@ existing facts without becoming a second classification authority.
 
 ## Compiled execution
 
-The built-in pipeline groups deterministic matcher work and uses conservative
-prefiltering for contextual pattern rules:
+Configuration is compiled into immutable reusable rule state before execution.
+Source-local mutable state is kept separate from that shared configuration.
 
 ```text
-UTF-8 source
-    │
-    ├── deterministic matcher groups
-    │
-    └── shared contextual prefilter gate
-             │
-             ▼
-       potentially active rules
-             │
-             ▼
-       rule-local matcher / validator
-             │
-             ▼
-       deterministic normalization
+compiled configuration
+        │
+        ├── shared multi-pattern matcher
+        ├── suffix matchers
+        ├── contextual pattern rules
+        ├── contextual prefilter gate
+        └── immutable rule metadata
+                    │
+                    ▼
+              source execution
+                    │
+                    ├── matcher candidates
+                    ├── validation
+                    ├── normalization
+                    └── report materialization
 ```
 
 The shared contextual gate is an execution optimization only. A prefilter may
 skip a rule that cannot match; it cannot create a finding. Rule-local matching
 and validation remain authoritative.
 
-A single source is scanned serially. With the optional `parallel` feature,
-independent sources are distributed through Rayon while sharing the same
-immutable scanner. Serial and parallel execution preserve the same per-source
-semantics and input ordering.
+Compiled configuration contains no mutable state belonging to an individual
+source and can therefore be reused across independent source executions.
+
+## Whole-source and incremental execution
+
+Whole-source and incremental processing are execution strategies of the same
+engine. They must not become independent detection implementations.
+
+Whole-source execution remains the semantic reference path. Incremental
+execution moves source-local state into a `SourceSession` while reusing the same
+compiled rule authority.
+
+```text
+immutable CompiledRuleSet
+          │
+          ├──────────────┐
+          ▼              ▼
+   whole source      SourceSession
+                         │
+                         ├── UTF-8 transport state
+                         ├── absolute source position
+                         └── matcher-local streaming state
+```
+
+Incremental execution is introduced matcher family by matcher family. A matcher
+is considered stream-capable only when its chunked execution preserves the
+corresponding whole-source detection semantics.
+
+Literal and prefix matching support incremental execution with bounded
+source-local state. Cross-chunk matches preserve absolute UTF-8 byte offsets,
+prefix token semantics, and end-of-source finalization.
+
+The multi-pattern streaming state retains only the bounded overlap required by
+the longest compiled needle plus active prefix candidates whose token boundary
+has not yet been observed. It does not retain complete historical chunks.
+
+Arbitrary byte fragmentation is handled separately by the incremental UTF-8
+transport. Incomplete UTF-8 scalar bytes may be retained only until the scalar
+can be reconstructed or end-of-source proves the input incomplete.
+
+Other matcher, validation, review, normalization, and public reporting stages
+remain subject to their existing whole-source semantics until their incremental
+execution slice is explicitly implemented and validated.
+
+## Parallel execution
+
+A single logical source is processed serially.
+
+With the optional `parallel` feature, independent sources may be distributed
+through Rayon. Each source owns independent execution state while sharing the
+same immutable compiled configuration.
+
+Parallel execution does not split an individual source into worker-owned
+fragments and does not change per-source detection semantics or deterministic
+input ordering.
 
 ## Privacy boundary
 
 Public findings and candidates contain metadata and source coordinates, not
 copies of matched secret values. Cribra itself performs no network access.
 
+Source-local incremental state is bounded execution state rather than
+source-sized persistence.
+
 Share-safe transformations are explicit caller operations and apply to
 classified findings. Ambiguous candidates are not automatically redacted,
-templated, pseudonymized or synthesized.
+templated, pseudonymized, or synthesized.
 
 ## Consumers
 
 ```text
 Cribra
 ├── Generic consumers: Rust apps, middleware, services, custom tooling
+├── cribra-cli: canonical process boundary
+├── cribra-capi: native C ABI
+├── cribra-wasm: WebAssembly integration
 ├── Silens Scan / Scan+: WASM/PWA
 └── Silens Studio: desktop application
 ```
+
+Consumers may compose Cribra capabilities into broader workflows, but those
+workflows do not become core engine responsibilities.
 
 ## Dependency direction
 
 Consumers may depend on `cribra`.
 
-Cribra must not depend on those consumers or on Silens Siren.
+Cribra must not depend on its consumers, product-specific workflow, or Silens
+Siren.
