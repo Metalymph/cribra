@@ -461,6 +461,16 @@ struct ActivePrefix {
     source_start: usize,
 }
 
+/// Maximum byte length of a token eligible for suffix matching.
+///
+/// Suffix matching extends backwards to the beginning of the containing token.
+/// Bounding the token extent makes the same semantics implementable with
+/// bounded source-local state during incremental execution.
+///
+/// Tokens longer than this limit are not eligible for suffix findings; they are
+/// never reported as truncated spans.
+const MAX_SUFFIX_TOKEN_LEN: usize = 4096;
+
 #[derive(Debug)]
 struct SuffixRule {
     rule_index: RuleIndex,
@@ -479,12 +489,86 @@ impl SuffixRule {
             }
 
             let mut start = suffix_start;
-            while start > 0 && is_token_byte(bytes[start - 1]) {
+
+            while start > 0 && end - start < MAX_SUFFIX_TOKEN_LEN && is_token_byte(bytes[start - 1])
+            {
                 start -= 1;
+            }
+
+            // Reaching the bound while the token still continues to the left
+            // means the complete token exceeds the supported suffix extent.
+            if start > 0 && end - start == MAX_SUFFIX_TOKEN_LEN && is_token_byte(bytes[start - 1]) {
+                continue;
             }
 
             findings.push(InternalFinding::new(self.rule_index, start, end));
         }
+    }
+}
+
+#[cfg(test)]
+mod suffix_tests {
+    use super::*;
+    use crate::{Rule, Severity};
+
+    fn scan(source: &str) -> Vec<(usize, usize)> {
+        let compiled =
+            CompiledRuleSet::compile(vec![Rule::suffix("suffix", "_end", Severity::High)])
+                .expect("rule should compile");
+
+        let mut findings = Vec::new();
+        compiled.scan(source, &mut findings);
+
+        findings
+            .into_iter()
+            .map(|finding| (finding.start(), finding.end()))
+            .collect()
+    }
+
+    #[test]
+    fn suffix_accepts_token_at_maximum_extent() {
+        let source = format!("{}{}", "a".repeat(MAX_SUFFIX_TOKEN_LEN - 4), "_end");
+
+        assert_eq!(source.len(), MAX_SUFFIX_TOKEN_LEN);
+        assert_eq!(scan(&source), vec![(0, MAX_SUFFIX_TOKEN_LEN)]);
+    }
+
+    #[test]
+    fn suffix_rejects_token_beyond_maximum_extent() {
+        let source = format!("{}{}", "a".repeat(MAX_SUFFIX_TOKEN_LEN - 3), "_end");
+
+        assert_eq!(source.len(), MAX_SUFFIX_TOKEN_LEN + 1);
+        assert!(scan(&source).is_empty());
+    }
+
+    #[test]
+    fn suffix_accepts_token_below_maximum_extent() {
+        let source = format!("{}{}", "a".repeat(MAX_SUFFIX_TOKEN_LEN - 5), "_end");
+
+        assert_eq!(source.len(), MAX_SUFFIX_TOKEN_LEN - 1);
+        assert_eq!(scan(&source), vec![(0, MAX_SUFFIX_TOKEN_LEN - 1)]);
+    }
+
+    #[test]
+    fn suffix_requires_trailing_token_boundary() {
+        assert!(scan("abc_endx").is_empty());
+        assert_eq!(scan("abc_end!"), vec![(0, 7)]);
+    }
+
+    #[test]
+    fn suffix_recovers_start_after_left_boundary() {
+        assert_eq!(scan("before abc_end!"), vec![(7, 14)]);
+    }
+
+    #[test]
+    fn oversized_token_does_not_hide_later_valid_token() {
+        let oversized = format!("{}{}", "a".repeat(MAX_SUFFIX_TOKEN_LEN), "_end");
+        let source = format!("{oversized} valid_end!");
+
+        assert_eq!(
+            scan(&source),
+            vec![(oversized.len() + 1, oversized.len() + 10)]
+        );
     }
 }
 
