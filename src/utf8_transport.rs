@@ -349,4 +349,95 @@ mod tests {
 
         assert_eq!(output, source);
     }
+
+    #[test]
+    fn malformed_utf8_failure_is_invariant_across_every_split() {
+        let malformed_cases: &[&[u8]] = &[
+            &[0xC3, 0x28],
+            &[0xE2, 0x28, 0xA1],
+            &[0xF0, 0x28, 0x8C, 0xBC],
+            &[0xED, 0xA0, 0x80],       // UTF-16 surrogate encoding
+            &[0xF4, 0x90, 0x80, 0x80], // above U+10FFFF
+            &[0x80],                   // stray continuation byte
+            &[0xC0, 0xAF],             // overlong encoding
+        ];
+
+        for bytes in malformed_cases {
+            for split in 0..=bytes.len() {
+                let mut transport = Utf8Transport::default();
+
+                let first = transport.push(&bytes[..split], |_| {});
+                let second = if first.is_ok() {
+                    transport.push(&bytes[split..], |_| {})
+                } else {
+                    first
+                };
+
+                assert_eq!(
+                    second,
+                    Err(Utf8TransportError::Malformed),
+                    "case {bytes:02X?}, split at byte {split}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn incomplete_utf8_end_of_source_is_invariant_across_every_split() {
+        let incomplete_cases: &[&[u8]] = &[
+            &[0xC2],
+            &[0xE2],
+            &[0xE2, 0x82],
+            &[0xF0],
+            &[0xF0, 0x9F],
+            &[0xF0, 0x9F, 0xA6],
+        ];
+
+        for bytes in incomplete_cases {
+            for split in 0..=bytes.len() {
+                let mut transport = Utf8Transport::default();
+
+                transport.push(&bytes[..split], |_| {}).unwrap();
+                transport.push(&bytes[split..], |_| {}).unwrap();
+
+                assert_eq!(
+                    transport.finish(),
+                    Err(Utf8TransportError::Incomplete),
+                    "case {bytes:02X?}, split at byte {split}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn empty_fragments_do_not_change_pending_coordinates_or_completion() {
+        use crate::source_coordinates::SourceCoordinates;
+
+        let crab = "🦀".as_bytes();
+        let mut transport = Utf8Transport::default();
+        let mut coordinates = SourceCoordinates::default();
+
+        transport
+            .push(&crab[..2], |text| coordinates.advance(text))
+            .unwrap();
+
+        let pending_coordinates = coordinates;
+
+        for _ in 0..8 {
+            transport
+                .push(&[], |text| coordinates.advance(text))
+                .unwrap();
+            assert_eq!(coordinates, pending_coordinates);
+            assert_eq!(transport.finish(), Err(Utf8TransportError::Incomplete));
+        }
+
+        transport
+            .push(&crab[2..], |text| coordinates.advance(text))
+            .unwrap();
+
+        assert_eq!(transport.finish(), Ok(()));
+        assert_eq!(coordinates.byte_offset(), crab.len());
+        assert_eq!(coordinates.line(), 1);
+        assert_eq!(coordinates.column(), 2);
+    }
 }
