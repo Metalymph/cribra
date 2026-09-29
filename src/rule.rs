@@ -101,7 +101,7 @@ pub enum RuleKind {
     ///
     /// The compiled engine requires a token boundary after the suffix and
     /// extends the finding backwards through preceding token characters.
-    /// 
+    ///
     /// Tokens whose complete extent exceeds the engine's supported suffix bound
     /// are not reported rather than being returned as truncated findings.
     Suffix,
@@ -356,7 +356,7 @@ impl Rule {
     ///
     /// The suffix must end at a token boundary. The compiled engine extends
     /// the match backwards through ASCII alphanumeric characters, `_` and `-`.
-    /// 
+    ///
     /// Tokens whose complete extent exceeds the engine's supported suffix bound
     /// are not reported rather than being returned as truncated findings.
     #[must_use]
