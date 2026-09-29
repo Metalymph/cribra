@@ -45,6 +45,17 @@ material.
 
 Transformations are explicit operations and require caller-owned source input.
 
+## Safe Rust boundary
+
+Cribra keeps its detection and transformation engine entirely in safe Rust.
+
+- `cribra` — `#![forbid(unsafe_code)]`
+- `cribra-wasm` — `#![forbid(unsafe_code)]`
+- `cribra-cli` — `#![forbid(unsafe_code)]`
+
+Unsafe Rust is intentionally isolated to `cribra-capi`, where it is required at
+the C ABI/FFI boundary. The core engine itself does not permit unsafe Rust.
+
 ## Install
 
 ### Rust core

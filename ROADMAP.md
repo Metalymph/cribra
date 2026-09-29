@@ -1429,30 +1429,30 @@ families are migrated onto incremental execution.
 
 Required work:
 
--   [ ] Accept arbitrary byte fragments internally.
--   [ ] Retain only incomplete trailing UTF-8 bytes required to reconstruct a
+-   [x] Accept arbitrary byte fragments internally.
+-   [x] Retain only incomplete trailing UTF-8 bytes required to reconstruct a
     scalar divided across transport calls.
--   [ ] Distinguish temporarily incomplete UTF-8 from definitively malformed
+-   [x] Distinguish temporarily incomplete UTF-8 from definitively malformed
     UTF-8.
--   [ ] Reject malformed complete input deterministically and independently of
+-   [x] Reject malformed complete input deterministically and independently of
     partition layout.
--   [ ] Reject incomplete UTF-8 deterministically at end-of-stream.
--   [ ] Track global byte position incrementally.
--   [ ] Track one-based line numbers incrementally.
--   [ ] Track one-based Unicode-scalar columns incrementally.
--   [ ] Ensure a scalar divided across chunks advances source coordinates
+-   [x] Reject incomplete UTF-8 deterministically at end-of-stream.
+-   [x] Track global byte position incrementally.
+-   [x] Track one-based line numbers incrementally.
+-   [x] Track one-based Unicode-scalar columns incrementally.
+-   [x] Ensure a scalar divided across chunks advances source coordinates
     exactly once.
--   [ ] Treat empty chunks as transport no-ops rather than semantic completion.
+-   [x] Treat empty chunks as transport no-ops rather than semantic completion.
 
 Acceptance gate:
 
--   [ ] Valid UTF-8 has identical validity under every tested partition.
--   [ ] Invalid UTF-8 has identical failure semantics under every tested
+-   [x] Valid UTF-8 has identical validity under every tested partition.
+-   [x] Invalid UTF-8 has identical failure semantics under every tested
     partition.
--   [ ] Single-byte transport reads preserve source coordinates.
--   [ ] Splits inside multi-byte scalars preserve source coordinates.
--   [ ] Empty chunks cannot advance coordinates or finalize pending state.
--   [ ] UTF-8 carry remains bounded independently of total source length.
+-   [x] Single-byte transport reads preserve source coordinates.
+-   [x] Splits inside multi-byte scalars preserve source coordinates.
+-   [x] Empty chunks cannot advance coordinates or finalize pending state.
+-   [x] UTF-8 carry remains bounded independently of total source length.
 
 ##### 0.5-D3 --- Literal and prefix streaming parity
 

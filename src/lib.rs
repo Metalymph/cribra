@@ -1,3 +1,5 @@
+#![forbid(unsafe_code)]
+
 //! Privacy-first scanning core for secrets and sensitive data.
 //!
 //! `cribra` provides deterministic detection, reporting, querying and
@@ -120,7 +122,6 @@
 //! persistence and UI are intentionally outside this crate. This keeps the
 //! scanner reusable in local-first native, WASM/PWA, desktop and service
 //! applications.
-#![forbid(unsafe_code)]
 #![warn(missing_docs)]
 //! Privacy-first Rust engine for detecting secrets and sensitive data.
 //!
@@ -178,8 +179,18 @@ mod severity;
     not(test),
     allow(dead_code, reason = "wired incrementally during streaming 0.5-D")
 )]
+mod source_coordinates;
+#[cfg_attr(
+    not(test),
+    allow(dead_code, reason = "wired incrementally during streaming 0.5-D")
+)]
 mod source_session;
 pub mod transform;
+#[cfg_attr(
+    not(test),
+    allow(dead_code, reason = "wired incrementally during streaming 0.5-D")
+)]
+mod utf8_transport;
 mod validators;
 pub use confidence::Confidence;
 pub use explanation::Explanation;
