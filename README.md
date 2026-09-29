@@ -1,19 +1,31 @@
 # Cribra
 
-Embeddable, local-first Rust engine for detecting, classifying, and safely transforming secrets and sensitive data. Use it directly as a Rust crate, through the CLI as a process boundary, via C ABI or WebAssembly, or through language-specific bindings. Integrate it into scripts and pipelines, use it inside APIs before data is stored, logged, or transmitted, or build complete security and data-handling products on top of it.
+Cribra is an embeddable, local-first, fully synchronous Rust engine for deterministic sensitive-data detection, validation, classification, and safe transformation.
 
-*Cribra provides the primitives; the surrounding tool decides the workflow*ch
+It is not a file, repository, or vulnerability scanner. Cribra operates on caller-provided data and provides reusable security primitives that applications, CLIs, APIs, pipelines, WebAssembly hosts, and native integrations can compose into their own workflows.
 
-Cribra is application-agnostic. Callers provide UTF-8 text and retain control
-of I/O, storage, persistence, presentation, and policy. The core owns detection,
-validation, deterministic normalization, metadata-only reporting, and explicit
-share-safe transformations.
+Use it directly as a Rust crate, through the canonical CLI as a process boundary, via C ABI or WebAssembly, or through language-specific bindings.
+
+*Cribra provides the engine; the surrounding application decides the workflow.*
+
+Cribra is application-agnostic. Callers retain control of source acquisition,
+I/O, storage, persistence, presentation, and policy. The core owns detection,
+validation, deterministic normalization, metadata-only reporting, querying, and
+explicit share-safe transformations.
+
+Cribra’s core is fully synchronous. It requires no async runtime and performs
+no I/O or network access. A logical source is processed serially and
+deterministically. Independent sources can optionally be processed in parallel
+with Rayon, while incremental execution allows a source to be supplied in
+chunks without changing that execution model.
 
 Matched secret values are not stored in public findings.
 
 ## Capabilities
 
-- deterministic UTF-8 scanning;
+- deterministic sensitive-data detection over UTF-8 input;
+- reusable compiled rule execution;
+- incremental execution with bounded source-local state for supported matcher families;
 - literal, prefix, suffix, and regex rules;
 - deterministic and contextual validators;
 - selectable built-in detector catalog;
@@ -33,6 +45,44 @@ Matched secret values are not stored in public findings.
 - native C interoperability;
 - typed WebAssembly interoperability;
 - canonical reusable CLI via `cribra-cli`.
+
+## Engine model
+
+Cribra separates engine semantics from source acquisition and product workflow.
+
+```text
+caller-owned data
+      │
+      ▼
+┌──────────────────────────────────────┐
+│                Cribra                │
+│                                      │
+│  detection ──▶ validation            │
+│      │              │                │
+│      └──────────────┴─▶ normalize    │
+│                         │            │
+│                         ▼            │
+│                 reports / queries    │
+│                         │            │
+│                         ▼            │
+│                    transform         │
+└──────────────────────────────────────┘
+      │
+      ▼
+caller-owned policy / storage / output
+```
+
+The engine does not discover files, walk repositories, own persistence, make
+network requests, or decide application policy.
+
+Scanner and ScannerBuilder are Cribra’s Rust detection API. They do not
+define the scope of the overall project: scanning is one capability of the
+engine, alongside validation, reporting, querying, explainability, and
+transformation.
+
+Whole-source and incremental processing are execution strategies of the same
+engine and are expected to preserve the same detection semantics where a
+matcher supports both modes.
 
 ## Privacy boundary
 
@@ -131,7 +181,8 @@ per-source semantics and deterministic input ordering.
 
 ## Detection model
 
-Cribra separates classified findings from ambiguous review candidates.
+Detection is one capability of the Cribra engine. The `Scanner` API provides
+the primary Rust interface for executing compiled detection rules.
 
 ```text
 caller-owned UTF-8 input
@@ -181,8 +232,7 @@ families including:
 
 The canonical default pack is `builtins::CURRENT`.
 
-Additional built-in families may be exposed through explicit opt-in packs rather
-than broadening the default scanner. The financial pack is available as
+Additional built-in families may be exposed through explicit opt-in packs rather than broadening the default detection catalog. The financial pack is available as
 `builtins::financial::CURRENT` and currently contains:
 
 - `financial.iban` — registered-country IBAN structure, exact country length,
@@ -236,7 +286,7 @@ validators.
 `Explanation` projects existing classification facts rather than introducing a
 second classification authority.
 
-For findings, explanation is resolved against scanner-owned rule metadata. For
+For findings, explanation is resolved against compiled rule metadata. For
 review candidates, explanation derives from candidate evidence.
 
 The core intentionally does not provide human-facing explanation copy.
