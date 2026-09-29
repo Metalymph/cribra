@@ -28,21 +28,25 @@ pub(crate) struct Utf8Transport {
 }
 
 impl Utf8Transport {
-    /// Accepts the next arbitrary byte fragment.
+    /// Accepts the next arbitrary byte fragment and visits complete UTF-8
+    /// segments as soon as they become available.
     ///
-    /// Empty fragments are transport no-ops. Complete valid UTF-8 is consumed
+    /// Empty fragments are transport no-ops. Complete valid UTF-8 is visited
     /// immediately. A valid but incomplete trailing scalar prefix is retained
     /// until a later fragment completes it.
-    pub(crate) fn push(&mut self, bytes: &[u8]) -> Result<(), Utf8TransportError> {
+    pub(crate) fn push<F>(&mut self, bytes: &[u8], mut visit: F) -> Result<(), Utf8TransportError>
+    where
+        F: FnMut(&str),
+    {
         if bytes.is_empty() {
             return Ok(());
         }
 
         if self.carry_len == 0 {
-            return self.accept_without_carry(bytes);
+            return self.accept_without_carry(bytes, &mut visit);
         }
 
-        self.resolve_carry(bytes)
+        self.resolve_carry(bytes, &mut visit)
     }
 
     /// Verifies that the logical source ended on a UTF-8 scalar boundary.
@@ -54,43 +58,81 @@ impl Utf8Transport {
         }
     }
 
-    fn accept_without_carry(&mut self, bytes: &[u8]) -> Result<(), Utf8TransportError> {
+    fn accept_without_carry<F>(
+        &mut self,
+        bytes: &[u8],
+        visit: &mut F,
+    ) -> Result<(), Utf8TransportError>
+    where
+        F: FnMut(&str),
+    {
         match std::str::from_utf8(bytes) {
-            Ok(_) => Ok(()),
+            Ok(text) => {
+                if !text.is_empty() {
+                    visit(text);
+                }
+                Ok(())
+            }
+            Err(error) if error.error_len().is_some() => Err(Utf8TransportError::Malformed),
             Err(error) => {
-                if error.error_len().is_some() {
-                    return Err(Utf8TransportError::Malformed);
+                let valid_up_to = error.valid_up_to();
+
+                if valid_up_to != 0 {
+                    let text = std::str::from_utf8(&bytes[..valid_up_to])
+                        .map_err(|_| Utf8TransportError::Malformed)?;
+                    visit(text);
                 }
 
-                self.store_incomplete_tail(&bytes[error.valid_up_to()..])
+                self.store_incomplete_tail(&bytes[valid_up_to..])
             }
         }
     }
 
-    fn resolve_carry(&mut self, bytes: &[u8]) -> Result<(), Utf8TransportError> {
-        // One UTF-8 scalar is at most four bytes. Existing carry is at most
-        // three, so only enough bytes to resolve that scalar need temporary
-        // stack storage.
+    fn resolve_carry<F>(&mut self, bytes: &[u8], visit: &mut F) -> Result<(), Utf8TransportError>
+    where
+        F: FnMut(&str),
+    {
         let carry_len = usize::from(self.carry_len);
-        let needed = 4 - carry_len;
-        let taken = bytes.len().min(needed);
+        let scalar_width =
+            Self::scalar_width(self.carry[0]).ok_or(Utf8TransportError::Malformed)?;
 
-        let mut boundary = [0_u8; 4];
-        boundary[..carry_len].copy_from_slice(&self.carry[..carry_len]);
-        boundary[carry_len..carry_len + taken].copy_from_slice(&bytes[..taken]);
+        debug_assert!(scalar_width > carry_len);
 
-        let boundary_len = carry_len + taken;
+        let missing = scalar_width - carry_len;
+        let taken = bytes.len().min(missing);
 
-        match std::str::from_utf8(&boundary[..boundary_len]) {
-            Ok(_) => {
+        let mut scalar = [0_u8; 4];
+        scalar[..carry_len].copy_from_slice(&self.carry[..carry_len]);
+        scalar[carry_len..carry_len + taken].copy_from_slice(&bytes[..taken]);
+
+        let scalar_len = carry_len + taken;
+
+        match std::str::from_utf8(&scalar[..scalar_len]) {
+            Ok(text) => {
+                // A carried scalar can become valid only when its complete
+                // encoded width has been reconstructed.
+                if scalar_len != scalar_width {
+                    return Err(Utf8TransportError::Malformed);
+                }
+
+                visit(text);
                 self.clear_carry();
-                self.accept_without_carry(&bytes[taken..])
+
+                self.accept_without_carry(&bytes[taken..], visit)
             }
             Err(error) if error.error_len().is_some() => Err(Utf8TransportError::Malformed),
-            Err(_) if taken == bytes.len() => {
-                self.store_incomplete_tail(&boundary[..boundary_len])
-            }
+            Err(_) if taken == bytes.len() => self.store_incomplete_tail(&scalar[..scalar_len]),
             Err(_) => Err(Utf8TransportError::Malformed),
+        }
+    }
+
+    fn scalar_width(first: u8) -> Option<usize> {
+        match first {
+            0x00..=0x7F => Some(1),
+            0xC2..=0xDF => Some(2),
+            0xE0..=0xEF => Some(3),
+            0xF0..=0xF4 => Some(4),
+            _ => None,
         }
     }
 
@@ -125,7 +167,7 @@ mod tests {
     fn complete_utf8_requires_no_carry() {
         let mut transport = Utf8Transport::default();
 
-        transport.push("ascii € 🦀".as_bytes()).unwrap();
+        transport.push("ascii € 🦀".as_bytes(), |_| {}).unwrap();
 
         assert_eq!(transport.carry_len(), 0);
         assert_eq!(transport.finish(), Ok(()));
@@ -135,8 +177,8 @@ mod tests {
     fn empty_fragments_are_no_ops() {
         let mut transport = Utf8Transport::default();
 
-        transport.push(&[]).unwrap();
-        transport.push(&[]).unwrap();
+        transport.push(&[], |_| {}).unwrap();
+        transport.push(&[], |_| {}).unwrap();
 
         assert_eq!(transport.carry_len(), 0);
         assert_eq!(transport.finish(), Ok(()));
@@ -147,16 +189,16 @@ mod tests {
         let bytes = "🦀".as_bytes();
         let mut transport = Utf8Transport::default();
 
-        transport.push(&bytes[..1]).unwrap();
+        transport.push(&bytes[..1], |_| {}).unwrap();
         assert_eq!(transport.carry_len(), 1);
 
-        transport.push(&bytes[1..2]).unwrap();
+        transport.push(&bytes[1..2], |_| {}).unwrap();
         assert_eq!(transport.carry_len(), 2);
 
-        transport.push(&bytes[2..3]).unwrap();
+        transport.push(&bytes[2..3], |_| {}).unwrap();
         assert_eq!(transport.carry_len(), 3);
 
-        transport.push(&bytes[3..]).unwrap();
+        transport.push(&bytes[3..], |_| {}).unwrap();
 
         assert_eq!(transport.carry_len(), 0);
         assert_eq!(transport.finish(), Ok(()));
@@ -168,7 +210,7 @@ mod tests {
         let mut transport = Utf8Transport::default();
 
         for byte in source.as_bytes() {
-            transport.push(std::slice::from_ref(byte)).unwrap();
+            transport.push(std::slice::from_ref(byte), |_| {}).unwrap();
             assert!(transport.carry_len() <= MAX_UTF8_CARRY);
         }
 
@@ -180,7 +222,7 @@ mod tests {
         let mut transport = Utf8Transport::default();
 
         assert_eq!(
-            transport.push(&[0xC3, 0x28]),
+            transport.push(&[0xC3, 0x28], |_| {}),
             Err(Utf8TransportError::Malformed)
         );
     }
@@ -189,10 +231,10 @@ mod tests {
     fn malformed_utf8_crossing_transport_boundary_is_rejected() {
         let mut transport = Utf8Transport::default();
 
-        transport.push(&[0xE2]).unwrap();
+        transport.push(&[0xE2], |_| {}).unwrap();
 
         assert_eq!(
-            transport.push(&[0x28]),
+            transport.push(&[0x28], |_| {}),
             Err(Utf8TransportError::Malformed)
         );
     }
@@ -201,7 +243,7 @@ mod tests {
     fn incomplete_utf8_is_rejected_only_at_end_of_source() {
         let mut transport = Utf8Transport::default();
 
-        transport.push(&[0xF0, 0x9F, 0xA6]).unwrap();
+        transport.push(&[0xF0, 0x9F, 0xA6], |_| {}).unwrap();
 
         assert_eq!(transport.carry_len(), 3);
         assert_eq!(transport.finish(), Err(Utf8TransportError::Incomplete));
@@ -211,13 +253,100 @@ mod tests {
     fn empty_fragment_does_not_finalize_pending_scalar() {
         let mut transport = Utf8Transport::default();
 
-        transport.push(&[0xE2]).unwrap();
-        transport.push(&[]).unwrap();
+        transport.push(&[0xE2], |_| {}).unwrap();
+        transport.push(&[], |_| {}).unwrap();
 
         assert_eq!(transport.carry_len(), 1);
 
-        transport.push(&[0x82, 0xAC]).unwrap();
+        transport.push(&[0x82, 0xAC], |_| {}).unwrap();
 
         assert_eq!(transport.finish(), Ok(()));
+    }
+
+    #[test]
+    fn complete_input_is_delivered() {
+        let mut transport = Utf8Transport::default();
+        let mut output = String::new();
+
+        transport
+            .push("hello 🦀".as_bytes(), |text| output.push_str(text))
+            .unwrap();
+
+        assert_eq!(output, "hello 🦀");
+        assert_eq!(transport.finish(), Ok(()));
+    }
+
+    #[test]
+    fn split_scalar_is_delivered_exactly_once() {
+        let bytes = "🦀".as_bytes();
+        let mut transport = Utf8Transport::default();
+        let mut output = String::new();
+
+        for byte in bytes {
+            transport
+                .push(std::slice::from_ref(byte), |text| output.push_str(text))
+                .unwrap();
+        }
+
+        assert_eq!(output, "🦀");
+        assert_eq!(transport.finish(), Ok(()));
+    }
+
+    #[test]
+    fn reconstructed_scalar_precedes_same_fragment_remainder() {
+        let euro = "€".as_bytes();
+        let mut transport = Utf8Transport::default();
+        let mut output = String::new();
+
+        transport
+            .push(&euro[..1], |text| output.push_str(text))
+            .unwrap();
+
+        let mut next = Vec::from(&euro[1..]);
+        next.extend_from_slice(b"hello");
+
+        transport.push(&next, |text| output.push_str(text)).unwrap();
+
+        assert_eq!(output, "€hello");
+    }
+
+    #[test]
+    fn delivery_is_invariant_across_every_single_split() {
+        let source = "aé€🦀z";
+        let bytes = source.as_bytes();
+
+        for split in 0..=bytes.len() {
+            let mut transport = Utf8Transport::default();
+            let mut output = String::new();
+
+            transport
+                .push(&bytes[..split], |text| output.push_str(text))
+                .unwrap();
+
+            transport
+                .push(&bytes[split..], |text| output.push_str(text))
+                .unwrap();
+
+            transport.finish().unwrap();
+
+            assert_eq!(output, source, "partition at byte {split}");
+        }
+    }
+
+    #[test]
+    fn single_byte_delivery_reconstructs_original_source() {
+        let source = "aé€🦀z";
+        let mut transport = Utf8Transport::default();
+        let mut output = String::new();
+
+        for byte in source.as_bytes() {
+            transport
+                .push(std::slice::from_ref(byte), |text| output.push_str(text))
+                .unwrap();
+        }
+
+        transport.finish().unwrap();
+
+        assert_eq!(output, source);
     }
 }
