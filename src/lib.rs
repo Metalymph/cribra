@@ -1,3 +1,5 @@
+#![forbid(unsafe_code)]
+
 //! Privacy-first scanning core for secrets and sensitive data.
 //!
 //! `cribra` provides deterministic detection, reporting, querying and
@@ -180,12 +182,12 @@ mod severity;
 )]
 mod source_session;
 pub mod transform;
-mod validators;
 #[cfg_attr(
     not(test),
     allow(dead_code, reason = "wired incrementally during streaming 0.5-D")
 )]
 mod utf8_transport;
+mod validators;
 pub use confidence::Confidence;
 pub use explanation::Explanation;
 pub use finding::Finding;

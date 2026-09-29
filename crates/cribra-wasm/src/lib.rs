@@ -1,3 +1,5 @@
+#![forbid(unsafe_code)]
+
 //! WebAssembly interoperability adapter for Cribra.
 //!
 //! This crate projects the authoritative Rust-native `cribra` core into a
