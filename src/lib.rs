@@ -122,7 +122,6 @@
 //! persistence and UI are intentionally outside this crate. This keeps the
 //! scanner reusable in local-first native, WASM/PWA, desktop and service
 //! applications.
-#![forbid(unsafe_code)]
 #![warn(missing_docs)]
 //! Privacy-first Rust engine for detecting secrets and sensitive data.
 //!

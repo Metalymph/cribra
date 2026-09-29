@@ -1,3 +1,5 @@
+#![forbid(unsafe_code)]
+
 //! Reusable command-line interface for Cribra.
 //!
 //! This crate owns canonical Cribra command parsing, execution, and CLI
