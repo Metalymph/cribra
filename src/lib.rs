@@ -180,6 +180,11 @@ mod severity;
     not(test),
     allow(dead_code, reason = "wired incrementally during streaming 0.5-D")
 )]
+mod source_coordinates;
+#[cfg_attr(
+    not(test),
+    allow(dead_code, reason = "wired incrementally during streaming 0.5-D")
+)]
 mod source_session;
 pub mod transform;
 #[cfg_attr(
