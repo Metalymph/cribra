@@ -836,3 +836,118 @@ mod capture_projection_tests {
         assert_eq!(findings[0].end(), source.len());
     }
 }
+
+#[cfg(test)]
+mod multi_pattern_tests {
+    use super::*;
+    use crate::{Rule, Severity};
+
+    fn scan(rules: Vec<Rule>, source: &str) -> Vec<(usize, usize, RuleIndex)> {
+        let compiled = CompiledRuleSet::compile(rules).expect("rules should compile");
+        let mut findings = Vec::new();
+
+        compiled.scan(source, &mut findings);
+
+        findings
+            .into_iter()
+            .map(|finding| {
+                (
+                    finding.start(),
+                    finding.end(),
+                    finding.rule_index(),
+                )
+            })
+            .collect()
+    }
+
+    #[test]
+    fn literal_matches_without_token_boundaries() {
+        let findings = scan(
+            vec![Rule::literal("literal", "secret", Severity::High)],
+            "xsecrety secret",
+        );
+
+        assert_eq!(
+            findings,
+            vec![
+                (1, 7, RuleIndex::new(0)),
+                (9, 15, RuleIndex::new(0)),
+            ]
+        );
+    }
+
+    #[test]
+    fn overlapping_literals_are_preserved() {
+        let findings = scan(
+            vec![
+                Rule::literal("long", "secret", Severity::High),
+                Rule::literal("short", "sec", Severity::High),
+            ],
+            "secret",
+        );
+
+        assert_eq!(findings.len(), 2);
+        assert!(findings.contains(&(0, 6, RuleIndex::new(0))));
+        assert!(findings.contains(&(0, 3, RuleIndex::new(1))));
+    }
+
+    #[test]
+    fn identical_literals_from_distinct_rules_are_preserved() {
+        let findings = scan(
+            vec![
+                Rule::literal("first", "secret", Severity::High),
+                Rule::literal("second", "secret", Severity::High),
+            ],
+            "secret",
+        );
+
+        assert_eq!(findings.len(), 2);
+        assert!(findings.contains(&(0, 6, RuleIndex::new(0))));
+        assert!(findings.contains(&(0, 6, RuleIndex::new(1))));
+    }
+
+    #[test]
+    fn prefix_requires_left_token_boundary() {
+        let findings = scan(
+            vec![Rule::prefix("token", "ghp_", Severity::Critical)],
+            "xghp_invalid ghp_valid",
+        );
+
+        assert_eq!(findings, vec![(13, 22, RuleIndex::new(0))]);
+    }
+
+    #[test]
+    fn prefix_extends_through_complete_ascii_token() {
+        let findings = scan(
+            vec![Rule::prefix("token", "ghp_", Severity::Critical)],
+            "ghp_abc-DEF_123!",
+        );
+
+        assert_eq!(findings, vec![(0, 15, RuleIndex::new(0))]);
+    }
+
+    #[test]
+    fn overlapping_prefix_needles_are_preserved() {
+        let findings = scan(
+            vec![
+                Rule::prefix("short", "tok", Severity::High),
+                Rule::prefix("long", "token_", Severity::High),
+            ],
+            "token_value",
+        );
+
+        assert_eq!(findings.len(), 2);
+        assert!(findings.contains(&(0, 11, RuleIndex::new(0))));
+        assert!(findings.contains(&(0, 11, RuleIndex::new(1))));
+    }
+
+    #[test]
+    fn unicode_adjacent_to_prefix_preserves_utf8_offsets() {
+        let findings = scan(
+            vec![Rule::prefix("token", "ghp_", Severity::Critical)],
+            "😀ghp_value",
+        );
+
+        assert_eq!(findings, vec![(4, 13, RuleIndex::new(0))]);
+    }
+}
