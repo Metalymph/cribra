@@ -1462,29 +1462,29 @@ semantics.
 
 Required work:
 
--   [ ] Preserve literal matcher continuation across arbitrary transport
+-   [x] Preserve literal matcher continuation across arbitrary transport
     boundaries.
--   [ ] Detect literal matches crossing one or multiple chunks exactly once.
--   [ ] Preserve prefix leading-boundary semantics.
--   [ ] Keep prefix candidates unresolved while later bytes can still extend or
+-   [x] Detect literal matches crossing one or multiple chunks exactly once.
+-   [x] Preserve prefix leading-boundary semantics.
+-   [x] Keep prefix candidates unresolved while later bytes can still extend or
     invalidate the relevant token.
--   [ ] Preserve exact global byte spans.
--   [ ] Preserve whole-source validation behavior.
--   [ ] Preserve rule identity and metadata.
--   [ ] Avoid a generic copied overlap window when compact matcher state is
+-   [x] Preserve exact global byte spans.
+-   [x] Preserve whole-source validation behavior.
+-   [x] Preserve rule identity and metadata.
+-   [x] Avoid a generic copied overlap window when compact matcher state is
     sufficient.
 
 Acceptance gate:
 
--   [ ] Literal fixtures produce semantic output identical to whole-source
+-   [x] Literal fixtures produce semantic output identical to whole-source
     execution for adversarial partitions.
--   [ ] Prefix fixtures produce semantic output identical to whole-source
+-   [x] Prefix fixtures produce semantic output identical to whole-source
     execution for adversarial partitions.
--   [ ] Matcher prefixes divided at every relevant byte position are handled
+-   [x] Matcher prefixes divided at every relevant byte position are handled
     correctly.
--   [ ] Logical matches are neither duplicated nor suppressed by chunk
+-   [x] Logical matches are neither duplicated nor suppressed by chunk
     placement.
--   [ ] Retained literal and prefix source-dependent state has an explicit
+-   [x] Retained literal and prefix source-dependent state has an explicit
     bound.
 
 ##### 0.5-D4 --- Suffix streaming parity

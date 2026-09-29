@@ -138,17 +138,26 @@ struct MultiPatternRule {
 struct MultiPatternEngine {
     automaton: AhoCorasick,
     rules: Box<[MultiPatternRule]>,
+    max_needle_len: usize,
 }
 
 impl MultiPatternEngine {
+    #[inline]
+    const fn max_overlap_len(&self) -> usize {
+        self.max_needle_len.saturating_sub(1)
+    }
+
     fn compile(rules: Vec<MultiPatternRule>) -> Result<Option<Self>, ScannerBuildError> {
         if rules.is_empty() {
             return Ok(None);
         }
 
-        // Overlapping iteration requires standard match semantics. Keeping all
-        // overlaps is intentional: rules may share a prefix, use identical
-        // needles, or begin at the same source position.
+        let max_needle_len = rules
+            .iter()
+            .map(|rule| rule.needle.len())
+            .max()
+            .unwrap_or(0);
+
         let automaton = AhoCorasickBuilder::new()
             .match_kind(MatchKind::Standard)
             .build(rules.iter().map(|rule| rule.needle.as_ref()))
@@ -157,6 +166,7 @@ impl MultiPatternEngine {
         Ok(Some(Self {
             automaton,
             rules: rules.into_boxed_slice(),
+            max_needle_len,
         }))
     }
 
@@ -186,6 +196,269 @@ impl MultiPatternEngine {
             }
         }
     }
+
+    fn update_stream_overlap(&self, state: &mut MultiPatternStreamState, chunk: &[u8]) {
+        let keep = self.max_overlap_len();
+
+        if keep == 0 {
+            if let Some(&last) = chunk.last() {
+                state.byte_before_overlap = Some(last);
+            }
+
+            state.overlap.clear();
+            return;
+        }
+
+        let old_overlap_len = state.overlap.len();
+        let total_len = old_overlap_len + chunk.len();
+
+        if total_len <= keep {
+            state.overlap.extend_from_slice(chunk);
+            return;
+        }
+
+        let remove = total_len - keep;
+
+        if remove <= old_overlap_len {
+            state.byte_before_overlap = Some(state.overlap[remove - 1]);
+            state.overlap.drain(..remove);
+            state.overlap.extend_from_slice(chunk);
+            return;
+        }
+
+        let removed_from_chunk = remove - old_overlap_len;
+
+        state.byte_before_overlap = if removed_from_chunk == 0 {
+            state.overlap.last().copied()
+        } else {
+            Some(chunk[removed_from_chunk - 1])
+        };
+
+        state.overlap.clear();
+        state
+            .overlap
+            .extend_from_slice(&chunk[removed_from_chunk..]);
+    }
+
+    fn scan_stream_chunk(
+        &self,
+        state: &mut MultiPatternStreamState,
+        chunk: &[u8],
+        source_offset: usize,
+        findings: &mut Vec<InternalFinding>,
+    ) {
+        // 1. Resolve prefixes already active before this chunk.
+        Self::continue_active_prefixes(state, chunk, source_offset, findings);
+
+        let overlap_len = state.overlap.len();
+
+        debug_assert!(source_offset >= overlap_len);
+
+        // 2. Discover literal + prefix needles wholly inside this chunk.
+        for matched in self.automaton.find_overlapping_iter(chunk) {
+            let rule = &self.rules[matched.pattern().as_usize()];
+            let absolute_start = source_offset + matched.start();
+
+            match rule.kind {
+                MultiPatternKind::Literal => {
+                    findings.push(InternalFinding::new(
+                        rule.rule_index,
+                        absolute_start,
+                        source_offset + matched.end(),
+                    ));
+                }
+
+                MultiPatternKind::Prefix => {
+                    let left_is_token = if matched.start() == 0 {
+                        state
+                            .overlap
+                            .last()
+                            .copied()
+                            .or(state.byte_before_overlap)
+                            .is_some_and(is_token_byte)
+                    } else {
+                        is_token_byte(chunk[matched.start() - 1])
+                    };
+
+                    if left_is_token {
+                        continue;
+                    }
+
+                    self.accept_stream_prefix(
+                        state,
+                        rule,
+                        absolute_start,
+                        source_offset + matched.end(),
+                        &chunk[matched.end()..],
+                        findings,
+                    );
+                }
+            }
+        }
+
+        // 3. Discover needles crossing the old/new boundary.
+        if overlap_len != 0 && !chunk.is_empty() {
+            let right_len = chunk.len().min(self.max_overlap_len());
+            let mut boundary = Vec::with_capacity(overlap_len + right_len);
+
+            boundary.extend_from_slice(&state.overlap);
+            boundary.extend_from_slice(&chunk[..right_len]);
+
+            let boundary_base = source_offset - overlap_len;
+
+            for matched in self.automaton.find_overlapping_iter(&boundary) {
+                if matched.start() >= overlap_len || matched.end() <= overlap_len {
+                    continue;
+                }
+
+                let rule = &self.rules[matched.pattern().as_usize()];
+                let absolute_start = boundary_base + matched.start();
+                let absolute_end = boundary_base + matched.end();
+
+                match rule.kind {
+                    MultiPatternKind::Literal => {
+                        findings.push(InternalFinding::new(
+                            rule.rule_index,
+                            absolute_start,
+                            absolute_end,
+                        ));
+                    }
+
+                    MultiPatternKind::Prefix => {
+                        let left_is_token = if matched.start() == 0 {
+                            state.byte_before_overlap.is_some_and(is_token_byte)
+                        } else {
+                            is_token_byte(boundary[matched.start() - 1])
+                        };
+
+                        if left_is_token {
+                            continue;
+                        }
+
+                        let suffix_start = matched.end() - overlap_len;
+
+                        self.accept_stream_prefix(
+                            state,
+                            rule,
+                            absolute_start,
+                            absolute_end,
+                            &chunk[suffix_start..],
+                            findings,
+                        );
+                    }
+                }
+            }
+        }
+
+        // 4. Mutate overlap only after every matcher has observed the old boundary.
+        self.update_stream_overlap(state, chunk);
+    }
+
+    fn continue_active_prefixes(
+        state: &mut MultiPatternStreamState,
+        chunk: &[u8],
+        source_offset: usize,
+        findings: &mut Vec<InternalFinding>,
+    ) {
+        let mut index = 0;
+
+        while index < state.active_prefixes.len() {
+            let active = state.active_prefixes[index];
+
+            let token_len = chunk
+                .iter()
+                .position(|&byte| !is_token_byte(byte))
+                .unwrap_or(chunk.len());
+
+            if token_len == chunk.len() {
+                index += 1;
+                continue;
+            }
+
+            findings.push(InternalFinding::new(
+                active.rule_index,
+                active.source_start,
+                source_offset + token_len,
+            ));
+
+            state.active_prefixes.swap_remove(index);
+        }
+    }
+
+    fn accept_stream_prefix(
+        &self,
+        state: &mut MultiPatternStreamState,
+        rule: &MultiPatternRule,
+        source_start: usize,
+        needle_end: usize,
+        suffix: &[u8],
+        findings: &mut Vec<InternalFinding>,
+    ) {
+        let token_len = suffix
+            .iter()
+            .position(|&byte| !is_token_byte(byte))
+            .unwrap_or(suffix.len());
+
+        if token_len == suffix.len() {
+            if !state.active_prefixes.iter().any(|active| {
+                active.rule_index == rule.rule_index && active.source_start == source_start
+            }) {
+                state.active_prefixes.push(ActivePrefix {
+                    rule_index: rule.rule_index,
+                    source_start,
+                });
+            }
+
+            return;
+        }
+
+        findings.push(InternalFinding::new(
+            rule.rule_index,
+            source_start,
+            needle_end + token_len,
+        ));
+    }
+
+    fn finish_stream(
+        state: &mut MultiPatternStreamState,
+        source_end: usize,
+        findings: &mut Vec<InternalFinding>,
+    ) {
+        findings.extend(state.active_prefixes.drain(..).map(|active| {
+            InternalFinding::new(active.rule_index, active.source_start, source_end)
+        }));
+    }
+}
+
+/// Incremental execution state for the shared literal/prefix matcher.
+///
+/// The compiled [`MultiPatternEngine`] remains immutable and reusable across
+/// sources. Each streaming source owns one instance of this state.
+///
+/// `overlap` retains only the bounded suffix of already consumed input that
+/// may participate in a needle crossing the next chunk boundary. It never
+/// retains complete historical chunks.
+///
+/// `active_prefixes` contains prefix rules whose configured prefix has already
+/// matched but whose token has not yet reached a terminating boundary.
+#[derive(Debug, Default)]
+pub(crate) struct MultiPatternStreamState {
+    overlap: Vec<u8>,
+
+    /// Byte immediately preceding `overlap`, when one exists.
+    ///
+    /// This is retained only for evaluating the left token boundary of a
+    /// prefix candidate whose start coincides with the beginning of overlap.
+    byte_before_overlap: Option<u8>,
+
+    /// Prefix matches whose token continues beyond the latest consumed chunk.
+    active_prefixes: Vec<ActivePrefix>,
+}
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+struct ActivePrefix {
+    rule_index: RuleIndex,
+    source_start: usize,
 }
 
 #[derive(Debug)]
@@ -502,6 +775,29 @@ impl CompiledRuleSet {
 
     pub(crate) fn is_empty(&self) -> bool {
         self.metadata.is_empty()
+    }
+
+    pub(crate) fn scan_stream_chunk(
+        &self,
+        state: &mut MultiPatternStreamState,
+        chunk: &[u8],
+        source_offset: usize,
+        findings: &mut Vec<InternalFinding>,
+    ) {
+        if let Some(engine) = &self.multi_pattern {
+            engine.scan_stream_chunk(state, chunk, source_offset, findings);
+        }
+    }
+
+    pub(crate) fn finish_stream(
+        &self,
+        state: &mut MultiPatternStreamState,
+        source_end: usize,
+        findings: &mut Vec<InternalFinding>,
+    ) {
+        if self.multi_pattern.is_some() {
+            MultiPatternEngine::finish_stream(state, source_end, findings);
+        }
     }
 }
 
@@ -834,5 +1130,493 @@ mod capture_projection_tests {
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].start(), 0);
         assert_eq!(findings[0].end(), source.len());
+    }
+}
+
+#[cfg(test)]
+mod multi_pattern_tests {
+    use super::*;
+    use crate::{Rule, Severity};
+
+    fn scan(rules: Vec<Rule>, source: &str) -> Vec<(usize, usize, RuleIndex)> {
+        let compiled = CompiledRuleSet::compile(rules).expect("rules should compile");
+        let mut findings = Vec::new();
+
+        compiled.scan(source, &mut findings);
+
+        findings
+            .into_iter()
+            .map(|finding| (finding.start(), finding.end(), finding.rule_index()))
+            .collect()
+    }
+
+    #[test]
+    fn literal_matches_without_token_boundaries() {
+        let findings = scan(
+            vec![Rule::literal("literal", "secret", Severity::High)],
+            "xsecrety secret",
+        );
+
+        assert_eq!(
+            findings,
+            vec![(1, 7, RuleIndex::new(0)), (9, 15, RuleIndex::new(0)),]
+        );
+    }
+
+    #[test]
+    fn overlapping_literals_are_preserved() {
+        let findings = scan(
+            vec![
+                Rule::literal("long", "secret", Severity::High),
+                Rule::literal("short", "sec", Severity::High),
+            ],
+            "secret",
+        );
+
+        assert_eq!(findings.len(), 2);
+        assert!(findings.contains(&(0, 6, RuleIndex::new(0))));
+        assert!(findings.contains(&(0, 3, RuleIndex::new(1))));
+    }
+
+    #[test]
+    fn identical_literals_from_distinct_rules_are_preserved() {
+        let findings = scan(
+            vec![
+                Rule::literal("first", "secret", Severity::High),
+                Rule::literal("second", "secret", Severity::High),
+            ],
+            "secret",
+        );
+
+        assert_eq!(findings.len(), 2);
+        assert!(findings.contains(&(0, 6, RuleIndex::new(0))));
+        assert!(findings.contains(&(0, 6, RuleIndex::new(1))));
+    }
+
+    #[test]
+    fn prefix_requires_left_token_boundary() {
+        let findings = scan(
+            vec![Rule::prefix("token", "ghp_", Severity::Critical)],
+            "xghp_invalid ghp_valid",
+        );
+
+        assert_eq!(findings, vec![(13, 22, RuleIndex::new(0))]);
+    }
+
+    #[test]
+    fn prefix_extends_through_complete_ascii_token() {
+        let findings = scan(
+            vec![Rule::prefix("token", "ghp_", Severity::Critical)],
+            "ghp_abc-DEF_123!",
+        );
+
+        assert_eq!(findings, vec![(0, 15, RuleIndex::new(0))]);
+    }
+
+    #[test]
+    fn overlapping_prefix_needles_are_preserved() {
+        let findings = scan(
+            vec![
+                Rule::prefix("short", "tok", Severity::High),
+                Rule::prefix("long", "token_", Severity::High),
+            ],
+            "token_value",
+        );
+
+        assert_eq!(findings.len(), 2);
+        assert!(findings.contains(&(0, 11, RuleIndex::new(0))));
+        assert!(findings.contains(&(0, 11, RuleIndex::new(1))));
+    }
+
+    #[test]
+    fn unicode_adjacent_to_prefix_preserves_utf8_offsets() {
+        let findings = scan(
+            vec![Rule::prefix("token", "ghp_", Severity::Critical)],
+            "😀ghp_value",
+        );
+
+        assert_eq!(findings, vec![(4, 13, RuleIndex::new(0))]);
+    }
+
+    #[test]
+    fn engine_records_longest_multi_pattern_needle() {
+        let compiled = CompiledRuleSet::compile(vec![
+            Rule::literal("short", "abc", Severity::High),
+            Rule::prefix("long", "prefix_", Severity::Critical),
+        ])
+        .expect("rules should compile");
+
+        let engine = compiled
+            .multi_pattern
+            .as_ref()
+            .expect("multi-pattern engine should exist");
+
+        assert_eq!(engine.max_needle_len, 7);
+        assert_eq!(engine.max_overlap_len(), 6);
+    }
+
+    #[test]
+    fn single_byte_needles_require_no_overlap() {
+        let compiled = CompiledRuleSet::compile(vec![Rule::literal("single", "x", Severity::High)])
+            .expect("rules should compile");
+
+        let engine = compiled
+            .multi_pattern
+            .as_ref()
+            .expect("multi-pattern engine should exist");
+
+        assert_eq!(engine.max_needle_len, 1);
+        assert_eq!(engine.max_overlap_len(), 0);
+    }
+
+    #[test]
+    fn stream_state_starts_empty() {
+        let state = MultiPatternStreamState::default();
+
+        assert!(state.overlap.is_empty());
+        assert_eq!(state.byte_before_overlap, None);
+        assert!(state.active_prefixes.is_empty());
+    }
+
+    #[test]
+    fn stream_overlap_is_bounded_by_longest_needle() {
+        let compiled =
+            CompiledRuleSet::compile(vec![Rule::literal("literal", "secret", Severity::High)])
+                .expect("rules should compile");
+
+        let engine = compiled
+            .multi_pattern
+            .as_ref()
+            .expect("multi-pattern engine should exist");
+
+        let mut state = MultiPatternStreamState::default();
+
+        engine.update_stream_overlap(&mut state, b"abcdefgh");
+
+        assert_eq!(state.overlap, b"defgh");
+    }
+
+    #[test]
+    fn stream_overlap_combines_only_required_tail() {
+        let compiled =
+            CompiledRuleSet::compile(vec![Rule::literal("literal", "secret", Severity::High)])
+                .expect("rules should compile");
+
+        let engine = compiled
+            .multi_pattern
+            .as_ref()
+            .expect("multi-pattern engine should exist");
+
+        let mut state = MultiPatternStreamState::default();
+
+        engine.update_stream_overlap(&mut state, b"abc");
+        assert_eq!(state.overlap, b"abc");
+
+        engine.update_stream_overlap(&mut state, b"de");
+        assert_eq!(state.overlap, b"abcde");
+
+        engine.update_stream_overlap(&mut state, b"fg");
+        assert_eq!(state.overlap, b"cdefg");
+    }
+
+    #[test]
+    fn stream_overlap_may_retain_partial_utf8_bytes() {
+        let compiled =
+            CompiledRuleSet::compile(vec![Rule::literal("literal", "abcdef", Severity::High)])
+                .expect("rules should compile");
+
+        let engine = compiled
+            .multi_pattern
+            .as_ref()
+            .expect("multi-pattern engine should exist");
+
+        let mut state = MultiPatternStreamState::default();
+
+        engine.update_stream_overlap(&mut state, b"abcdefgh");
+
+        assert_eq!(state.overlap.len(), engine.max_overlap_len());
+    }
+
+    fn scan_literal_chunks(rules: Vec<Rule>, chunks: &[&[u8]]) -> Vec<(usize, usize, RuleIndex)> {
+        let compiled = CompiledRuleSet::compile(rules).expect("rules should compile");
+        let engine = compiled
+            .multi_pattern
+            .as_ref()
+            .expect("multi-pattern engine should exist");
+
+        let mut state = MultiPatternStreamState::default();
+        let mut findings = Vec::new();
+        let mut offset = 0;
+
+        for chunk in chunks {
+            engine.scan_stream_chunk(&mut state, chunk, offset, &mut findings);
+            offset += chunk.len();
+        }
+
+        findings
+            .into_iter()
+            .map(|finding| (finding.start(), finding.end(), finding.rule_index()))
+            .collect()
+    }
+
+    #[test]
+    fn streamed_literal_matches_inside_single_chunk() {
+        let findings = scan_literal_chunks(
+            vec![Rule::literal("literal", "secret", Severity::High)],
+            &[b"xxsecretyy"],
+        );
+
+        assert_eq!(findings, vec![(2, 8, RuleIndex::new(0))]);
+    }
+
+    #[test]
+    fn streamed_literal_matches_across_chunk_boundary() {
+        let findings = scan_literal_chunks(
+            vec![Rule::literal("literal", "secret", Severity::High)],
+            &[b"xxsec", b"retyy"],
+        );
+
+        assert_eq!(findings, vec![(2, 8, RuleIndex::new(0))]);
+    }
+
+    #[test]
+    fn streamed_literal_is_emitted_exactly_once() {
+        let findings = scan_literal_chunks(
+            vec![Rule::literal("literal", "secret", Severity::High)],
+            &[b"xxsec", b"ret", b"secret"],
+        );
+
+        assert_eq!(
+            findings,
+            vec![(2, 8, RuleIndex::new(0)), (8, 14, RuleIndex::new(0)),]
+        );
+    }
+
+    #[test]
+    fn streamed_overlapping_literals_are_preserved() {
+        let findings = scan_literal_chunks(
+            vec![
+                Rule::literal("long", "secret", Severity::High),
+                Rule::literal("short", "sec", Severity::High),
+            ],
+            &[b"se", b"cret"],
+        );
+
+        assert_eq!(findings.len(), 2);
+        assert!(findings.contains(&(0, 6, RuleIndex::new(0))));
+        assert!(findings.contains(&(0, 3, RuleIndex::new(1))));
+    }
+
+    #[test]
+    fn streamed_literal_preserves_absolute_utf8_byte_offsets() {
+        let findings = scan_literal_chunks(
+            vec![Rule::literal("literal", "secret", Severity::High)],
+            &["😀se".as_bytes(), b"cret"],
+        );
+
+        assert_eq!(findings, vec![(4, 10, RuleIndex::new(0))]);
+    }
+
+    #[test]
+    fn active_prefix_continues_across_chunks_until_boundary() {
+        let mut state = MultiPatternStreamState {
+            active_prefixes: vec![ActivePrefix {
+                rule_index: RuleIndex::new(0),
+                source_start: 4,
+            }],
+            ..Default::default()
+        };
+
+        let mut findings = Vec::new();
+
+        MultiPatternEngine::continue_active_prefixes(&mut state, b"abc123", 8, &mut findings);
+
+        assert!(findings.is_empty());
+        assert_eq!(state.active_prefixes.len(), 1);
+
+        MultiPatternEngine::continue_active_prefixes(&mut state, b"DEF rest", 14, &mut findings);
+
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].rule_index(), RuleIndex::new(0));
+        assert_eq!(findings[0].start(), 4);
+        assert_eq!(findings[0].end(), 17);
+        assert!(state.active_prefixes.is_empty());
+    }
+
+    #[test]
+    fn active_prefix_is_emitted_at_end_of_stream() {
+        let mut state = MultiPatternStreamState {
+            active_prefixes: vec![ActivePrefix {
+                rule_index: RuleIndex::new(0),
+                source_start: 4,
+            }],
+            ..Default::default()
+        };
+
+        let mut findings = Vec::new();
+
+        MultiPatternEngine::finish_stream(&mut state, 19, &mut findings);
+
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].start(), 4);
+        assert_eq!(findings[0].end(), 19);
+        assert!(state.active_prefixes.is_empty());
+    }
+
+    #[test]
+    fn stream_prefix_accepts_complete_token() {
+        let compiled =
+            CompiledRuleSet::compile(vec![Rule::prefix("github", "ghp_", Severity::Critical)])
+                .expect("rules should compile");
+
+        let engine = compiled
+            .multi_pattern
+            .as_ref()
+            .expect("multi-pattern engine should exist");
+
+        let mut state = MultiPatternStreamState::default();
+        let mut findings = Vec::new();
+
+        engine.scan_stream_chunk(&mut state, b"ghp_secret!", 0, &mut findings);
+
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].start(), 0);
+        assert_eq!(findings[0].end(), 10);
+        assert!(state.active_prefixes.is_empty());
+    }
+
+    #[test]
+    fn stream_prefix_remains_active_without_token_boundary() {
+        let compiled =
+            CompiledRuleSet::compile(vec![Rule::prefix("github", "ghp_", Severity::Critical)])
+                .expect("rules should compile");
+
+        let engine = compiled
+            .multi_pattern
+            .as_ref()
+            .expect("multi-pattern engine should exist");
+
+        let mut state = MultiPatternStreamState::default();
+        let mut findings = Vec::new();
+
+        engine.scan_stream_chunk(&mut state, b"ghp_secret", 0, &mut findings);
+
+        assert!(findings.is_empty());
+        assert_eq!(state.active_prefixes.len(), 1);
+        assert_eq!(state.active_prefixes[0].source_start, 0);
+    }
+
+    #[test]
+    fn stream_prefix_rejects_missing_left_boundary() {
+        let compiled =
+            CompiledRuleSet::compile(vec![Rule::prefix("github", "ghp_", Severity::Critical)])
+                .expect("rules should compile");
+
+        let engine = compiled
+            .multi_pattern
+            .as_ref()
+            .expect("multi-pattern engine should exist");
+
+        let mut state = MultiPatternStreamState::default();
+        let mut findings = Vec::new();
+
+        engine.scan_stream_chunk(&mut state, b"xghp_secret!", 0, &mut findings);
+
+        assert!(findings.is_empty());
+    }
+
+    #[test]
+    fn stream_prefix_crosses_chunk_boundary() {
+        let compiled =
+            CompiledRuleSet::compile(vec![Rule::prefix("github", "ghp_", Severity::Critical)])
+                .expect("rules should compile");
+
+        let engine = compiled
+            .multi_pattern
+            .as_ref()
+            .expect("multi-pattern engine should exist");
+
+        let mut state = MultiPatternStreamState::default();
+        let mut findings = Vec::new();
+
+        engine.scan_stream_chunk(&mut state, b" gh", 0, &mut findings);
+
+        assert!(findings.is_empty());
+        assert_eq!(state.overlap, b" gh");
+
+        engine.scan_stream_chunk(&mut state, b"p_secret!", 3, &mut findings);
+
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].start(), 1);
+        assert_eq!(findings[0].end(), 11);
+    }
+
+    #[test]
+    fn stream_prefix_crossing_boundary_respects_left_token_boundary() {
+        let compiled =
+            CompiledRuleSet::compile(vec![Rule::prefix("github", "ghp_", Severity::Critical)])
+                .expect("rules should compile");
+
+        let engine = compiled
+            .multi_pattern
+            .as_ref()
+            .expect("multi-pattern engine should exist");
+
+        let mut state = MultiPatternStreamState::default();
+        let mut findings = Vec::new();
+
+        engine.scan_stream_chunk(&mut state, b"p_secret!", 4, &mut findings);
+
+        assert!(findings.is_empty());
+    }
+
+    #[test]
+    fn streamed_multi_pattern_matches_whole_source_semantics() {
+        let rules = vec![
+            Rule::literal("literal", "secret", Severity::High),
+            Rule::prefix("github", "ghp_", Severity::Critical),
+        ];
+
+        let compiled = CompiledRuleSet::compile(rules).expect("rules should compile");
+
+        let source = "secret ghp_value! xxsecret ghp_other";
+        let mut whole = Vec::new();
+        compiled.scan(source, &mut whole);
+
+        let engine = compiled
+            .multi_pattern
+            .as_ref()
+            .expect("multi-pattern engine should exist");
+
+        let chunks: &[&[u8]] = &[
+            b"sec",
+            b"ret gh",
+            b"p_val",
+            b"ue! xxse",
+            b"cret ghp_",
+            b"other",
+        ];
+
+        let mut state = MultiPatternStreamState::default();
+        let mut streamed = Vec::new();
+        let mut offset = 0;
+
+        for chunk in chunks {
+            engine.scan_stream_chunk(&mut state, chunk, offset, &mut streamed);
+            offset += chunk.len();
+        }
+
+        MultiPatternEngine::finish_stream(&mut state, offset, &mut streamed);
+
+        let project =
+            |finding: &InternalFinding| (finding.start(), finding.end(), finding.rule_index());
+
+        let mut whole = whole.iter().map(project).collect::<Vec<_>>();
+        let mut streamed = streamed.iter().map(project).collect::<Vec<_>>();
+
+        whole.sort_unstable();
+        streamed.sort_unstable();
+
+        assert_eq!(streamed, whole);
     }
 }

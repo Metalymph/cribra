@@ -1,6 +1,9 @@
 use std::sync::Arc;
 
-use crate::compiled_rule::CompiledRuleSet;
+use crate::{
+    compiled_rule::{CompiledRuleSet, InternalFinding, MultiPatternStreamState},
+    utf8_transport::{Utf8Transport, Utf8TransportError},
+};
 
 /// Mutable execution state owned by one logical source.
 ///
@@ -11,6 +14,8 @@ use crate::compiled_rule::CompiledRuleSet;
 #[derive(Debug, Default)]
 struct SourceExecutionState {
     accepted_bytes: usize,
+    transport: Utf8Transport,
+    multi_pattern: MultiPatternStreamState,
 }
 
 /// Mutable execution state for one logical source.
@@ -27,16 +32,22 @@ pub(crate) struct SourceSession {
 
 /// Lifecycle of one logical-source execution.
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
-pub(crate) enum SourceLifecycle {
+enum SourceLifecycle {
     Active,
     Completed,
-    Failed,
 }
 
 /// Invalid mutation of a source session that is no longer active.
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
-pub(crate) enum SourceSessionStateError {
+pub(crate) enum SourceSessionError {
     NotActive,
+    InvalidUtf8(Utf8TransportError),
+}
+
+impl From<Utf8TransportError> for SourceSessionError {
+    fn from(error: Utf8TransportError) -> Self {
+        Self::InvalidUtf8(error)
+    }
 }
 
 impl SourceSession {
@@ -52,33 +63,57 @@ impl SourceSession {
         self.state.accepted_bytes
     }
 
-    pub(crate) fn lifecycle(&self) -> SourceLifecycle {
+    pub(crate) fn scan_chunk(
+        &mut self,
+        chunk: &[u8],
+        findings: &mut Vec<InternalFinding>,
+    ) -> Result<(), SourceSessionError> {
+        self.ensure_active()?;
+
+        let rules = &self.rules;
+        let state = &mut self.state;
+
+        state.transport.push(chunk, |text| {
+            let bytes = text.as_bytes();
+            let source_offset = state.accepted_bytes;
+
+            rules.scan_stream_chunk(&mut state.multi_pattern, bytes, source_offset, findings);
+
+            state.accepted_bytes += bytes.len();
+        })?;
+
+        Ok(())
+    }
+
+    #[cfg(test)]
+    fn lifecycle(&self) -> SourceLifecycle {
         self.lifecycle
     }
 
-    pub(crate) fn accept_bytes(&mut self, count: usize) -> Result<(), SourceSessionStateError> {
+    pub(crate) fn finish_scan(
+        &mut self,
+        findings: &mut Vec<InternalFinding>,
+    ) -> Result<(), SourceSessionError> {
         self.ensure_active()?;
-        self.state.accepted_bytes += count;
-        Ok(())
-    }
 
-    pub(crate) fn complete(&mut self) -> Result<(), SourceSessionStateError> {
-        self.ensure_active()?;
+        self.state.transport.finish()?;
+
+        self.rules.finish_stream(
+            &mut self.state.multi_pattern,
+            self.state.accepted_bytes,
+            findings,
+        );
+
         self.lifecycle = SourceLifecycle::Completed;
+
         Ok(())
     }
 
-    pub(crate) fn fail(&mut self) -> Result<(), SourceSessionStateError> {
-        self.ensure_active()?;
-        self.lifecycle = SourceLifecycle::Failed;
-        Ok(())
-    }
-
-    fn ensure_active(&self) -> Result<(), SourceSessionStateError> {
+    fn ensure_active(&self) -> Result<(), SourceSessionError> {
         if self.lifecycle == SourceLifecycle::Active {
             Ok(())
         } else {
-            Err(SourceSessionStateError::NotActive)
+            Err(SourceSessionError::NotActive)
         }
     }
 
@@ -91,7 +126,7 @@ impl SourceSession {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Scanner;
+    use crate::{Rule, Scanner, Severity};
 
     #[test]
     fn sessions_share_immutable_compiled_configuration() {
@@ -104,129 +139,159 @@ mod tests {
     }
 
     #[test]
-    fn sessions_keep_mutable_state_independent() {
-        let scanner = Scanner::default();
-
-        let mut first = scanner.source_session();
-        let second = scanner.source_session();
-
-        first.accept_bytes(17).unwrap();
-
-        assert_eq!(first.accepted_bytes(), 17);
-        assert_eq!(second.accepted_bytes(), 0);
-        assert_eq!(first.lifecycle(), SourceLifecycle::Active);
-        assert_eq!(second.lifecycle(), SourceLifecycle::Active);
-    }
-
-    #[test]
-    fn abandoned_session_does_not_affect_later_session() {
-        let scanner = Scanner::default();
-
-        {
-            let mut abandoned = scanner.source_session();
-            abandoned.accept_bytes(23).unwrap();
-        }
-
-        let later = scanner.source_session();
-
-        assert_eq!(later.accepted_bytes(), 0);
-        assert_eq!(later.lifecycle(), SourceLifecycle::Active);
-    }
-
-    #[test]
-    fn session_can_reach_each_terminal_lifecycle() {
-        let scanner = Scanner::default();
-
-        let mut completed = scanner.source_session();
-        completed.complete().unwrap();
-
-        let mut failed = scanner.source_session();
-        failed.fail().unwrap();
-
-        assert_eq!(completed.lifecycle(), SourceLifecycle::Completed);
-        assert_eq!(failed.lifecycle(), SourceLifecycle::Failed);
-    }
-
-    #[test]
-    fn completed_session_rejects_further_mutation() {
-        let scanner = Scanner::default();
-        let mut session = scanner.source_session();
-
-        session.accept_bytes(11).unwrap();
-        session.complete().unwrap();
-
-        assert_eq!(
-            session.accept_bytes(7),
-            Err(SourceSessionStateError::NotActive)
+    fn session_scans_literal_across_chunk_boundary() {
+        let rules = Arc::new(
+            CompiledRuleSet::compile(vec![Rule::literal("secret", "secret", Severity::High)])
+                .unwrap(),
         );
-        assert_eq!(session.complete(), Err(SourceSessionStateError::NotActive));
-        assert_eq!(session.fail(), Err(SourceSessionStateError::NotActive));
-        assert_eq!(session.accepted_bytes(), 11);
+
+        let mut session = SourceSession::new(rules);
+        let mut findings = Vec::new();
+
+        session.scan_chunk(b"xxsec", &mut findings).unwrap();
+        session.scan_chunk(b"retyy", &mut findings).unwrap();
+        session.finish_scan(&mut findings).unwrap();
+
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].start(), 2);
+        assert_eq!(findings[0].end(), 8);
+        assert_eq!(session.accepted_bytes(), 10);
         assert_eq!(session.lifecycle(), SourceLifecycle::Completed);
     }
 
     #[test]
-    fn failed_session_rejects_further_mutation() {
-        let scanner = Scanner::default();
-        let mut session = scanner.source_session();
+    fn session_finishes_active_prefix_at_end_of_source() {
+        let rules = Arc::new(
+            CompiledRuleSet::compile(vec![Rule::prefix("token", "ghp_", Severity::Critical)])
+                .unwrap(),
+        );
 
-        session.accept_bytes(13).unwrap();
-        session.fail().unwrap();
+        let mut session = SourceSession::new(rules);
+        let mut findings = Vec::new();
+
+        session.scan_chunk(b"xx gh", &mut findings).unwrap();
+        session.scan_chunk(b"p_secret", &mut findings).unwrap();
+
+        assert!(findings.is_empty());
+
+        session.finish_scan(&mut findings).unwrap();
+
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].start(), 3);
+        assert_eq!(findings[0].end(), 13);
+    }
+
+    #[test]
+    fn sessions_keep_stream_matcher_state_independent() {
+        let rules = Arc::new(
+            CompiledRuleSet::compile(vec![Rule::literal("secret", "secret", Severity::High)])
+                .unwrap(),
+        );
+
+        let mut first = SourceSession::new(Arc::clone(&rules));
+        let mut second = SourceSession::new(rules);
+
+        let mut first_findings = Vec::new();
+        let mut second_findings = Vec::new();
+
+        first.scan_chunk(b"sec", &mut first_findings).unwrap();
+        second.scan_chunk(b"xxxx", &mut second_findings).unwrap();
+
+        first.scan_chunk(b"ret", &mut first_findings).unwrap();
+        second.scan_chunk(b"secret", &mut second_findings).unwrap();
+
+        first.finish_scan(&mut first_findings).unwrap();
+        second.finish_scan(&mut second_findings).unwrap();
+
+        assert_eq!(first_findings.len(), 1);
+        assert_eq!(first_findings[0].start(), 0);
+        assert_eq!(first_findings[0].end(), 6);
+
+        assert_eq!(second_findings.len(), 1);
+        assert_eq!(second_findings[0].start(), 4);
+        assert_eq!(second_findings[0].end(), 10);
+    }
+
+    #[test]
+    fn session_preserves_offsets_when_utf8_scalar_is_split() {
+        let rules = Arc::new(
+            CompiledRuleSet::compile(vec![Rule::literal("secret", "secret", Severity::High)])
+                .unwrap(),
+        );
+
+        let source = "🦀secret";
+        let bytes = source.as_bytes();
+
+        for split in 0..=bytes.len() {
+            let mut session = SourceSession::new(Arc::clone(&rules));
+            let mut findings = Vec::new();
+
+            session.scan_chunk(&bytes[..split], &mut findings).unwrap();
+            session.scan_chunk(&bytes[split..], &mut findings).unwrap();
+            session.finish_scan(&mut findings).unwrap();
+
+            assert_eq!(findings.len(), 1, "split at byte {split}");
+            assert_eq!(findings[0].start(), 4, "split at byte {split}");
+            assert_eq!(findings[0].end(), 10, "split at byte {split}");
+            assert_eq!(session.accepted_bytes(), source.len());
+        }
+    }
+
+    #[test]
+    fn session_matches_with_single_byte_transport() {
+        let rules = Arc::new(
+            CompiledRuleSet::compile(vec![
+                Rule::literal("secret", "secret", Severity::High),
+                Rule::prefix("github", "ghp_", Severity::Critical),
+            ])
+            .unwrap(),
+        );
+
+        let source = "🦀 secret xx ghp_value!";
+        let mut session = SourceSession::new(rules);
+        let mut findings = Vec::new();
+
+        for byte in source.as_bytes() {
+            session
+                .scan_chunk(std::slice::from_ref(byte), &mut findings)
+                .unwrap();
+        }
+
+        session.finish_scan(&mut findings).unwrap();
+
+        let spans = findings
+            .iter()
+            .map(|finding| (finding.start(), finding.end()))
+            .collect::<Vec<_>>();
+
+        assert!(spans.contains(&(5, 11)));
+        assert!(spans.contains(&(15, 24)));
+        assert_eq!(session.accepted_bytes(), source.len());
+    }
+
+    #[test]
+    fn session_rejects_incomplete_utf8_before_matcher_eof() {
+        let rules = Arc::new(
+            CompiledRuleSet::compile(vec![Rule::prefix("github", "ghp_", Severity::Critical)])
+                .unwrap(),
+        );
+
+        let mut session = SourceSession::new(rules);
+        let mut findings = Vec::new();
+
+        session.scan_chunk(b"ghp_secret", &mut findings).unwrap();
+        session
+            .scan_chunk(&[0xF0, 0x9F, 0xA6], &mut findings)
+            .unwrap();
 
         assert_eq!(
-            session.accept_bytes(5),
-            Err(SourceSessionStateError::NotActive)
+            session.finish_scan(&mut findings),
+            Err(SourceSessionError::InvalidUtf8(
+                Utf8TransportError::Incomplete
+            ))
         );
-        assert_eq!(session.complete(), Err(SourceSessionStateError::NotActive));
-        assert_eq!(session.fail(), Err(SourceSessionStateError::NotActive));
-        assert_eq!(session.accepted_bytes(), 13);
-        assert_eq!(session.lifecycle(), SourceLifecycle::Failed);
-    }
 
-    #[test]
-    fn completing_one_session_does_not_affect_another_active_session() {
-        let scanner = Scanner::default();
-
-        let mut first = scanner.source_session();
-        let mut second = scanner.source_session();
-
-        first.accept_bytes(11).unwrap();
-        second.accept_bytes(7).unwrap();
-        first.accept_bytes(13).unwrap();
-        second.accept_bytes(5).unwrap();
-
-        assert_eq!(first.accepted_bytes(), 24);
-        assert_eq!(second.accepted_bytes(), 12);
-
-        first.complete().unwrap();
-
-        assert_eq!(first.lifecycle(), SourceLifecycle::Completed);
-        assert_eq!(second.lifecycle(), SourceLifecycle::Active);
-
-        second.accept_bytes(3).unwrap();
-
-        assert_eq!(first.accepted_bytes(), 24);
-        assert_eq!(second.accepted_bytes(), 15);
-    }
-
-    #[test]
-    fn failing_one_session_does_not_affect_another_active_session() {
-        let scanner = Scanner::default();
-
-        let mut first = scanner.source_session();
-        let mut second = scanner.source_session();
-
-        first.accept_bytes(19).unwrap();
-        second.accept_bytes(5).unwrap();
-
-        first.fail().unwrap();
-
-        assert_eq!(first.lifecycle(), SourceLifecycle::Failed);
-        assert_eq!(second.lifecycle(), SourceLifecycle::Active);
-
-        second.accept_bytes(7).unwrap();
-
-        assert_eq!(first.accepted_bytes(), 19);
-        assert_eq!(second.accepted_bytes(), 12);
+        assert!(findings.is_empty());
+        assert_eq!(session.lifecycle(), SourceLifecycle::Active);
     }
 }
