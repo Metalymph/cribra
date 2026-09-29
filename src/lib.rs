@@ -181,6 +181,11 @@ mod severity;
 mod source_session;
 pub mod transform;
 mod validators;
+#[cfg_attr(
+    not(test),
+    allow(dead_code, reason = "wired incrementally during streaming 0.5-D")
+)]
+mod utf8_transport;
 pub use confidence::Confidence;
 pub use explanation::Explanation;
 pub use finding::Finding;
