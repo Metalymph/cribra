@@ -138,17 +138,26 @@ struct MultiPatternRule {
 struct MultiPatternEngine {
     automaton: AhoCorasick,
     rules: Box<[MultiPatternRule]>,
+    max_needle_len: usize,
 }
 
 impl MultiPatternEngine {
+    #[inline]
+    const fn max_overlap_len(&self) -> usize {
+        self.max_needle_len.saturating_sub(1)
+    }
+
     fn compile(rules: Vec<MultiPatternRule>) -> Result<Option<Self>, ScannerBuildError> {
         if rules.is_empty() {
             return Ok(None);
         }
 
-        // Overlapping iteration requires standard match semantics. Keeping all
-        // overlaps is intentional: rules may share a prefix, use identical
-        // needles, or begin at the same source position.
+        let max_needle_len = rules
+            .iter()
+            .map(|rule| rule.needle.len())
+            .max()
+            .unwrap_or(0);
+
         let automaton = AhoCorasickBuilder::new()
             .match_kind(MatchKind::Standard)
             .build(rules.iter().map(|rule| rule.needle.as_ref()))
@@ -157,6 +166,7 @@ impl MultiPatternEngine {
         Ok(Some(Self {
             automaton,
             rules: rules.into_boxed_slice(),
+            max_needle_len,
         }))
     }
 
@@ -186,6 +196,32 @@ impl MultiPatternEngine {
             }
         }
     }
+}
+
+/// Incremental execution state for the shared literal/prefix matcher.
+///
+/// The compiled [`MultiPatternEngine`] remains immutable and reusable across
+/// sources. Each streaming source owns one instance of this state.
+///
+/// `overlap` retains only the bounded suffix of already consumed input that
+/// may participate in a needle crossing the next chunk boundary. It never
+/// retains complete historical chunks.
+///
+/// `active_prefixes` contains prefix rules whose configured prefix has already
+/// matched but whose token has not yet reached a terminating boundary.
+#[derive(Debug, Default)]
+struct MultiPatternStreamState {
+    overlap: String,
+    /// Whether the byte immediately preceding `overlap`, or the next chunk when
+    /// `overlap` is empty, belongs to the ASCII token alphabet.
+    previous_was_token_byte: bool,
+    active_prefixes: Vec<ActivePrefix>,
+}
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+struct ActivePrefix {
+    rule_index: RuleIndex,
+    source_start: usize,
 }
 
 #[derive(Debug)]
@@ -850,13 +886,7 @@ mod multi_pattern_tests {
 
         findings
             .into_iter()
-            .map(|finding| {
-                (
-                    finding.start(),
-                    finding.end(),
-                    finding.rule_index(),
-                )
-            })
+            .map(|finding| (finding.start(), finding.end(), finding.rule_index()))
             .collect()
     }
 
@@ -869,10 +899,7 @@ mod multi_pattern_tests {
 
         assert_eq!(
             findings,
-            vec![
-                (1, 7, RuleIndex::new(0)),
-                (9, 15, RuleIndex::new(0)),
-            ]
+            vec![(1, 7, RuleIndex::new(0)), (9, 15, RuleIndex::new(0)),]
         );
     }
 
@@ -949,5 +976,45 @@ mod multi_pattern_tests {
         );
 
         assert_eq!(findings, vec![(4, 13, RuleIndex::new(0))]);
+    }
+
+    #[test]
+    fn engine_records_longest_multi_pattern_needle() {
+        let compiled = CompiledRuleSet::compile(vec![
+            Rule::literal("short", "abc", Severity::High),
+            Rule::prefix("long", "prefix_", Severity::Critical),
+        ])
+        .expect("rules should compile");
+
+        let engine = compiled
+            .multi_pattern
+            .as_ref()
+            .expect("multi-pattern engine should exist");
+
+        assert_eq!(engine.max_needle_len, 7);
+        assert_eq!(engine.max_overlap_len(), 6);
+    }
+
+    #[test]
+    fn single_byte_needles_require_no_overlap() {
+        let compiled = CompiledRuleSet::compile(vec![Rule::literal("single", "x", Severity::High)])
+            .expect("rules should compile");
+
+        let engine = compiled
+            .multi_pattern
+            .as_ref()
+            .expect("multi-pattern engine should exist");
+
+        assert_eq!(engine.max_needle_len, 1);
+        assert_eq!(engine.max_overlap_len(), 0);
+    }
+
+    #[test]
+    fn stream_state_starts_empty() {
+        let state = MultiPatternStreamState::default();
+
+        assert!(state.overlap.is_empty());
+        assert!(!state.previous_was_token_byte);
+        assert!(state.active_prefixes.is_empty());
     }
 }
