@@ -504,6 +504,97 @@ impl SuffixRule {
             findings.push(InternalFinding::new(self.rule_index, start, end));
         }
     }
+
+    fn scan_stream_token(
+        &self,
+        token_start: usize,
+        token: &[u8],
+        findings: &mut Vec<InternalFinding>,
+    ) {
+        let suffix = self.suffix.as_bytes();
+
+        if token.ends_with(suffix) {
+            findings.push(InternalFinding::new(
+                self.rule_index,
+                token_start,
+                token_start + token.len(),
+            ));
+        }
+    }
+}
+
+/// Incremental execution state for suffix rules.
+///
+/// Suffix matching needs bounded history from the current token so that a
+/// suffix candidate can recover the complete token start without retaining
+/// arbitrary source history.
+///
+/// A token that grows beyond [`MAX_SUFFIX_TOKEN_LEN`] becomes ineligible for
+/// suffix findings until the next token boundary. It is never represented as a
+/// truncated token.
+#[derive(Debug, Default)]
+pub(crate) struct SuffixStreamState {
+    /// Bytes retained for the current token while it remains eligible.
+    token: Vec<u8>,
+
+    /// Absolute byte offset at which the current token begins.
+    token_start: usize,
+
+    /// Whether the current token exceeded the supported suffix extent.
+    oversized: bool,
+}
+
+impl SuffixStreamState {
+    /// Consumes one source chunk and yields each complete eligible token.
+    ///
+    /// Only token bytes are retained. Once a token exceeds
+    /// [`MAX_SUFFIX_TOKEN_LEN`], its retained bytes are discarded and the
+    /// token remains ineligible until its terminating boundary.
+    fn push_chunk(
+        &mut self,
+        chunk: &[u8],
+        source_offset: usize,
+        mut on_token: impl FnMut(usize, &[u8]),
+    ) {
+        for (index, &byte) in chunk.iter().enumerate() {
+            let absolute_offset = source_offset + index;
+
+            if is_token_byte(byte) {
+                if self.token.is_empty() && !self.oversized {
+                    self.token_start = absolute_offset;
+                }
+
+                if self.oversized {
+                    continue;
+                }
+
+                if self.token.len() < MAX_SUFFIX_TOKEN_LEN {
+                    self.token.push(byte);
+                } else {
+                    self.token.clear();
+                    self.oversized = true;
+                }
+
+                continue;
+            }
+
+            self.finish_token(&mut on_token);
+        }
+    }
+
+    /// Treats end-of-source as a token boundary.
+    fn finish(&mut self, mut on_token: impl FnMut(usize, &[u8])) {
+        self.finish_token(&mut on_token);
+    }
+
+    fn finish_token(&mut self, on_token: &mut impl FnMut(usize, &[u8])) {
+        if !self.oversized && !self.token.is_empty() {
+            on_token(self.token_start, &self.token);
+        }
+
+        self.token.clear();
+        self.oversized = false;
+    }
 }
 
 #[cfg(test)]
@@ -523,6 +614,145 @@ mod suffix_tests {
             .into_iter()
             .map(|finding| (finding.start(), finding.end()))
             .collect()
+    }
+
+    #[test]
+    fn suffix_stream_emits_complete_token_at_boundary() {
+        let mut state = SuffixStreamState::default();
+        let mut tokens = Vec::new();
+
+        state.push_chunk(b"abc_end!", 0, |start, token| {
+            tokens.push((start, token.to_vec()));
+        });
+
+        assert_eq!(tokens, vec![(0, b"abc_end".to_vec())]);
+        assert!(state.token.is_empty());
+        assert!(!state.oversized);
+    }
+
+    #[test]
+    fn suffix_stream_preserves_token_across_chunks() {
+        let mut state = SuffixStreamState::default();
+        let mut tokens = Vec::new();
+
+        state.push_chunk(b"before ab", 0, |start, token| {
+            tokens.push((start, token.to_vec()));
+        });
+        state.push_chunk(b"c_end!", 9, |start, token| {
+            tokens.push((start, token.to_vec()));
+        });
+
+        assert_eq!(
+            tokens,
+            vec![(0, b"before".to_vec()), (7, b"abc_end".to_vec()),]
+        );
+    }
+
+    #[test]
+    fn suffix_stream_finishes_token_at_end_of_source() {
+        let mut state = SuffixStreamState::default();
+        let mut tokens = Vec::new();
+
+        state.push_chunk(b"abc_end", 0, |start, token| {
+            tokens.push((start, token.to_vec()));
+        });
+
+        assert!(tokens.is_empty());
+
+        state.finish(|start, token| {
+            tokens.push((start, token.to_vec()));
+        });
+
+        assert_eq!(tokens, vec![(0, b"abc_end".to_vec())]);
+    }
+
+    #[test]
+    fn suffix_stream_accepts_token_at_maximum_extent() {
+        let source = vec![b'a'; MAX_SUFFIX_TOKEN_LEN];
+
+        let mut state = SuffixStreamState::default();
+        let mut tokens = Vec::new();
+
+        state.push_chunk(&source, 0, |start, token| {
+            tokens.push((start, token.len()));
+        });
+        state.finish(|start, token| {
+            tokens.push((start, token.len()));
+        });
+
+        assert_eq!(tokens, vec![(0, MAX_SUFFIX_TOKEN_LEN)]);
+        assert!(!state.oversized);
+    }
+
+    #[test]
+    fn suffix_stream_discards_token_beyond_maximum_extent() {
+        let source = vec![b'a'; MAX_SUFFIX_TOKEN_LEN + 1];
+
+        let mut state = SuffixStreamState::default();
+        let mut tokens = Vec::new();
+
+        state.push_chunk(&source, 0, |start, token| {
+            tokens.push((start, token.len()));
+        });
+
+        assert!(tokens.is_empty());
+        assert!(state.oversized);
+        assert!(state.token.is_empty());
+
+        state.finish(|start, token| {
+            tokens.push((start, token.len()));
+        });
+
+        assert!(tokens.is_empty());
+        assert!(!state.oversized);
+        assert!(state.token.is_empty());
+    }
+
+    #[test]
+    fn suffix_stream_recovers_after_oversized_token() {
+        let mut source = vec![b'a'; MAX_SUFFIX_TOKEN_LEN + 1];
+        source.extend_from_slice(b"!valid_end!");
+
+        let mut state = SuffixStreamState::default();
+        let mut tokens = Vec::new();
+
+        state.push_chunk(&source, 0, |start, token| {
+            tokens.push((start, token.to_vec()));
+        });
+
+        assert_eq!(
+            tokens,
+            vec![(MAX_SUFFIX_TOKEN_LEN + 2, b"valid_end".to_vec())]
+        );
+    }
+
+    #[test]
+    fn suffix_stream_bound_is_independent_of_chunking() {
+        let source = vec![b'a'; MAX_SUFFIX_TOKEN_LEN + 1];
+
+        for split in 0..=source.len() {
+            let mut state = SuffixStreamState::default();
+            let mut emitted = 0;
+
+            state.push_chunk(&source[..split], 0, |_, _| {
+                emitted += 1;
+            });
+            state.push_chunk(&source[split..], split, |_, _| {
+                emitted += 1;
+            });
+
+            assert_eq!(emitted, 0, "split at byte {split}");
+            assert!(
+                state.token.len() <= MAX_SUFFIX_TOKEN_LEN,
+                "split at byte {split}"
+            );
+
+            state.finish(|_, _| {
+                emitted += 1;
+            });
+
+            assert_eq!(emitted, 0, "split at byte {split}");
+        }
     }
 
     #[test]
@@ -861,19 +1091,35 @@ impl CompiledRuleSet {
         self.metadata.is_empty()
     }
 
-    pub(crate) fn scan_stream_chunk(
+    pub(crate) fn scan_multi_pattern_stream_chunk(
         &self,
-        state: &mut MultiPatternStreamState,
+        multi_pattern_state: &mut MultiPatternStreamState,
         chunk: &[u8],
         source_offset: usize,
         findings: &mut Vec<InternalFinding>,
     ) {
         if let Some(engine) = &self.multi_pattern {
-            engine.scan_stream_chunk(state, chunk, source_offset, findings);
+            engine.scan_stream_chunk(multi_pattern_state, chunk, source_offset, findings);
         }
     }
 
-    pub(crate) fn finish_stream(
+    pub(crate) fn scan_suffix_stream_chunk(
+        &self,
+        state: &mut SuffixStreamState,
+        chunk: &[u8],
+        source_offset: usize,
+        findings: &mut Vec<InternalFinding>,
+    ) {
+        let suffixes = &self.suffixes;
+
+        state.push_chunk(chunk, source_offset, |token_start, token| {
+            for rule in suffixes {
+                rule.scan_stream_token(token_start, token, findings);
+            }
+        });
+    }
+
+    pub(crate) fn finish_multi_pattern_stream(
         &self,
         state: &mut MultiPatternStreamState,
         source_end: usize,
@@ -882,6 +1128,20 @@ impl CompiledRuleSet {
         if self.multi_pattern.is_some() {
             MultiPatternEngine::finish_stream(state, source_end, findings);
         }
+    }
+
+    pub(crate) fn finish_suffix_stream(
+        &self,
+        state: &mut SuffixStreamState,
+        findings: &mut Vec<InternalFinding>,
+    ) {
+        let suffixes = &self.suffixes;
+
+        state.finish(|token_start, token| {
+            for rule in suffixes {
+                rule.scan_stream_token(token_start, token, findings);
+            }
+        });
     }
 }
 

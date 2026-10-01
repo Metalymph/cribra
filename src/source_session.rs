@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use crate::{
-    compiled_rule::{CompiledRuleSet, InternalFinding, MultiPatternStreamState},
+    compiled_rule::{CompiledRuleSet, InternalFinding, MultiPatternStreamState, SuffixStreamState},
     utf8_transport::{Utf8Transport, Utf8TransportError},
 };
 
@@ -16,6 +16,7 @@ struct SourceExecutionState {
     accepted_bytes: usize,
     transport: Utf8Transport,
     multi_pattern: MultiPatternStreamState,
+    suffix: SuffixStreamState,
 }
 
 /// Mutable execution state for one logical source.
@@ -77,7 +78,14 @@ impl SourceSession {
             let bytes = text.as_bytes();
             let source_offset = state.accepted_bytes;
 
-            rules.scan_stream_chunk(&mut state.multi_pattern, bytes, source_offset, findings);
+            rules.scan_multi_pattern_stream_chunk(
+                &mut state.multi_pattern,
+                bytes,
+                source_offset,
+                findings,
+            );
+
+            rules.scan_suffix_stream_chunk(&mut state.suffix, bytes, source_offset, findings);
 
             state.accepted_bytes += bytes.len();
         })?;
@@ -98,11 +106,14 @@ impl SourceSession {
 
         self.state.transport.finish()?;
 
-        self.rules.finish_stream(
+        self.rules.finish_multi_pattern_stream(
             &mut self.state.multi_pattern,
             self.state.accepted_bytes,
             findings,
         );
+
+        self.rules
+            .finish_suffix_stream(&mut self.state.suffix, findings);
 
         self.lifecycle = SourceLifecycle::Completed;
 
@@ -293,5 +304,225 @@ mod tests {
 
         assert!(findings.is_empty());
         assert_eq!(session.lifecycle(), SourceLifecycle::Active);
+    }
+
+    #[test]
+    fn session_scans_suffix_across_chunk_boundary() {
+        let rules = Arc::new(
+            CompiledRuleSet::compile(vec![Rule::suffix("suffix", "_end", Severity::High)]).unwrap(),
+        );
+
+        let mut session = SourceSession::new(rules);
+        let mut findings = Vec::new();
+
+        session.scan_chunk(b"before ab", &mut findings).unwrap();
+
+        assert!(findings.is_empty());
+
+        session.scan_chunk(b"c_end!", &mut findings).unwrap();
+
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].start(), 7);
+        assert_eq!(findings[0].end(), 14);
+    }
+
+    #[test]
+    fn session_finishes_suffix_at_end_of_source() {
+        let rules = Arc::new(
+            CompiledRuleSet::compile(vec![Rule::suffix("suffix", "_end", Severity::High)]).unwrap(),
+        );
+
+        let mut session = SourceSession::new(rules);
+        let mut findings = Vec::new();
+
+        session.scan_chunk(b"xx abc_end", &mut findings).unwrap();
+
+        assert!(findings.is_empty());
+
+        session.finish_scan(&mut findings).unwrap();
+
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].start(), 3);
+        assert_eq!(findings[0].end(), 10);
+    }
+
+    #[test]
+    fn session_rejects_oversized_suffix_token() {
+        let rules = Arc::new(
+            CompiledRuleSet::compile(vec![Rule::suffix("suffix", "_end", Severity::High)]).unwrap(),
+        );
+
+        let source = format!("{}_end", "a".repeat(4096));
+
+        let mut session = SourceSession::new(rules);
+        let mut findings = Vec::new();
+
+        for chunk in source.as_bytes().chunks(127) {
+            session.scan_chunk(chunk, &mut findings).unwrap();
+        }
+
+        session.finish_scan(&mut findings).unwrap();
+
+        assert!(findings.is_empty());
+    }
+
+    #[test]
+    fn session_recovers_suffix_matching_after_oversized_token() {
+        let rules = Arc::new(
+            CompiledRuleSet::compile(vec![Rule::suffix("suffix", "_end", Severity::High)]).unwrap(),
+        );
+
+        let oversized = format!("{}_end", "a".repeat(4096));
+        let source = format!("{oversized}! valid_end!");
+
+        let mut session = SourceSession::new(rules);
+        let mut findings = Vec::new();
+
+        for chunk in source.as_bytes().chunks(113) {
+            session.scan_chunk(chunk, &mut findings).unwrap();
+        }
+
+        session.finish_scan(&mut findings).unwrap();
+
+        assert_eq!(findings.len(), 1);
+
+        let expected_start = oversized.len() + 2;
+
+        assert_eq!(findings[0].start(), expected_start);
+        assert_eq!(findings[0].end(), expected_start + "valid_end".len());
+    }
+
+    #[test]
+    fn streamed_suffix_matches_whole_source_semantics() {
+        let rules = Arc::new(
+            CompiledRuleSet::compile(vec![Rule::suffix("suffix", "_end", Severity::High)]).unwrap(),
+        );
+
+        let source = "first_end! nope_endx second_end third_end";
+
+        let mut whole = Vec::new();
+        rules.scan(source, &mut whole);
+
+        let mut session = SourceSession::new(Arc::clone(&rules));
+        let mut streamed = Vec::new();
+
+        for chunk in source.as_bytes().chunks(3) {
+            session.scan_chunk(chunk, &mut streamed).unwrap();
+        }
+
+        session.finish_scan(&mut streamed).unwrap();
+
+        let project =
+            |finding: &InternalFinding| (finding.start(), finding.end(), finding.rule_index());
+
+        let mut whole = whole.iter().map(project).collect::<Vec<_>>();
+        let mut streamed = streamed.iter().map(project).collect::<Vec<_>>();
+
+        whole.sort_unstable();
+        streamed.sort_unstable();
+
+        assert_eq!(streamed, whole);
+    }
+
+    #[test]
+    fn streamed_suffix_is_equivalent_across_every_two_chunk_partition() {
+        let rules = Arc::new(
+            CompiledRuleSet::compile(vec![Rule::suffix("suffix", "_end", Severity::High)]).unwrap(),
+        );
+
+        let source = "🦀 first_end! nope_endx second_end third_end";
+
+        let mut whole = Vec::new();
+        rules.scan(source, &mut whole);
+
+        let project =
+            |finding: &InternalFinding| (finding.start(), finding.end(), finding.rule_index());
+
+        let mut expected = whole.iter().map(project).collect::<Vec<_>>();
+        expected.sort_unstable();
+
+        for split in 0..=source.len() {
+            if !source.is_char_boundary(split) {
+                continue;
+            }
+
+            let mut session = SourceSession::new(Arc::clone(&rules));
+            let mut streamed = Vec::new();
+
+            session
+                .scan_chunk(&source.as_bytes()[..split], &mut streamed)
+                .unwrap();
+            session
+                .scan_chunk(&source.as_bytes()[split..], &mut streamed)
+                .unwrap();
+            session.finish_scan(&mut streamed).unwrap();
+
+            let mut actual = streamed.iter().map(project).collect::<Vec<_>>();
+            actual.sort_unstable();
+
+            assert_eq!(actual, expected, "split at byte {split}");
+        }
+    }
+
+    #[test]
+    fn streamed_suffix_is_equivalent_across_every_byte_partition() {
+        let rules = Arc::new(
+            CompiledRuleSet::compile(vec![Rule::suffix("suffix", "_end", Severity::High)]).unwrap(),
+        );
+
+        let source = "🦀 first_end! café second_end";
+
+        let mut whole = Vec::new();
+        rules.scan(source, &mut whole);
+
+        let project =
+            |finding: &InternalFinding| (finding.start(), finding.end(), finding.rule_index());
+
+        let mut expected = whole.iter().map(project).collect::<Vec<_>>();
+        expected.sort_unstable();
+
+        for split in 0..=source.len() {
+            let mut session = SourceSession::new(Arc::clone(&rules));
+            let mut streamed = Vec::new();
+
+            session
+                .scan_chunk(&source.as_bytes()[..split], &mut streamed)
+                .unwrap();
+            session
+                .scan_chunk(&source.as_bytes()[split..], &mut streamed)
+                .unwrap();
+            session.finish_scan(&mut streamed).unwrap();
+
+            let mut actual = streamed.iter().map(project).collect::<Vec<_>>();
+            actual.sort_unstable();
+
+            assert_eq!(actual, expected, "split at raw byte {split}");
+        }
+    }
+
+    #[test]
+    fn session_matches_suffix_with_single_byte_transport() {
+        let rules = Arc::new(
+            CompiledRuleSet::compile(vec![Rule::suffix("suffix", "_end", Severity::High)]).unwrap(),
+        );
+
+        let source = "🦀 alpha_end! beta_end gamma";
+        let mut session = SourceSession::new(rules);
+        let mut findings = Vec::new();
+
+        for byte in source.as_bytes() {
+            session
+                .scan_chunk(std::slice::from_ref(byte), &mut findings)
+                .unwrap();
+        }
+
+        session.finish_scan(&mut findings).unwrap();
+
+        let spans = findings
+            .iter()
+            .map(|finding| (finding.start(), finding.end()))
+            .collect::<Vec<_>>();
+
+        assert_eq!(spans, vec![(5, 14), (16, 24)]);
     }
 }
