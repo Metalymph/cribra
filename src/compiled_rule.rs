@@ -6,7 +6,7 @@ use regex::Regex;
 use crate::{
     confidence::Confidence,
     remediation::Remediation,
-    rule::{Matcher, Rule, RuleId, RuleKind},
+    rule::{Matcher, PatternContext, Rule, RuleId, RuleKind},
     scanner_builder::ScannerBuildError,
     severity::Severity,
     validators::dispatch::ValidatorKind,
@@ -807,11 +807,17 @@ struct PatternRule {
     rule_index: RuleIndex,
     pattern: Regex,
     capture: Option<usize>,
+    context: PatternContext,
     prefilter: Option<AhoCorasick>,
     gate_bit: Option<u8>,
 }
 
 impl PatternRule {
+    #[cfg(test)]
+    const fn is_stream_context_free(&self) -> bool {
+        self.context.is_context_free()
+    }
+
     fn scan(&self, source: &str, findings: &mut Vec<InternalFinding>) {
         match (&self.prefilter, self.capture) {
             (Some(prefilter), Some(capture)) => {
@@ -1021,10 +1027,15 @@ impl CompiledRuleSet {
                     needle,
                 }),
                 Matcher::Suffix(suffix) => suffixes.push(SuffixRule { rule_index, suffix }),
-                Matcher::Pattern { regex, capture } => patterns.push(PatternRule {
+                Matcher::Pattern {
+                    regex,
+                    capture,
+                    context,
+                } => patterns.push(PatternRule {
                     rule_index,
                     pattern: regex,
                     capture,
+                    context,
                     prefilter: pattern_prefilter,
                     gate_bit,
                 }),
@@ -1962,5 +1973,41 @@ mod multi_pattern_tests {
         streamed.sort_unstable();
 
         assert_eq!(streamed, whole);
+    }
+
+    #[test]
+    fn pattern_context_classifies_context_free_expression() {
+        let rule = Rule::pattern("plain", r"secret_[A-Za-z0-9]{8}", Severity::High).unwrap();
+
+        let rules = CompiledRuleSet::compile(vec![rule]).unwrap();
+
+        assert!(rules.patterns[0].is_stream_context_free());
+    }
+
+    #[test]
+    fn pattern_context_classifies_text_anchor() {
+        let rule = Rule::pattern("anchored", r"\Asecret_[A-Za-z0-9]{8}\z", Severity::High).unwrap();
+
+        let rules = CompiledRuleSet::compile(vec![rule]).unwrap();
+
+        assert!(!rules.patterns[0].is_stream_context_free());
+    }
+
+    #[test]
+    fn pattern_context_classifies_line_anchor() {
+        let rule = Rule::pattern("line", r"(?m)^secret_[A-Za-z0-9]{8}$", Severity::High).unwrap();
+
+        let rules = CompiledRuleSet::compile(vec![rule]).unwrap();
+
+        assert!(!rules.patterns[0].is_stream_context_free());
+    }
+
+    #[test]
+    fn pattern_context_classifies_word_boundary() {
+        let rule = Rule::pattern("word", r"\bsecret_[A-Za-z0-9]{8}\b", Severity::High).unwrap();
+
+        let rules = CompiledRuleSet::compile(vec![rule]).unwrap();
+
+        assert!(!rules.patterns[0].is_stream_context_free());
     }
 }

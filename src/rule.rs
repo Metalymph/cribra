@@ -287,6 +287,64 @@ impl RuleSpec {
     }
 }
 
+#[derive(Debug, Copy, Clone, Default, Eq, PartialEq)]
+pub(crate) struct PatternContext {
+    bits: u8,
+}
+
+impl PatternContext {
+    const TEXT_START: u8 = 1 << 0;
+    const TEXT_END: u8 = 1 << 1;
+    const LINE_START: u8 = 1 << 2;
+    const LINE_END: u8 = 1 << 3;
+    const CRLF: u8 = 1 << 4;
+    const WORD: u8 = 1 << 5;
+
+    fn from_hir(hir: &regex_syntax::hir::Hir) -> Self {
+        let mut context = Self::default();
+        context.visit(hir);
+        context
+    }
+
+    fn visit(&mut self, hir: &regex_syntax::hir::Hir) {
+        use regex_syntax::hir::{HirKind, Look};
+
+        if let HirKind::Look(look) = hir.kind() {
+            self.bits |= match look {
+                Look::Start => Self::TEXT_START,
+                Look::End => Self::TEXT_END,
+
+                Look::StartLF => Self::LINE_START,
+                Look::EndLF => Self::LINE_END,
+
+                Look::StartCRLF => Self::LINE_START | Self::CRLF,
+                Look::EndCRLF => Self::LINE_END | Self::CRLF,
+
+                Look::WordAscii
+                | Look::WordAsciiNegate
+                | Look::WordUnicode
+                | Look::WordUnicodeNegate
+                | Look::WordStartAscii
+                | Look::WordEndAscii
+                | Look::WordStartUnicode
+                | Look::WordEndUnicode
+                | Look::WordStartHalfAscii
+                | Look::WordEndHalfAscii
+                | Look::WordStartHalfUnicode
+                | Look::WordEndHalfUnicode => Self::WORD,
+            };
+        }
+
+        for sub in hir.kind().subs() {
+            self.visit(sub);
+        }
+    }
+
+    pub(crate) const fn is_context_free(self) -> bool {
+        self.bits == 0
+    }
+}
+
 /// Private owned matcher retained by a [`Rule`] before scanner compilation.
 #[derive(Debug, Clone)]
 pub(crate) enum Matcher {
@@ -296,6 +354,7 @@ pub(crate) enum Matcher {
     Pattern {
         regex: Regex,
         capture: Option<usize>,
+        context: PatternContext,
     },
 }
 
@@ -315,6 +374,14 @@ pub struct Rule {
     pub(crate) validator: ValidatorKind,
     pub(crate) matcher: Matcher,
     pub(crate) remediation: Option<Remediation>,
+}
+
+fn pattern_length_bounds(pattern: &str) -> Result<(Option<usize>, Option<usize>), RuleError> {
+    let hir = regex_syntax::parse(pattern)
+        .map_err(|error| RuleError::InvalidPattern(regex::Error::Syntax(error.to_string())))?;
+    let properties = hir.properties();
+
+    Ok((properties.minimum_len(), properties.maximum_len()))
 }
 
 impl Rule {
@@ -404,6 +471,8 @@ impl Rule {
             return Err(RuleError::PatternMatchesEmpty);
         }
 
+        let context = PatternContext::from_hir(&hir);
+
         Ok(Self {
             id: id.into(),
             severity,
@@ -412,6 +481,7 @@ impl Rule {
             matcher: Matcher::Pattern {
                 regex,
                 capture: None,
+                context,
             },
         })
     }
@@ -427,7 +497,14 @@ impl Rule {
         capture: impl AsRef<str>,
         severity: Severity,
     ) -> Result<Self, RuleError> {
-        let regex = Regex::new(pattern.as_ref()).map_err(RuleError::InvalidPattern)?;
+        let pattern = pattern.as_ref();
+
+        let regex = Regex::new(pattern).map_err(RuleError::InvalidPattern)?;
+        let hir = regex_syntax::parse(pattern)
+            .map_err(|error| RuleError::InvalidPattern(regex::Error::Syntax(error.to_string())))?;
+
+        let context = PatternContext::from_hir(&hir);
+
         let capture_name = capture.as_ref();
         let capture_index = regex
             .capture_names()
@@ -444,6 +521,7 @@ impl Rule {
             matcher: Matcher::Pattern {
                 regex,
                 capture: Some(capture_index),
+                context,
             },
         })
     }
@@ -682,5 +760,30 @@ mod tests {
                 crate::DetectionMode::MatcherOnly
             );
         }
+    }
+
+    #[test]
+    fn pattern_length_bounds_classify_bounded_and_unbounded_languages() {
+        assert_eq!(
+            pattern_length_bounds(r"abc{4}").unwrap(),
+            (Some(6), Some(6))
+        );
+
+        assert_eq!(
+            pattern_length_bounds(r"[A-Z]{8,16}").unwrap(),
+            (Some(8), Some(16))
+        );
+
+        assert_eq!(
+            pattern_length_bounds(r"(?:foo|bar)+").unwrap(),
+            (Some(3), None)
+        );
+
+        assert_eq!(pattern_length_bounds(r".*secret").unwrap(), (Some(6), None));
+
+        assert_eq!(
+            pattern_length_bounds(r"\A[A-Z]{16}\z").unwrap(),
+            (Some(16), Some(16))
+        );
     }
 }
