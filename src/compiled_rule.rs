@@ -802,20 +802,39 @@ mod suffix_tests {
     }
 }
 
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+enum PatternStreamPlan {
+    /// The complete match has a statically bounded byte extent and does not
+    /// depend on zero-width context outside that extent.
+    Bounded { max_match_len: usize },
+
+    /// Incremental execution is not yet supported for this pattern.
+    Unsupported,
+}
+
+impl PatternStreamPlan {
+    fn compile(max_match_len: Option<usize>, context: PatternContext) -> Self {
+        match max_match_len {
+            Some(max_match_len) if context.is_context_free() => Self::Bounded { max_match_len },
+            _ => Self::Unsupported,
+        }
+    }
+}
+
 #[derive(Debug)]
 struct PatternRule {
     rule_index: RuleIndex,
     pattern: Regex,
     capture: Option<usize>,
-    context: PatternContext,
+    stream_plan: PatternStreamPlan,
     prefilter: Option<AhoCorasick>,
     gate_bit: Option<u8>,
 }
 
 impl PatternRule {
     #[cfg(test)]
-    const fn is_stream_context_free(&self) -> bool {
-        self.context.is_context_free()
+    const fn stream_plan(&self) -> PatternStreamPlan {
+        self.stream_plan
     }
 
     fn scan(&self, source: &str, findings: &mut Vec<InternalFinding>) {
@@ -1031,11 +1050,12 @@ impl CompiledRuleSet {
                     regex,
                     capture,
                     context,
+                    maximum_len,
                 } => patterns.push(PatternRule {
                     rule_index,
                     pattern: regex,
                     capture,
-                    context,
+                    stream_plan: PatternStreamPlan::compile(maximum_len, context),
                     prefilter: pattern_prefilter,
                     gate_bit,
                 }),
@@ -1976,38 +1996,58 @@ mod multi_pattern_tests {
     }
 
     #[test]
-    fn pattern_context_classifies_context_free_expression() {
-        let rule = Rule::pattern("plain", r"secret_[A-Za-z0-9]{8}", Severity::High).unwrap();
-
-        let rules = CompiledRuleSet::compile(vec![rule]).unwrap();
-
-        assert!(rules.patterns[0].is_stream_context_free());
-    }
-
-    #[test]
-    fn pattern_context_classifies_text_anchor() {
-        let rule = Rule::pattern("anchored", r"\Asecret_[A-Za-z0-9]{8}\z", Severity::High).unwrap();
-
-        let rules = CompiledRuleSet::compile(vec![rule]).unwrap();
-
-        assert!(!rules.patterns[0].is_stream_context_free());
-    }
-
-    #[test]
-    fn pattern_context_classifies_line_anchor() {
+    fn pattern_stream_plan_rejects_bounded_line_anchors() {
         let rule = Rule::pattern("line", r"(?m)^secret_[A-Za-z0-9]{8}$", Severity::High).unwrap();
 
         let rules = CompiledRuleSet::compile(vec![rule]).unwrap();
 
-        assert!(!rules.patterns[0].is_stream_context_free());
+        assert_eq!(
+            rules.patterns[0].stream_plan(),
+            PatternStreamPlan::Unsupported
+        );
     }
 
     #[test]
-    fn pattern_context_classifies_word_boundary() {
-        let rule = Rule::pattern("word", r"\bsecret_[A-Za-z0-9]{8}\b", Severity::High).unwrap();
-
+    fn pattern_stream_plan_accepts_bounded_context_free_pattern() {
+        let rule = Rule::pattern("plain", r"secret_[A-Z]{8}", Severity::High).unwrap();
         let rules = CompiledRuleSet::compile(vec![rule]).unwrap();
 
-        assert!(!rules.patterns[0].is_stream_context_free());
+        assert_eq!(
+            rules.patterns[0].stream_plan(),
+            PatternStreamPlan::Bounded { max_match_len: 15 }
+        );
+    }
+
+    #[test]
+    fn pattern_stream_plan_rejects_unbounded_pattern() {
+        let rule = Rule::pattern("unbounded", r"secret_[A-Z]+", Severity::High).unwrap();
+        let rules = CompiledRuleSet::compile(vec![rule]).unwrap();
+
+        assert_eq!(
+            rules.patterns[0].stream_plan(),
+            PatternStreamPlan::Unsupported
+        );
+    }
+
+    #[test]
+    fn pattern_stream_plan_rejects_bounded_text_anchors() {
+        let rule = Rule::pattern("anchored", r"\Asecret[A-Z]{4}\z", Severity::High).unwrap();
+        let rules = CompiledRuleSet::compile(vec![rule]).unwrap();
+
+        assert_eq!(
+            rules.patterns[0].stream_plan(),
+            PatternStreamPlan::Unsupported
+        );
+    }
+
+    #[test]
+    fn pattern_stream_plan_rejects_bounded_word_boundaries() {
+        let rule = Rule::pattern("word", r"\bsecret[A-Z]{4}\b", Severity::High).unwrap();
+        let rules = CompiledRuleSet::compile(vec![rule]).unwrap();
+
+        assert_eq!(
+            rules.patterns[0].stream_plan(),
+            PatternStreamPlan::Unsupported
+        );
     }
 }

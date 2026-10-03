@@ -355,6 +355,7 @@ pub(crate) enum Matcher {
         regex: Regex,
         capture: Option<usize>,
         context: PatternContext,
+        maximum_len: Option<usize>,
     },
 }
 
@@ -374,14 +375,6 @@ pub struct Rule {
     pub(crate) validator: ValidatorKind,
     pub(crate) matcher: Matcher,
     pub(crate) remediation: Option<Remediation>,
-}
-
-fn pattern_length_bounds(pattern: &str) -> Result<(Option<usize>, Option<usize>), RuleError> {
-    let hir = regex_syntax::parse(pattern)
-        .map_err(|error| RuleError::InvalidPattern(regex::Error::Syntax(error.to_string())))?;
-    let properties = hir.properties();
-
-    Ok((properties.minimum_len(), properties.maximum_len()))
 }
 
 impl Rule {
@@ -472,6 +465,7 @@ impl Rule {
         }
 
         let context = PatternContext::from_hir(&hir);
+        let maximum_len = hir.properties().maximum_len();
 
         Ok(Self {
             id: id.into(),
@@ -482,6 +476,7 @@ impl Rule {
                 regex,
                 capture: None,
                 context,
+                maximum_len,
             },
         })
     }
@@ -504,6 +499,7 @@ impl Rule {
             .map_err(|error| RuleError::InvalidPattern(regex::Error::Syntax(error.to_string())))?;
 
         let context = PatternContext::from_hir(&hir);
+        let maximum_len = hir.properties().maximum_len();
 
         let capture_name = capture.as_ref();
         let capture_index = regex
@@ -522,6 +518,7 @@ impl Rule {
                 regex,
                 capture: Some(capture_index),
                 context,
+                maximum_len,
             },
         })
     }
@@ -760,30 +757,5 @@ mod tests {
                 crate::DetectionMode::MatcherOnly
             );
         }
-    }
-
-    #[test]
-    fn pattern_length_bounds_classify_bounded_and_unbounded_languages() {
-        assert_eq!(
-            pattern_length_bounds(r"abc{4}").unwrap(),
-            (Some(6), Some(6))
-        );
-
-        assert_eq!(
-            pattern_length_bounds(r"[A-Z]{8,16}").unwrap(),
-            (Some(8), Some(16))
-        );
-
-        assert_eq!(
-            pattern_length_bounds(r"(?:foo|bar)+").unwrap(),
-            (Some(3), None)
-        );
-
-        assert_eq!(pattern_length_bounds(r".*secret").unwrap(), (Some(6), None));
-
-        assert_eq!(
-            pattern_length_bounds(r"\A[A-Z]{16}\z").unwrap(),
-            (Some(16), Some(16))
-        );
     }
 }
