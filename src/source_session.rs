@@ -1,7 +1,10 @@
 use std::sync::Arc;
 
 use crate::{
-    compiled_rule::{CompiledRuleSet, InternalFinding, MultiPatternStreamState, SuffixStreamState},
+    compiled_rule::{
+        CompiledRuleSet, InternalFinding, MultiPatternStreamState, PatternStreamState,
+        SuffixStreamState,
+    },
     utf8_transport::{Utf8Transport, Utf8TransportError},
 };
 
@@ -11,12 +14,13 @@ use crate::{
 /// scanner configuration. Later streaming slices extend this boundary with the
 /// concrete matcher, validator, candidate, normalization, and location state
 /// they require.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 struct SourceExecutionState {
     accepted_bytes: usize,
     transport: Utf8Transport,
     multi_pattern: MultiPatternStreamState,
     suffix: SuffixStreamState,
+    patterns: Vec<PatternStreamState>,
 }
 
 /// Mutable execution state for one logical source.
@@ -53,10 +57,18 @@ impl From<Utf8TransportError> for SourceSessionError {
 
 impl SourceSession {
     pub(crate) fn new(rules: Arc<CompiledRuleSet>) -> Self {
+        let patterns = rules.pattern_stream_states();
+    
         Self {
             rules,
             lifecycle: SourceLifecycle::Active,
-            state: SourceExecutionState::default(),
+            state: SourceExecutionState {
+                accepted_bytes: 0,
+                transport: Utf8Transport::default(),
+                multi_pattern: MultiPatternStreamState::default(),
+                suffix: SuffixStreamState::default(),
+                patterns,
+            },
         }
     }
 
@@ -87,6 +99,13 @@ impl SourceSession {
 
             rules.scan_suffix_stream_chunk(&mut state.suffix, bytes, source_offset, findings);
 
+            rules.scan_pattern_stream_chunk(
+                &mut state.patterns,
+                bytes,
+                source_offset,
+                findings,
+            );
+            
             state.accepted_bytes += bytes.len();
         })?;
 
@@ -103,20 +122,23 @@ impl SourceSession {
         findings: &mut Vec<InternalFinding>,
     ) -> Result<(), SourceSessionError> {
         self.ensure_active()?;
-
+    
         self.state.transport.finish()?;
-
+    
         self.rules.finish_multi_pattern_stream(
             &mut self.state.multi_pattern,
             self.state.accepted_bytes,
             findings,
         );
-
+    
         self.rules
             .finish_suffix_stream(&mut self.state.suffix, findings);
-
+    
+        self.rules
+            .finish_pattern_stream(&mut self.state.patterns, findings);
+    
         self.lifecycle = SourceLifecycle::Completed;
-
+    
         Ok(())
     }
 

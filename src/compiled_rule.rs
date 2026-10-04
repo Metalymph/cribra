@@ -821,6 +821,20 @@ impl PatternStreamPlan {
     }
 }
 
+#[derive(Debug, Default)]
+pub(crate) struct PatternStreamState {
+    buffer: Vec<u8>,
+    buffer_offset: usize,
+    resolved_before: usize,
+}
+
+impl PatternStreamState {
+    #[cfg(test)]
+    fn buffered_len(&self) -> usize {
+        self.buffer.len()
+    }
+}
+
 #[derive(Debug)]
 struct PatternRule {
     rule_index: RuleIndex,
@@ -919,6 +933,101 @@ impl PatternRule {
                 ));
             }
         }
+    }
+
+    fn scan_stream_bounded(
+        &self,
+        state: &mut PatternStreamState,
+        chunk: &[u8],
+        source_offset: usize,
+        findings: &mut Vec<InternalFinding>,
+    ) {
+        let PatternStreamPlan::Bounded { max_match_len } = self.stream_plan else {
+            return;
+        };
+
+        if state.buffer.is_empty() {
+            state.buffer_offset = source_offset;
+        }
+
+        state.buffer.extend_from_slice(chunk);
+
+        let observed_end = state.buffer_offset + state.buffer.len();
+
+        let Ok(source) = std::str::from_utf8(&state.buffer) else {
+            return;
+        };
+
+        let new_resolved_before = observed_end
+            .checked_sub(max_match_len)
+            .and_then(|offset| offset.checked_add(1))
+            .unwrap_or(0);
+
+        for matched in self.pattern.find_iter(source) {
+            let start = state.buffer_offset + matched.start();
+            let end = state.buffer_offset + matched.end();
+
+            if start < state.resolved_before {
+                continue;
+            }
+
+            if start >= new_resolved_before {
+                break;
+            }
+
+            findings.push(InternalFinding::new(self.rule_index, start, end));
+        }
+
+        state.resolved_before = state.resolved_before.max(new_resolved_before);
+
+        let cut = {
+            let source = std::str::from_utf8(&state.buffer)
+                .expect("pattern stream receives validated UTF-8");
+
+            let mut cut = state
+                .resolved_before
+                .saturating_sub(state.buffer_offset)
+                .min(state.buffer.len());
+
+            while cut < state.buffer.len() && !source.is_char_boundary(cut) {
+                cut += 1;
+            }
+
+            cut
+        };
+
+        if cut > 0 {
+            state.buffer.drain(..cut);
+            state.buffer_offset += cut;
+        }
+    }
+
+    fn finish_stream_bounded(
+        &self,
+        state: &mut PatternStreamState,
+        findings: &mut Vec<InternalFinding>,
+    ) {
+        let PatternStreamPlan::Bounded { .. } = self.stream_plan else {
+            return;
+        };
+
+        let source =
+            std::str::from_utf8(&state.buffer).expect("pattern stream receives validated UTF-8");
+
+        for matched in self.pattern.find_iter(source) {
+            let start = state.buffer_offset + matched.start();
+            let end = state.buffer_offset + matched.end();
+
+            if start < state.resolved_before {
+                continue;
+            }
+
+            findings.push(InternalFinding::new(self.rule_index, start, end));
+        }
+
+        state.resolved_before = state.buffer_offset + state.buffer.len();
+        state.buffer.clear();
+        state.buffer_offset = state.resolved_before;
     }
 }
 
@@ -1173,6 +1282,39 @@ impl CompiledRuleSet {
                 rule.scan_stream_token(token_start, token, findings);
             }
         });
+    }
+
+    pub(crate) fn pattern_stream_states(&self) -> Vec<PatternStreamState> {
+        self.patterns
+            .iter()
+            .map(|_| PatternStreamState::default())
+            .collect()
+    }
+    
+    pub(crate) fn scan_pattern_stream_chunk(
+        &self,
+        states: &mut [PatternStreamState],
+        chunk: &[u8],
+        source_offset: usize,
+        findings: &mut Vec<InternalFinding>,
+    ) {
+        debug_assert_eq!(states.len(), self.patterns.len());
+    
+        for (rule, state) in self.patterns.iter().zip(states) {
+            rule.scan_stream_bounded(state, chunk, source_offset, findings);
+        }
+    }
+    
+    pub(crate) fn finish_pattern_stream(
+        &self,
+        states: &mut [PatternStreamState],
+        findings: &mut Vec<InternalFinding>,
+    ) {
+        debug_assert_eq!(states.len(), self.patterns.len());
+    
+        for (rule, state) in self.patterns.iter().zip(states) {
+            rule.finish_stream_bounded(state, findings);
+        }
     }
 }
 
@@ -2049,5 +2191,173 @@ mod multi_pattern_tests {
             rules.patterns[0].stream_plan(),
             PatternStreamPlan::Unsupported
         );
+    }
+
+    #[test]
+    fn bounded_pattern_streaming_requires_commit_frontier() {
+        let regex = Regex::new(r"a|ab").unwrap();
+
+        let first = regex.find("a").unwrap();
+        assert_eq!((first.start(), first.end()), (0, 1));
+
+        let complete = regex.find("ab").unwrap();
+        assert_eq!((complete.start(), complete.end()), (0, 1));
+    }
+
+    #[test]
+    fn bounded_pattern_stream_waits_until_match_is_stable() {
+        let rule = Rule::pattern("bounded", r"a[A-Za-z]{0,3}", Severity::High).unwrap();
+        let rules = CompiledRuleSet::compile(vec![rule]).unwrap();
+        let rule = &rules.patterns[0];
+
+        let mut state = PatternStreamState::default();
+        let mut findings = Vec::new();
+
+        rule.scan_stream_bounded(&mut state, b"a", 0, &mut findings);
+        assert!(findings.is_empty());
+
+        rule.scan_stream_bounded(&mut state, b"bc", 1, &mut findings);
+        assert!(findings.is_empty());
+
+        rule.scan_stream_bounded(&mut state, b"d", 3, &mut findings);
+
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].start(), 0);
+        assert_eq!(findings[0].end(), 4);
+    }
+
+    #[test]
+    fn bounded_pattern_stream_preserves_absolute_offset() {
+        let rule = Rule::pattern("bounded", r"secret_[A-Z]{4}", Severity::High).unwrap();
+        let rules = CompiledRuleSet::compile(vec![rule]).unwrap();
+        let rule = &rules.patterns[0];
+
+        let mut state = PatternStreamState::default();
+        let mut findings = Vec::new();
+
+        rule.scan_stream_bounded(&mut state, b"xx secret_", 0, &mut findings);
+        assert!(findings.is_empty());
+
+        rule.scan_stream_bounded(&mut state, b"ABCD yy", 10, &mut findings);
+
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].start(), 3);
+        assert_eq!(findings[0].end(), 14);
+    }
+
+    #[test]
+    fn bounded_pattern_stream_commits_remaining_match_at_eof() {
+        let rule = Rule::pattern("bounded", r"secret_[A-Z]{1,4}", Severity::High).unwrap();
+        let rules = CompiledRuleSet::compile(vec![rule]).unwrap();
+        let rule = &rules.patterns[0];
+
+        let mut state = PatternStreamState::default();
+        let mut findings = Vec::new();
+
+        rule.scan_stream_bounded(&mut state, b"secret_AB", 0, &mut findings);
+
+        assert!(findings.is_empty());
+
+        rule.finish_stream_bounded(&mut state, &mut findings);
+
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].start(), 0);
+        assert_eq!(findings[0].end(), 9);
+    }
+
+    #[test]
+    fn bounded_pattern_stream_does_not_retain_complete_source() {
+        let rule = Rule::pattern("bounded", r"secret_[A-Z]{4}", Severity::High).unwrap();
+        let rules = CompiledRuleSet::compile(vec![rule]).unwrap();
+        let rule = &rules.patterns[0];
+
+        let mut state = PatternStreamState::default();
+        let mut findings = Vec::new();
+
+        for offset in 0..10_000 {
+            rule.scan_stream_bounded(&mut state, b"x", offset, &mut findings);
+
+            assert!(
+                state.buffered_len() <= 11,
+                "retained {} bytes at offset {offset}",
+                state.buffered_len()
+            );
+        }
+    }
+
+    fn projected_findings(findings: &[InternalFinding]) -> Vec<(usize, usize, RuleIndex)> {
+        let mut projected = findings
+            .iter()
+            .map(|finding| (finding.start(), finding.end(), finding.rule_index()))
+            .collect::<Vec<_>>();
+
+        projected.sort_unstable();
+        projected
+    }
+
+    fn whole_pattern_findings(rule: &PatternRule, source: &str) -> Vec<(usize, usize, RuleIndex)> {
+        let mut findings = Vec::new();
+        rule.scan(source, &mut findings);
+        projected_findings(&findings)
+    }
+
+    #[test]
+    fn bounded_pattern_stream_matches_whole_source_for_every_valid_split() {
+        let rule = Rule::pattern("bounded", r"secret_[A-Z]{4}", Severity::High).unwrap();
+        let rules = CompiledRuleSet::compile(vec![rule]).unwrap();
+        let rule = &rules.patterns[0];
+
+        let source = "🦀 xx secret_ABCD yy secret_WXYZ 🦀";
+        let expected = whole_pattern_findings(rule, source);
+
+        for split in 0..=source.len() {
+            if !source.is_char_boundary(split) {
+                continue;
+            }
+
+            let mut state = PatternStreamState::default();
+            let mut findings = Vec::new();
+
+            rule.scan_stream_bounded(&mut state, &source.as_bytes()[..split], 0, &mut findings);
+            rule.scan_stream_bounded(
+                &mut state,
+                &source.as_bytes()[split..],
+                split,
+                &mut findings,
+            );
+            rule.finish_stream_bounded(&mut state, &mut findings);
+
+            assert_eq!(
+                projected_findings(&findings),
+                expected,
+                "stream differs from whole-source scan at split {split}",
+            );
+        }
+    }
+
+    #[test]
+    fn bounded_pattern_stream_matches_whole_source_for_single_byte_ascii_chunks() {
+        let rule = Rule::pattern("bounded", r"secret_[A-Z]{4}", Severity::High).unwrap();
+        let rules = CompiledRuleSet::compile(vec![rule]).unwrap();
+        let rule = &rules.patterns[0];
+
+        let source = "xx secret_ABCD yy secret_WXYZ zz";
+        let expected = whole_pattern_findings(rule, source);
+
+        let mut state = PatternStreamState::default();
+        let mut findings = Vec::new();
+
+        for (offset, byte) in source.as_bytes().iter().enumerate() {
+            rule.scan_stream_bounded(
+                &mut state,
+                std::slice::from_ref(byte),
+                offset,
+                &mut findings,
+            );
+        }
+
+        rule.finish_stream_bounded(&mut state, &mut findings);
+
+        assert_eq!(projected_findings(&findings), expected);
     }
 }
