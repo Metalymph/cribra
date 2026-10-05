@@ -963,19 +963,54 @@ impl PatternRule {
             .and_then(|offset| offset.checked_add(1))
             .unwrap_or(0);
 
-        for matched in self.pattern.find_iter(source) {
-            let start = state.buffer_offset + matched.start();
-            let end = state.buffer_offset + matched.end();
-
-            if start < state.resolved_before {
-                continue;
+        match self.capture {
+            Some(capture) => {
+                for captures in self.pattern.captures_iter(source) {
+                    let Some(complete) = captures.get(0) else {
+                        continue;
+                    };
+        
+                    let complete_start = state.buffer_offset + complete.start();
+        
+                    if complete_start < state.resolved_before {
+                        continue;
+                    }
+        
+                    if complete_start >= new_resolved_before {
+                        break;
+                    }
+        
+                    let Some(matched) = captures.get(capture) else {
+                        continue;
+                    };
+        
+                    findings.push(InternalFinding::new(
+                        self.rule_index,
+                        state.buffer_offset + matched.start(),
+                        state.buffer_offset + matched.end(),
+                    ));
+                }
             }
-
-            if start >= new_resolved_before {
-                break;
+        
+            None => {
+                for matched in self.pattern.find_iter(source) {
+                    let start = state.buffer_offset + matched.start();
+        
+                    if start < state.resolved_before {
+                        continue;
+                    }
+        
+                    if start >= new_resolved_before {
+                        break;
+                    }
+        
+                    findings.push(InternalFinding::new(
+                        self.rule_index,
+                        start,
+                        state.buffer_offset + matched.end(),
+                    ));
+                }
             }
-
-            findings.push(InternalFinding::new(self.rule_index, start, end));
         }
 
         state.resolved_before = state.resolved_before.max(new_resolved_before);
@@ -1014,15 +1049,46 @@ impl PatternRule {
         let source =
             std::str::from_utf8(&state.buffer).expect("pattern stream receives validated UTF-8");
 
-        for matched in self.pattern.find_iter(source) {
-            let start = state.buffer_offset + matched.start();
-            let end = state.buffer_offset + matched.end();
-
-            if start < state.resolved_before {
-                continue;
+        match self.capture {
+            Some(capture) => {
+                for captures in self.pattern.captures_iter(source) {
+                    let Some(complete) = captures.get(0) else {
+                        continue;
+                    };
+        
+                    let complete_start = state.buffer_offset + complete.start();
+        
+                    if complete_start < state.resolved_before {
+                        continue;
+                    }
+        
+                    let Some(matched) = captures.get(capture) else {
+                        continue;
+                    };
+        
+                    findings.push(InternalFinding::new(
+                        self.rule_index,
+                        state.buffer_offset + matched.start(),
+                        state.buffer_offset + matched.end(),
+                    ));
+                }
             }
-
-            findings.push(InternalFinding::new(self.rule_index, start, end));
+        
+            None => {
+                for matched in self.pattern.find_iter(source) {
+                    let start = state.buffer_offset + matched.start();
+        
+                    if start < state.resolved_before {
+                        continue;
+                    }
+        
+                    findings.push(InternalFinding::new(
+                        self.rule_index,
+                        start,
+                        state.buffer_offset + matched.end(),
+                    ));
+                }
+            }
         }
 
         state.resolved_before = state.buffer_offset + state.buffer.len();
@@ -1284,13 +1350,19 @@ impl CompiledRuleSet {
         });
     }
 
-    pub(crate) fn pattern_stream_states(&self) -> Vec<PatternStreamState> {
+    pub(crate) fn supports_streaming(&self) -> bool {
+        self.patterns
+            .iter()
+            .all(|rule| !matches!(rule.stream_plan, PatternStreamPlan::Unsupported))
+    }
+
+    pub(crate) fn new_pattern_stream_states(&self) -> Vec<PatternStreamState> {
         self.patterns
             .iter()
             .map(|_| PatternStreamState::default())
             .collect()
     }
-    
+
     pub(crate) fn scan_pattern_stream_chunk(
         &self,
         states: &mut [PatternStreamState],
@@ -1301,10 +1373,12 @@ impl CompiledRuleSet {
         debug_assert_eq!(states.len(), self.patterns.len());
     
         for (rule, state) in self.patterns.iter().zip(states) {
-            rule.scan_stream_bounded(state, chunk, source_offset, findings);
+            if matches!(rule.stream_plan, PatternStreamPlan::Bounded { .. }) {
+                rule.scan_stream_bounded(state, chunk, source_offset, findings);
+            }
         }
     }
-    
+
     pub(crate) fn finish_pattern_stream(
         &self,
         states: &mut [PatternStreamState],
@@ -1313,7 +1387,9 @@ impl CompiledRuleSet {
         debug_assert_eq!(states.len(), self.patterns.len());
     
         for (rule, state) in self.patterns.iter().zip(states) {
-            rule.finish_stream_bounded(state, findings);
+            if matches!(rule.stream_plan, PatternStreamPlan::Bounded { .. }) {
+                rule.finish_stream_bounded(state, findings);
+            }
         }
     }
 }
@@ -2359,5 +2435,118 @@ mod multi_pattern_tests {
         rule.finish_stream_bounded(&mut state, &mut findings);
 
         assert_eq!(projected_findings(&findings), expected);
+    }
+
+    #[test]
+    fn bounded_captured_pattern_stream_projects_capture_span() {
+        let rule = Rule::captured_pattern(
+            "captured",
+            r"KEY=(?P<value>[A-Z]{4})!",
+            "value",
+            Severity::High,
+        )
+        .unwrap();
+    
+        let rules = CompiledRuleSet::compile(vec![rule]).unwrap();
+        let rule = &rules.patterns[0];
+    
+        assert_eq!(
+            rule.stream_plan(),
+            PatternStreamPlan::Bounded { max_match_len: 9 }
+        );
+    
+        let source = "xx KEY=ABCD! yy";
+    
+        let expected = whole_pattern_findings(rule, source);
+    
+        let mut state = PatternStreamState::default();
+        let mut findings = Vec::new();
+    
+        rule.scan_stream_bounded(&mut state, b"xx KEY=A", 0, &mut findings);
+        rule.scan_stream_bounded(&mut state, b"BCD! yy", 8, &mut findings);
+        rule.finish_stream_bounded(&mut state, &mut findings);
+    
+        assert_eq!(projected_findings(&findings), expected);
+        assert_eq!(
+            expected,
+            vec![(7, 11, RuleIndex::new(0))]
+        );
+    }
+
+    #[test]
+    fn bounded_captured_pattern_stream_matches_whole_source_for_every_valid_split() {
+        let rule = Rule::captured_pattern(
+            "captured",
+            r"KEY=(?P<value>[A-Z]{4})!",
+            "value",
+            Severity::High,
+        )
+        .unwrap();
+    
+        let rules = CompiledRuleSet::compile(vec![rule]).unwrap();
+        let rule = &rules.patterns[0];
+    
+        let source = "🦀 xx KEY=ABCD! yy KEY=WXYZ! 🦀";
+        let expected = whole_pattern_findings(rule, source);
+    
+        for split in 0..=source.len() {
+            if !source.is_char_boundary(split) {
+                continue;
+            }
+    
+            let mut state = PatternStreamState::default();
+            let mut findings = Vec::new();
+    
+            rule.scan_stream_bounded(
+                &mut state,
+                &source.as_bytes()[..split],
+                0,
+                &mut findings,
+            );
+    
+            rule.scan_stream_bounded(
+                &mut state,
+                &source.as_bytes()[split..],
+                split,
+                &mut findings,
+            );
+    
+            rule.finish_stream_bounded(&mut state, &mut findings);
+    
+            assert_eq!(
+                projected_findings(&findings),
+                expected,
+                "captured stream differs from whole-source scan at split {split}",
+            );
+        }
+    }
+    
+    #[test]
+    fn bounded_captured_pattern_stream_commits_capture_at_eof() {
+        let rule = Rule::captured_pattern(
+            "captured",
+            r"KEY=(?P<value>[A-Z]{1,4})",
+            "value",
+            Severity::High,
+        )
+        .unwrap();
+    
+        let rules = CompiledRuleSet::compile(vec![rule]).unwrap();
+        let rule = &rules.patterns[0];
+    
+        let mut state = PatternStreamState::default();
+        let mut findings = Vec::new();
+    
+        rule.scan_stream_bounded(&mut state, b"xx KEY=AB", 0, &mut findings);
+    
+        // `AB` is a valid match now, but may still grow to ABC/ABCD.
+        assert!(findings.is_empty());
+    
+        rule.finish_stream_bounded(&mut state, &mut findings);
+    
+        assert_eq!(
+            projected_findings(&findings),
+            vec![(7, 9, RuleIndex::new(0))]
+        );
     }
 }
