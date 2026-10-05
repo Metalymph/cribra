@@ -78,7 +78,9 @@ impl Scanner {
         not(test),
         allow(dead_code, reason = "wired incrementally during streaming 0.5-D")
     )]
-    pub(crate) fn source_session(&self) -> SourceSession {
+    pub(crate) fn source_session(
+        &self,
+    ) -> Result<SourceSession, crate::source_session::SourceSessionError> {
         SourceSession::new(Arc::clone(&self.rules))
     }
 

@@ -1,7 +1,10 @@
 use std::sync::Arc;
 
 use crate::{
-    compiled_rule::{CompiledRuleSet, InternalFinding, MultiPatternStreamState},
+    compiled_rule::{
+        CompiledRuleSet, InternalFinding, MultiPatternStreamState, PatternStreamState,
+        SuffixStreamState,
+    },
     utf8_transport::{Utf8Transport, Utf8TransportError},
 };
 
@@ -11,11 +14,13 @@ use crate::{
 /// scanner configuration. Later streaming slices extend this boundary with the
 /// concrete matcher, validator, candidate, normalization, and location state
 /// they require.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 struct SourceExecutionState {
     accepted_bytes: usize,
     transport: Utf8Transport,
     multi_pattern: MultiPatternStreamState,
+    suffix: SuffixStreamState,
+    patterns: Vec<PatternStreamState>,
 }
 
 /// Mutable execution state for one logical source.
@@ -40,6 +45,7 @@ enum SourceLifecycle {
 /// Invalid mutation of a source session that is no longer active.
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub(crate) enum SourceSessionError {
+    UnsupportedRuleSet,
     NotActive,
     InvalidUtf8(Utf8TransportError),
 }
@@ -51,12 +57,24 @@ impl From<Utf8TransportError> for SourceSessionError {
 }
 
 impl SourceSession {
-    pub(crate) fn new(rules: Arc<CompiledRuleSet>) -> Self {
-        Self {
+    pub(crate) fn new(rules: Arc<CompiledRuleSet>) -> Result<Self, SourceSessionError> {
+        if !rules.supports_streaming() {
+            return Err(SourceSessionError::UnsupportedRuleSet);
+        }
+
+        let patterns = rules.new_pattern_stream_states();
+
+        Ok(Self {
             rules,
             lifecycle: SourceLifecycle::Active,
-            state: SourceExecutionState::default(),
-        }
+            state: SourceExecutionState {
+                accepted_bytes: 0,
+                transport: Utf8Transport::default(),
+                multi_pattern: MultiPatternStreamState::default(),
+                suffix: SuffixStreamState::default(),
+                patterns,
+            },
+        })
     }
 
     pub(crate) fn accepted_bytes(&self) -> usize {
@@ -77,7 +95,16 @@ impl SourceSession {
             let bytes = text.as_bytes();
             let source_offset = state.accepted_bytes;
 
-            rules.scan_stream_chunk(&mut state.multi_pattern, bytes, source_offset, findings);
+            rules.scan_multi_pattern_stream_chunk(
+                &mut state.multi_pattern,
+                bytes,
+                source_offset,
+                findings,
+            );
+
+            rules.scan_suffix_stream_chunk(&mut state.suffix, bytes, source_offset, findings);
+
+            rules.scan_pattern_stream_chunk(&mut state.patterns, bytes, source_offset, findings);
 
             state.accepted_bytes += bytes.len();
         })?;
@@ -98,11 +125,17 @@ impl SourceSession {
 
         self.state.transport.finish()?;
 
-        self.rules.finish_stream(
+        self.rules.finish_multi_pattern_stream(
             &mut self.state.multi_pattern,
             self.state.accepted_bytes,
             findings,
         );
+
+        self.rules
+            .finish_suffix_stream(&mut self.state.suffix, findings);
+
+        self.rules
+            .finish_pattern_stream(&mut self.state.patterns, findings);
 
         self.lifecycle = SourceLifecycle::Completed;
 
@@ -130,10 +163,17 @@ mod tests {
 
     #[test]
     fn sessions_share_immutable_compiled_configuration() {
-        let scanner = Scanner::default();
+        let scanner = Scanner::builder()
+            .rule(Rule::literal("literal", "secret", Severity::High))
+            .build()
+            .expect("rule should compile");
 
-        let first = scanner.source_session();
-        let second = scanner.source_session();
+        let first = scanner
+            .source_session()
+            .expect("rule set should support streaming");
+        let second = scanner
+            .source_session()
+            .expect("rule set should support streaming");
 
         assert!(first.shares_rules_with(&second));
     }
@@ -145,7 +185,7 @@ mod tests {
                 .unwrap(),
         );
 
-        let mut session = SourceSession::new(rules);
+        let mut session = SourceSession::new(rules).expect("rule set should support streaming");
         let mut findings = Vec::new();
 
         session.scan_chunk(b"xxsec", &mut findings).unwrap();
@@ -166,7 +206,7 @@ mod tests {
                 .unwrap(),
         );
 
-        let mut session = SourceSession::new(rules);
+        let mut session = SourceSession::new(rules).expect("rule set should support streaming");
         let mut findings = Vec::new();
 
         session.scan_chunk(b"xx gh", &mut findings).unwrap();
@@ -188,8 +228,9 @@ mod tests {
                 .unwrap(),
         );
 
-        let mut first = SourceSession::new(Arc::clone(&rules));
-        let mut second = SourceSession::new(rules);
+        let mut first =
+            SourceSession::new(Arc::clone(&rules)).expect("rule set should support streaming");
+        let mut second = SourceSession::new(rules).expect("rule set should support streaming");
 
         let mut first_findings = Vec::new();
         let mut second_findings = Vec::new();
@@ -223,7 +264,8 @@ mod tests {
         let bytes = source.as_bytes();
 
         for split in 0..=bytes.len() {
-            let mut session = SourceSession::new(Arc::clone(&rules));
+            let mut session =
+                SourceSession::new(Arc::clone(&rules)).expect("rule set should support streaming");
             let mut findings = Vec::new();
 
             session.scan_chunk(&bytes[..split], &mut findings).unwrap();
@@ -248,7 +290,7 @@ mod tests {
         );
 
         let source = "🦀 secret xx ghp_value!";
-        let mut session = SourceSession::new(rules);
+        let mut session = SourceSession::new(rules).expect("rule set should support streaming");
         let mut findings = Vec::new();
 
         for byte in source.as_bytes() {
@@ -276,7 +318,7 @@ mod tests {
                 .unwrap(),
         );
 
-        let mut session = SourceSession::new(rules);
+        let mut session = SourceSession::new(rules).expect("rule set should support streaming");
         let mut findings = Vec::new();
 
         session.scan_chunk(b"ghp_secret", &mut findings).unwrap();
@@ -293,5 +335,447 @@ mod tests {
 
         assert!(findings.is_empty());
         assert_eq!(session.lifecycle(), SourceLifecycle::Active);
+    }
+
+    #[test]
+    fn session_scans_suffix_across_chunk_boundary() {
+        let rules = Arc::new(
+            CompiledRuleSet::compile(vec![Rule::suffix("suffix", "_end", Severity::High)]).unwrap(),
+        );
+
+        let mut session = SourceSession::new(rules).expect("rule set should support streaming");
+        let mut findings = Vec::new();
+
+        session.scan_chunk(b"before ab", &mut findings).unwrap();
+
+        assert!(findings.is_empty());
+
+        session.scan_chunk(b"c_end!", &mut findings).unwrap();
+
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].start(), 7);
+        assert_eq!(findings[0].end(), 14);
+    }
+
+    #[test]
+    fn session_finishes_suffix_at_end_of_source() {
+        let rules = Arc::new(
+            CompiledRuleSet::compile(vec![Rule::suffix("suffix", "_end", Severity::High)]).unwrap(),
+        );
+
+        let mut session = SourceSession::new(rules).expect("rule set should support streaming");
+        let mut findings = Vec::new();
+
+        session.scan_chunk(b"xx abc_end", &mut findings).unwrap();
+
+        assert!(findings.is_empty());
+
+        session.finish_scan(&mut findings).unwrap();
+
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].start(), 3);
+        assert_eq!(findings[0].end(), 10);
+    }
+
+    #[test]
+    fn session_rejects_oversized_suffix_token() {
+        let rules = Arc::new(
+            CompiledRuleSet::compile(vec![Rule::suffix("suffix", "_end", Severity::High)]).unwrap(),
+        );
+
+        let source = format!("{}_end", "a".repeat(4096));
+
+        let mut session = SourceSession::new(rules).expect("rule set should support streaming");
+        let mut findings = Vec::new();
+
+        for chunk in source.as_bytes().chunks(127) {
+            session.scan_chunk(chunk, &mut findings).unwrap();
+        }
+
+        session.finish_scan(&mut findings).unwrap();
+
+        assert!(findings.is_empty());
+    }
+
+    #[test]
+    fn session_recovers_suffix_matching_after_oversized_token() {
+        let rules = Arc::new(
+            CompiledRuleSet::compile(vec![Rule::suffix("suffix", "_end", Severity::High)]).unwrap(),
+        );
+
+        let oversized = format!("{}_end", "a".repeat(4096));
+        let source = format!("{oversized}! valid_end!");
+
+        let mut session = SourceSession::new(rules).expect("rule set should support streaming");
+        let mut findings = Vec::new();
+
+        for chunk in source.as_bytes().chunks(113) {
+            session.scan_chunk(chunk, &mut findings).unwrap();
+        }
+
+        session.finish_scan(&mut findings).unwrap();
+
+        assert_eq!(findings.len(), 1);
+
+        let expected_start = oversized.len() + 2;
+
+        assert_eq!(findings[0].start(), expected_start);
+        assert_eq!(findings[0].end(), expected_start + "valid_end".len());
+    }
+
+    #[test]
+    fn streamed_suffix_matches_whole_source_semantics() {
+        let rules = Arc::new(
+            CompiledRuleSet::compile(vec![Rule::suffix("suffix", "_end", Severity::High)]).unwrap(),
+        );
+
+        let source = "first_end! nope_endx second_end third_end";
+
+        let mut whole = Vec::new();
+        rules.scan(source, &mut whole);
+
+        let mut session =
+            SourceSession::new(Arc::clone(&rules)).expect("rule set should support streaming");
+        let mut streamed = Vec::new();
+
+        for chunk in source.as_bytes().chunks(3) {
+            session.scan_chunk(chunk, &mut streamed).unwrap();
+        }
+
+        session.finish_scan(&mut streamed).unwrap();
+
+        let project =
+            |finding: &InternalFinding| (finding.start(), finding.end(), finding.rule_index());
+
+        let mut whole = whole.iter().map(project).collect::<Vec<_>>();
+        let mut streamed = streamed.iter().map(project).collect::<Vec<_>>();
+
+        whole.sort_unstable();
+        streamed.sort_unstable();
+
+        assert_eq!(streamed, whole);
+    }
+
+    #[test]
+    fn streamed_suffix_is_equivalent_across_every_two_chunk_partition() {
+        let rules = Arc::new(
+            CompiledRuleSet::compile(vec![Rule::suffix("suffix", "_end", Severity::High)]).unwrap(),
+        );
+
+        let source = "🦀 first_end! nope_endx second_end third_end";
+
+        let mut whole = Vec::new();
+        rules.scan(source, &mut whole);
+
+        let project =
+            |finding: &InternalFinding| (finding.start(), finding.end(), finding.rule_index());
+
+        let mut expected = whole.iter().map(project).collect::<Vec<_>>();
+        expected.sort_unstable();
+
+        for split in 0..=source.len() {
+            if !source.is_char_boundary(split) {
+                continue;
+            }
+
+            let mut session =
+                SourceSession::new(Arc::clone(&rules)).expect("rule set should support streaming");
+            let mut streamed = Vec::new();
+
+            session
+                .scan_chunk(&source.as_bytes()[..split], &mut streamed)
+                .unwrap();
+            session
+                .scan_chunk(&source.as_bytes()[split..], &mut streamed)
+                .unwrap();
+            session.finish_scan(&mut streamed).unwrap();
+
+            let mut actual = streamed.iter().map(project).collect::<Vec<_>>();
+            actual.sort_unstable();
+
+            assert_eq!(actual, expected, "split at byte {split}");
+        }
+    }
+
+    #[test]
+    fn streamed_suffix_is_equivalent_across_every_byte_partition() {
+        let rules = Arc::new(
+            CompiledRuleSet::compile(vec![Rule::suffix("suffix", "_end", Severity::High)]).unwrap(),
+        );
+
+        let source = "🦀 first_end! café second_end";
+
+        let mut whole = Vec::new();
+        rules.scan(source, &mut whole);
+
+        let project =
+            |finding: &InternalFinding| (finding.start(), finding.end(), finding.rule_index());
+
+        let mut expected = whole.iter().map(project).collect::<Vec<_>>();
+        expected.sort_unstable();
+
+        for split in 0..=source.len() {
+            let mut session =
+                SourceSession::new(Arc::clone(&rules)).expect("rule set should support streaming");
+            let mut streamed = Vec::new();
+
+            session
+                .scan_chunk(&source.as_bytes()[..split], &mut streamed)
+                .unwrap();
+            session
+                .scan_chunk(&source.as_bytes()[split..], &mut streamed)
+                .unwrap();
+            session.finish_scan(&mut streamed).unwrap();
+
+            let mut actual = streamed.iter().map(project).collect::<Vec<_>>();
+            actual.sort_unstable();
+
+            assert_eq!(actual, expected, "split at raw byte {split}");
+        }
+    }
+
+    #[test]
+    fn session_matches_suffix_with_single_byte_transport() {
+        let rules = Arc::new(
+            CompiledRuleSet::compile(vec![Rule::suffix("suffix", "_end", Severity::High)]).unwrap(),
+        );
+
+        let source = "🦀 alpha_end! beta_end gamma";
+        let mut session = SourceSession::new(rules).expect("rule set should support streaming");
+        let mut findings = Vec::new();
+
+        for byte in source.as_bytes() {
+            session
+                .scan_chunk(std::slice::from_ref(byte), &mut findings)
+                .unwrap();
+        }
+
+        session.finish_scan(&mut findings).unwrap();
+
+        let spans = findings
+            .iter()
+            .map(|finding| (finding.start(), finding.end()))
+            .collect::<Vec<_>>();
+
+        assert_eq!(spans, vec![(5, 14), (16, 24)]);
+    }
+
+    fn projected_findings(
+        findings: &[InternalFinding],
+    ) -> Vec<(usize, usize, crate::compiled_rule::RuleIndex)> {
+        let mut projected = findings
+            .iter()
+            .map(|finding| (finding.start(), finding.end(), finding.rule_index()))
+            .collect::<Vec<_>>();
+
+        projected.sort_unstable();
+        projected
+    }
+
+    #[test]
+    fn session_stream_matches_whole_source_with_all_supported_matchers() {
+        let rules = Arc::new(
+            CompiledRuleSet::compile(vec![
+                Rule::literal("literal", "secret", Severity::High),
+                Rule::prefix("prefix", "ghp_", Severity::Critical),
+                Rule::suffix("suffix", "_token", Severity::High),
+                Rule::pattern("pattern", r"key_[A-Z]{4}", Severity::High).unwrap(),
+            ])
+            .unwrap(),
+        );
+
+        let source = "🦀 secret xx ghp_value! yy alpha_token zz key_ABCD end";
+
+        let mut whole = Vec::new();
+        rules.scan(source, &mut whole);
+
+        let mut session =
+            SourceSession::new(Arc::clone(&rules)).expect("rule set should support streaming");
+        let mut streamed = Vec::new();
+
+        let chunks: &[&[u8]] = &[
+            "🦀 se".as_bytes(),
+            b"cret xx gh",
+            b"p_val",
+            b"ue! yy alpha_",
+            b"token zz key_",
+            b"AB",
+            b"CD end",
+        ];
+
+        for chunk in chunks {
+            session.scan_chunk(chunk, &mut streamed).unwrap();
+        }
+
+        session.finish_scan(&mut streamed).unwrap();
+
+        assert_eq!(projected_findings(&streamed), projected_findings(&whole),);
+
+        assert_eq!(session.accepted_bytes(), source.len());
+        assert_eq!(session.lifecycle(), SourceLifecycle::Completed);
+    }
+
+    #[test]
+    fn session_stream_matches_whole_source_for_every_valid_split() {
+        let rules = Arc::new(
+            CompiledRuleSet::compile(vec![
+                Rule::literal("literal", "secret", Severity::High),
+                Rule::prefix("prefix", "ghp_", Severity::Critical),
+                Rule::suffix("suffix", "_token", Severity::High),
+                Rule::pattern("pattern", r"key_[A-Z]{4}", Severity::High).unwrap(),
+            ])
+            .unwrap(),
+        );
+
+        let source = "🦀 secret xx ghp_value! yy alpha_token zz key_ABCD 🦀";
+
+        let mut whole = Vec::new();
+        rules.scan(source, &mut whole);
+        let expected = projected_findings(&whole);
+
+        for split in 0..=source.len() {
+            if !source.is_char_boundary(split) {
+                continue;
+            }
+
+            let mut session =
+                SourceSession::new(Arc::clone(&rules)).expect("rule set should support streaming");
+            let mut streamed = Vec::new();
+
+            session
+                .scan_chunk(&source.as_bytes()[..split], &mut streamed)
+                .unwrap();
+
+            session
+                .scan_chunk(&source.as_bytes()[split..], &mut streamed)
+                .unwrap();
+
+            session.finish_scan(&mut streamed).unwrap();
+
+            assert_eq!(
+                projected_findings(&streamed),
+                expected,
+                "stream differs from whole-source scan at split {split}",
+            );
+
+            assert_eq!(session.accepted_bytes(), source.len());
+        }
+    }
+
+    #[test]
+    fn session_stream_matches_whole_source_with_single_byte_transport() {
+        let rules = Arc::new(
+            CompiledRuleSet::compile(vec![
+                Rule::literal("literal", "secret", Severity::High),
+                Rule::prefix("prefix", "ghp_", Severity::Critical),
+                Rule::suffix("suffix", "_token", Severity::High),
+                Rule::pattern("pattern", r"key_[A-Z]{4}", Severity::High).unwrap(),
+            ])
+            .unwrap(),
+        );
+
+        let source = "🦀 secret xx ghp_value! yy alpha_token zz key_ABCD 🦀";
+
+        let mut whole = Vec::new();
+        rules.scan(source, &mut whole);
+        let expected = projected_findings(&whole);
+
+        let mut session =
+            SourceSession::new(Arc::clone(&rules)).expect("rule set should support streaming");
+        let mut streamed = Vec::new();
+
+        for byte in source.as_bytes() {
+            session
+                .scan_chunk(std::slice::from_ref(byte), &mut streamed)
+                .unwrap();
+        }
+
+        session.finish_scan(&mut streamed).unwrap();
+
+        assert_eq!(projected_findings(&streamed), expected);
+        assert_eq!(session.accepted_bytes(), source.len());
+        assert_eq!(session.lifecycle(), SourceLifecycle::Completed);
+    }
+
+    #[test]
+    fn source_session_streams_all_supported_matcher_kinds_across_chunks() {
+        let rules = Arc::new(
+            CompiledRuleSet::compile(vec![
+                Rule::literal("literal", "literal_secret", Severity::High),
+                Rule::suffix("suffix", "_suffix", Severity::High),
+                Rule::captured_pattern(
+                    "pattern",
+                    r"KEY=(?P<value>[A-Z]{4})!",
+                    "value",
+                    Severity::High,
+                )
+                .unwrap(),
+            ])
+            .unwrap(),
+        );
+
+        let source = "🦀 literal_secret token_suffix KEY=ABCD! end";
+
+        let mut expected = Vec::new();
+        rules.scan(source, &mut expected);
+
+        let bytes = source.as_bytes();
+
+        // Deliberately split inside the leading UTF-8 scalar and inside
+        // the bounded captured pattern.
+        let pattern_start = source.find("KEY=ABCD!").unwrap();
+
+        let chunks = [
+            &bytes[..2],
+            &bytes[2..pattern_start + 6],
+            &bytes[pattern_start + 6..],
+        ];
+
+        let mut session =
+            SourceSession::new(Arc::clone(&rules)).expect("rule set should support streaming");
+        let mut streamed = Vec::new();
+
+        for chunk in chunks {
+            session.scan_chunk(chunk, &mut streamed).unwrap();
+        }
+
+        session.finish_scan(&mut streamed).unwrap();
+
+        let project =
+            |finding: &InternalFinding| (finding.start(), finding.end(), finding.rule_index());
+
+        let mut expected = expected.iter().map(project).collect::<Vec<_>>();
+        let mut streamed = streamed.iter().map(project).collect::<Vec<_>>();
+
+        expected.sort_unstable();
+        streamed.sort_unstable();
+
+        assert_eq!(streamed, expected);
+        assert_eq!(session.accepted_bytes(), source.len());
+    }
+
+    #[test]
+    fn session_rejects_rule_set_with_unsupported_streaming_pattern() {
+        let rule = Rule::pattern("unbounded", r"secret_[A-Z]+", Severity::High)
+            .expect("pattern should compile");
+
+        let rules =
+            Arc::new(CompiledRuleSet::compile(vec![rule]).expect("rule set should compile"));
+
+        let error =
+            SourceSession::new(rules).expect_err("unbounded pattern must reject streaming session");
+
+        assert_eq!(error, SourceSessionError::UnsupportedRuleSet);
+    }
+
+    #[test]
+    fn session_accepts_rule_set_with_bounded_streaming_pattern() {
+        let rule = Rule::pattern("bounded", r"secret_[A-Z]{4}", Severity::High)
+            .expect("pattern should compile");
+
+        let rules =
+            Arc::new(CompiledRuleSet::compile(vec![rule]).expect("rule set should compile"));
+
+        SourceSession::new(rules).expect("bounded pattern should support streaming");
     }
 }

@@ -6,7 +6,7 @@ use regex::Regex;
 use crate::{
     confidence::Confidence,
     remediation::Remediation,
-    rule::{Matcher, Rule, RuleId, RuleKind},
+    rule::{Matcher, PatternContext, Rule, RuleId, RuleKind},
     scanner_builder::ScannerBuildError,
     severity::Severity,
     validators::dispatch::ValidatorKind,
@@ -461,6 +461,16 @@ struct ActivePrefix {
     source_start: usize,
 }
 
+/// Maximum byte length of a token eligible for suffix matching.
+///
+/// Suffix matching extends backwards to the beginning of the containing token.
+/// Bounding the token extent makes the same semantics implementable with
+/// bounded source-local state during incremental execution.
+///
+/// Tokens longer than this limit are not eligible for suffix findings; they are
+/// never reported as truncated spans.
+const MAX_SUFFIX_TOKEN_LEN: usize = 4096;
+
 #[derive(Debug)]
 struct SuffixRule {
     rule_index: RuleIndex,
@@ -479,12 +489,349 @@ impl SuffixRule {
             }
 
             let mut start = suffix_start;
-            while start > 0 && is_token_byte(bytes[start - 1]) {
+
+            while start > 0 && end - start < MAX_SUFFIX_TOKEN_LEN && is_token_byte(bytes[start - 1])
+            {
                 start -= 1;
+            }
+
+            // Reaching the bound while the token still continues to the left
+            // means the complete token exceeds the supported suffix extent.
+            if start > 0 && end - start == MAX_SUFFIX_TOKEN_LEN && is_token_byte(bytes[start - 1]) {
+                continue;
             }
 
             findings.push(InternalFinding::new(self.rule_index, start, end));
         }
+    }
+
+    fn scan_stream_token(
+        &self,
+        token_start: usize,
+        token: &[u8],
+        findings: &mut Vec<InternalFinding>,
+    ) {
+        let suffix = self.suffix.as_bytes();
+
+        if token.ends_with(suffix) {
+            findings.push(InternalFinding::new(
+                self.rule_index,
+                token_start,
+                token_start + token.len(),
+            ));
+        }
+    }
+}
+
+/// Incremental execution state for suffix rules.
+///
+/// Suffix matching needs bounded history from the current token so that a
+/// suffix candidate can recover the complete token start without retaining
+/// arbitrary source history.
+///
+/// A token that grows beyond [`MAX_SUFFIX_TOKEN_LEN`] becomes ineligible for
+/// suffix findings until the next token boundary. It is never represented as a
+/// truncated token.
+#[derive(Debug, Default)]
+pub(crate) struct SuffixStreamState {
+    /// Bytes retained for the current token while it remains eligible.
+    token: Vec<u8>,
+
+    /// Absolute byte offset at which the current token begins.
+    token_start: usize,
+
+    /// Whether the current token exceeded the supported suffix extent.
+    oversized: bool,
+}
+
+impl SuffixStreamState {
+    /// Consumes one source chunk and yields each complete eligible token.
+    ///
+    /// Only token bytes are retained. Once a token exceeds
+    /// [`MAX_SUFFIX_TOKEN_LEN`], its retained bytes are discarded and the
+    /// token remains ineligible until its terminating boundary.
+    fn push_chunk(
+        &mut self,
+        chunk: &[u8],
+        source_offset: usize,
+        mut on_token: impl FnMut(usize, &[u8]),
+    ) {
+        for (index, &byte) in chunk.iter().enumerate() {
+            let absolute_offset = source_offset + index;
+
+            if is_token_byte(byte) {
+                if self.token.is_empty() && !self.oversized {
+                    self.token_start = absolute_offset;
+                }
+
+                if self.oversized {
+                    continue;
+                }
+
+                if self.token.len() < MAX_SUFFIX_TOKEN_LEN {
+                    self.token.push(byte);
+                } else {
+                    self.token.clear();
+                    self.oversized = true;
+                }
+
+                continue;
+            }
+
+            self.finish_token(&mut on_token);
+        }
+    }
+
+    /// Treats end-of-source as a token boundary.
+    fn finish(&mut self, mut on_token: impl FnMut(usize, &[u8])) {
+        self.finish_token(&mut on_token);
+    }
+
+    fn finish_token(&mut self, on_token: &mut impl FnMut(usize, &[u8])) {
+        if !self.oversized && !self.token.is_empty() {
+            on_token(self.token_start, &self.token);
+        }
+
+        self.token.clear();
+        self.oversized = false;
+    }
+}
+
+#[cfg(test)]
+mod suffix_tests {
+    use super::*;
+    use crate::{Rule, Severity};
+
+    fn scan(source: &str) -> Vec<(usize, usize)> {
+        let compiled =
+            CompiledRuleSet::compile(vec![Rule::suffix("suffix", "_end", Severity::High)])
+                .expect("rule should compile");
+
+        let mut findings = Vec::new();
+        compiled.scan(source, &mut findings);
+
+        findings
+            .into_iter()
+            .map(|finding| (finding.start(), finding.end()))
+            .collect()
+    }
+
+    #[test]
+    fn suffix_stream_emits_complete_token_at_boundary() {
+        let mut state = SuffixStreamState::default();
+        let mut tokens = Vec::new();
+
+        state.push_chunk(b"abc_end!", 0, |start, token| {
+            tokens.push((start, token.to_vec()));
+        });
+
+        assert_eq!(tokens, vec![(0, b"abc_end".to_vec())]);
+        assert!(state.token.is_empty());
+        assert!(!state.oversized);
+    }
+
+    #[test]
+    fn suffix_stream_preserves_token_across_chunks() {
+        let mut state = SuffixStreamState::default();
+        let mut tokens = Vec::new();
+
+        state.push_chunk(b"before ab", 0, |start, token| {
+            tokens.push((start, token.to_vec()));
+        });
+        state.push_chunk(b"c_end!", 9, |start, token| {
+            tokens.push((start, token.to_vec()));
+        });
+
+        assert_eq!(
+            tokens,
+            vec![(0, b"before".to_vec()), (7, b"abc_end".to_vec()),]
+        );
+    }
+
+    #[test]
+    fn suffix_stream_finishes_token_at_end_of_source() {
+        let mut state = SuffixStreamState::default();
+        let mut tokens = Vec::new();
+
+        state.push_chunk(b"abc_end", 0, |start, token| {
+            tokens.push((start, token.to_vec()));
+        });
+
+        assert!(tokens.is_empty());
+
+        state.finish(|start, token| {
+            tokens.push((start, token.to_vec()));
+        });
+
+        assert_eq!(tokens, vec![(0, b"abc_end".to_vec())]);
+    }
+
+    #[test]
+    fn suffix_stream_accepts_token_at_maximum_extent() {
+        let source = vec![b'a'; MAX_SUFFIX_TOKEN_LEN];
+
+        let mut state = SuffixStreamState::default();
+        let mut tokens = Vec::new();
+
+        state.push_chunk(&source, 0, |start, token| {
+            tokens.push((start, token.len()));
+        });
+        state.finish(|start, token| {
+            tokens.push((start, token.len()));
+        });
+
+        assert_eq!(tokens, vec![(0, MAX_SUFFIX_TOKEN_LEN)]);
+        assert!(!state.oversized);
+    }
+
+    #[test]
+    fn suffix_stream_discards_token_beyond_maximum_extent() {
+        let source = vec![b'a'; MAX_SUFFIX_TOKEN_LEN + 1];
+
+        let mut state = SuffixStreamState::default();
+        let mut tokens = Vec::new();
+
+        state.push_chunk(&source, 0, |start, token| {
+            tokens.push((start, token.len()));
+        });
+
+        assert!(tokens.is_empty());
+        assert!(state.oversized);
+        assert!(state.token.is_empty());
+
+        state.finish(|start, token| {
+            tokens.push((start, token.len()));
+        });
+
+        assert!(tokens.is_empty());
+        assert!(!state.oversized);
+        assert!(state.token.is_empty());
+    }
+
+    #[test]
+    fn suffix_stream_recovers_after_oversized_token() {
+        let mut source = vec![b'a'; MAX_SUFFIX_TOKEN_LEN + 1];
+        source.extend_from_slice(b"!valid_end!");
+
+        let mut state = SuffixStreamState::default();
+        let mut tokens = Vec::new();
+
+        state.push_chunk(&source, 0, |start, token| {
+            tokens.push((start, token.to_vec()));
+        });
+
+        assert_eq!(
+            tokens,
+            vec![(MAX_SUFFIX_TOKEN_LEN + 2, b"valid_end".to_vec())]
+        );
+    }
+
+    #[test]
+    fn suffix_stream_bound_is_independent_of_chunking() {
+        let source = vec![b'a'; MAX_SUFFIX_TOKEN_LEN + 1];
+
+        for split in 0..=source.len() {
+            let mut state = SuffixStreamState::default();
+            let mut emitted = 0;
+
+            state.push_chunk(&source[..split], 0, |_, _| {
+                emitted += 1;
+            });
+            state.push_chunk(&source[split..], split, |_, _| {
+                emitted += 1;
+            });
+
+            assert_eq!(emitted, 0, "split at byte {split}");
+            assert!(
+                state.token.len() <= MAX_SUFFIX_TOKEN_LEN,
+                "split at byte {split}"
+            );
+
+            state.finish(|_, _| {
+                emitted += 1;
+            });
+
+            assert_eq!(emitted, 0, "split at byte {split}");
+        }
+    }
+
+    #[test]
+    fn suffix_accepts_token_at_maximum_extent() {
+        let source = format!("{}{}", "a".repeat(MAX_SUFFIX_TOKEN_LEN - 4), "_end");
+
+        assert_eq!(source.len(), MAX_SUFFIX_TOKEN_LEN);
+        assert_eq!(scan(&source), vec![(0, MAX_SUFFIX_TOKEN_LEN)]);
+    }
+
+    #[test]
+    fn suffix_rejects_token_beyond_maximum_extent() {
+        let source = format!("{}{}", "a".repeat(MAX_SUFFIX_TOKEN_LEN - 3), "_end");
+
+        assert_eq!(source.len(), MAX_SUFFIX_TOKEN_LEN + 1);
+        assert!(scan(&source).is_empty());
+    }
+
+    #[test]
+    fn suffix_accepts_token_below_maximum_extent() {
+        let source = format!("{}{}", "a".repeat(MAX_SUFFIX_TOKEN_LEN - 5), "_end");
+
+        assert_eq!(source.len(), MAX_SUFFIX_TOKEN_LEN - 1);
+        assert_eq!(scan(&source), vec![(0, MAX_SUFFIX_TOKEN_LEN - 1)]);
+    }
+
+    #[test]
+    fn suffix_requires_trailing_token_boundary() {
+        assert!(scan("abc_endx").is_empty());
+        assert_eq!(scan("abc_end!"), vec![(0, 7)]);
+    }
+
+    #[test]
+    fn suffix_recovers_start_after_left_boundary() {
+        assert_eq!(scan("before abc_end!"), vec![(7, 14)]);
+    }
+
+    #[test]
+    fn oversized_token_does_not_hide_later_valid_token() {
+        let oversized = format!("{}{}", "a".repeat(MAX_SUFFIX_TOKEN_LEN), "_end");
+        let source = format!("{oversized} valid_end!");
+
+        assert_eq!(
+            scan(&source),
+            vec![(oversized.len() + 1, oversized.len() + 10)]
+        );
+    }
+}
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+enum PatternStreamPlan {
+    /// The complete match has a statically bounded byte extent and does not
+    /// depend on zero-width context outside that extent.
+    Bounded { max_match_len: usize },
+
+    /// Incremental execution is not yet supported for this pattern.
+    Unsupported,
+}
+
+impl PatternStreamPlan {
+    fn compile(max_match_len: Option<usize>, context: PatternContext) -> Self {
+        match max_match_len {
+            Some(max_match_len) if context.is_context_free() => Self::Bounded { max_match_len },
+            _ => Self::Unsupported,
+        }
+    }
+}
+
+#[derive(Debug, Default)]
+pub(crate) struct PatternStreamState {
+    buffer: Vec<u8>,
+    buffer_offset: usize,
+    resolved_before: usize,
+}
+
+impl PatternStreamState {
+    #[cfg(test)]
+    fn buffered_len(&self) -> usize {
+        self.buffer.len()
     }
 }
 
@@ -493,11 +840,17 @@ struct PatternRule {
     rule_index: RuleIndex,
     pattern: Regex,
     capture: Option<usize>,
+    stream_plan: PatternStreamPlan,
     prefilter: Option<AhoCorasick>,
     gate_bit: Option<u8>,
 }
 
 impl PatternRule {
+    #[cfg(test)]
+    const fn stream_plan(&self) -> PatternStreamPlan {
+        self.stream_plan
+    }
+
     fn scan(&self, source: &str, findings: &mut Vec<InternalFinding>) {
         match (&self.prefilter, self.capture) {
             (Some(prefilter), Some(capture)) => {
@@ -580,6 +933,167 @@ impl PatternRule {
                 ));
             }
         }
+    }
+
+    fn scan_stream_bounded(
+        &self,
+        state: &mut PatternStreamState,
+        chunk: &[u8],
+        source_offset: usize,
+        findings: &mut Vec<InternalFinding>,
+    ) {
+        let PatternStreamPlan::Bounded { max_match_len } = self.stream_plan else {
+            return;
+        };
+
+        if state.buffer.is_empty() {
+            state.buffer_offset = source_offset;
+        }
+
+        state.buffer.extend_from_slice(chunk);
+
+        let observed_end = state.buffer_offset + state.buffer.len();
+
+        let Ok(source) = std::str::from_utf8(&state.buffer) else {
+            return;
+        };
+
+        let new_resolved_before = observed_end
+            .checked_sub(max_match_len)
+            .and_then(|offset| offset.checked_add(1))
+            .unwrap_or(0);
+
+        match self.capture {
+            Some(capture) => {
+                for captures in self.pattern.captures_iter(source) {
+                    let Some(complete) = captures.get(0) else {
+                        continue;
+                    };
+
+                    let complete_start = state.buffer_offset + complete.start();
+
+                    if complete_start < state.resolved_before {
+                        continue;
+                    }
+
+                    if complete_start >= new_resolved_before {
+                        break;
+                    }
+
+                    let Some(matched) = captures.get(capture) else {
+                        continue;
+                    };
+
+                    findings.push(InternalFinding::new(
+                        self.rule_index,
+                        state.buffer_offset + matched.start(),
+                        state.buffer_offset + matched.end(),
+                    ));
+                }
+            }
+
+            None => {
+                for matched in self.pattern.find_iter(source) {
+                    let start = state.buffer_offset + matched.start();
+
+                    if start < state.resolved_before {
+                        continue;
+                    }
+
+                    if start >= new_resolved_before {
+                        break;
+                    }
+
+                    findings.push(InternalFinding::new(
+                        self.rule_index,
+                        start,
+                        state.buffer_offset + matched.end(),
+                    ));
+                }
+            }
+        }
+
+        state.resolved_before = state.resolved_before.max(new_resolved_before);
+
+        let cut = {
+            let source = std::str::from_utf8(&state.buffer)
+                .expect("pattern stream receives validated UTF-8");
+
+            let mut cut = state
+                .resolved_before
+                .saturating_sub(state.buffer_offset)
+                .min(state.buffer.len());
+
+            while cut < state.buffer.len() && !source.is_char_boundary(cut) {
+                cut += 1;
+            }
+
+            cut
+        };
+
+        if cut > 0 {
+            state.buffer.drain(..cut);
+            state.buffer_offset += cut;
+        }
+    }
+
+    fn finish_stream_bounded(
+        &self,
+        state: &mut PatternStreamState,
+        findings: &mut Vec<InternalFinding>,
+    ) {
+        let PatternStreamPlan::Bounded { .. } = self.stream_plan else {
+            return;
+        };
+
+        let source =
+            std::str::from_utf8(&state.buffer).expect("pattern stream receives validated UTF-8");
+
+        match self.capture {
+            Some(capture) => {
+                for captures in self.pattern.captures_iter(source) {
+                    let Some(complete) = captures.get(0) else {
+                        continue;
+                    };
+
+                    let complete_start = state.buffer_offset + complete.start();
+
+                    if complete_start < state.resolved_before {
+                        continue;
+                    }
+
+                    let Some(matched) = captures.get(capture) else {
+                        continue;
+                    };
+
+                    findings.push(InternalFinding::new(
+                        self.rule_index,
+                        state.buffer_offset + matched.start(),
+                        state.buffer_offset + matched.end(),
+                    ));
+                }
+            }
+
+            None => {
+                for matched in self.pattern.find_iter(source) {
+                    let start = state.buffer_offset + matched.start();
+
+                    if start < state.resolved_before {
+                        continue;
+                    }
+
+                    findings.push(InternalFinding::new(
+                        self.rule_index,
+                        start,
+                        state.buffer_offset + matched.end(),
+                    ));
+                }
+            }
+        }
+
+        state.resolved_before = state.buffer_offset + state.buffer.len();
+        state.buffer.clear();
+        state.buffer_offset = state.resolved_before;
     }
 }
 
@@ -707,10 +1221,16 @@ impl CompiledRuleSet {
                     needle,
                 }),
                 Matcher::Suffix(suffix) => suffixes.push(SuffixRule { rule_index, suffix }),
-                Matcher::Pattern { regex, capture } => patterns.push(PatternRule {
+                Matcher::Pattern {
+                    regex,
+                    capture,
+                    context,
+                    maximum_len,
+                } => patterns.push(PatternRule {
                     rule_index,
                     pattern: regex,
                     capture,
+                    stream_plan: PatternStreamPlan::compile(maximum_len, context),
                     prefilter: pattern_prefilter,
                     gate_bit,
                 }),
@@ -777,19 +1297,35 @@ impl CompiledRuleSet {
         self.metadata.is_empty()
     }
 
-    pub(crate) fn scan_stream_chunk(
+    pub(crate) fn scan_multi_pattern_stream_chunk(
         &self,
-        state: &mut MultiPatternStreamState,
+        multi_pattern_state: &mut MultiPatternStreamState,
         chunk: &[u8],
         source_offset: usize,
         findings: &mut Vec<InternalFinding>,
     ) {
         if let Some(engine) = &self.multi_pattern {
-            engine.scan_stream_chunk(state, chunk, source_offset, findings);
+            engine.scan_stream_chunk(multi_pattern_state, chunk, source_offset, findings);
         }
     }
 
-    pub(crate) fn finish_stream(
+    pub(crate) fn scan_suffix_stream_chunk(
+        &self,
+        state: &mut SuffixStreamState,
+        chunk: &[u8],
+        source_offset: usize,
+        findings: &mut Vec<InternalFinding>,
+    ) {
+        let suffixes = &self.suffixes;
+
+        state.push_chunk(chunk, source_offset, |token_start, token| {
+            for rule in suffixes {
+                rule.scan_stream_token(token_start, token, findings);
+            }
+        });
+    }
+
+    pub(crate) fn finish_multi_pattern_stream(
         &self,
         state: &mut MultiPatternStreamState,
         source_end: usize,
@@ -797,6 +1333,63 @@ impl CompiledRuleSet {
     ) {
         if self.multi_pattern.is_some() {
             MultiPatternEngine::finish_stream(state, source_end, findings);
+        }
+    }
+
+    pub(crate) fn finish_suffix_stream(
+        &self,
+        state: &mut SuffixStreamState,
+        findings: &mut Vec<InternalFinding>,
+    ) {
+        let suffixes = &self.suffixes;
+
+        state.finish(|token_start, token| {
+            for rule in suffixes {
+                rule.scan_stream_token(token_start, token, findings);
+            }
+        });
+    }
+
+    pub(crate) fn supports_streaming(&self) -> bool {
+        self.patterns
+            .iter()
+            .all(|rule| !matches!(rule.stream_plan, PatternStreamPlan::Unsupported))
+    }
+
+    pub(crate) fn new_pattern_stream_states(&self) -> Vec<PatternStreamState> {
+        self.patterns
+            .iter()
+            .map(|_| PatternStreamState::default())
+            .collect()
+    }
+
+    pub(crate) fn scan_pattern_stream_chunk(
+        &self,
+        states: &mut [PatternStreamState],
+        chunk: &[u8],
+        source_offset: usize,
+        findings: &mut Vec<InternalFinding>,
+    ) {
+        debug_assert_eq!(states.len(), self.patterns.len());
+
+        for (rule, state) in self.patterns.iter().zip(states) {
+            if matches!(rule.stream_plan, PatternStreamPlan::Bounded { .. }) {
+                rule.scan_stream_bounded(state, chunk, source_offset, findings);
+            }
+        }
+    }
+
+    pub(crate) fn finish_pattern_stream(
+        &self,
+        states: &mut [PatternStreamState],
+        findings: &mut Vec<InternalFinding>,
+    ) {
+        debug_assert_eq!(states.len(), self.patterns.len());
+
+        for (rule, state) in self.patterns.iter().zip(states) {
+            if matches!(rule.stream_plan, PatternStreamPlan::Bounded { .. }) {
+                rule.finish_stream_bounded(state, findings);
+            }
         }
     }
 }
@@ -1618,5 +2211,334 @@ mod multi_pattern_tests {
         streamed.sort_unstable();
 
         assert_eq!(streamed, whole);
+    }
+
+    #[test]
+    fn pattern_stream_plan_rejects_bounded_line_anchors() {
+        let rule = Rule::pattern("line", r"(?m)^secret_[A-Za-z0-9]{8}$", Severity::High).unwrap();
+
+        let rules = CompiledRuleSet::compile(vec![rule]).unwrap();
+
+        assert_eq!(
+            rules.patterns[0].stream_plan(),
+            PatternStreamPlan::Unsupported
+        );
+    }
+
+    #[test]
+    fn pattern_stream_plan_accepts_bounded_context_free_pattern() {
+        let rule = Rule::pattern("plain", r"secret_[A-Z]{8}", Severity::High).unwrap();
+        let rules = CompiledRuleSet::compile(vec![rule]).unwrap();
+
+        assert_eq!(
+            rules.patterns[0].stream_plan(),
+            PatternStreamPlan::Bounded { max_match_len: 15 }
+        );
+    }
+
+    #[test]
+    fn pattern_stream_plan_rejects_unbounded_pattern() {
+        let rule = Rule::pattern("unbounded", r"secret_[A-Z]+", Severity::High).unwrap();
+        let rules = CompiledRuleSet::compile(vec![rule]).unwrap();
+
+        assert_eq!(
+            rules.patterns[0].stream_plan(),
+            PatternStreamPlan::Unsupported
+        );
+    }
+
+    #[test]
+    fn pattern_stream_plan_rejects_bounded_text_anchors() {
+        let rule = Rule::pattern("anchored", r"\Asecret[A-Z]{4}\z", Severity::High).unwrap();
+        let rules = CompiledRuleSet::compile(vec![rule]).unwrap();
+
+        assert_eq!(
+            rules.patterns[0].stream_plan(),
+            PatternStreamPlan::Unsupported
+        );
+    }
+
+    #[test]
+    fn pattern_stream_plan_rejects_bounded_word_boundaries() {
+        let rule = Rule::pattern("word", r"\bsecret[A-Z]{4}\b", Severity::High).unwrap();
+        let rules = CompiledRuleSet::compile(vec![rule]).unwrap();
+
+        assert_eq!(
+            rules.patterns[0].stream_plan(),
+            PatternStreamPlan::Unsupported
+        );
+    }
+
+    #[test]
+    fn bounded_pattern_streaming_requires_commit_frontier() {
+        let regex = Regex::new(r"a|ab").unwrap();
+
+        let first = regex.find("a").unwrap();
+        assert_eq!((first.start(), first.end()), (0, 1));
+
+        let complete = regex.find("ab").unwrap();
+        assert_eq!((complete.start(), complete.end()), (0, 1));
+    }
+
+    #[test]
+    fn bounded_pattern_stream_waits_until_match_is_stable() {
+        let rule = Rule::pattern("bounded", r"a[A-Za-z]{0,3}", Severity::High).unwrap();
+        let rules = CompiledRuleSet::compile(vec![rule]).unwrap();
+        let rule = &rules.patterns[0];
+
+        let mut state = PatternStreamState::default();
+        let mut findings = Vec::new();
+
+        rule.scan_stream_bounded(&mut state, b"a", 0, &mut findings);
+        assert!(findings.is_empty());
+
+        rule.scan_stream_bounded(&mut state, b"bc", 1, &mut findings);
+        assert!(findings.is_empty());
+
+        rule.scan_stream_bounded(&mut state, b"d", 3, &mut findings);
+
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].start(), 0);
+        assert_eq!(findings[0].end(), 4);
+    }
+
+    #[test]
+    fn bounded_pattern_stream_preserves_absolute_offset() {
+        let rule = Rule::pattern("bounded", r"secret_[A-Z]{4}", Severity::High).unwrap();
+        let rules = CompiledRuleSet::compile(vec![rule]).unwrap();
+        let rule = &rules.patterns[0];
+
+        let mut state = PatternStreamState::default();
+        let mut findings = Vec::new();
+
+        rule.scan_stream_bounded(&mut state, b"xx secret_", 0, &mut findings);
+        assert!(findings.is_empty());
+
+        rule.scan_stream_bounded(&mut state, b"ABCD yy", 10, &mut findings);
+
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].start(), 3);
+        assert_eq!(findings[0].end(), 14);
+    }
+
+    #[test]
+    fn bounded_pattern_stream_commits_remaining_match_at_eof() {
+        let rule = Rule::pattern("bounded", r"secret_[A-Z]{1,4}", Severity::High).unwrap();
+        let rules = CompiledRuleSet::compile(vec![rule]).unwrap();
+        let rule = &rules.patterns[0];
+
+        let mut state = PatternStreamState::default();
+        let mut findings = Vec::new();
+
+        rule.scan_stream_bounded(&mut state, b"secret_AB", 0, &mut findings);
+
+        assert!(findings.is_empty());
+
+        rule.finish_stream_bounded(&mut state, &mut findings);
+
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].start(), 0);
+        assert_eq!(findings[0].end(), 9);
+    }
+
+    #[test]
+    fn bounded_pattern_stream_does_not_retain_complete_source() {
+        let rule = Rule::pattern("bounded", r"secret_[A-Z]{4}", Severity::High).unwrap();
+        let rules = CompiledRuleSet::compile(vec![rule]).unwrap();
+        let rule = &rules.patterns[0];
+
+        let mut state = PatternStreamState::default();
+        let mut findings = Vec::new();
+
+        for offset in 0..10_000 {
+            rule.scan_stream_bounded(&mut state, b"x", offset, &mut findings);
+
+            assert!(
+                state.buffered_len() <= 11,
+                "retained {} bytes at offset {offset}",
+                state.buffered_len()
+            );
+        }
+    }
+
+    fn projected_findings(findings: &[InternalFinding]) -> Vec<(usize, usize, RuleIndex)> {
+        let mut projected = findings
+            .iter()
+            .map(|finding| (finding.start(), finding.end(), finding.rule_index()))
+            .collect::<Vec<_>>();
+
+        projected.sort_unstable();
+        projected
+    }
+
+    fn whole_pattern_findings(rule: &PatternRule, source: &str) -> Vec<(usize, usize, RuleIndex)> {
+        let mut findings = Vec::new();
+        rule.scan(source, &mut findings);
+        projected_findings(&findings)
+    }
+
+    #[test]
+    fn bounded_pattern_stream_matches_whole_source_for_every_valid_split() {
+        let rule = Rule::pattern("bounded", r"secret_[A-Z]{4}", Severity::High).unwrap();
+        let rules = CompiledRuleSet::compile(vec![rule]).unwrap();
+        let rule = &rules.patterns[0];
+
+        let source = "🦀 xx secret_ABCD yy secret_WXYZ 🦀";
+        let expected = whole_pattern_findings(rule, source);
+
+        for split in 0..=source.len() {
+            if !source.is_char_boundary(split) {
+                continue;
+            }
+
+            let mut state = PatternStreamState::default();
+            let mut findings = Vec::new();
+
+            rule.scan_stream_bounded(&mut state, &source.as_bytes()[..split], 0, &mut findings);
+            rule.scan_stream_bounded(
+                &mut state,
+                &source.as_bytes()[split..],
+                split,
+                &mut findings,
+            );
+            rule.finish_stream_bounded(&mut state, &mut findings);
+
+            assert_eq!(
+                projected_findings(&findings),
+                expected,
+                "stream differs from whole-source scan at split {split}",
+            );
+        }
+    }
+
+    #[test]
+    fn bounded_pattern_stream_matches_whole_source_for_single_byte_ascii_chunks() {
+        let rule = Rule::pattern("bounded", r"secret_[A-Z]{4}", Severity::High).unwrap();
+        let rules = CompiledRuleSet::compile(vec![rule]).unwrap();
+        let rule = &rules.patterns[0];
+
+        let source = "xx secret_ABCD yy secret_WXYZ zz";
+        let expected = whole_pattern_findings(rule, source);
+
+        let mut state = PatternStreamState::default();
+        let mut findings = Vec::new();
+
+        for (offset, byte) in source.as_bytes().iter().enumerate() {
+            rule.scan_stream_bounded(
+                &mut state,
+                std::slice::from_ref(byte),
+                offset,
+                &mut findings,
+            );
+        }
+
+        rule.finish_stream_bounded(&mut state, &mut findings);
+
+        assert_eq!(projected_findings(&findings), expected);
+    }
+
+    #[test]
+    fn bounded_captured_pattern_stream_projects_capture_span() {
+        let rule = Rule::captured_pattern(
+            "captured",
+            r"KEY=(?P<value>[A-Z]{4})!",
+            "value",
+            Severity::High,
+        )
+        .unwrap();
+
+        let rules = CompiledRuleSet::compile(vec![rule]).unwrap();
+        let rule = &rules.patterns[0];
+
+        assert_eq!(
+            rule.stream_plan(),
+            PatternStreamPlan::Bounded { max_match_len: 9 }
+        );
+
+        let source = "xx KEY=ABCD! yy";
+
+        let expected = whole_pattern_findings(rule, source);
+
+        let mut state = PatternStreamState::default();
+        let mut findings = Vec::new();
+
+        rule.scan_stream_bounded(&mut state, b"xx KEY=A", 0, &mut findings);
+        rule.scan_stream_bounded(&mut state, b"BCD! yy", 8, &mut findings);
+        rule.finish_stream_bounded(&mut state, &mut findings);
+
+        assert_eq!(projected_findings(&findings), expected);
+        assert_eq!(expected, vec![(7, 11, RuleIndex::new(0))]);
+    }
+
+    #[test]
+    fn bounded_captured_pattern_stream_matches_whole_source_for_every_valid_split() {
+        let rule = Rule::captured_pattern(
+            "captured",
+            r"KEY=(?P<value>[A-Z]{4})!",
+            "value",
+            Severity::High,
+        )
+        .unwrap();
+
+        let rules = CompiledRuleSet::compile(vec![rule]).unwrap();
+        let rule = &rules.patterns[0];
+
+        let source = "🦀 xx KEY=ABCD! yy KEY=WXYZ! 🦀";
+        let expected = whole_pattern_findings(rule, source);
+
+        for split in 0..=source.len() {
+            if !source.is_char_boundary(split) {
+                continue;
+            }
+
+            let mut state = PatternStreamState::default();
+            let mut findings = Vec::new();
+
+            rule.scan_stream_bounded(&mut state, &source.as_bytes()[..split], 0, &mut findings);
+
+            rule.scan_stream_bounded(
+                &mut state,
+                &source.as_bytes()[split..],
+                split,
+                &mut findings,
+            );
+
+            rule.finish_stream_bounded(&mut state, &mut findings);
+
+            assert_eq!(
+                projected_findings(&findings),
+                expected,
+                "captured stream differs from whole-source scan at split {split}",
+            );
+        }
+    }
+
+    #[test]
+    fn bounded_captured_pattern_stream_commits_capture_at_eof() {
+        let rule = Rule::captured_pattern(
+            "captured",
+            r"KEY=(?P<value>[A-Z]{1,4})",
+            "value",
+            Severity::High,
+        )
+        .unwrap();
+
+        let rules = CompiledRuleSet::compile(vec![rule]).unwrap();
+        let rule = &rules.patterns[0];
+
+        let mut state = PatternStreamState::default();
+        let mut findings = Vec::new();
+
+        rule.scan_stream_bounded(&mut state, b"xx KEY=AB", 0, &mut findings);
+
+        // `AB` is a valid match now, but may still grow to ABC/ABCD.
+        assert!(findings.is_empty());
+
+        rule.finish_stream_bounded(&mut state, &mut findings);
+
+        assert_eq!(
+            projected_findings(&findings),
+            vec![(7, 9, RuleIndex::new(0))]
+        );
     }
 }

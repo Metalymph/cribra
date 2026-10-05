@@ -101,6 +101,9 @@ pub enum RuleKind {
     ///
     /// The compiled engine requires a token boundary after the suffix and
     /// extends the finding backwards through preceding token characters.
+    ///
+    /// Tokens whose complete extent exceeds the engine's supported suffix bound
+    /// are not reported rather than being returned as truncated findings.
     Suffix,
 
     /// Match spans produced by a regular expression.
@@ -284,6 +287,64 @@ impl RuleSpec {
     }
 }
 
+#[derive(Debug, Copy, Clone, Default, Eq, PartialEq)]
+pub(crate) struct PatternContext {
+    bits: u8,
+}
+
+impl PatternContext {
+    const TEXT_START: u8 = 1 << 0;
+    const TEXT_END: u8 = 1 << 1;
+    const LINE_START: u8 = 1 << 2;
+    const LINE_END: u8 = 1 << 3;
+    const CRLF: u8 = 1 << 4;
+    const WORD: u8 = 1 << 5;
+
+    fn from_hir(hir: &regex_syntax::hir::Hir) -> Self {
+        let mut context = Self::default();
+        context.visit(hir);
+        context
+    }
+
+    fn visit(&mut self, hir: &regex_syntax::hir::Hir) {
+        use regex_syntax::hir::{HirKind, Look};
+
+        if let HirKind::Look(look) = hir.kind() {
+            self.bits |= match look {
+                Look::Start => Self::TEXT_START,
+                Look::End => Self::TEXT_END,
+
+                Look::StartLF => Self::LINE_START,
+                Look::EndLF => Self::LINE_END,
+
+                Look::StartCRLF => Self::LINE_START | Self::CRLF,
+                Look::EndCRLF => Self::LINE_END | Self::CRLF,
+
+                Look::WordAscii
+                | Look::WordAsciiNegate
+                | Look::WordUnicode
+                | Look::WordUnicodeNegate
+                | Look::WordStartAscii
+                | Look::WordEndAscii
+                | Look::WordStartUnicode
+                | Look::WordEndUnicode
+                | Look::WordStartHalfAscii
+                | Look::WordEndHalfAscii
+                | Look::WordStartHalfUnicode
+                | Look::WordEndHalfUnicode => Self::WORD,
+            };
+        }
+
+        for sub in hir.kind().subs() {
+            self.visit(sub);
+        }
+    }
+
+    pub(crate) const fn is_context_free(self) -> bool {
+        self.bits == 0
+    }
+}
+
 /// Private owned matcher retained by a [`Rule`] before scanner compilation.
 #[derive(Debug, Clone)]
 pub(crate) enum Matcher {
@@ -293,6 +354,8 @@ pub(crate) enum Matcher {
     Pattern {
         regex: Regex,
         capture: Option<usize>,
+        context: PatternContext,
+        maximum_len: Option<usize>,
     },
 }
 
@@ -353,6 +416,9 @@ impl Rule {
     ///
     /// The suffix must end at a token boundary. The compiled engine extends
     /// the match backwards through ASCII alphanumeric characters, `_` and `-`.
+    ///
+    /// Tokens whose complete extent exceeds the engine's supported suffix bound
+    /// are not reported rather than being returned as truncated findings.
     #[must_use]
     pub fn suffix(id: impl Into<RuleId>, suffix: impl Into<Box<str>>, severity: Severity) -> Self {
         Self {
@@ -398,6 +464,9 @@ impl Rule {
             return Err(RuleError::PatternMatchesEmpty);
         }
 
+        let context = PatternContext::from_hir(&hir);
+        let maximum_len = hir.properties().maximum_len();
+
         Ok(Self {
             id: id.into(),
             severity,
@@ -406,6 +475,8 @@ impl Rule {
             matcher: Matcher::Pattern {
                 regex,
                 capture: None,
+                context,
+                maximum_len,
             },
         })
     }
@@ -421,7 +492,15 @@ impl Rule {
         capture: impl AsRef<str>,
         severity: Severity,
     ) -> Result<Self, RuleError> {
-        let regex = Regex::new(pattern.as_ref()).map_err(RuleError::InvalidPattern)?;
+        let pattern = pattern.as_ref();
+
+        let regex = Regex::new(pattern).map_err(RuleError::InvalidPattern)?;
+        let hir = regex_syntax::parse(pattern)
+            .map_err(|error| RuleError::InvalidPattern(regex::Error::Syntax(error.to_string())))?;
+
+        let context = PatternContext::from_hir(&hir);
+        let maximum_len = hir.properties().maximum_len();
+
         let capture_name = capture.as_ref();
         let capture_index = regex
             .capture_names()
@@ -438,6 +517,8 @@ impl Rule {
             matcher: Matcher::Pattern {
                 regex,
                 capture: Some(capture_index),
+                context,
+                maximum_len,
             },
         })
     }
