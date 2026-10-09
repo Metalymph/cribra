@@ -6,7 +6,7 @@ use regex::Regex;
 use crate::{
     confidence::Confidence,
     remediation::Remediation,
-    rule::{Matcher, PatternContext, Rule, RuleId, RuleKind},
+    rule::{AbsoluteAnchor, Matcher, PatternContext, Rule, RuleId, RuleKind},
     scanner_builder::ScannerBuildError,
     severity::Severity,
     validators::dispatch::ValidatorKind,
@@ -838,6 +838,54 @@ impl PatternStreamPlan {
                 },
             },
 
+            Some(max_match_len)
+                if context.absolute_start() == AbsoluteAnchor::None
+                    && context.absolute_end() == AbsoluteAnchor::Required
+                    && context.has_only_text_end_and_word_context() =>
+            {
+                Self::Bounded {
+                    max_match_len,
+                    context: PatternStreamContext {
+                        history_bytes: 4,
+                        lookahead_bytes: 0,
+                        requires_text_start: false,
+                        requires_text_end: true,
+                    },
+                }
+            }
+
+            Some(max_match_len)
+                if context.absolute_start() == AbsoluteAnchor::Required
+                    && context.absolute_end() == AbsoluteAnchor::Required
+                    && context.has_only_absolute_anchors_and_word_context() =>
+            {
+                Self::Bounded {
+                    max_match_len,
+                    context: PatternStreamContext {
+                        history_bytes: 0,
+                        lookahead_bytes: 0,
+                        requires_text_start: true,
+                        requires_text_end: true,
+                    },
+                }
+            }
+
+            Some(max_match_len)
+                if context.absolute_start() == AbsoluteAnchor::Required
+                    && context.absolute_end() == AbsoluteAnchor::None
+                    && context.has_only_text_start_and_word_context() =>
+            {
+                Self::Bounded {
+                    max_match_len,
+                    context: PatternStreamContext {
+                        history_bytes: 0,
+                        lookahead_bytes: 4,
+                        requires_text_start: true,
+                        requires_text_end: false,
+                    },
+                }
+            }
+
             _ => Self::Unsupported,
         }
     }
@@ -972,6 +1020,29 @@ impl PatternRule {
             return;
         };
 
+        if context.requires_text_start && context.requires_text_end {
+            if state.resolved_before > 0 {
+                return;
+            }
+
+            if state.buffer.is_empty() {
+                state.buffer_offset = source_offset;
+            }
+
+            state.buffer.extend_from_slice(chunk);
+
+            if state.buffer.len() > max_match_len {
+                state.buffer.clear();
+                state.resolved_before = 1;
+            }
+
+            return;
+        }
+
+        if context.requires_text_start && state.resolved_before > 0 {
+            return;
+        }
+
         if state.buffer.is_empty() {
             state.buffer_offset = source_offset;
         }
@@ -979,6 +1050,27 @@ impl PatternRule {
         state.buffer.extend_from_slice(chunk);
 
         let observed_end = state.buffer_offset + state.buffer.len();
+
+        if context.requires_text_end {
+            let retain_bytes = max_match_len.saturating_add(context.history_bytes);
+            let excess = state.buffer.len().saturating_sub(retain_bytes);
+
+            let source = std::str::from_utf8(&state.buffer)
+                .expect("pattern stream receives validated UTF-8");
+
+            let mut cut = excess;
+
+            while cut > 0 && !source.is_char_boundary(cut) {
+                cut -= 1;
+            }
+
+            if cut > 0 {
+                state.buffer.drain(..cut);
+                state.buffer_offset += cut;
+            }
+
+            return;
+        }
 
         let Ok(source) = std::str::from_utf8(&state.buffer) else {
             return;
@@ -1042,6 +1134,12 @@ impl PatternRule {
 
         state.resolved_before = state.resolved_before.max(new_resolved_before);
 
+        if context.requires_text_start && state.resolved_before > 0 {
+            state.buffer.clear();
+            state.buffer_offset = observed_end;
+            return;
+        }
+
         let cut = {
             let source = std::str::from_utf8(&state.buffer)
                 .expect("pattern stream receives validated UTF-8");
@@ -1070,9 +1168,13 @@ impl PatternRule {
         state: &mut PatternStreamState,
         findings: &mut Vec<InternalFinding>,
     ) {
-        let PatternStreamPlan::Bounded { .. } = self.stream_plan else {
+        let PatternStreamPlan::Bounded { context, .. } = self.stream_plan else {
             return;
         };
+
+        if context.requires_text_start && state.resolved_before > 0 {
+            return;
+        }
 
         let source =
             std::str::from_utf8(&state.buffer).expect("pattern stream receives validated UTF-8");
@@ -2279,14 +2381,40 @@ mod multi_pattern_tests {
     }
 
     #[test]
-    fn pattern_stream_plan_rejects_bounded_text_anchors() {
+    fn pattern_stream_plan_accepts_bounded_text_anchors() {
         let rule = Rule::pattern("anchored", r"\Asecret[A-Z]{4}\z", Severity::High).unwrap();
         let rules = CompiledRuleSet::compile(vec![rule]).unwrap();
 
         assert_eq!(
             rules.patterns[0].stream_plan(),
-            PatternStreamPlan::Unsupported
+            PatternStreamPlan::Bounded {
+                max_match_len: 10,
+                context: PatternStreamContext {
+                    history_bytes: 0,
+                    lookahead_bytes: 0,
+                    requires_text_start: true,
+                    requires_text_end: true,
+                },
+            }
         );
+    }
+
+    #[test]
+    fn pattern_stream_plan_rejects_conditional_absolute_anchors() {
+        for pattern in [
+            r"(?:\Asecret|token)",
+            r"(?:secret\z|token)",
+            r"(?:\Asecret|token\z)",
+        ] {
+            let rule = Rule::pattern("conditional", pattern, Severity::High).unwrap();
+            let rules = CompiledRuleSet::compile(vec![rule]).unwrap();
+
+            assert_eq!(
+                rules.patterns[0].stream_plan(),
+                PatternStreamPlan::Unsupported,
+                "unexpected streaming support for {pattern}"
+            );
+        }
     }
 
     #[test]
@@ -2368,6 +2496,78 @@ mod multi_pattern_tests {
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].start(), 8);
         assert_eq!(findings[0].end(), 14);
+    }
+
+    #[test]
+    fn text_end_anchor_stream_waits_for_real_eof() {
+        let rule = Rule::pattern("end", r"secret\z", Severity::High).unwrap();
+        let rules = CompiledRuleSet::compile(vec![rule]).unwrap();
+        let rule = &rules.patterns[0];
+
+        let mut state = PatternStreamState::default();
+        let mut findings = Vec::new();
+
+        rule.scan_stream_bounded(&mut state, b"secret", 0, &mut findings);
+
+        assert!(
+            findings.is_empty(),
+            "absolute end anchor must not match temporary buffer EOF"
+        );
+
+        rule.scan_stream_bounded(&mut state, b"X", 6, &mut findings);
+
+        assert!(
+            findings.is_empty(),
+            "candidate invalidated by continuation must not be emitted"
+        );
+
+        rule.finish_stream_bounded(&mut state, &mut findings);
+
+        assert!(findings.is_empty());
+    }
+
+    #[test]
+    fn text_end_anchor_stream_emits_at_real_eof() {
+        let rule = Rule::pattern("end", r"secret\z", Severity::High).unwrap();
+        let rules = CompiledRuleSet::compile(vec![rule]).unwrap();
+        let rule = &rules.patterns[0];
+
+        let mut state = PatternStreamState::default();
+        let mut findings = Vec::new();
+
+        rule.scan_stream_bounded(&mut state, b"xx secret", 0, &mut findings);
+
+        assert!(findings.is_empty());
+
+        rule.finish_stream_bounded(&mut state, &mut findings);
+
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].start(), 3);
+        assert_eq!(findings[0].end(), 9);
+    }
+
+    #[test]
+    fn absolute_end_streaming_remains_bounded() {
+        let rule = Rule::pattern("end", r"secret\z", Severity::High).unwrap();
+        let rules = CompiledRuleSet::compile(vec![rule]).unwrap();
+        let rule = &rules.patterns[0];
+
+        let mut state = PatternStreamState::default();
+        let mut findings = Vec::new();
+
+        for offset in 0..10_000 {
+            rule.scan_stream_bounded(&mut state, b"x", offset, &mut findings);
+
+            assert!(
+                state.buffered_len() <= 14,
+                "absolute-end stream retained excessive input"
+            );
+        }
+
+        assert!(findings.is_empty());
+
+        rule.finish_stream_bounded(&mut state, &mut findings);
+        assert!(findings.is_empty());
     }
 
     #[test]

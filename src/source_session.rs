@@ -1036,4 +1036,189 @@ mod tests {
             let _ = case;
         }
     }
+
+    #[test]
+    fn text_anchor_streaming_preserves_absolute_start() {
+        for pattern in [
+            r"\Asecret",
+            r"\A(?:secret|secretX)",
+            r"\A(?:secretX|secret)",
+            r"\Asecret\b",
+            r"\A(?P<value>secret)",
+        ] {
+            for source in [
+                "",
+                "secret",
+                "secretX",
+                "secret secret",
+                "Xsecret",
+                "Xsecret secret",
+                " secret",
+                "ésecret",
+                "🦀secret",
+                "secret\nsecret",
+                "secret\r\nsecret",
+            ] {
+                assert_pattern_stream_parity(pattern, source);
+            }
+        }
+    }
+
+    #[test]
+    fn text_anchor_streaming_preserves_absolute_end() {
+        for pattern in [
+            r"secret\z",
+            r"(?:secret|Xsecret)\z",
+            r"(?:secretX|secret)\z",
+            r"secret\b\z",
+            r"(?P<value>secret)\z",
+        ] {
+            for source in [
+                "",
+                "secret",
+                "Xsecret",
+                "secretX",
+                "secret secret",
+                "secretXsecret",
+                "secret\n",
+                "secret\r\n",
+                "ésecret",
+                "🦀secret",
+                "secret🦀",
+                "secreté",
+            ] {
+                assert_pattern_stream_parity(pattern, source);
+            }
+        }
+    }
+
+    #[test]
+    fn text_anchor_streaming_preserves_both_absolute_anchors() {
+        for pattern in [
+            r"\Asecret\z",
+            r"\A(?:secret|secretX)\z",
+            r"\A(?:secretX|secret)\z",
+            r"\A(?P<value>secret)\z",
+        ] {
+            for source in [
+                "",
+                "secret",
+                "secretX",
+                "Xsecret",
+                "secret secret",
+                "secret\n",
+                "ésecret",
+                "🦀secret",
+            ] {
+                assert_pattern_stream_parity(pattern, source);
+            }
+        }
+    }
+
+    #[test]
+    fn text_anchor_streaming_does_not_rebase_source_start() {
+        for pattern in [r"\Asecret", r"\A(?:secret|secretX)", r"\Asecret\b"] {
+            for source in [
+                format!("{}secret", "x".repeat(256)),
+                format!("{}secret", "é".repeat(128)),
+                format!("{}secret", "🦀".repeat(128)),
+                format!("{}secret secret", "x".repeat(256)),
+            ] {
+                assert_pattern_stream_parity(pattern, &source);
+            }
+        }
+    }
+
+    #[test]
+    fn absolute_start_streaming_resolves_without_eof() {
+        for pattern in [
+            r"\Asecret",
+            r"\A(?:secretX|secret)",
+            r"\A(?:secret|secretX)",
+            r"\Asecret\b",
+        ] {
+            let source = format!("secret{}", "x".repeat(256));
+            assert_pattern_stream_parity(pattern, &source);
+        }
+    }
+
+    #[test]
+    fn absolute_end_streaming_long_source_parity() {
+        for pattern in [
+            r"secret\z",
+            r"\bsecret\z",
+            r"\Bsecret\z",
+            r"(?:secret|Xsecret)\z",
+            r"(?P<value>secret)\z",
+        ] {
+            for prefix in [
+                "x".repeat(256),
+                " ".repeat(256),
+                "é".repeat(128),
+                "🦀".repeat(128),
+                "x ".repeat(128),
+            ] {
+                for suffix in [
+                    "secret",
+                    "Xsecret",
+                    " secret",
+                    "secretX",
+                    "secret\n",
+                    "secret🦀",
+                ] {
+                    let source = format!("{prefix}{suffix}");
+                    assert_pattern_stream_parity(pattern, &source);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn absolute_end_streaming_alternative_parity() {
+        for pattern in [
+            r"(?:secret|Xsecret)\z",
+            r"(?:Xsecret|secret)\z",
+            r"(?:secretX|secret)\z",
+            r"(?:secret|secretX)\z",
+            r"(?:abc|abcabc)\z",
+            r"(?:abcabc|abc)\z",
+        ] {
+            for source in [
+                "secret",
+                "Xsecret",
+                "secretX",
+                "abc",
+                "abcabc",
+                "xabcabc",
+                "abcabcabc",
+                "secretsecret",
+                "Xsecretsecret",
+            ] {
+                assert_pattern_stream_parity(pattern, source);
+            }
+        }
+    }
+
+    #[test]
+    fn both_absolute_anchors_reject_oversized_sources() {
+        let sources = [
+            "secretXsecret".to_owned(),
+            "Xsecret".to_owned(),
+            "secret\n".to_owned(),
+            "secret🦀".to_owned(),
+            "🦀secret".to_owned(),
+            "secret".repeat(100),
+        ];
+
+        for pattern in [
+            r"\Asecret\z",
+            r"\A(?:secret|secretX)\z",
+            r"\A(?P<value>secret)\z",
+            r"\Asecret\b\z",
+        ] {
+            for source in &sources {
+                assert_pattern_stream_parity(pattern, source);
+            }
+        }
+    }
 }
