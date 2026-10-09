@@ -804,18 +804,40 @@ mod suffix_tests {
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 enum PatternStreamPlan {
-    /// The complete match has a statically bounded byte extent and does not
-    /// depend on zero-width context outside that extent.
-    Bounded { max_match_len: usize },
+    Bounded {
+        max_match_len: usize,
+        context: PatternStreamContext,
+    },
 
-    /// Incremental execution is not yet supported for this pattern.
     Unsupported,
+}
+
+#[derive(Debug, Copy, Clone, Default, Eq, PartialEq)]
+struct PatternStreamContext {
+    history_bytes: usize,
+    lookahead_bytes: usize,
+    requires_text_start: bool,
+    requires_text_end: bool,
 }
 
 impl PatternStreamPlan {
     fn compile(max_match_len: Option<usize>, context: PatternContext) -> Self {
         match max_match_len {
-            Some(max_match_len) if context.is_context_free() => Self::Bounded { max_match_len },
+            Some(max_match_len) if context.is_context_free() => Self::Bounded {
+                max_match_len,
+                context: PatternStreamContext::default(),
+            },
+
+            Some(max_match_len) if context.is_word_only() => Self::Bounded {
+                max_match_len,
+                context: PatternStreamContext {
+                    history_bytes: 4,
+                    lookahead_bytes: 4,
+                    requires_text_start: false,
+                    requires_text_end: false,
+                },
+            },
+
             _ => Self::Unsupported,
         }
     }
@@ -942,7 +964,11 @@ impl PatternRule {
         source_offset: usize,
         findings: &mut Vec<InternalFinding>,
     ) {
-        let PatternStreamPlan::Bounded { max_match_len } = self.stream_plan else {
+        let PatternStreamPlan::Bounded {
+            max_match_len,
+            context,
+        } = self.stream_plan
+        else {
             return;
         };
 
@@ -960,6 +986,7 @@ impl PatternRule {
 
         let new_resolved_before = observed_end
             .checked_sub(max_match_len)
+            .and_then(|offset| offset.checked_sub(context.lookahead_bytes))
             .and_then(|offset| offset.checked_add(1))
             .unwrap_or(0);
 
@@ -1019,13 +1046,14 @@ impl PatternRule {
             let source = std::str::from_utf8(&state.buffer)
                 .expect("pattern stream receives validated UTF-8");
 
-            let mut cut = state
-                .resolved_before
+            let retain_from = state.resolved_before.saturating_sub(context.history_bytes);
+
+            let mut cut = retain_from
                 .saturating_sub(state.buffer_offset)
                 .min(state.buffer.len());
 
-            while cut < state.buffer.len() && !source.is_char_boundary(cut) {
-                cut += 1;
+            while cut > 0 && !source.is_char_boundary(cut) {
+                cut -= 1;
             }
 
             cut
@@ -2232,7 +2260,10 @@ mod multi_pattern_tests {
 
         assert_eq!(
             rules.patterns[0].stream_plan(),
-            PatternStreamPlan::Bounded { max_match_len: 15 }
+            PatternStreamPlan::Bounded {
+                max_match_len: 15,
+                context: PatternStreamContext::default(),
+            }
         );
     }
 
@@ -2259,14 +2290,84 @@ mod multi_pattern_tests {
     }
 
     #[test]
-    fn pattern_stream_plan_rejects_bounded_word_boundaries() {
+    fn pattern_stream_plan_accepts_bounded_word_boundaries() {
         let rule = Rule::pattern("word", r"\bsecret[A-Z]{4}\b", Severity::High).unwrap();
         let rules = CompiledRuleSet::compile(vec![rule]).unwrap();
 
         assert_eq!(
             rules.patterns[0].stream_plan(),
-            PatternStreamPlan::Unsupported
+            PatternStreamPlan::Bounded {
+                max_match_len: 10,
+                context: PatternStreamContext {
+                    history_bytes: 4,
+                    lookahead_bytes: 4,
+                    requires_text_start: false,
+                    requires_text_end: false,
+                },
+            }
         );
+    }
+
+    #[test]
+    fn word_boundary_stream_retains_bounded_history() {
+        let rule = Rule::pattern("word", r"\bsecret\b", Severity::High).unwrap();
+        let rules = CompiledRuleSet::compile(vec![rule]).unwrap();
+        let rule = &rules.patterns[0];
+
+        let PatternStreamPlan::Bounded {
+            max_match_len,
+            context,
+        } = rule.stream_plan()
+        else {
+            panic!("word-boundary pattern must support bounded streaming");
+        };
+
+        let mut state = PatternStreamState::default();
+        let mut findings = Vec::new();
+
+        let bound = max_match_len + context.history_bytes + context.lookahead_bytes;
+
+        for offset in 0..10_000 {
+            rule.scan_stream_bounded(&mut state, b"x", offset, &mut findings);
+
+            assert!(
+                state.buffered_len() <= bound,
+                "retained {} bytes at offset {offset}; bound={bound}",
+                state.buffered_len()
+            );
+        }
+
+        assert!(findings.is_empty());
+    }
+
+    #[test]
+    fn word_boundary_stream_emits_only_resolved_matches() {
+        let rule = Rule::pattern("word", r"\bsecret\b", Severity::High).unwrap();
+        let rules = CompiledRuleSet::compile(vec![rule]).unwrap();
+        let rule = &rules.patterns[0];
+
+        let mut state = PatternStreamState::default();
+        let mut findings = Vec::new();
+
+        rule.scan_stream_bounded(&mut state, b"secret", 0, &mut findings);
+
+        // A subsequent word character could invalidate the right boundary.
+        assert!(findings.is_empty());
+
+        rule.scan_stream_bounded(&mut state, b"X", 6, &mut findings);
+
+        assert!(findings.is_empty());
+
+        rule.scan_stream_bounded(&mut state, b" secret ", 7, &mut findings);
+
+        // The second candidate is still inside the conservative lookahead window.
+        assert!(findings.is_empty());
+
+        rule.scan_stream_bounded(&mut state, b"xxxxxxxxxxxxxxxx", 15, &mut findings);
+
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].start(), 8);
+        assert_eq!(findings[0].end(), 14);
     }
 
     #[test]
@@ -2452,7 +2553,10 @@ mod multi_pattern_tests {
 
         assert_eq!(
             rule.stream_plan(),
-            PatternStreamPlan::Bounded { max_match_len: 9 }
+            PatternStreamPlan::Bounded {
+                max_match_len: 9,
+                context: PatternStreamContext::default(),
+            }
         );
 
         let source = "xx KEY=ABCD! yy";

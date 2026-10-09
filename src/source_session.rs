@@ -778,4 +778,262 @@ mod tests {
 
         SourceSession::new(rules).expect("bounded pattern should support streaming");
     }
+
+    fn assert_pattern_stream_parity(pattern: &str, source: &str) {
+        let rule = Rule::pattern("word-boundary", pattern, Severity::High)
+            .expect("pattern should compile");
+
+        let rules =
+            Arc::new(CompiledRuleSet::compile(vec![rule]).expect("rule set should compile"));
+
+        let mut expected = Vec::new();
+        rules.scan(source, &mut expected);
+        let expected = projected_findings(&expected);
+
+        // Every possible two-chunk partition, including UTF-8 boundaries.
+        for split in 0..=source.len() {
+            let mut session = SourceSession::new(Arc::clone(&rules))
+                .expect("bounded word-boundary pattern must support streaming");
+
+            let mut actual = Vec::new();
+
+            session
+                .scan_chunk(&source.as_bytes()[..split], &mut actual)
+                .expect("first chunk should succeed");
+
+            session
+                .scan_chunk(&source.as_bytes()[split..], &mut actual)
+                .expect("second chunk should succeed");
+
+            session
+                .finish_scan(&mut actual)
+                .expect("finish should succeed");
+
+            assert_eq!(
+                projected_findings(&actual),
+                expected,
+                "pattern={pattern:?}, source={source:?}, split={split}",
+            );
+        }
+
+        // One byte per transport chunk.
+        let mut session = SourceSession::new(Arc::clone(&rules))
+            .expect("bounded word-boundary pattern must support streaming");
+
+        let mut actual = Vec::new();
+
+        for byte in source.as_bytes() {
+            session
+                .scan_chunk(std::slice::from_ref(byte), &mut actual)
+                .expect("single-byte chunk should succeed");
+        }
+
+        session
+            .finish_scan(&mut actual)
+            .expect("finish should succeed");
+
+        assert_eq!(
+            projected_findings(&actual),
+            expected,
+            "single-byte pattern={pattern:?}, source={source:?}",
+        );
+    }
+
+    #[test]
+    fn word_boundary_streaming_preserves_ascii_semantics() {
+        for source in [
+            "secret",
+            " secret ",
+            "secretX",
+            "Xsecret",
+            "secret secret",
+            "secretX secret",
+            "secret_secret",
+            "secret\nsecret",
+            "secret!",
+            "!secret",
+            "secreté",
+            "ésecret",
+        ] {
+            assert_pattern_stream_parity(r"(?-u:\b)secret(?-u:\b)", source);
+        }
+    }
+
+    #[test]
+    fn word_boundary_streaming_preserves_unicode_semantics() {
+        for source in [
+            "secret",
+            " secret ",
+            "secretX",
+            "Xsecret",
+            "secret secret",
+            "secreté",
+            "ésecret",
+            "🦀secret🦀",
+            "secret🦀secret",
+            "αsecretβ",
+            "secret\u{0301}",
+            "secret\nsecret",
+        ] {
+            assert_pattern_stream_parity(r"\bsecret\b", source);
+        }
+    }
+
+    #[test]
+    fn word_boundary_streaming_preserves_non_overlapping_matches() {
+        for source in [
+            "abc",
+            "abcabc",
+            "abc abc",
+            "abcabcabc",
+            "abcéabc",
+            "abc!abc",
+        ] {
+            assert_pattern_stream_parity(r"\b(?:abc|abcabc)\b", source);
+        }
+    }
+
+    #[test]
+    fn word_boundary_streaming_preserves_context_after_repeated_trimming() {
+        let sources = [
+            format!("{}secret ", "X".repeat(256)),
+            format!("{}secret ", "é".repeat(128)),
+            format!("{}secret ", "🦀".repeat(128)),
+            format!("{} secretX secret ", "x".repeat(256)),
+            format!("{}secret secretX secret ", "α".repeat(128)),
+            "Xsecret secret Xsecret secret".repeat(64),
+        ];
+
+        for source in &sources {
+            assert_pattern_stream_parity(r"\bsecret\b", source);
+            assert_pattern_stream_parity(r"(?-u:\b)secret(?-u:\b)", source);
+        }
+    }
+
+    #[test]
+    fn word_boundary_streaming_preserves_leftmost_selection() {
+        let patterns = [
+            r"\b(?:a|ab|abc)\b",
+            r"\b(?:abc|ab|a)\b",
+            r"\b(?:abc|abcabc)\b",
+            r"\b(?:abcabc|abc)\b",
+            r"\b(?:foo|foobar)\b",
+            r"\b(?:foobar|foo)\b",
+            r"\b(?:ab|abc|abcd)\b",
+        ];
+
+        let sources = [
+            "a ab abc abcd".to_owned(),
+            "abc abcabc abc".to_owned(),
+            "abcabc abc abcabc".to_owned(),
+            "foobar foo foobar".to_owned(),
+            "foo foobar foo".to_owned(),
+            "abcX abc abcabc".to_owned(),
+            "Xabc abc Xabc".to_owned(),
+            "αabcβ abc 🦀abc🦀".to_owned(),
+            "abc abcabc abc abcabc".repeat(32),
+        ];
+
+        for pattern in patterns {
+            for source in &sources {
+                assert_pattern_stream_parity(pattern, source);
+            }
+        }
+    }
+
+    #[test]
+    fn word_boundary_streaming_preserves_negated_boundaries() {
+        for pattern in [
+            r"\Bsecret\B",
+            r"(?-u:\B)secret(?-u:\B)",
+            r"\Bsecret\b",
+            r"\bsecret\B",
+        ] {
+            for source in [
+                "secret",
+                "XsecretY",
+                "Xsecret",
+                "secretY",
+                " secret ",
+                "ésecreté",
+                "🦀secret🦀",
+                "XsecretY secret Zsecret",
+            ] {
+                assert_pattern_stream_parity(pattern, source);
+            }
+        }
+    }
+
+    #[test]
+    fn word_boundary_streaming_preserves_directional_boundaries() {
+        for pattern in [
+            r"\b{start}secret\b{end}",
+            r"\b{start-half}secret\b{end-half}",
+            r"\b{start}secret",
+            r"secret\b{end}",
+        ] {
+            for source in [
+                "secret",
+                "XsecretY",
+                " secret ",
+                "secret secret",
+                "ésecret",
+                "secreté",
+                "🦀secret🦀",
+                "secret\u{0301}",
+            ] {
+                assert_pattern_stream_parity(pattern, source);
+            }
+        }
+    }
+
+    #[test]
+    fn word_boundary_streaming_differential_regression() {
+        // Fixed seed: failures must be reproducible without external dependencies.
+        let mut state = 0xC71B_A5E5_D52A_2026_u64;
+
+        fn next(state: &mut u64) -> u64 {
+            *state ^= *state << 13;
+            *state ^= *state >> 7;
+            *state ^= *state << 17;
+            *state
+        }
+
+        const FRAGMENTS: &[&str] = &[
+            "", "a", "b", "x", "abc", "abcabc", "secret", "secretX", "Xsecret", " ", "  ", "\n",
+            "\r\n", "_", "-", "!", ".", "é", "α", "β", "🦀", "\u{0301}",
+        ];
+
+        const PATTERNS: &[&str] = &[
+            r"\bsecret\b",
+            r"(?-u:\b)secret(?-u:\b)",
+            r"\Bsecret\B",
+            r"\b(?:abc|abcabc)\b",
+            r"\b(?:abcabc|abc)\b",
+            r"\b(?:a|ab|abc)\b",
+            r"\b{start}abc\b{end}",
+            r"\b{start-half}abc\b{end-half}",
+        ];
+
+        for case in 0..128 {
+            let mut source = String::new();
+
+            // Variable-length sources with a mixture of ASCII, Unicode,
+            // delimiters, partial candidates, and adjacent candidates.
+            let fragments = 8 + (next(&mut state) % 32) as usize;
+
+            for _ in 0..fragments {
+                let index = (next(&mut state) as usize) % FRAGMENTS.len();
+                source.push_str(FRAGMENTS[index]);
+            }
+
+            for pattern in PATTERNS {
+                assert_pattern_stream_parity(pattern, &source);
+            }
+
+            // Include the case index in the failure context when debugging.
+            // The fixed seed and generation order make every case reproducible.
+            let _ = case;
+        }
+    }
 }

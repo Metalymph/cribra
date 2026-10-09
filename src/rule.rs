@@ -343,6 +343,10 @@ impl PatternContext {
     pub(crate) const fn is_context_free(self) -> bool {
         self.bits == 0
     }
+
+    pub(crate) const fn is_word_only(self) -> bool {
+        self.bits == Self::WORD
+    }
 }
 
 /// Private owned matcher retained by a [`Rule`] before scanner compilation.
