@@ -332,7 +332,7 @@ mod tests {
             session.push(b"").unwrap();
             session.push(&source.as_bytes()[split..]).unwrap();
             let report = session.finish().unwrap();
-            assert_eq!(report, expected, "split {split}: {source:?}");
+            assert_eq!(report, expected, "split {split}");
             assert_eq!(report.to_string(), expected.to_string());
             #[cfg(feature = "serde")]
             assert_eq!(
