@@ -9,6 +9,30 @@ history.
 
 ## [Unreleased]
 
+## [0.5.0] — release candidate (not yet published)
+
+### Added
+
+- Synchronous Rust streaming sessions for explicitly admitted rule configurations,
+  accepting arbitrary UTF-8 byte partitions and returning the existing complete
+  `ScanReport` only after successful EOF.
+- Whole-source parity for findings and structural review candidates, including
+  validation confidence, coordinates, priorities, duplicates and overlap suppression.
+- Optional cumulative raw-candidate, logical executor-storage and retained-result
+  limits. Limit exhaustion and UTF-8/offset/coordinate failures are terminal.
+- Explicit rejection of unsupported matchers, byte-dependent prefixes,
+  incompatible suffix needles and per-rule regex prefilters. Complete built-in
+  portfolios remain whole-source configurations; streaming has no silent fallback.
+
+### Compatibility
+
+- Existing whole-source scanning and report serialization remain unchanged.
+- Rust 1.97 remains the MSRV. Adapter versions remain independently versioned;
+  this release introduces no new language bindings.
+- Release qualification and accounting exclusions are documented in
+  `docs/streaming.md` and `docs/0.5-qualification.md`. This entry has no publication
+  date because the release is prepared without publishing.
+
 ## [0.4.7] - 2026-09-24
 
 Cribra 0.4.7 completes the currently planned broad detector-expansion phase

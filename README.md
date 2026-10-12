@@ -16,10 +16,43 @@ explicit share-safe transformations.
 Cribra’s core is fully synchronous. It requires no async runtime and performs
 no I/O or network access. A logical source is processed serially and
 deterministically. Independent sources can optionally be processed in parallel
-with Rayon, while incremental execution allows a source to be supplied in
+with Rayon, while streaming execution allows a source to be supplied in
 chunks without changing that execution model.
 
 Matched secret values are not stored in public findings.
+
+## Streaming core — 0.5.0
+
+Streaming is synchronous and opt-in. Build an admitted ruleset, feed arbitrary
+byte fragments, and consume the session at genuine EOF:
+
+```rust
+use cribra::{Rule, Scanner, Severity, StreamLimits};
+
+let scanner = Scanner::builder()
+    .rule(Rule::literal("credential", "SECRET", Severity::High))
+    .build()?;
+let limits = StreamLimits::default()
+    .with_max_candidates(Some(10_000))
+    .with_max_retained_results(Some(1_000));
+let mut session = scanner.stream_with_limits(limits)?;
+session.push(b"TOKEN=SEC")?;
+session.push(b"RET")?;
+let report = session.finish()?;
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+Successful reports preserve whole-source semantics, including structural review
+candidates. Unsupported configurations fail before execution; `Scanner::default()`
+and complete Core, Personal and Financial portfolios currently cannot stream.
+Existing whole-source methods continue to support those portfolios.
+
+Limits are optional and unlimited by default. Logical executor storage is separate
+from retained results and is not a total heap-memory guarantee. Failure returns no
+partial report and makes a session terminal.
+
+See [streaming contracts and compatibility](docs/streaming.md) and
+[release qualification](docs/0.5-qualification.md).
 
 ## Capabilities
 
@@ -112,13 +145,13 @@ the C ABI/FFI boundary. The core engine itself does not permit unsafe Rust.
 
 ```toml
 [dependencies]
-cribra = "0.4"
+cribra = "0.5"
 ```
 
 Optional features:
 
 ```toml
-cribra = { version = "0.4", features = ["serde", "parallel"] }
+cribra = { version = "0.5", features = ["serde", "parallel"] }
 ```
 
 | Feature | Default | Purpose |
@@ -426,8 +459,8 @@ contracts.
 The completed `0.4.x` line established Cribra's current detection, validation,
 transformation, C ABI, WebAssembly, and downstream-consumer foundation.
 
-The active architectural development line is `0.5`, beginning with the
-Streaming Core: bounded-memory incremental source processing that preserves
+The prepared core release is `0.5.0`. Its Streaming Core supports explicitly
+admitted configurations with bounded retained source state and preserves
 Cribra's authoritative detection and validation semantics without introducing
 a second scanner implementation.
 
@@ -435,7 +468,10 @@ CLI parity, native FFI parity, language bindings, packaging, distribution, and
 developer integrations continue as independent project workstreams rather than
 defining sequential core release numbers.
 
-See `ROADMAP.md` for the architectural v0.5 plan and the independent interface
+Implementation of v0.5.0 is complete; release qualification is tracked separately.
+The planned v0.6.0 line concerns incremental rescanning after source changes.
+
+See `ROADMAP.md` for the architectural roadmap and the independent interface
 and ecosystem workstreams.
 
 ## Examples

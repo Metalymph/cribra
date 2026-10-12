@@ -185,6 +185,7 @@ mod source_coordinates;
     allow(dead_code, reason = "wired incrementally during streaming 0.5-D")
 )]
 mod source_session;
+mod stream;
 pub mod transform;
 #[cfg_attr(
     not(test),
@@ -210,4 +211,5 @@ pub use scanner::Scanner;
 pub use scanner_builder::{ScannerBuildError, ScannerBuilder};
 pub use sensitive_candidate::{CandidateEvidence, SensitiveCandidate, SensitiveCandidateKind};
 pub use severity::Severity;
+pub use stream::{StreamError, StreamLimits, StreamSession};
 pub use transform::redact;

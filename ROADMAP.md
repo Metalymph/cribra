@@ -77,9 +77,8 @@ Cribra's `0.4.x` line established the current detection, validation,
 transformation, and interoperability foundation while preserving the original
 whole-source scanning architecture and public semantic contracts.
 
-The `0.5` line is the next architectural development line. Its defining change
-is a bounded-memory streaming core for incremental source processing while
-preserving Cribra's deterministic detection and validation semantics wherever
+The `0.5` line completes the bounded-memory streaming core for chunked source
+processing while preserving Cribra's deterministic detection and validation semantics wherever
 those semantics are applicable to streamed input.
 
 CLI parity, native FFI parity, language bindings, packaging, distribution, and
@@ -89,11 +88,50 @@ the architectural `0.5` work where their dependencies permit.
 
 ## Current architectural line
 
-### v0.5 --- Streaming Core
+### v0.5.0 --- Streaming Core (implementation completed)
 
-Status: planned.
+Current core implementation: EOF report finalization for explicitly admitted
+streaming configurations. The prepared 0.5.0 Rust surface is `stream`,
+`stream_with_limits`, `push`, and consuming `finish`. Complete built-in
+portfolios remain unsupported for streaming; whole-source scanning remains
+unchanged. Output metadata is retained until EOF under an optional result limit;
+this implementation does not promise pre-EOF ordered emission or a total heap cap.
+See `docs/streaming.md` and `docs/0.5-qualification.md` for the current contract,
+compatibility inventory and actual qualification evidence. Historical frontier,
+whole-source convergence and interface work below is not implicitly closed by
+this admitted-subset release.
 
-Goal: evolve Cribra from a whole-source UTF-8 scanning engine into an engine
+Status: implementation completed for explicitly admitted configurations; release
+qualification and publication status are recorded separately in
+`docs/0.5-qualification.md`.
+
+Completed implementation:
+
+- Public synchronous streaming session API and incremental UTF-8 transport.
+- Full `ScanReport` parity for admitted rulesets, validators and coordinates.
+- Bounded source retention and three independent optional resource controls.
+- Terminal failures and successful-EOF-only report completion.
+
+Rayon multithreaded whole-source execution already exists, is selectable with the
+`parallel` feature, and is tested. It is not future streaming implementation work.
+
+### v0.6.0 --- Incremental scanning core (planned)
+
+Status: planned. Incremental rescanning after source changes is distinct from
+supplying one source in chunks and is not implemented by v0.5.0. Bindings and
+integrations remain separate workstreams; no new interface milestone is implied.
+
+### Historical v0.5 architecture and phase checklists
+
+The checklists below preserve the original development contract and intermediate
+phase records. They are not the current implementation-status inventory. The
+current admitted-subset contract, EOF normalization choice, explicit unsupported
+configurations and qualification evidence are authoritative in
+`docs/streaming.md` and `docs/0.5-qualification.md`. Broader portfolio support,
+pre-EOF finalization frontiers and whole-source executor migration are not
+claimed complete.
+
+Original goal: evolve Cribra from a whole-source UTF-8 scanning engine into an engine
 that can process large or incrementally supplied sources with bounded memory,
 without introducing a second detection implementation or weakening the
 deterministic semantics of the existing scanner.
@@ -1494,25 +1532,25 @@ without retaining an unbounded token or source prefix.
 
 Required work:
 
--   [ ] Preserve enough bounded token history to recover candidate starts when a
+-   [x] Preserve enough bounded token history to recover candidate starts when a
     suffix is recognized.
--   [ ] Preserve trailing-boundary semantics independently of transport
+-   [x] Preserve trailing-boundary semantics independently of transport
     boundaries.
--   [ ] Keep unresolved suffix candidates pending while later input can change
+-   [x] Keep unresolved suffix candidates pending while later input can change
     their validity.
--   [ ] Preserve exact global spans and source coordinates.
--   [ ] Preserve validator behavior and rule metadata.
--   [ ] Make any maximum retained token or candidate extent explicit and
+-   [x] Preserve exact global spans and source coordinates.
+-   [x] Preserve validator behavior and rule metadata.
+-   [x] Make any maximum retained token or candidate extent explicit and
     testable.
 
 Acceptance gate:
 
--   [ ] Suffix matches crossing arbitrary chunk boundaries are equivalent to
+-   [x] Suffix matches crossing arbitrary chunk boundaries are equivalent to
     whole-source results.
--   [ ] Leading and trailing token-boundary cases preserve existing behavior.
--   [ ] Chunk boundaries cannot create false suffix findings.
--   [ ] Chunk boundaries cannot suppress valid suffix findings.
--   [ ] Suffix retained source-dependent state has an explicit semantic bound.
+-   [x] Leading and trailing token-boundary cases preserve existing behavior.
+-   [x] Chunk boundaries cannot create false suffix findings.
+-   [x] Chunk boundaries cannot suppress valid suffix findings.
+-   [x] Suffix retained source-dependent state has an explicit semantic bound.
 
 ##### 0.5-D5 --- Pattern and captured-pattern streaming parity
 

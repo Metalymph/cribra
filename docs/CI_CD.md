@@ -18,7 +18,6 @@ cargo test --features serde
 cargo test --all-features
 cargo test --doc
 cargo clippy --all-targets --all-features -- -D warnings
-cargo package --allow-dirty
 ```
 
 macOS and Windows additionally run cross-platform `cargo check` and test gates.
@@ -60,7 +59,7 @@ Releases are tag-driven.
 A tag such as:
 
 ```text
-v0.2.0
+v0.5.0
 ```
 
 must exactly match the version in `Cargo.toml`.
@@ -129,3 +128,32 @@ Security audits can be run locally with:
 cargo install cargo-audit
 cargo audit
 ```
+
+## Core 0.5.0 integration and publication boundary
+
+The existing `.github/workflows/release.yml` listens only to pushed tags matching
+`v*.*.*`; its validator additionally requires exact equality with core version.
+For core 0.5.0 the tag is `v0.5.0`. A branch push or merge to `main` does not
+publish. Jobs run in order: `validate`, core-only `publish` in environment
+`release` using OIDC, then `github-release`. Adapter publication is not included.
+The WASM adapter has its own `cribra-wasm-v*` tag workflow and independent version.
+
+The active repository ruleset `PR on main` (21052746), inspected on 2026-10-12,
+requires a pull request, resolved review threads, an up-to-date branch and these
+checks: `Linux full gate`, `Test macos-latest`, `Test windows-latest`,
+`wasm32-unknown-unknown`, `RustSec cargo audit`, and `Rust 1.97`. It blocks branch
+deletion and force pushes and has no bypass actors. Approval count is zero.
+The classic branch-protection endpoint returns 404; the ruleset is authoritative.
+Native C ABI checks are also release qualification gates on all three platforms.
+The `release` environment currently has no additional approval or branch policy.
+
+Integrate by PR into `main`, qualify its exact tree with the existing workflows,
+and verify the resulting main commit. Do not tag an unqualified feature revision
+or rely on CI from an older main commit. After explicit publication authorization,
+create `v0.5.0` at the qualified main commit and push that tag to origin. Observe
+the existing release workflow through publication and GitHub Release creation;
+do not duplicate either operation manually. The workflow does not itself enforce
+main ancestry or await Windows CI, so those are mandatory pre-tag checks.
+
+See [the qualification ledger](0.5-qualification.md) for this release's exact
+evidence and [release preparation](0.5-release.md) for the integration boundary.

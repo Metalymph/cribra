@@ -288,8 +288,46 @@ impl RuleSpec {
 }
 
 #[derive(Debug, Copy, Clone, Default, Eq, PartialEq)]
+pub(crate) enum AbsoluteAnchor {
+    #[default]
+    None,
+    Required,
+    Conditional,
+}
+
+impl AbsoluteAnchor {
+    fn classify(
+        hir: &regex_syntax::hir::Hir,
+        target: regex_syntax::hir::Look,
+        at_start: bool,
+    ) -> Self {
+        use regex_syntax::hir::HirKind;
+
+        match hir.kind() {
+            HirKind::Look(look) if *look == target => Self::Required,
+
+            HirKind::Capture(capture) => Self::classify(&capture.sub, target, at_start),
+
+            HirKind::Concat(parts) => {
+                let candidate = if at_start {
+                    parts.first()
+                } else {
+                    parts.last()
+                };
+
+                candidate.map_or(Self::None, |part| Self::classify(part, target, at_start))
+            }
+
+            _ => Self::None,
+        }
+    }
+}
+
+#[derive(Debug, Copy, Clone, Default, Eq, PartialEq)]
 pub(crate) struct PatternContext {
     bits: u8,
+    absolute_start: AbsoluteAnchor,
+    absolute_end: AbsoluteAnchor,
 }
 
 impl PatternContext {
@@ -299,10 +337,27 @@ impl PatternContext {
     const LINE_END: u8 = 1 << 3;
     const CRLF: u8 = 1 << 4;
     const WORD: u8 = 1 << 5;
+    // Keep LF provenance so mixed LF/CRLF assertions remain unsupported.
+    const LF: u8 = 1 << 6;
 
     fn from_hir(hir: &regex_syntax::hir::Hir) -> Self {
+        use regex_syntax::hir::Look;
+
         let mut context = Self::default();
         context.visit(hir);
+
+        context.absolute_start = AbsoluteAnchor::classify(hir, Look::Start, true);
+
+        context.absolute_end = AbsoluteAnchor::classify(hir, Look::End, false);
+
+        if context.absolute_start == AbsoluteAnchor::None && context.bits & Self::TEXT_START != 0 {
+            context.absolute_start = AbsoluteAnchor::Conditional;
+        }
+
+        if context.absolute_end == AbsoluteAnchor::None && context.bits & Self::TEXT_END != 0 {
+            context.absolute_end = AbsoluteAnchor::Conditional;
+        }
+
         context
     }
 
@@ -314,8 +369,8 @@ impl PatternContext {
                 Look::Start => Self::TEXT_START,
                 Look::End => Self::TEXT_END,
 
-                Look::StartLF => Self::LINE_START,
-                Look::EndLF => Self::LINE_END,
+                Look::StartLF => Self::LINE_START | Self::LF,
+                Look::EndLF => Self::LINE_END | Self::LF,
 
                 Look::StartCRLF => Self::LINE_START | Self::CRLF,
                 Look::EndCRLF => Self::LINE_END | Self::CRLF,
@@ -342,6 +397,54 @@ impl PatternContext {
 
     pub(crate) const fn is_context_free(self) -> bool {
         self.bits == 0
+    }
+
+    pub(crate) const fn is_word_only(self) -> bool {
+        self.bits == Self::WORD
+    }
+
+    pub(crate) const fn absolute_start(self) -> AbsoluteAnchor {
+        self.absolute_start
+    }
+
+    pub(crate) const fn absolute_end(self) -> AbsoluteAnchor {
+        self.absolute_end
+    }
+
+    pub(crate) const fn has_only_text_start_and_word_context(self) -> bool {
+        self.bits & !(Self::TEXT_START | Self::WORD) == 0
+    }
+
+    pub(crate) const fn has_only_text_end_and_word_context(self) -> bool {
+        self.bits & !(Self::TEXT_END | Self::WORD) == 0
+    }
+
+    pub(crate) const fn has_only_absolute_anchors_and_word_context(self) -> bool {
+        self.bits & !(Self::TEXT_START | Self::TEXT_END | Self::WORD) == 0
+    }
+
+    pub(crate) const fn is_lf_line_context(self) -> bool {
+        self.bits & (Self::LINE_START | Self::LINE_END) != 0
+            && self.bits & !(Self::LINE_START | Self::LINE_END | Self::LF | Self::WORD) == 0
+    }
+
+    pub(crate) const fn is_crlf_line_context(self) -> bool {
+        self.bits & Self::CRLF != 0
+            && self.bits & !(Self::LINE_START | Self::LINE_END | Self::CRLF | Self::WORD) == 0
+    }
+
+    pub(crate) const fn has_only_uniform_line_and_absolute_context(self) -> bool {
+        self.bits & (Self::LINE_START | Self::LINE_END) != 0
+            && self.bits & (Self::LF | Self::CRLF) != (Self::LF | Self::CRLF)
+            && self.bits
+                & !(Self::TEXT_START
+                    | Self::TEXT_END
+                    | Self::LINE_START
+                    | Self::LINE_END
+                    | Self::LF
+                    | Self::CRLF
+                    | Self::WORD)
+                == 0
     }
 }
 
@@ -497,6 +600,12 @@ impl Rule {
         let regex = Regex::new(pattern).map_err(RuleError::InvalidPattern)?;
         let hir = regex_syntax::parse(pattern)
             .map_err(|error| RuleError::InvalidPattern(regex::Error::Syntax(error.to_string())))?;
+
+        // Complete matches obey the same contract as ordinary pattern rules.
+        // The projected capture itself may still be empty.
+        if hir.properties().minimum_len() == Some(0) {
+            return Err(RuleError::PatternMatchesEmpty);
+        }
 
         let context = PatternContext::from_hir(&hir);
         let maximum_len = hir.properties().maximum_len();
@@ -755,6 +864,57 @@ mod tests {
             assert_eq!(
                 rule.metadata().detection_mode(),
                 crate::DetectionMode::MatcherOnly
+            );
+        }
+    }
+
+    #[test]
+    fn pattern_context_classifies_absolute_anchors() {
+        use super::{AbsoluteAnchor, PatternContext};
+
+        let cases = [
+            ("secret", AbsoluteAnchor::None, AbsoluteAnchor::None),
+            (r"\Asecret", AbsoluteAnchor::Required, AbsoluteAnchor::None),
+            (r"secret\z", AbsoluteAnchor::None, AbsoluteAnchor::Required),
+            (
+                r"\Asecret\z",
+                AbsoluteAnchor::Required,
+                AbsoluteAnchor::Required,
+            ),
+            (
+                r"\A(?:secret|token)",
+                AbsoluteAnchor::Required,
+                AbsoluteAnchor::None,
+            ),
+            (
+                r"(?P<value>\Asecret)",
+                AbsoluteAnchor::Required,
+                AbsoluteAnchor::None,
+            ),
+            (
+                r"(?:\Asecret|token)",
+                AbsoluteAnchor::Conditional,
+                AbsoluteAnchor::None,
+            ),
+            (
+                r"(?:secret\z|token)",
+                AbsoluteAnchor::None,
+                AbsoluteAnchor::Conditional,
+            ),
+        ];
+
+        for (pattern, expected_start, expected_end) in cases {
+            let hir = regex_syntax::parse(pattern).unwrap();
+            let context = PatternContext::from_hir(&hir);
+
+            assert_eq!(
+                context.absolute_start, expected_start,
+                "incorrect start classification for {pattern:?}"
+            );
+
+            assert_eq!(
+                context.absolute_end, expected_end,
+                "incorrect end classification for {pattern:?}"
             );
         }
     }

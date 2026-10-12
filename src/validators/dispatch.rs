@@ -106,7 +106,93 @@ pub(crate) enum ValidatorKind {
     Nuget,
 }
 
+/// Source data required to reproduce whole-source validation in a later slice.
+///
+/// Context sizes are byte windows in addition to the complete candidate. This
+/// metadata does not implement streaming validation or allocate retained context.
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub(crate) enum ValidatorStreamingRequirement {
+    NoValidation,
+    CandidateOnly,
+    BoundedContext {
+        before_bytes: usize,
+        after_bytes: usize,
+    },
+}
+
 impl ValidatorKind {
+    /// Conservatively covers every validation branch, including fallback kinds.
+    /// Newly added validators require an explicit source-dependency decision.
+    pub(crate) const fn streaming_requirement(self) -> ValidatorStreamingRequirement {
+        use ValidatorStreamingRequirement::{BoundedContext, CandidateOnly, NoValidation};
+
+        match self {
+            Self::None => NoValidation,
+            Self::CodiceFiscale
+            | Self::Pesel
+            | Self::RubyGems
+            | Self::Tailscale
+            | Self::GitHub
+            | Self::GitLab
+            | Self::Stripe
+            | Self::Iban
+            | Self::Cloudflare
+            | Self::Slack
+            | Self::Telegram
+            | Self::Jwt
+            | Self::Nats => CandidateOnly,
+            Self::Aws
+            | Self::Azure
+            | Self::Gcp
+            | Self::NpmRegistry
+            | Self::RubyGemsHost
+            | Self::NhsNumber
+            | Self::Ssn
+            | Self::CardVerificationCode
+            | Self::OtpProvisioningSecret
+            | Self::Pan
+            | Self::Password
+            | Self::SensitiveHash
+            | Self::GenericCredential
+            | Self::HttpBasic => BoundedContext {
+                before_bytes: super::contextual::utils::DEFAULT_KEY_WINDOW,
+                after_bytes: 0,
+            },
+            Self::DatabaseConnection | Self::SwiftPm => BoundedContext {
+                before_bytes: 256,
+                after_bytes: 0,
+            },
+            Self::Gradle => BoundedContext {
+                before_bytes: 512,
+                after_bytes: 0,
+            },
+            Self::CargoRegistry | Self::Pypi => BoundedContext {
+                before_bytes: 4096,
+                after_bytes: 0,
+            },
+            Self::WireGuard => BoundedContext {
+                before_bytes: 8192,
+                after_bytes: 0,
+            },
+            Self::DockerRegistry | Self::Netrc | Self::SwiftPmNetrc => BoundedContext {
+                before_bytes: 16384,
+                after_bytes: 0,
+            },
+            Self::Maven | Self::SystemPasswordVerifier => BoundedContext {
+                before_bytes: 4096,
+                after_bytes: 4096,
+            },
+            Self::ComposerHttpBasicPassword
+            | Self::ComposerBearerToken
+            | Self::ComposerBitbucketConsumerSecret
+            | Self::ComposerForgejoToken
+            | Self::Nuget => BoundedContext {
+                before_bytes: 16384,
+                after_bytes: 16384,
+            },
+        }
+    }
+
     /// Returns the public validation mode represented by this internal validator.
     pub(crate) const fn detection_mode(self) -> DetectionMode {
         match self {
@@ -396,6 +482,123 @@ pub(crate) fn validate_candidate(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn streaming_requirements_cover_all_current_validators_deterministically() {
+        use ValidatorStreamingRequirement::{BoundedContext, CandidateOnly, NoValidation};
+
+        let groups = [
+            (&[ValidatorKind::None][..], NoValidation),
+            (
+                &[
+                    ValidatorKind::CodiceFiscale,
+                    ValidatorKind::Pesel,
+                    ValidatorKind::RubyGems,
+                    ValidatorKind::Tailscale,
+                    ValidatorKind::GitHub,
+                    ValidatorKind::GitLab,
+                    ValidatorKind::Stripe,
+                    ValidatorKind::Iban,
+                    ValidatorKind::Cloudflare,
+                    ValidatorKind::Slack,
+                    ValidatorKind::Telegram,
+                    ValidatorKind::Jwt,
+                    ValidatorKind::Nats,
+                ][..],
+                CandidateOnly,
+            ),
+            (
+                &[
+                    ValidatorKind::Aws,
+                    ValidatorKind::Azure,
+                    ValidatorKind::Gcp,
+                    ValidatorKind::NpmRegistry,
+                    ValidatorKind::RubyGemsHost,
+                    ValidatorKind::NhsNumber,
+                    ValidatorKind::Ssn,
+                    ValidatorKind::CardVerificationCode,
+                    ValidatorKind::OtpProvisioningSecret,
+                    ValidatorKind::Pan,
+                    ValidatorKind::Password,
+                    ValidatorKind::SensitiveHash,
+                    ValidatorKind::GenericCredential,
+                    ValidatorKind::HttpBasic,
+                ][..],
+                BoundedContext {
+                    before_bytes: 160,
+                    after_bytes: 0,
+                },
+            ),
+            (
+                &[ValidatorKind::DatabaseConnection, ValidatorKind::SwiftPm][..],
+                BoundedContext {
+                    before_bytes: 256,
+                    after_bytes: 0,
+                },
+            ),
+            (
+                &[ValidatorKind::Gradle][..],
+                BoundedContext {
+                    before_bytes: 512,
+                    after_bytes: 0,
+                },
+            ),
+            (
+                &[ValidatorKind::CargoRegistry, ValidatorKind::Pypi][..],
+                BoundedContext {
+                    before_bytes: 4096,
+                    after_bytes: 0,
+                },
+            ),
+            (
+                &[ValidatorKind::WireGuard][..],
+                BoundedContext {
+                    before_bytes: 8192,
+                    after_bytes: 0,
+                },
+            ),
+            (
+                &[
+                    ValidatorKind::DockerRegistry,
+                    ValidatorKind::Netrc,
+                    ValidatorKind::SwiftPmNetrc,
+                ][..],
+                BoundedContext {
+                    before_bytes: 16384,
+                    after_bytes: 0,
+                },
+            ),
+            (
+                &[ValidatorKind::Maven, ValidatorKind::SystemPasswordVerifier][..],
+                BoundedContext {
+                    before_bytes: 4096,
+                    after_bytes: 4096,
+                },
+            ),
+            (
+                &[
+                    ValidatorKind::ComposerHttpBasicPassword,
+                    ValidatorKind::ComposerBearerToken,
+                    ValidatorKind::ComposerBitbucketConsumerSecret,
+                    ValidatorKind::ComposerForgejoToken,
+                    ValidatorKind::Nuget,
+                ][..],
+                BoundedContext {
+                    before_bytes: 16384,
+                    after_bytes: 16384,
+                },
+            ),
+        ];
+        let mut seen = std::collections::BTreeSet::new();
+        for (kinds, expected) in groups {
+            for &kind in kinds {
+                assert!(seen.insert(kind), "duplicate fixture: {kind:?}");
+                assert_eq!(kind.streaming_requirement(), expected, "{kind:?}");
+                assert_eq!(kind.streaming_requirement(), expected, "{kind:?}");
+            }
+        }
+        assert_eq!(seen.len(), 44);
+    }
 
     fn range_of(source: &str, candidate: &str) -> Range<usize> {
         let start = source
