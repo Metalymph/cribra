@@ -121,7 +121,7 @@ and validation remain authoritative.
 Compiled configuration contains no mutable state belonging to an individual
 source and can therefore be reused across independent source executions.
 
-## Whole-source and incremental execution
+## Whole-source and streaming execution
 
 Whole-source and incremental processing are execution strategies of the same
 engine. They must not become independent detection implementations.
@@ -158,9 +158,21 @@ Arbitrary byte fragmentation is handled separately by the incremental UTF-8
 transport. Incomplete UTF-8 scalar bytes may be retained only until the scalar
 can be reconstructed or end-of-source proves the input incomplete.
 
-Other matcher, validation, review, normalization, and public reporting stages
-remain subject to their existing whole-source semantics until their incremental
-execution slice is explicitly implemented and validated.
+The public `StreamSession` composes the annotated validated session with bounded
+structural review detection. Admitted suffix and bounded regex engines, including
+projected captures, reuse compiled rules. Validator dispatch, exact coordinates,
+normalization and review suppression preserve whole-source semantics.
+
+Owned bounded history and pending snapshots provide validator evidence; prefix
+coordinate pins preserve long-lived starts. Checked planning precedes allocation.
+Raw candidate and retained-result limits remain distinct from logical executor
+storage admission, which is not a total heap-memory cap.
+
+Only successful consuming `finish` constructs the complete `ScanReport`. All
+execution failures are terminal. Complete built-in portfolios, per-rule regex
+prefilters and other unsupported configurations fail admission explicitly. See
+[the streaming contract](streaming.md) for exact restrictions and ownership.
+This chunked execution does not implement incremental rescanning after edits.
 
 ## Parallel execution
 

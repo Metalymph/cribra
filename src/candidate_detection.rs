@@ -176,6 +176,86 @@ fn advance_position(
     *cursor = target;
 }
 
+/// Fixed window: left boundary, 19 candidate bytes, right boundary. The
+/// initial and EOF sentinels represent genuine source boundaries only.
+/// Each byte carries its scalar-start coordinate; accepted tokens are ASCII.
+#[derive(Debug)]
+pub(crate) struct StreamingCandidateDetector {
+    bytes: [u8; RECOVERY_LIKE_LEN + 2],
+    positions: [crate::source_coordinates::SourceCoordinates; RECOVERY_LIKE_LEN + 2],
+    len: usize,
+    cursor: crate::source_coordinates::SourceCoordinates,
+}
+
+impl Default for StreamingCandidateDetector {
+    fn default() -> Self {
+        Self {
+            bytes: [0; RECOVERY_LIKE_LEN + 2],
+            positions: [crate::source_coordinates::SourceCoordinates::default();
+                RECOVERY_LIKE_LEN + 2],
+            len: 1,
+            cursor: crate::source_coordinates::SourceCoordinates::default(),
+        }
+    }
+}
+
+impl StreamingCandidateDetector {
+    fn byte(&mut self, byte: u8) -> Option<SensitiveCandidate> {
+        if self.len == self.bytes.len() {
+            self.bytes.copy_within(1.., 0);
+            self.positions.copy_within(1.., 0);
+            self.len -= 1;
+        }
+        self.bytes[self.len] = byte;
+        self.positions[self.len] = self.cursor;
+        self.len += 1;
+        if self.len != self.bytes.len() || !is_recovery_like_at(&self.bytes, 1) {
+            return None;
+        }
+        let start = self.positions[1];
+        // The 19 ASCII bytes have already been consumed. The addition is
+        // representable because the checked cursor reached their end.
+        let mut location =
+            Location::from_span(start.byte_offset(), start.byte_offset() + RECOVERY_LIKE_LEN);
+        location.set_position(start.line(), start.column());
+        Some(SensitiveCandidate::new(
+            SensitiveCandidateKind::RecoveryLikeCode,
+            location,
+            CandidateEvidence::Structural,
+        ))
+    }
+
+    pub(crate) fn push(
+        &mut self,
+        text: &str,
+        base: usize,
+        emit: &mut impl FnMut(
+            SensitiveCandidate,
+        ) -> Result<(), crate::source_session::SourceSessionError>,
+    ) -> Result<(), crate::source_session::SourceSessionError> {
+        if self.cursor.byte_offset() != base {
+            return Err(crate::source_session::SourceSessionError::CoordinateInvariantViolation);
+        }
+        for character in text.chars() {
+            let mut encoded = [0; 4];
+            let scalar = character.encode_utf8(&mut encoded);
+            let mut next = self.cursor;
+            next.checked_advance(scalar)?;
+            for &byte in scalar.as_bytes() {
+                if let Some(candidate) = self.byte(byte) {
+                    emit(candidate)?;
+                }
+            }
+            self.cursor = next;
+        }
+        Ok(())
+    }
+
+    pub(crate) fn finish(&mut self) -> Option<SensitiveCandidate> {
+        self.byte(0)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

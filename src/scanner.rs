@@ -38,11 +38,11 @@ pub struct Scanner {
 /// accepted byte span to immutable compiled metadata and the confidence
 /// produced by validation.
 #[derive(Debug, Copy, Clone)]
-struct AcceptedCandidate<'a> {
-    metadata: &'a CompiledRuleMetadata,
-    start: usize,
-    end: usize,
-    confidence: crate::Confidence,
+pub(crate) struct AcceptedCandidate<'a> {
+    pub(crate) metadata: &'a CompiledRuleMetadata,
+    pub(crate) start: usize,
+    pub(crate) end: usize,
+    pub(crate) confidence: crate::Confidence,
 }
 
 /// Internal candidate counts used only by scanner diagnostics tests.
@@ -82,6 +82,24 @@ impl Scanner {
         &self,
     ) -> Result<SourceSession, crate::source_session::SourceSessionError> {
         SourceSession::new(Arc::clone(&self.rules))
+    }
+
+    /// Creates a synchronous streaming session with unlimited optional budgets.
+    ///
+    /// Unsupported matcher/validator/prefilter configurations fail admission;
+    /// there is no whole-source fallback. The complete default built-in portfolio
+    /// is currently unsupported. Use an admitted custom ruleset.
+    pub fn stream(&self) -> Result<crate::StreamSession, crate::StreamError> {
+        self.stream_with_limits(crate::StreamLimits::default())
+    }
+
+    /// Creates a streaming session with explicit per-source limits.
+    /// Admission precedes execution allocation; whole-source scans are unchanged.
+    pub fn stream_with_limits(
+        &self,
+        limits: crate::StreamLimits,
+    ) -> Result<crate::StreamSession, crate::StreamError> {
+        crate::StreamSession::new(Arc::clone(&self.rules), limits)
     }
 
     /// Creates an empty builder for configuring a scanner.
@@ -231,11 +249,7 @@ impl Scanner {
         }
 
         let mut candidates = detect_sensitive_candidates(source);
-        candidates.retain(|candidate| {
-            findings
-                .iter()
-                .all(|finding| !spans_overlap(candidate.location(), finding.location()))
-        });
+        suppress_overlapping_candidates(&findings, &mut candidates);
 
         ScanReport::new_with_candidates(findings, candidates)
     }
@@ -319,7 +333,18 @@ impl Default for Scanner {
 ///
 /// Partially overlapping spans are intentionally preserved.
 fn normalize_candidates(candidates: &mut Vec<AcceptedCandidate<'_>>) {
+    normalize_candidates_by(candidates, |candidate| *candidate);
+}
+
+/// Normalizes caller-owned records in place using the whole-source ranking.
+/// The borrowed projection allocates no intermediate candidate collection.
+pub(crate) fn normalize_candidates_by<'a, T>(
+    candidates: &mut Vec<T>,
+    inspect: impl Fn(&T) -> AcceptedCandidate<'a>,
+) {
     candidates.sort_unstable_by(|left, right| {
+        let left = inspect(left);
+        let right = inspect(right);
         left.start
             .cmp(&right.start)
             .then_with(|| left.end.cmp(&right.end))
@@ -338,6 +363,7 @@ fn normalize_candidates(candidates: &mut Vec<AcceptedCandidate<'_>>) {
     let mut highest_priority = 0;
 
     candidates.retain(|candidate| {
+        let candidate = inspect(candidate);
         let span = (candidate.start, candidate.end);
 
         if current_span != Some(span) {
@@ -350,8 +376,31 @@ fn normalize_candidates(candidates: &mut Vec<AcceptedCandidate<'_>>) {
     });
 }
 
-/// Returns `true` when two half-open source spans overlap.
-fn spans_overlap(left: &Location, right: &Location) -> bool {
+/// Suppresses review candidates overlapping normalized findings.
+/// Both collections are in source-start order. Keep the original strict
+/// overlap predicate, including zero-width findings strictly inside a review.
+/// Review ends must also be monotone, as ensured by the current fixed-width
+/// structural candidate family.
+/// A running maximum end makes suppression linear without a temporary index.
+pub(crate) fn suppress_overlapping_candidates(
+    findings: &[Finding],
+    candidates: &mut Vec<crate::SensitiveCandidate>,
+) {
+    let mut next = 0;
+    let mut maximum_end = 0;
+    candidates.retain(|candidate| {
+        while next < findings.len()
+            && findings[next].location().start() < candidate.location().end()
+        {
+            maximum_end = maximum_end.max(findings[next].location().end());
+            next += 1;
+        }
+        maximum_end <= candidate.location().start()
+    });
+}
+
+#[cfg(test)]
+pub(crate) fn spans_overlap(left: &Location, right: &Location) -> bool {
     left.start() < right.end() && right.start() < left.end()
 }
 
@@ -411,6 +460,55 @@ mod tests {
         );
 
         repeat_to_size(BLOCK, DENSE_DIAGNOSTIC_SIZE)
+    }
+
+    #[test]
+    fn linear_review_suppression_preserves_strict_overlap_including_empty_spans() {
+        use crate::{CandidateEvidence, SensitiveCandidate, SensitiveCandidateKind};
+        let findings: Vec<_> = [(0, 0), (0, 3), (1, 9), (4, 4), (9, 10), (12, 12)]
+            .into_iter()
+            .map(|(start, end)| {
+                Finding::new(
+                    "rule".into(),
+                    Location::from_span(start, end),
+                    Severity::High,
+                    crate::Confidence::High,
+                    None,
+                )
+            })
+            .collect();
+        for start in 0..14 {
+            let mut actual = vec![SensitiveCandidate::new(
+                SensitiveCandidateKind::RecoveryLikeCode,
+                Location::from_span(start, start + 1),
+                CandidateEvidence::Structural,
+            )];
+            let mut expected = actual.clone();
+            expected.retain(|candidate| {
+                findings
+                    .iter()
+                    .all(|finding| !spans_overlap(candidate.location(), finding.location()))
+            });
+            suppress_overlapping_candidates(&findings, &mut actual);
+            assert_eq!(actual, expected);
+        }
+        let mut actual: Vec<_> = (0..14)
+            .map(|start| {
+                SensitiveCandidate::new(
+                    SensitiveCandidateKind::RecoveryLikeCode,
+                    Location::from_span(start, start + 1),
+                    CandidateEvidence::Structural,
+                )
+            })
+            .collect();
+        let mut expected = actual.clone();
+        expected.retain(|candidate| {
+            findings
+                .iter()
+                .all(|finding| !spans_overlap(candidate.location(), finding.location()))
+        });
+        suppress_overlapping_candidates(&findings, &mut actual);
+        assert_eq!(actual, expected);
     }
 
     #[test]

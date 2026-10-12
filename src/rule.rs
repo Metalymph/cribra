@@ -337,6 +337,8 @@ impl PatternContext {
     const LINE_END: u8 = 1 << 3;
     const CRLF: u8 = 1 << 4;
     const WORD: u8 = 1 << 5;
+    // Keep LF provenance so mixed LF/CRLF assertions remain unsupported.
+    const LF: u8 = 1 << 6;
 
     fn from_hir(hir: &regex_syntax::hir::Hir) -> Self {
         use regex_syntax::hir::Look;
@@ -367,8 +369,8 @@ impl PatternContext {
                 Look::Start => Self::TEXT_START,
                 Look::End => Self::TEXT_END,
 
-                Look::StartLF => Self::LINE_START,
-                Look::EndLF => Self::LINE_END,
+                Look::StartLF => Self::LINE_START | Self::LF,
+                Look::EndLF => Self::LINE_END | Self::LF,
 
                 Look::StartCRLF => Self::LINE_START | Self::CRLF,
                 Look::EndCRLF => Self::LINE_END | Self::CRLF,
@@ -419,6 +421,30 @@ impl PatternContext {
 
     pub(crate) const fn has_only_absolute_anchors_and_word_context(self) -> bool {
         self.bits & !(Self::TEXT_START | Self::TEXT_END | Self::WORD) == 0
+    }
+
+    pub(crate) const fn is_lf_line_context(self) -> bool {
+        self.bits & (Self::LINE_START | Self::LINE_END) != 0
+            && self.bits & !(Self::LINE_START | Self::LINE_END | Self::LF | Self::WORD) == 0
+    }
+
+    pub(crate) const fn is_crlf_line_context(self) -> bool {
+        self.bits & Self::CRLF != 0
+            && self.bits & !(Self::LINE_START | Self::LINE_END | Self::CRLF | Self::WORD) == 0
+    }
+
+    pub(crate) const fn has_only_uniform_line_and_absolute_context(self) -> bool {
+        self.bits & (Self::LINE_START | Self::LINE_END) != 0
+            && self.bits & (Self::LF | Self::CRLF) != (Self::LF | Self::CRLF)
+            && self.bits
+                & !(Self::TEXT_START
+                    | Self::TEXT_END
+                    | Self::LINE_START
+                    | Self::LINE_END
+                    | Self::LF
+                    | Self::CRLF
+                    | Self::WORD)
+                == 0
     }
 }
 
@@ -574,6 +600,12 @@ impl Rule {
         let regex = Regex::new(pattern).map_err(RuleError::InvalidPattern)?;
         let hir = regex_syntax::parse(pattern)
             .map_err(|error| RuleError::InvalidPattern(regex::Error::Syntax(error.to_string())))?;
+
+        // Complete matches obey the same contract as ordinary pattern rules.
+        // The projected capture itself may still be empty.
+        if hir.properties().minimum_len() == Some(0) {
+            return Err(RuleError::PatternMatchesEmpty);
+        }
 
         let context = PatternContext::from_hir(&hir);
         let maximum_len = hir.properties().maximum_len();
