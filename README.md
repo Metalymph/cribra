@@ -478,9 +478,10 @@ Core **v0.5.0 is published**. It provides bounded retained-source streaming for
 explicitly admitted configurations; complete built-in portfolios remain
 unsupported for streaming.
 
-The **v0.6.0 incremental API is implemented and locally qualified through D4 on
-this branch, but unreleased**. D5 covers final documentation, audit and
-release-readiness work. Published `cribra = "0.5"` does not expose this new API.
+The **v0.6.0 incremental API is implemented, locally qualified and prepared
+for release, but not yet published**. It introduces revisioned mutable-document
+scanning with transactional edits and complete whole-source report parity.
+The published `cribra = "0.5"` release does not expose this API.
 See [the D4 evidence](docs/0.6-d4-qualification.md) and
 [the D5 qualification record](docs/0.6-d5-qualification.md).
 
