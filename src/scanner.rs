@@ -6,7 +6,7 @@ use rayon::prelude::*;
 use crate::{
     RuleMetadata,
     candidate_detection::detect_sensitive_candidates,
-    compiled_rule::{CompiledRuleMetadata, CompiledRuleSet},
+    compiled_rule::{CompiledRuleMetadata, CompiledRuleSet, InternalFinding},
     finding::Finding,
     location::Location,
     scan_entry::ScanEntry,
@@ -24,9 +24,8 @@ use crate::{
 /// allowing the same scanner instance to be reused across multiple UTF-8
 /// inputs.
 ///
-/// Scanning is currently deliberately single-threaded. The execution engine is
-/// optimized and benchmarked in serial before any optional parallel strategy
-/// is introduced.
+/// `scan` executes serially. With the `parallel` feature, `parallel_scan`
+/// distributes independent sources while preserving the same report semantics.
 #[derive(Debug, Clone)]
 pub struct Scanner {
     rules: Arc<CompiledRuleSet>,
@@ -82,6 +81,39 @@ impl Scanner {
         &self,
     ) -> Result<SourceSession, crate::source_session::SourceSessionError> {
         SourceSession::new(Arc::clone(&self.rules))
+    }
+
+    /// Owns a mutable UTF-8 document with exact whole-source report semantics.
+    /// Optional resource limits default to unlimited; scanner configuration is shared.
+    ///
+    /// ```
+    /// use cribra::{Rule, Scanner, Severity};
+    /// let scanner = Scanner::builder()
+    ///     .rule(Rule::literal("credential", "SECRET", Severity::High)).build()?;
+    /// let mut document = scanner.incremental_session("SEC".into())?;
+    /// document.apply_edit(0, 3..3, "RET")?;
+    /// assert_eq!(document.report().len(), 1);
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    pub fn incremental_session(
+        &self,
+        source: String,
+    ) -> Result<crate::IncrementalSession, crate::IncrementalError> {
+        crate::incremental_session::IncrementalSession::new(Arc::clone(&self.rules), source)
+    }
+
+    /// Creates an owned incremental document with preventive operation limits.
+    /// Resource failures preserve the last snapshot but make further edits terminal.
+    pub fn incremental_session_with_limits(
+        &self,
+        source: String,
+        limits: crate::IncrementalLimits,
+    ) -> Result<crate::IncrementalSession, crate::IncrementalError> {
+        crate::incremental_session::IncrementalSession::new_with_limits(
+            Arc::clone(&self.rules),
+            source,
+            limits,
+        )
     }
 
     /// Creates a synchronous streaming session with unlimited optional budgets.
@@ -207,51 +239,12 @@ impl Scanner {
         let mut accepted = Vec::with_capacity(raw_candidates.len());
 
         for candidate in raw_candidates {
-            let metadata = self.rules.metadata(candidate.rule_index());
-
-            let Some(validation) = validate_candidate(
-                metadata.validator(),
-                source,
-                candidate.start()..candidate.end(),
-                metadata.confidence(),
-            ) else {
-                continue;
-            };
-
-            accepted.push(AcceptedCandidate {
-                metadata,
-                start: candidate.start(),
-                end: candidate.end(),
-                confidence: validation.confidence(),
-            });
+            if let Some(candidate) = validate_raw_candidate(&self.rules, source, candidate) {
+                accepted.push(candidate);
+            }
         }
 
-        normalize_candidates(&mut accepted);
-
-        let mut findings = Vec::with_capacity(accepted.len());
-        let mut cursor = 0;
-        let mut line = 1;
-        let mut column = 1;
-
-        for candidate in accepted {
-            advance_position(source, &mut cursor, candidate.start, &mut line, &mut column);
-
-            let mut location = Location::from_span(candidate.start, candidate.end);
-            location.set_position(line, column);
-
-            findings.push(Finding::new(
-                candidate.metadata.id().clone(),
-                location,
-                candidate.metadata.severity(),
-                candidate.confidence,
-                candidate.metadata.remediation(),
-            ));
-        }
-
-        let mut candidates = detect_sensitive_candidates(source);
-        suppress_overlapping_candidates(&findings, &mut candidates);
-
-        ScanReport::new_with_candidates(findings, candidates)
+        finalize_report(source, accepted, || detect_sensitive_candidates(source))
     }
 
     /// Executes the candidate stages and returns internal counts for tests.
@@ -268,23 +261,9 @@ impl Scanner {
         let mut accepted = Vec::with_capacity(raw_count);
 
         for candidate in raw_candidates {
-            let metadata = self.rules.metadata(candidate.rule_index());
-
-            let Some(validation) = validate_candidate(
-                metadata.validator(),
-                source,
-                candidate.start()..candidate.end(),
-                metadata.confidence(),
-            ) else {
-                continue;
-            };
-
-            accepted.push(AcceptedCandidate {
-                metadata,
-                start: candidate.start(),
-                end: candidate.end(),
-                confidence: validation.confidence(),
-            });
+            if let Some(candidate) = validate_raw_candidate(&self.rules, source, candidate) {
+                accepted.push(candidate);
+            }
         }
 
         let accepted_count = accepted.len();
@@ -313,6 +292,115 @@ impl Default for Scanner {
     fn default() -> Self {
         crate::builtins::current_scanner()
     }
+}
+
+/// Authoritative whole-source validation for one raw emission. Both ordinary
+/// scanning and incremental replay supply the same full source and metadata.
+pub(crate) fn validate_raw_candidate<'a>(
+    rules: &'a CompiledRuleSet,
+    source: &str,
+    candidate: InternalFinding,
+) -> Option<AcceptedCandidate<'a>> {
+    let metadata = rules.metadata(candidate.rule_index());
+    let validation = validate_candidate(
+        metadata.validator(),
+        source,
+        candidate.start()..candidate.end(),
+        metadata.confidence(),
+    )?;
+    Some(AcceptedCandidate {
+        metadata,
+        start: candidate.start(),
+        end: candidate.end(),
+        confidence: validation.confidence(),
+    })
+}
+
+/// Shared whole-source finalization. Obtain structural observations after
+/// finding construction so ordinary scanning retains its allocation order.
+/// Incremental replay clones its pre-suppression cache only at this point.
+pub(crate) fn finalize_report(
+    source: &str,
+    accepted: Vec<AcceptedCandidate<'_>>,
+    structural_candidates: impl FnOnce() -> Vec<crate::SensitiveCandidate>,
+) -> ScanReport {
+    finalize_report_accounted(source, accepted, |_| Ok(structural_candidates()), &mut ())
+        .expect("unmetered finalization cannot fail")
+}
+
+/// Same authoritative finalization with preventive allocation hooks. The
+/// incremental path reserves its accepted projection before entering this helper.
+pub(crate) fn finalize_report_accounted<B: crate::incremental_session::ReportAccounting>(
+    source: &str,
+    mut accepted: Vec<AcceptedCandidate<'_>>,
+    structural_candidates: impl FnOnce(
+        &mut B,
+    ) -> Result<
+        Vec<crate::SensitiveCandidate>,
+        crate::IncrementalError,
+    >,
+    budget: &mut B,
+) -> Result<ScanReport, crate::IncrementalError> {
+    let accepted_bytes = accepted
+        .len()
+        .checked_mul(std::mem::size_of::<AcceptedCandidate<'_>>())
+        .ok_or(crate::IncrementalError::ResourceAccountingOverflow)?;
+    #[cfg(test)]
+    budget.observe_gap(0)?;
+    normalize_candidates(&mut accepted);
+    budget.results(accepted.len())?;
+    let finding_bytes = accepted
+        .len()
+        .checked_mul(std::mem::size_of::<Finding>())
+        .filter(|n| *n <= isize::MAX as usize)
+        .ok_or(crate::IncrementalError::ResourceAccountingOverflow)?;
+    budget.bytes(finding_bytes)?;
+    let mut findings = Vec::with_capacity(accepted.len());
+    let mut cursor = 0;
+    let mut line = 1;
+    let mut column = 1;
+    for candidate in accepted {
+        advance_position(source, &mut cursor, candidate.start, &mut line, &mut column);
+        let mut location = Location::from_span(candidate.start, candidate.end);
+        location.set_position(line, column);
+        findings.push(Finding::new(
+            candidate.metadata.id().clone(),
+            location,
+            candidate.metadata.severity(),
+            candidate.confidence,
+            candidate.metadata.remediation(),
+        ));
+    }
+    budget.release_bytes(accepted_bytes)?;
+    #[cfg(test)]
+    budget.observe_gap(0)?;
+    let mut candidates = structural_candidates(budget)?;
+    let candidate_input_bytes = candidates
+        .len()
+        .checked_mul(std::mem::size_of::<crate::SensitiveCandidate>())
+        .ok_or(crate::IncrementalError::ResourceAccountingOverflow)?;
+    #[cfg(test)]
+    budget.observe_gap(0)?;
+    suppress_overlapping_candidates(&findings, &mut candidates);
+    #[cfg(test)]
+    budget.observe_gap(
+        candidate_input_bytes - candidates.len() * std::mem::size_of::<crate::SensitiveCandidate>(),
+    )?;
+    // Box conversion may relocate: reserve its destination while the Vec
+    // reservation is still live. Capacity/allocator overhead remain excluded.
+    budget.bytes(finding_bytes)?;
+    let findings = findings.into_boxed_slice();
+    budget.release_bytes(finding_bytes)?;
+    let candidate_bytes = candidates
+        .len()
+        .checked_mul(std::mem::size_of::<crate::SensitiveCandidate>())
+        .ok_or(crate::IncrementalError::ResourceAccountingOverflow)?;
+    budget.bytes(candidate_bytes)?;
+    let candidates = candidates.into_boxed_slice();
+    budget.release_bytes(candidate_input_bytes)?;
+    #[cfg(test)]
+    budget.observe_gap(0)?;
+    Ok(ScanReport::from_boxed(findings, candidates))
 }
 
 /// Sorts accepted candidates and resolves exact-span collisions.

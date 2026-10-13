@@ -331,3 +331,7 @@ bench-all: bench bench-v02 bench-diagnostics
 # Remove Cargo build artifacts.
 clean:
     cargo clean
+
+# Measure owned edits plus exact incremental updates against edits plus full scans.
+bench-incremental:
+    cargo bench --bench incremental --all-features

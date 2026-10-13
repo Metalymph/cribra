@@ -9,7 +9,23 @@ history.
 
 ## [Unreleased]
 
-## [0.5.0] — release candidate (not yet published)
+### Added
+
+- Implemented v0.6 incremental Rust sessions: owned revisioned UTF-8 documents,
+  transactional replacement edits and complete whole-source report parity.
+- Local literal/structural invalidation and contextual revalidation with
+  authoritative whole-rule Prefix/Suffix/regex/prefilter fallback.
+- Four optional preventive limits for raw emissions, peak cache ownership,
+  materialized results and logical transaction payload; terminal execution
+  failures preserve the previous complete snapshot.
+- Differential/resource qualification and edit-plus-scan benchmark comparisons.
+  Dense and fallback-heavy workloads do not imply a performance improvement.
+
+This branch is locally qualified through D4 and undergoing D5 cleanup. v0.6.0
+is not released; versions, dependencies and adapter surfaces remain unchanged.
+See `docs/incremental.md` and the dated D4/D5 qualification records.
+
+## [0.5.0] — published
 
 ### Added
 
@@ -30,8 +46,8 @@ history.
 - Rust 1.97 remains the MSRV. Adapter versions remain independently versioned;
   this release introduces no new language bindings.
 - Release qualification and accounting exclusions are documented in
-  `docs/streaming.md` and `docs/0.5-qualification.md`. This entry has no publication
-  date because the release is prepared without publishing.
+  `docs/streaming.md` and `docs/0.5-qualification.md`. The qualification and
+  release-preparation documents preserve their original historical evidence.
 
 ## [0.4.7] - 2026-09-24
 

@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use aho_corasick::{AhoCorasick, AhoCorasickBuilder, MatchKind};
+use aho_corasick::{AhoCorasick, AhoCorasickBuilder, Input, MatchKind};
 use regex::Regex;
 
 use crate::{
@@ -11,6 +11,47 @@ use crate::{
     severity::Severity,
     validators::dispatch::ValidatorKind,
 };
+
+/// Test instrumentation is updated by actual execution paths. Production builds
+/// retain no counters: this type is zero-sized and record() is a no-op.
+#[derive(Debug, Default, Clone)]
+pub(crate) struct IncrementalWork {
+    #[cfg(test)]
+    counts: [usize; 11],
+}
+
+#[derive(Copy, Clone)]
+pub(crate) enum WorkMetric {
+    LiteralBytes,
+    StructuralBytes,
+    StructuralPredicates,
+    PrefixPasses,
+    PrefixBytes,
+    GatePasses,
+    GateBytes,
+    WholeRuleFallbacks,
+    ReusedRecords,
+    RevalidatedCandidates,
+    RegeneratedCandidates,
+}
+
+impl IncrementalWork {
+    pub(crate) fn record(&mut self, metric: WorkMetric, count: usize) -> Option<()> {
+        #[cfg(test)]
+        {
+            let slot = &mut self.counts[metric as usize];
+            *slot = slot.checked_add(count)?;
+        }
+        #[cfg(not(test))]
+        let _ = (metric, count);
+        Some(())
+    }
+
+    #[cfg(test)]
+    pub(crate) fn get(&self, metric: WorkMetric) -> usize {
+        self.counts[metric as usize]
+    }
+}
 
 /// Exact text is borrowed only for synchronous ingestion. Prefixes may omit it.
 #[derive(Debug, Copy, Clone)]
@@ -360,31 +401,35 @@ impl MultiPatternEngine {
         }))
     }
 
-    fn scan(&self, source: &str, findings: &mut Vec<InternalFinding>) {
-        let bytes = source.as_bytes();
-
-        for matched in self.automaton.find_overlapping_iter(source) {
+    // Full and regional scans share emission semantics. Input retains the
+    // complete haystack: prefix boundaries never observe artificial EOF.
+    fn scan_selected(
+        &self,
+        input: Input<'_>,
+        emit: &mut impl FnMut(
+            InternalFinding,
+        ) -> Result<(), crate::incremental_session::IncrementalError>,
+        mut owns: impl FnMut(&MultiPatternRule, usize) -> bool,
+    ) -> Result<(), crate::incremental_session::IncrementalError> {
+        let bytes = input.haystack();
+        for matched in self.automaton.find_overlapping_iter(input.clone()) {
             let rule = &self.rules[matched.pattern().as_usize()];
             let start = matched.start();
-
-            match rule.kind {
-                MultiPatternKind::Literal => {
-                    findings.push(InternalFinding::new(rule.rule_index, start, matched.end()));
+            if !owns(rule, start) {
+                continue;
+            }
+            let mut end = matched.end();
+            if rule.kind == MultiPatternKind::Prefix {
+                if start > 0 && is_token_byte(bytes[start - 1]) {
+                    continue;
                 }
-                MultiPatternKind::Prefix => {
-                    if start > 0 && is_token_byte(bytes[start - 1]) {
-                        continue;
-                    }
-
-                    let mut end = matched.end();
-                    while end < bytes.len() && is_token_byte(bytes[end]) {
-                        end += 1;
-                    }
-
-                    findings.push(InternalFinding::new(rule.rule_index, start, end));
+                while end < bytes.len() && is_token_byte(bytes[end]) {
+                    end += 1;
                 }
             }
+            emit(InternalFinding::new(rule.rule_index, start, end))?;
         }
+        Ok(())
     }
 
     fn update_stream_overlap(&self, state: &mut MultiPatternStreamState, chunk: &[u8]) {
@@ -718,7 +763,13 @@ struct SuffixRule {
 }
 
 impl SuffixRule {
-    fn scan(&self, source: &str, findings: &mut Vec<InternalFinding>) {
+    fn scan_with_emit(
+        &self,
+        source: &str,
+        emit: &mut impl FnMut(
+            InternalFinding,
+        ) -> Result<(), crate::incremental_session::IncrementalError>,
+    ) -> Result<(), crate::incremental_session::IncrementalError> {
         let bytes = source.as_bytes();
 
         for (suffix_start, _) in source.match_indices(self.suffix.as_ref()) {
@@ -741,8 +792,9 @@ impl SuffixRule {
                 continue;
             }
 
-            findings.push(InternalFinding::new(self.rule_index, start, end));
+            emit(InternalFinding::new(self.rule_index, start, end))?;
         }
+        Ok(())
     }
 
     fn scan_stream_token(
@@ -1260,34 +1312,60 @@ impl PatternRule {
         self.stream_plan
     }
 
+    #[cfg(test)]
     fn scan(&self, source: &str, findings: &mut Vec<InternalFinding>) {
+        self.scan_with_emit(source, &mut |finding| {
+            findings.push(finding);
+            Ok(())
+        })
+        .expect("Vec emission cannot fail");
+    }
+
+    fn scan_with_emit(
+        &self,
+        source: &str,
+        emit: &mut impl FnMut(
+            InternalFinding,
+        ) -> Result<(), crate::incremental_session::IncrementalError>,
+    ) -> Result<(), crate::incremental_session::IncrementalError> {
         match (&self.prefilter, self.capture) {
             (Some(prefilter), Some(capture)) => {
-                self.scan_prefiltered_captures(source, findings, prefilter, capture);
+                self.scan_prefiltered_captures(source, emit, prefilter, capture)?
             }
-            (Some(prefilter), None) => {
-                self.scan_prefiltered_matches(source, findings, prefilter);
+            (Some(prefilter), None) => self.scan_prefiltered_matches(source, emit, prefilter)?,
+            (None, None) => {
+                for matched in self.pattern.find_iter(source) {
+                    emit(InternalFinding::new(
+                        self.rule_index,
+                        matched.start(),
+                        matched.end(),
+                    ))?;
+                }
             }
-            (None, None) => findings.extend(self.pattern.find_iter(source).map(|matched| {
-                InternalFinding::new(self.rule_index, matched.start(), matched.end())
-            })),
             (None, Some(capture)) => {
-                findings.extend(self.pattern.captures_iter(source).filter_map(|captures| {
-                    captures.get(capture).map(|matched| {
-                        InternalFinding::new(self.rule_index, matched.start(), matched.end())
-                    })
-                }));
+                for captures in self.pattern.captures_iter(source) {
+                    if let Some(matched) = captures.get(capture) {
+                        emit(InternalFinding::new(
+                            self.rule_index,
+                            matched.start(),
+                            matched.end(),
+                        ))?;
+                    }
+                }
             }
         }
+        Ok(())
     }
 
     fn scan_prefiltered_captures(
         &self,
         source: &str,
-        findings: &mut Vec<InternalFinding>,
+        emit: &mut impl FnMut(
+            InternalFinding,
+        ) -> Result<(), crate::incremental_session::IncrementalError>,
         prefilter: &AhoCorasick,
         capture: usize,
-    ) {
+    ) -> Result<(), crate::incremental_session::IncrementalError> {
         let bytes = source.as_bytes();
 
         for key_match in prefilter.find_iter(source) {
@@ -1309,21 +1387,24 @@ impl PatternRule {
             }
 
             if let Some(matched) = captures.get(capture) {
-                findings.push(InternalFinding::new(
+                emit(InternalFinding::new(
                     self.rule_index,
                     matched.start(),
                     matched.end(),
-                ));
+                ))?;
             }
         }
+        Ok(())
     }
 
     fn scan_prefiltered_matches(
         &self,
         source: &str,
-        findings: &mut Vec<InternalFinding>,
+        emit: &mut impl FnMut(
+            InternalFinding,
+        ) -> Result<(), crate::incremental_session::IncrementalError>,
         prefilter: &AhoCorasick,
-    ) {
+    ) -> Result<(), crate::incremental_session::IncrementalError> {
         let bytes = source.as_bytes();
 
         for key_match in prefilter.find_iter(source) {
@@ -1335,13 +1416,14 @@ impl PatternRule {
             };
 
             if matched.start() == search_start || matched.start() == key_start {
-                findings.push(InternalFinding::new(
+                emit(InternalFinding::new(
                     self.rule_index,
                     matched.start(),
                     matched.end(),
-                ));
+                ))?;
             }
         }
+        Ok(())
     }
 
     fn scan_stream_bounded_with_sink(
@@ -2338,14 +2420,51 @@ impl CompiledRuleSet {
     }
 
     pub(crate) fn scan(&self, source: &str, findings: &mut Vec<InternalFinding>) {
+        self.scan_with_emit(source, &mut |finding| {
+            findings.push(finding);
+            Ok(())
+        })
+        .expect("unmetered emission cannot fail");
+    }
+
+    pub(crate) fn scan_with_emit(
+        &self,
+        source: &str,
+        emit: &mut impl FnMut(
+            InternalFinding,
+        ) -> Result<(), crate::incremental_session::IncrementalError>,
+    ) -> Result<(), crate::incremental_session::IncrementalError> {
         if let Some(engine) = &self.multi_pattern {
-            engine.scan(source, findings);
+            engine.scan_selected(Input::new(source), emit, |_, _| true)?;
         }
+        self.scan_non_multi(source, emit, None)
+    }
 
+    fn scan_non_multi(
+        &self,
+        source: &str,
+        emit: &mut impl FnMut(
+            InternalFinding,
+        ) -> Result<(), crate::incremental_session::IncrementalError>,
+        mut work: Option<&mut IncrementalWork>,
+    ) -> Result<(), crate::incremental_session::IncrementalError> {
         for rule in &self.suffixes {
-            rule.scan(source, findings);
+            if let Some(work) = work.as_deref_mut() {
+                work.record(WorkMetric::WholeRuleFallbacks, 1).ok_or(
+                    crate::incremental_session::IncrementalError::ExecutionInvariantViolated,
+                )?;
+            }
+            rule.scan_with_emit(source, emit)?;
         }
 
+        if self.pattern_gate.is_some()
+            && let Some(work) = work.as_deref_mut()
+        {
+            work.record(WorkMetric::GatePasses, 1)
+                .ok_or(crate::incremental_session::IncrementalError::ExecutionInvariantViolated)?;
+            work.record(WorkMetric::GateBytes, source.len())
+                .ok_or(crate::incremental_session::IncrementalError::ExecutionInvariantViolated)?;
+        }
         let active_patterns = self
             .pattern_gate
             .as_ref()
@@ -2358,8 +2477,95 @@ impl CompiledRuleSet {
                 continue;
             }
 
-            rule.scan(source, findings);
+            if let Some(work) = work.as_deref_mut() {
+                work.record(WorkMetric::WholeRuleFallbacks, 1).ok_or(
+                    crate::incremental_session::IncrementalError::ExecutionInvariantViolated,
+                )?;
+            }
+            rule.scan_with_emit(source, emit)?;
         }
+        Ok(())
+    }
+
+    /// Immutable per-rule localization metadata, built only for an incremental session.
+    pub(crate) fn incremental_literal_lengths(&self) -> Vec<Option<usize>> {
+        let mut lengths = vec![None; self.len()];
+        if let Some(engine) = &self.multi_pattern {
+            for rule in &engine.rules {
+                if rule.kind == MultiPatternKind::Literal {
+                    lengths[rule.rule_index.get()] = Some(rule.needle.len());
+                }
+            }
+        }
+        lengths
+    }
+
+    /// Enumerate owned literal starts in one byte span on the complete source.
+    /// Standard overlapping matching retains duplicate pattern identities.
+    pub(crate) fn scan_incremental_literals(
+        &self,
+        source: &str,
+        span: std::ops::Range<usize>,
+        owners: &[std::ops::Range<usize>],
+        emit: &mut impl FnMut(
+            InternalFinding,
+        ) -> Result<(), crate::incremental_session::IncrementalError>,
+        work: &mut IncrementalWork,
+    ) -> Result<(), crate::incremental_session::IncrementalError> {
+        work.record(
+            WorkMetric::LiteralBytes,
+            span.end
+                .checked_sub(span.start)
+                .ok_or(crate::incremental_session::IncrementalError::ExecutionInvariantViolated)?,
+        )
+        .ok_or(crate::incremental_session::IncrementalError::ExecutionInvariantViolated)?;
+        if let Some(engine) = &self.multi_pattern {
+            // Overlapping enumeration has no non-overlapping selection history.
+            // The span includes complete needles; per-rule start ownership avoids
+            // duplicating cached suffix matches while preserving pattern identity.
+            engine.scan_selected(Input::new(source).span(span), emit, |rule, start| {
+                rule.kind == MultiPatternKind::Literal
+                    && owners[rule.rule_index.get()].contains(&start)
+            })?;
+        }
+        Ok(())
+    }
+
+    /// Whole-source authoritative fallback; regex gates and per-rule prefilters
+    /// retain their existing source-wide behavior and emission multiplicity.
+    /// A bounded regex match length does not bound the downstream effects of
+    /// non-overlapping selection, so regional replay is not inferred from it.
+    pub(crate) fn scan_incremental_fallback(
+        &self,
+        source: &str,
+        emit: &mut impl FnMut(
+            InternalFinding,
+        ) -> Result<(), crate::incremental_session::IncrementalError>,
+        work: &mut IncrementalWork,
+    ) -> Result<(), crate::incremental_session::IncrementalError> {
+        if let Some(engine) = &self.multi_pattern {
+            let prefixes = engine
+                .rules
+                .iter()
+                .filter(|rule| rule.kind == MultiPatternKind::Prefix)
+                .count();
+            if prefixes > 0 {
+                work.record(WorkMetric::WholeRuleFallbacks, prefixes)
+                    .ok_or(
+                        crate::incremental_session::IncrementalError::ExecutionInvariantViolated,
+                    )?;
+                work.record(WorkMetric::PrefixPasses, 1).ok_or(
+                    crate::incremental_session::IncrementalError::ExecutionInvariantViolated,
+                )?;
+                work.record(WorkMetric::PrefixBytes, source.len()).ok_or(
+                    crate::incremental_session::IncrementalError::ExecutionInvariantViolated,
+                )?;
+                engine.scan_selected(Input::new(source), emit, |rule, _| {
+                    rule.kind == MultiPatternKind::Prefix
+                })?;
+            }
+        }
+        self.scan_non_multi(source, emit, Some(work))
     }
 
     pub(crate) fn metadata(&self, index: RuleIndex) -> &CompiledRuleMetadata {
@@ -2735,7 +2941,7 @@ pub(crate) struct InternalFinding {
 }
 
 impl InternalFinding {
-    const fn new(rule_index: RuleIndex, start: usize, end: usize) -> Self {
+    pub(crate) const fn new(rule_index: RuleIndex, start: usize, end: usize) -> Self {
         Self {
             rule_index,
             start,

@@ -24,7 +24,8 @@ during v0.2:
 - ambiguity promotion through explicit custom domain knowledge.
 
 `benches/contextual_tail.rs` isolates the contextual-pattern tail and measures
-individual and incremental contextual rule costs. Together with
+individual contextual-rule costs and the cumulative cost of adding rules.
+This suite is whole-source scanning, not mutable-document incremental updates. Together with
 `benches/isolation.rs`, it is diagnostic tooling rather than a portable
 performance promise.
 
@@ -186,3 +187,44 @@ portfolio.
 Further low-level optimization is deferred until real-world profiling identifies
 a concrete bottleneck. Detection quality, semantic correctness and
 maintainability remain higher priority than synthetic benchmark parity.
+
+## Incremental D4 methodology
+
+`just bench-incremental` runs `benches/incremental.rs` using the existing Criterion
+dependency. Compilation, source fixtures and initial snapshots are outside update
+timing. The primary comparison is **owned replacement plus incremental update**
+versus **the same owned replacement plus authoritative whole-source scan**.
+Both retain the old source/report until commit and drop them inside timing.
+The full-scan baseline transfers its report without cloning it. Its one-source
+`ScanResults` wrapper is included. `scan-only` is a separately labelled reference.
+
+Before timing, each fixture's initial and edited complete reports are checked for
+parity. The 32-edit sequence checks parity after every revision and includes
+UTF-8 paste, deletion, replacement, no-op and larger paste. Each measured iteration
+starts from a fresh untimed snapshot; sessions do not accumulate unintended edits.
+Fixture preparation and scanner compilation are excluded from both primary paths.
+
+Workloads cover 1 KiB/64 KiB/1 MiB sparse literals (4/64/512 rules), dense duplicate
+self-overlaps, structural density, mixed local/fallback matchers, contextual rules,
+all independent built-in portfolios and Combined, and whole-document replacement.
+Update groups use 50 samples, an 8-second measurement target and Criterion's
+3-second warmup. Construction, scan-only and sequence groups use Criterion defaults
+(100 samples, 5-second target). Setup overhead can extend wall time beyond these
+measurement targets.
+
+Report update/sequence latency and confidence intervals, not document throughput
+as a proxy for locally scanned work. Source copying, cache traversal, validation,
+normalization, coordinates and transactional cleanup are legitimate update costs.
+Fallback-heavy and dense workloads can be slower incrementally; those outcomes
+are recorded, not removed from the comparison.
+
+Private test diagnostics measure controlled logical ownership checkpoints and
+conservative reservations, along with submitted local bytes, reuse, revalidation,
+regeneration and fallback counts. They are separate diagnostic fixtures, not
+public counters or inferred allocation counts. Box relocation reservations are
+conservative; Vec capacity and process RSS do not stand in for logical payload.
+No custom allocator, unsafe code or new profiling dependency is introduced.
+
+See [D4 qualification and measured results](0.6-d4-qualification.md). Raw Criterion
+artifacts remain local under `target/criterion`; recorded results are specific to
+the documented machine and toolchain, not portable performance guarantees.
