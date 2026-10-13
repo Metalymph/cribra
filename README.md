@@ -54,6 +54,20 @@ partial report and makes a session terminal.
 See [streaming contracts and compatibility](docs/streaming.md) and
 [release qualification](docs/0.5-qualification.md).
 
+## Mutable documents — 0.6 development
+
+`Scanner::incremental_session(String)` owns a revisioned UTF-8 document.
+`apply_edit(expected_revision, byte_range, replacement)` transactionally updates
+its complete report with whole-source parity. Literal and structural matching
+are localized; Prefix, Suffix and regex use authoritative whole-rule replay.
+Built-in portfolios remain supported here independently of streaming admission.
+
+Four optional limits govern new raw emissions, peak cache ownership, result
+materialization and logical transaction payload. Resource failures are terminal
+and preserve the previous complete snapshot. The full document is owned; this
+API does not promise ruleset-bounded storage or a total heap-memory cap.
+See [incremental contracts](docs/incremental.md).
+
 ## Capabilities
 
 - deterministic sensitive-data detection over UTF-8 input;

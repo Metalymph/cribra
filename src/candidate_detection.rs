@@ -25,13 +25,14 @@
 
 use crate::{
     CandidateEvidence, Location, SensitiveCandidate, SensitiveCandidateKind,
+    compiled_rule::{IncrementalWork, WorkMetric},
     validators::utils::is_obvious_placeholder,
 };
 
 const GROUP_LEN: usize = 4;
 const GROUP_COUNT: usize = 4;
 const SEPARATOR_COUNT: usize = GROUP_COUNT - 1;
-const RECOVERY_LIKE_LEN: usize = GROUP_LEN * GROUP_COUNT + SEPARATOR_COUNT;
+pub(crate) const RECOVERY_LIKE_LEN: usize = GROUP_LEN * GROUP_COUNT + SEPARATOR_COUNT;
 
 /// Detects structurally plausible sensitive values without promoting them to findings.
 ///
@@ -40,37 +41,102 @@ const RECOVERY_LIKE_LEN: usize = GROUP_LEN * GROUP_COUNT + SEPARATOR_COUNT;
 /// immutable report is materialized, so one span is never simultaneously
 /// presented as both a confirmed finding and an ambiguous candidate.
 pub(crate) fn detect_sensitive_candidates(source: &str) -> Vec<SensitiveCandidate> {
-    let bytes = source.as_bytes();
-    let mut spans = Vec::new();
+    let spans = detect_owned_spans(source, 0..source.len(), None)
+        .expect("unmetered structural detection cannot overflow work counters");
+    materialize_candidates(source, spans)
+}
 
-    // A valid recovery-like token has its first separator exactly four bytes
-    // after the token start. Anchor the scan on `-` bytes instead of running
-    // the complete structural predicate at every byte of the source.
-    let mut separator = GROUP_LEN;
+/// Enumerate owned starts using the same predicate and separator traversal as
+/// whole-source detection. Boundaries are inspected in the complete haystack.
+pub(crate) fn detect_owned_spans(
+    source: &str,
+    starts: std::ops::Range<usize>,
+    work: Option<&mut IncrementalWork>,
+) -> Option<Vec<(usize, usize)>> {
+    let mut spans = Vec::new();
+    detect_owned_spans_with_emit(source, starts, work, &mut |start, end| {
+        spans.push((start, end));
+        Ok(())
+    })
+    .ok()?;
+    Some(spans)
+}
+
+pub(crate) fn detect_owned_spans_with_emit(
+    source: &str,
+    starts: std::ops::Range<usize>,
+    mut work: Option<&mut IncrementalWork>,
+    emit: &mut impl FnMut(usize, usize) -> Result<(), crate::IncrementalError>,
+) -> Result<(), crate::IncrementalError> {
+    let bytes = source.as_bytes();
+    if starts.is_empty() {
+        return Ok(());
+    }
+    if let Some(work) = work.as_deref_mut() {
+        let left = starts.start.saturating_sub(1);
+        let right = starts
+            .end
+            .checked_add(RECOVERY_LIKE_LEN)
+            .unwrap_or(bytes.len())
+            .min(bytes.len());
+        work.record(
+            WorkMetric::StructuralBytes,
+            right
+                .checked_sub(left)
+                .ok_or(crate::IncrementalError::ExecutionInvariantViolated)?,
+        )
+        .ok_or(crate::IncrementalError::ExecutionInvariantViolated)?;
+    }
+    // The first separator is four bytes after an owned start. A valid token
+    // cannot contain another valid start (its preceding byte is token-like).
+    let Some(mut separator) = starts.start.checked_add(GROUP_LEN) else {
+        return Ok(());
+    };
     while separator < bytes.len() {
+        let start = separator - GROUP_LEN;
+        if start >= starts.end {
+            break;
+        }
         if bytes[separator] != b'-' {
             separator += 1;
             continue;
         }
-
-        let start = separator - GROUP_LEN;
-        if start + RECOVERY_LIKE_LEN <= bytes.len() && is_recovery_like_at(bytes, start) {
-            let end = start + RECOVERY_LIKE_LEN;
-            spans.push((start, end));
-
-            // A valid token cannot start inside the accepted span. Resume at
-            // the first possible separator of a following candidate.
-            separator = end.saturating_add(GROUP_LEN);
-        } else {
-            separator += 1;
+        if let Some(end) = start.checked_add(RECOVERY_LIKE_LEN)
+            && end <= bytes.len()
+        {
+            if let Some(work) = work.as_deref_mut() {
+                work.record(WorkMetric::StructuralPredicates, 1)
+                    .ok_or(crate::IncrementalError::ExecutionInvariantViolated)?;
+            }
+            if is_recovery_like_at(bytes, start) {
+                emit(start, end)?;
+                separator = end.checked_add(GROUP_LEN).unwrap_or(bytes.len());
+                continue;
+            }
         }
+        separator += 1;
     }
-
-    materialize_candidates(source, spans)
+    Ok(())
 }
 
-fn materialize_candidates(source: &str, spans: Vec<(usize, usize)>) -> Vec<SensitiveCandidate> {
+pub(crate) fn materialize_candidates(
+    source: &str,
+    spans: Vec<(usize, usize)>,
+) -> Vec<SensitiveCandidate> {
     let mut candidates = Vec::with_capacity(spans.len());
+    materialize_candidates_with_emit(source, spans, &mut |candidate| {
+        candidates.push(candidate);
+        Ok(())
+    })
+    .expect("Vec emission cannot fail");
+    candidates
+}
+
+pub(crate) fn materialize_candidates_with_emit(
+    source: &str,
+    spans: impl IntoIterator<Item = (usize, usize)>,
+    emit: &mut impl FnMut(SensitiveCandidate) -> Result<(), crate::IncrementalError>,
+) -> Result<(), crate::IncrementalError> {
     let mut cursor = 0;
     let mut line = 1;
     let mut column = 1;
@@ -80,14 +146,14 @@ fn materialize_candidates(source: &str, spans: Vec<(usize, usize)>) -> Vec<Sensi
 
         let mut location = Location::from_span(start, end);
         location.set_position(line, column);
-        candidates.push(SensitiveCandidate::new(
+        emit(SensitiveCandidate::new(
             SensitiveCandidateKind::RecoveryLikeCode,
             location,
             CandidateEvidence::Structural,
-        ));
+        ))?;
     }
 
-    candidates
+    Ok(())
 }
 
 fn is_recovery_like_at(bytes: &[u8], start: usize) -> bool {

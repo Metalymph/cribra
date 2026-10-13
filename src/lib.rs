@@ -160,6 +160,7 @@ mod compiled_rule;
 mod confidence;
 mod explanation;
 mod finding;
+mod incremental_session;
 mod location;
 mod redaction;
 mod remediation;
@@ -213,3 +214,5 @@ pub use sensitive_candidate::{CandidateEvidence, SensitiveCandidate, SensitiveCa
 pub use severity::Severity;
 pub use stream::{StreamError, StreamLimits, StreamSession};
 pub use transform::redact;
+
+pub use incremental_session::{IncrementalError, IncrementalLimits, IncrementalSession};

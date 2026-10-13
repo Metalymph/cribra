@@ -16,6 +16,16 @@ pub struct ScanReport {
 }
 
 impl ScanReport {
+    pub(crate) fn from_boxed(
+        findings: Box<[Finding]>,
+        candidates: Box<[SensitiveCandidate]>,
+    ) -> Self {
+        Self {
+            findings,
+            candidates,
+        }
+    }
+
     pub(crate) fn new_with_candidates(
         findings: Vec<Finding>,
         candidates: Vec<SensitiveCandidate>,
