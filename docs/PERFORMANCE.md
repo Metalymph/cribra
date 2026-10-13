@@ -24,7 +24,8 @@ during v0.2:
 - ambiguity promotion through explicit custom domain knowledge.
 
 `benches/contextual_tail.rs` isolates the contextual-pattern tail and measures
-individual and incremental contextual rule costs. Together with
+individual contextual-rule costs and the cumulative cost of adding rules.
+This suite is whole-source scanning, not mutable-document incremental updates. Together with
 `benches/isolation.rs`, it is diagnostic tooling rather than a portable
 performance promise.
 

@@ -1,4 +1,5 @@
 #![forbid(unsafe_code)]
+#![warn(missing_docs)]
 
 //! Privacy-first scanning core for secrets and sensitive data.
 //!
@@ -37,7 +38,7 @@
 //!
 //! Findings intentionally do not contain the matched source value.
 //!
-//! //! # Ambiguous candidates and explainability
+//! # Ambiguous candidates and explainability
 //!
 //! [`ScanReport`] keeps classified [`Finding`] values separate from
 //! [`SensitiveCandidate`] values that are structurally review-worthy but do not
@@ -122,38 +123,24 @@
 //! persistence and UI are intentionally outside this crate. This keeps the
 //! scanner reusable in local-first native, WASM/PWA, desktop and service
 //! applications.
-#![warn(missing_docs)]
-//! Privacy-first Rust engine for detecting secrets and sensitive data.
 //!
-//! Cribrais a deterministic, local-first scanning core. It accepts UTF-8
-//! text and returns structured findings without filesystem, network, terminal,
-//! browser or cloud responsibilities.
+//! # Execution models
 //!
-//! # Example
+//! [`Scanner::scan`] is the whole-source semantic reference. Published v0.5.0
+//! supports [`Scanner::stream`] for explicitly admitted configurations, with
+//! bounded retained source history and successful-EOF-only complete reports.
+//! Complete built-in portfolios remain unsupported for streaming.
 //!
-//! ```
-//! use cribra::{Rule, Scanner, Severity};
+//! The implemented, unreleased v0.6.0 [`IncrementalSession`] owns a revisioned
+//! UTF-8 document and maintains exact complete reports after replacement edits.
+//! Literal and structural matching use local invalidation; Prefix, Suffix and
+//! regex rules use authoritative whole-rule fallback. This is mutable-document
+//! rescanning, distinct from append-only streaming.
 //!
-//! let scanner = Scanner::builder()
-//!     .rule(Rule::prefix(
-//!         "example-token",
-//!         "example_live_",
-//!         Severity::Critical,
-//!     ))
-//!     .build()?;
-//!
-//! let results = scanner.scan([
-//!     ("memory", "TOKEN=example_live_123456"),
-//! ]);
-//!
-//! let report = results.single_report().expect("one source was scanned");
-//! assert_eq!(report.len(), 1);
-//!
-//! # Ok::<(), cribra::ScannerBuildError>(())
-//! ```
-//!
-//! With the optional `parallel` feature, native callers can use
-//! `Scanner::parallel_scan` while preserving input order.
+//! Optional limits account for controlled logical payload and result ownership,
+//! not total heap memory. Incremental resource/execution failures preserve the
+//! last complete snapshot and prevent further edits. Input errors are recoverable.
+//! Session APIs are Rust-core surfaces; current adapters do not expose them.
 pub mod builtins;
 mod candidate_detection;
 mod compiled_rule;

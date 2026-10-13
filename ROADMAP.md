@@ -5,7 +5,7 @@ and safely transforming secrets and sensitive material. The Rust core is the
 semantic authority; adapters project applicable core behavior rather than
 reimplementing detection policy.
 
-**Current focus: v0.6.0 — Incremental Scanning Core.**
+**Current focus: v0.6.0 D5 — documentation, audit and release readiness.**
 
 ## Engineering principles
 
@@ -31,7 +31,7 @@ reimplementing detection policy.
 | `cribra-wasm` **v0.4.6** | **Released — complete** | Published compatibility update to core `^0.5`; existing JS/WASM API unchanged |
 | `cribra-cli` v0.4.4 | Existing independent release | Canonical CLI; no new streaming or incremental interface implied |
 | `cribra-c` v0.3.0 | Existing independent release | Native interoperability; no new streaming or incremental interface implied |
-| `cribra` **v0.6.0** | **Active — D1 complete, D2 next** | Exact incremental scanning of mutable documents |
+| `cribra` **v0.6.0** | **Unreleased — D1–D4 implemented and locally qualified; D5 active** | Exact incremental scanning of mutable documents |
 | `cribra` **v0.7.0** | Planned | Resource reuse, profiling, and measurement-led performance improvements |
 
 Core release-line numbering does not force synchronized CLI, C, WASM, or
@@ -148,64 +148,53 @@ finalization. No generic bounded regex invalidation is claimed. D1 was a
 read-only architectural audit; it did not implement or qualify incremental
 execution.
 
-### D2 — Exact session foundation — NEXT
+### D2 — Exact session foundation — IMPLEMENTED, LOCALLY QUALIFIED
 
-- [ ] Implement an **internal**, non-stabilized incremental session with owned
-      source, revision, caches, and complete current report.
-- [ ] Define checked insert/delete/replace operations, UTF-8 boundary checks,
-      stale revision handling, deterministic errors, and atomic publication.
-- [ ] Expose reusable pre-normalization emissions through a narrow internal
-      refactor of the authoritative whole-source path where necessary.
-- [ ] Build per-rule and structural caches via **full replay initially**;
-      selective invalidation is explicitly not a D2 deliverable.
-- [ ] Reuse current normalization, coordinate calculation, and suppression.
-- [ ] Differentially compare the **entire** `ScanReport` after every edit,
-      including adversarial regex/capture, validators, overlapping literals,
-      hidden candidates, Unicode, and CR/LF/CRLF cases.
-- [ ] Verify recoverable-error atomicity and document temporary memory costs.
-- [ ] Pass relevant core regression, formatting, strict Clippy, and MSRV gates.
+- [x] Owned source, revision, per-rule pre-normalization caches, unsuppressed
+      structural cache and complete report.
+- [x] Checked insert/delete/replace, UTF-8 boundaries, stale revisions and atomic
+      snapshot publication; shared authoritative validation and finalization.
+- [x] Initial full replay and complete-report differential qualification,
+      including hidden/rejected candidates, captures and contextual validators.
 
-**D2 exit gate:** an internal revisioned session maintains exact report parity
-across edits and provides real pre-normalization caches for D3. Merely wrapping
-`Scanner::scan()` behind an edit API is insufficient.
+### D3 — Proven selective invalidation — IMPLEMENTED, LOCALLY QUALIFIED
 
-### D3 — Proven selective invalidation — PLANNED
+- [x] Local literal and structural start invalidation with boundary ownership,
+      checked span shifting and selective contextual revalidation.
+- [x] Whole-rule Prefix, Suffix and regex/prefilter fallback.
+- [x] Adversarial edit differential parity and private work counters.
 
-- [ ] Implement local invalidation for literal matches and fixed-width
-      structural candidates, including edit-adjacent boundary effects.
-- [ ] Revalidate candidates whose candidate bytes or bounded contextual windows
-      changed; do not overlook candidates outside the edit span.
-- [ ] Remap unchanged offsets with checked arithmetic and explicit ownership of
-      ambiguous insertion endpoints and zero-width projected captures.
-- [ ] Preserve whole-rule fallback for regex, per-rule prefilter, prefix/suffix,
-      and other families until specific locality proofs exist.
-- [ ] Compare full reports after every edit in deterministic adversarial
-      sequences; demonstrate actual matcher work avoided with counters.
+Global finalization and document copying remain size dependent; localized matcher
+work is not a claim of sublinear end-to-end updates.
 
-**D3 exit gate:** exact differential parity **and** measured avoidance of
-matching work for eligible edits, without pretending that global finalization
-or document copying is sublinear.
+### D4 — Resource contracts, public API and benchmarks — IMPLEMENTED, LOCALLY QUALIFIED
 
-### D4 — Resource contracts, public API, benchmarks, release gate — PLANNED
+- [x] Preventive fallible raw emission, including whole-rule fallback.
+- [x] Four optional limits: raw candidates, simultaneous cache records,
+      materialized results and logical transaction payload.
+- [x] Opaque Rust session with owned document, revisioned edits, borrowed source
+      and complete-report access, recoverable inputs and terminal execution errors.
+- [x] Built-in/custom differential tests, resource boundaries, Rust 1.97 MSRV,
+      strict Clippy, documentation and relevant C/WASM regressions.
+- [x] Equivalent edit-plus-update versus edit-plus-scan benchmarks, including
+      dense and fallback-heavy cases where incremental execution is slower.
 
-- [ ] Define an appropriate fallible internal emission path so resource limits
-      can be enforced **before** unbounded raw-candidate accumulation.
-- [ ] Specify accounting for source ownership, cached accepted/rejected and
-      suppressed candidates, transaction staging, and output retention.
-- [ ] Finalize a minimal Rust public API only after D2/D3 behavior and ownership
-      are proven; document revisions, error recovery, and fallbacks.
-- [ ] Qualify built-in portfolios, custom rules, UTF-8/coordinate edge cases,
-      validator families, error atomicity, and regression compatibility.
-- [ ] Add reproducible edit benchmarks: initialization, edit, rematching,
-      revalidation, finalization, total latency, memory and fallback frequency.
-- [ ] Compare against a compiled whole-source scanner on the **same updated
-      document**; report end-to-end cost rather than only bytes not rematched.
-- [ ] Complete release documentation and standard Rust/MSRV/C/WASM/security/
-      packaging gates without claiming adapter incremental APIs exist.
+Contracts: [incremental](docs/incremental.md). Dated evidence:
+[D4 qualification](docs/0.6-d4-qualification.md). Local qualification does not
+establish Linux/Windows CI or publication readiness by itself.
 
-**D4 exit gate:** a qualified, exact, measurable incremental Rust core with
-transparent fallback and resource behavior. Performance claims must be backed
-by realistic workload measurements.
+### D5 — Final documentation, audit and release readiness — ACTIVE
+
+- [x] Align roadmap, README, architecture and rustdoc with implemented contracts.
+- [x] Preserve relevant historical decisions without reinstating obsolete plans.
+- [x] Complete current local regression and documentation qualification.
+- [ ] Verify required remote CI on the eventual PR/release commit.
+- [ ] Prepare version/changelog, packaging and tag-driven release qualification
+      in the separately authorized release campaign.
+
+v0.6.0 is **not released**. The manifest remains 0.5.0 during this cleanup;
+no adapter capability, version bump or publication is implied. Current evidence
+is recorded in [D5 qualification](docs/0.6-d5-qualification.md).
 
 ### Deferred pending evidence
 
@@ -242,12 +231,20 @@ features are not automatically present in any adapter.
 - Maintain the canonical `cribra-cli` contract, deterministic human/JSON output,
   explicit input ownership, privacy-safe diagnostics, and documented exit codes.
 - Evaluate additional applicable core capabilities and distribution channels
-  independently; preserve existing CLI compatibility.
+  independently; preserve existing CLI compatibility. Track exact filters,
+  sorting, pack selection, transformations, multi-source/parallel applicability
+  and explicit failure policy in [CLI parity](docs/CLI_PARITY.md).
+- Homebrew and Debian/Ubuntu APT distribution remain planned independently;
+  packaged binaries must preserve canonical CLI semantics and version identity.
 
 ### Native FFI and bindings
 
 - Maintain the C ABI and its applicable parity contract, ownership rules,
   errors, and conformance corpus.
+- Binding readiness still requires a versioned Rust-to-C capability matrix,
+  explicit gaps/N/A decisions, ABI compatibility guarantees, stable lifetime/error
+  contracts and a shared adversarial conformance corpus. Existing C interoperability
+  does not by itself qualify every future binding. See [interop](docs/INTEROP.md).
 - Planned binding families: Swift; shared JVM Kotlin/Java; Python; Go;
   .NET/C#; and PHP. Each needs complete applicable FFI parity, lifetime/error
   semantics, adversarial conformance, packaging, and consumer tests before being
@@ -293,6 +290,9 @@ and source-local semantics take precedence over speculative coverage.
 | v0.4.0 | WebAssembly interoperability |
 | v0.3 | Native C interoperability |
 | v0.2 | Detection and transformation baseline |
+
+Important retained detector decisions and historical source references are
+collected in [architecture decision notes](docs/HISTORICAL_DECISIONS.md).
 
 Historical detailed checklists and release-specific evidence belong in their
 respective release documentation and Git history. This roadmap tracks current

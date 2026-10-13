@@ -1,4 +1,8 @@
-# Owned incremental documents (0.6 D4)
+# Owned incremental documents — unreleased v0.6.0
+
+D1–D4 are implemented and locally qualified; D5 is documentation and
+release-readiness work. This API is not present in published core v0.5.0 and
+is not exposed by current CLI, C or WASM adapters.
 
 The additive Rust API owns a mutable UTF-8 document and its current complete
 `ScanReport`. Scanner compilation is shared through immutable configuration.

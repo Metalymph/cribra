@@ -366,6 +366,8 @@ impl Snapshot {
         operation: &mut Operation,
     ) -> Result<Self, IncrementalError> {
         let span_count = spans.len();
+        // Each span already owns a cache ticket. Materialization transfers that
+        // identity, but both byte payloads count until the span buffer is dropped.
         operation.reserve::<SensitiveCandidate>(span_count)?;
         let mut structural = Vec::with_capacity(span_count);
         materialize_candidates_with_emit(&source, spans, &mut |candidate| {
@@ -770,6 +772,8 @@ impl IncrementalSession {
     ) -> Result<u64, IncrementalError> {
         match staged {
             Ok(snapshot) => {
+                // Publish only after matching, validation and finalization succeed;
+                // failures must leave the last complete revision readable.
                 self.current = snapshot;
                 Ok(self.revision())
             }
@@ -810,6 +814,9 @@ impl EditGeometry {
         // Insertion: old upper=a, new upper=c. Deletion: old upper=b,
         // new upper=a. Replacement: old upper=b, new upper=c. Intersect
         // with complete-match start domain [0,N-L+1). L=1 has no halo.
+        // Crossing starts need L-1 bytes of left halo; new starts inside [a,c)
+        // are also owned. Old suffix starts at b survive and shift to c, even
+        // for L=1 or insertion into an empty document.
         // Saturation here implements max(0,a-L+1), not offset shifting.
         let lo = self.a.saturating_sub(length - 1);
         let hi = end.min(source_len - length + 1);
@@ -824,6 +831,8 @@ impl EditGeometry {
         if self.is_empty() || source_len < RECOVERY_LIKE_LEN {
             return Ok(0..0);
         }
+        // Unlike a literal, a structural token depends on adjacent boundary
+        // bytes: include the token ending at a and the start exactly at end.
         let domain_end = source_len - RECOVERY_LIKE_LEN + 1;
         let lo = self.a.saturating_sub(RECOVERY_LIKE_LEN);
         // Clipping before addition prevents overflow at the representable EOF.
@@ -883,6 +892,8 @@ fn context_unchanged(
     else {
         return Ok(true);
     };
+    // Equal candidate bytes alone do not preserve contextual decisions. Clipped
+    // envelopes must map exactly, including source-edge and UTF-8 clipping changes.
     let old_envelope = dependency_envelope(old_source, old, before_bytes, after_bytes);
     let new_envelope = dependency_envelope(new_source, new, before_bytes, after_bytes);
     if edit.is_empty() {

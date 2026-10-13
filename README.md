@@ -4,7 +4,7 @@ Cribra is an embeddable, local-first, fully synchronous Rust engine for determin
 
 It is not a file, repository, or vulnerability scanner. Cribra operates on caller-provided data and provides reusable security primitives that applications, CLIs, APIs, pipelines, WebAssembly hosts, and native integrations can compose into their own workflows.
 
-Use it directly as a Rust crate, through the canonical CLI as a process boundary, via C ABI or WebAssembly, or through language-specific bindings.
+Use it directly as a Rust crate, through the canonical CLI as a process boundary, via C ABI or WebAssembly, with further native language bindings planned independently.
 
 *Cribra provides the engine; the surrounding application decides the workflow.*
 
@@ -54,7 +54,7 @@ partial report and makes a session terminal.
 See [streaming contracts and compatibility](docs/streaming.md) and
 [release qualification](docs/0.5-qualification.md).
 
-## Mutable documents — 0.6 development
+## Mutable documents — implemented for unreleased 0.6.0
 
 `Scanner::incremental_session(String)` owns a revisioned UTF-8 document.
 `apply_edit(expected_revision, byte_range, replacement)` transactionally updates
@@ -72,7 +72,8 @@ See [incremental contracts](docs/incremental.md).
 
 - deterministic sensitive-data detection over UTF-8 input;
 - reusable compiled rule execution;
-- incremental execution with bounded source-local state for supported matcher families;
+- bounded retained source state for admitted streaming configurations;
+- exact owned-document incremental scanning with documented whole-rule fallbacks;
 - literal, prefix, suffix, and regex rules;
 - deterministic and contextual validators;
 - selectable built-in detector catalog;
@@ -127,9 +128,11 @@ define the scope of the overall project: scanning is one capability of the
 engine, alongside validation, reporting, querying, explainability, and
 transformation.
 
-Whole-source and incremental processing are execution strategies of the same
-engine and are expected to preserve the same detection semantics where a
-matcher supports both modes.
+Whole-source scanning is authoritative. Admitted streaming configurations and
+successful incremental edits preserve its complete report semantics. Incremental
+sessions own the document; streaming sessions retain bounded source history.
+These session APIs are Rust-core capabilities and are not exposed by the current
+CLI, C or WASM adapters.
 
 ## Privacy boundary
 
@@ -420,8 +423,6 @@ including explicit parity gaps and deliberate non-parity, is documented in
 
 ## Coordinate contract
 
-## Coordinate contract
-
 Locations use:
 
 - `start`: zero-based UTF-8 byte offset, inclusive;
@@ -473,17 +474,22 @@ contracts.
 The completed `0.4.x` line established Cribra's current detection, validation,
 transformation, C ABI, WebAssembly, and downstream-consumer foundation.
 
-The prepared core release is `0.5.0`. Its Streaming Core supports explicitly
-admitted configurations with bounded retained source state and preserves
-Cribra's authoritative detection and validation semantics without introducing
-a second scanner implementation.
+Core **v0.5.0 is published**. It provides bounded retained-source streaming for
+explicitly admitted configurations; complete built-in portfolios remain
+unsupported for streaming.
 
-CLI parity, native FFI parity, language bindings, packaging, distribution, and
-developer integrations continue as independent project workstreams rather than
-defining sequential core release numbers.
+The **v0.6.0 incremental API is implemented and locally qualified through D4 on
+this branch, but unreleased**. D5 covers final documentation, audit and
+release-readiness work. Published `cribra = "0.5"` does not expose this new API.
+See [the D4 evidence](docs/0.6-d4-qualification.md) and
+[the D5 qualification record](docs/0.6-d5-qualification.md).
 
-Implementation of v0.5.0 is complete; release qualification is tracked separately.
-The planned v0.6.0 line concerns incremental rescanning after source changes.
+**v0.7.0 is planned** for profiling, resource reuse and evidence-driven
+optimization. Existing Rayon execution of independent sources remains available;
+it is not a future implementation milestone.
+
+CLI, C, WASM, native bindings and distribution remain independently versioned
+workstreams with their own documented capability surfaces.
 
 See `ROADMAP.md` for the architectural roadmap and the independent interface
 and ecosystem workstreams.

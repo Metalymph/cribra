@@ -2520,6 +2520,9 @@ impl CompiledRuleSet {
         )
         .ok_or(crate::incremental_session::IncrementalError::ExecutionInvariantViolated)?;
         if let Some(engine) = &self.multi_pattern {
+            // Overlapping enumeration has no non-overlapping selection history.
+            // The span includes complete needles; per-rule start ownership avoids
+            // duplicating cached suffix matches while preserving pattern identity.
             engine.scan_selected(Input::new(source).span(span), emit, |rule, start| {
                 rule.kind == MultiPatternKind::Literal
                     && owners[rule.rule_index.get()].contains(&start)
@@ -2530,6 +2533,8 @@ impl CompiledRuleSet {
 
     /// Whole-source authoritative fallback; regex gates and per-rule prefilters
     /// retain their existing source-wide behavior and emission multiplicity.
+    /// A bounded regex match length does not bound the downstream effects of
+    /// non-overlapping selection, so regional replay is not inferred from it.
     pub(crate) fn scan_incremental_fallback(
         &self,
         source: &str,
