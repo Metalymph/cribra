@@ -9,6 +9,8 @@ history.
 
 ## [Unreleased]
 
+## [0.6.0] — release prepared
+
 ### Added
 
 - Implemented v0.6 incremental Rust sessions: owned revisioned UTF-8 documents,
@@ -21,9 +23,19 @@ history.
 - Differential/resource qualification and edit-plus-scan benchmark comparisons.
   Dense and fallback-heavy workloads do not imply a performance improvement.
 
-This branch is locally qualified through D4 and undergoing D5 cleanup. v0.6.0
-is not released; versions, dependencies and adapter surfaces remain unchanged.
-See `docs/incremental.md` and the dated D4/D5 qualification records.
+### Compatibility
+
+- Existing whole-source and streaming APIs retain their established contracts.
+- Incremental scanning is exposed through the Rust core; no new CLI, C or
+  JavaScript incremental API is introduced.
+- Rust 1.97 remains the minimum supported Rust version.
+- The companion `cribra-wasm` v0.4.7 release is prepared separately,
+  requires `cribra = "^0.6"` and preserves the existing JavaScript API.
+- Performance depends on workload; no general speedup is guaranteed.
+
+The v0.6 implementation and local qualification are complete. Publication
+remains pending. See `docs/incremental.md` and the dated D4/D5
+qualification records.
 
 ## [0.5.0] — published
 

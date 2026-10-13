@@ -5,7 +5,7 @@ and safely transforming secrets and sensitive material. The Rust core is the
 semantic authority; adapters project applicable core behavior rather than
 reimplementing detection policy.
 
-**Current focus: v0.6.0 D5 — documentation, audit and release readiness.**
+**Current focus: v0.6.0 release preparation and publication.**
 
 ## Engineering principles
 
@@ -31,7 +31,8 @@ reimplementing detection policy.
 | `cribra-wasm` **v0.4.6** | **Released — complete** | Published compatibility update to core `^0.5`; existing JS/WASM API unchanged |
 | `cribra-cli` v0.4.4 | Existing independent release | Canonical CLI; no new streaming or incremental interface implied |
 | `cribra-c` v0.3.0 | Existing independent release | Native interoperability; no new streaming or incremental interface implied |
-| `cribra` **v0.6.0** | **Unreleased — D1–D4 implemented and locally qualified; D5 active** | Exact incremental scanning of mutable documents |
+| `cribra` **v0.6.0** | **Release preparation — D1–D5 complete; publication pending** | Exact incremental scanning of mutable documents |
+| `cribra-wasm` **v0.4.7** | **Release preparation — publication pending** | Compatibility update to core `^0.6`; existing JS/WASM API unchanged |
 | `cribra` **v0.7.0** | Planned | Resource reuse, profiling, and measurement-led performance improvements |
 
 Core release-line numbering does not force synchronized CLI, C, WASM, or
