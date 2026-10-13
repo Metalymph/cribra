@@ -21,7 +21,7 @@ chunks without changing that execution model.
 
 Matched secret values are not stored in public findings.
 
-## Streaming core — 0.5.0
+## Streaming core — available since 0.5.0
 
 Streaming is synchronous and opt-in. Build an admitted ruleset, feed arbitrary
 byte fragments, and consume the session at genuine EOF:
@@ -54,7 +54,7 @@ partial report and makes a session terminal.
 See [streaming contracts and compatibility](docs/streaming.md) and
 [release qualification](docs/0.5-qualification.md).
 
-## Mutable documents — implemented for unreleased 0.6.0
+## Incremental scanning — new in 0.6.0
 
 `Scanner::incremental_session(String)` owns a revisioned UTF-8 document.
 `apply_edit(expected_revision, byte_range, replacement)` transactionally updates
@@ -162,13 +162,13 @@ the C ABI/FFI boundary. The core engine itself does not permit unsafe Rust.
 
 ```toml
 [dependencies]
-cribra = "0.5"
+cribra = "0.6"
 ```
 
 Optional features:
 
 ```toml
-cribra = { version = "0.5", features = ["serde", "parallel"] }
+cribra = { version = "0.6", features = ["serde", "parallel"] }
 ```
 
 | Feature | Default | Purpose |
@@ -474,14 +474,14 @@ contracts.
 The completed `0.4.x` line established Cribra's current detection, validation,
 transformation, C ABI, WebAssembly, and downstream-consumer foundation.
 
-Core **v0.5.0 is published**. It provides bounded retained-source streaming for
-explicitly admitted configurations; complete built-in portfolios remain
-unsupported for streaming.
+Core **v0.6.0 is published** and is the current Rust release. It introduces
+incremental scanning of revisioned UTF-8 documents, transactional edits,
+selective invalidation and conservative fallback with complete whole-source
+report parity.
 
-The **v0.6.0 incremental API is implemented, locally qualified and prepared
-for release, but not yet published**. It introduces revisioned mutable-document
-scanning with transactional edits and complete whole-source report parity.
-The published `cribra = "0.5"` release does not expose this API.
+Streaming, introduced in **v0.5.0**, remains available for explicitly admitted
+configurations. Complete built-in portfolios remain unsupported for streaming,
+but are supported by the incremental API.
 See [the D4 evidence](docs/0.6-d4-qualification.md) and
 [the D5 qualification record](docs/0.6-d5-qualification.md).
 

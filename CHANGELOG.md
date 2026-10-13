@@ -9,7 +9,7 @@ history.
 
 ## [Unreleased]
 
-## [0.6.0] — release prepared
+## [0.6.0] — published 2026-10-13
 
 ### Added
 
@@ -29,12 +29,11 @@ history.
 - Incremental scanning is exposed through the Rust core; no new CLI, C or
   JavaScript incremental API is introduced.
 - Rust 1.97 remains the minimum supported Rust version.
-- The companion `cribra-wasm` v0.4.7 release is prepared separately,
+- The companion `cribra-wasm` v0.4.7 release is published separately,
   requires `cribra = "^0.6"` and preserves the existing JavaScript API.
 - Performance depends on workload; no general speedup is guaranteed.
 
-The v0.6 implementation and local qualification are complete. Publication
-remains pending. See `docs/incremental.md` and the dated D4/D5
+The v0.6 implementation, qualification and publication are complete. See `docs/incremental.md` and the dated D4/D5
 qualification records.
 
 ## [0.5.0] — published
