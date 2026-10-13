@@ -5,7 +5,7 @@ and safely transforming secrets and sensitive material. The Rust core is the
 semantic authority; adapters project applicable core behavior rather than
 reimplementing detection policy.
 
-**Current focus: v0.6.0 release preparation and publication.**
+**Current focus: v0.7.0 — profiling and measurement-led performance optimization.**
 
 ## Engineering principles
 
@@ -31,8 +31,8 @@ reimplementing detection policy.
 | `cribra-wasm` **v0.4.6** | **Released — complete** | Published compatibility update to core `^0.5`; existing JS/WASM API unchanged |
 | `cribra-cli` v0.4.4 | Existing independent release | Canonical CLI; no new streaming or incremental interface implied |
 | `cribra-c` v0.3.0 | Existing independent release | Native interoperability; no new streaming or incremental interface implied |
-| `cribra` **v0.6.0** | **Release preparation — D1–D5 complete; publication pending** | Exact incremental scanning of mutable documents |
-| `cribra-wasm` **v0.4.7** | **Release preparation — publication pending** | Compatibility update to core `^0.6`; existing JS/WASM API unchanged |
+| `cribra` **v0.6.0** | **Released — complete** | Exact incremental scanning of mutable documents |
+| `cribra-wasm` **v0.4.7** | **Released — complete** | Compatibility update to core `^0.6`; existing JS/WASM API unchanged |
 | `cribra` **v0.7.0** | Planned | Resource reuse, profiling, and measurement-led performance improvements |
 
 Core release-line numbering does not force synchronized CLI, C, WASM, or
@@ -96,7 +96,7 @@ aspirations must not be read as claims that every builtin rule is streamable or
 that pre-EOF finalization is implemented. Any remaining broader capability is a
 new, separately justified proposal, not an unfinished v0.5 release gate.
 
-## v0.6.0 — Incremental Scanning Core — ACTIVE
+## v0.6.0 — Incremental Scanning Core — RELEASED
 
 **Goal:** after edits to an already scanned UTF-8 document, produce exactly the
 same complete `ScanReport` as a fresh authoritative whole-source scan of the
@@ -184,18 +184,19 @@ Contracts: [incremental](docs/incremental.md). Dated evidence:
 [D4 qualification](docs/0.6-d4-qualification.md). Local qualification does not
 establish Linux/Windows CI or publication readiness by itself.
 
-### D5 — Final documentation, audit and release readiness — ACTIVE
+### D5 — Final documentation, audit and release readiness — COMPLETE
 
 - [x] Align roadmap, README, architecture and rustdoc with implemented contracts.
 - [x] Preserve relevant historical decisions without reinstating obsolete plans.
 - [x] Complete current local regression and documentation qualification.
-- [ ] Verify required remote CI on the eventual PR/release commit.
-- [ ] Prepare version/changelog, packaging and tag-driven release qualification
+- [x] Complete remote release validation and publication.
+- [x] Prepare version/changelog, packaging and tag-driven release qualification
       in the separately authorized release campaign.
 
-v0.6.0 is **not released**. The manifest remains 0.5.0 during this cleanup;
-no adapter capability, version bump or publication is implied. Current evidence
-is recorded in [D5 qualification](docs/0.6-d5-qualification.md).
+Cribra v0.6.0 and the independently versioned cribra-wasm v0.4.7 are
+published. The incremental API remains Rust-only; no new CLI, C or WASM
+incremental interface is implied. Qualification evidence is recorded in
+[D5 qualification](docs/0.6-d5-qualification.md).
 
 ### Deferred pending evidence
 
