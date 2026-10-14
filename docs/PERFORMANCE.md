@@ -228,3 +228,42 @@ No custom allocator, unsafe code or new profiling dependency is introduced.
 See [D4 qualification and measured results](0.6-d4-qualification.md). Raw Criterion
 artifacts remain local under `target/criterion`; recorded results are specific to
 the documented machine and toolchain, not portable performance guarantees.
+
+## v0.7 incremental performance qualification
+
+### Measured results
+
+The controlled Criterion comparison against the v0.6 baseline used the
+incremental benchmark methodology above, with temporary phase profiling disabled.
+These results measure the complete edit operation, including transactional
+cleanup; they are not isolated phase timings.
+
+| Workload | v0.7 edit time | Change versus v0.6 |
+| --- | ---: | ---: |
+| `dense-8-64k` | 19.654 ms | −46.62% |
+| `mixed-64k` | 488.09 µs | −8.76% |
+| `sparse-64-64k` | 33.813 µs | −2.02% |
+| `sparse-4-1k` | 783.20 ns | +3.60% |
+
+Negative changes indicate lower latency. The small-document `sparse-4-1k`
+regression is retained and reported transparently alongside the improvements.
+These measurements qualify the combined changes below; they do not attribute
+each workload's improvement to an individual optimization.
+
+### Architectural changes
+
+P1.1 introduces an ordered k-way heap merge for eligible literal caches whose
+per-rule candidate ordering is established and verified. It preserves the
+authoritative candidate ordering and retention semantics, including duplicates
+and tie-breaking. Other candidate paths retain the existing normalization
+fallback when ordering cannot be guaranteed.
+
+P2.1 removes a redundant old-source emission validation during retained-cache
+transfer. The remaining validations, new-source emission checks, resource
+accounting and transactional behavior are preserved.
+
+The temporary phase-profiling instrumentation was removed after qualification.
+[P0.3 incremental phase profile](0.7-p03-incremental-phase-profile.md) remains
+historical diagnostic evidence for the investigation that motivated these
+changes, not a current benchmark procedure. Its phase timings describe the
+investigated implementation rather than the qualified v0.7 implementation.

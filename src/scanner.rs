@@ -332,7 +332,7 @@ pub(crate) fn finalize_report(
 /// incremental path reserves its accepted projection before entering this helper.
 pub(crate) fn finalize_report_accounted<B: crate::incremental_session::ReportAccounting>(
     source: &str,
-    mut accepted: Vec<AcceptedCandidate<'_>>,
+    accepted: Vec<AcceptedCandidate<'_>>,
     structural_candidates: impl FnOnce(
         &mut B,
     ) -> Result<
@@ -341,13 +341,36 @@ pub(crate) fn finalize_report_accounted<B: crate::incremental_session::ReportAcc
     >,
     budget: &mut B,
 ) -> Result<ScanReport, crate::IncrementalError> {
+    finalize_report_accounted_with_order(source, accepted, structural_candidates, budget, false)
+}
+
+/// Finalizes a projection whose authoritative ordering was established by its caller.
+/// Retention and all accounting/materialization remain shared with whole-source scans.
+pub(crate) fn finalize_report_accounted_with_order<
+    B: crate::incremental_session::ReportAccounting,
+>(
+    source: &str,
+    mut accepted: Vec<AcceptedCandidate<'_>>,
+    structural_candidates: impl FnOnce(
+        &mut B,
+    ) -> Result<
+        Vec<crate::SensitiveCandidate>,
+        crate::IncrementalError,
+    >,
+    budget: &mut B,
+    ordered: bool,
+) -> Result<ScanReport, crate::IncrementalError> {
     let accepted_bytes = accepted
         .len()
         .checked_mul(std::mem::size_of::<AcceptedCandidate<'_>>())
         .ok_or(crate::IncrementalError::ResourceAccountingOverflow)?;
     #[cfg(test)]
     budget.observe_gap(0)?;
-    normalize_candidates(&mut accepted);
+    if ordered {
+        retain_candidates_by(&mut accepted, |candidate| *candidate);
+    } else {
+        normalize_candidates(&mut accepted);
+    }
     budget.results(accepted.len())?;
     let finding_bytes = accepted
         .len()
@@ -424,29 +447,41 @@ fn normalize_candidates(candidates: &mut Vec<AcceptedCandidate<'_>>) {
     normalize_candidates_by(candidates, |candidate| *candidate);
 }
 
+/// Authoritative span and exact-span ranking for normalization and ordered merges.
+pub(crate) fn compare_candidates(
+    left: AcceptedCandidate<'_>,
+    right: AcceptedCandidate<'_>,
+) -> std::cmp::Ordering {
+    left.start
+        .cmp(&right.start)
+        .then_with(|| left.end.cmp(&right.end))
+        .then_with(|| right.metadata.priority().cmp(&left.metadata.priority()))
+        .then_with(|| right.confidence.cmp(&left.confidence))
+        .then_with(|| right.metadata.severity().cmp(&left.metadata.severity()))
+        .then_with(|| {
+            left.metadata
+                .id()
+                .as_str()
+                .cmp(right.metadata.id().as_str())
+        })
+}
+
 /// Normalizes caller-owned records in place using the whole-source ranking.
 /// The borrowed projection allocates no intermediate candidate collection.
 pub(crate) fn normalize_candidates_by<'a, T>(
     candidates: &mut Vec<T>,
     inspect: impl Fn(&T) -> AcceptedCandidate<'a>,
 ) {
-    candidates.sort_unstable_by(|left, right| {
-        let left = inspect(left);
-        let right = inspect(right);
-        left.start
-            .cmp(&right.start)
-            .then_with(|| left.end.cmp(&right.end))
-            .then_with(|| right.metadata.priority().cmp(&left.metadata.priority()))
-            .then_with(|| right.confidence.cmp(&left.confidence))
-            .then_with(|| right.metadata.severity().cmp(&left.metadata.severity()))
-            .then_with(|| {
-                left.metadata
-                    .id()
-                    .as_str()
-                    .cmp(right.metadata.id().as_str())
-            })
-    });
+    candidates.sort_unstable_by(|left, right| compare_candidates(inspect(left), inspect(right)));
 
+    retain_candidates_by(candidates, inspect);
+}
+
+/// Applies authoritative exact-span retention to an already ordered sequence.
+fn retain_candidates_by<'a, T>(
+    candidates: &mut Vec<T>,
+    inspect: impl Fn(&T) -> AcceptedCandidate<'a>,
+) {
     let mut current_span = None;
     let mut highest_priority = 0;
 
