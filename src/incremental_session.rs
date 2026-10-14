@@ -7,8 +7,8 @@
 //!
 //! The old and staged snapshots coexist until commit. Raw emissions are checked
 //! before immediate ingestion; no raw candidate collection is retained. Controlled
-//! document, cache, structural-span, accepted-projection and report payloads are
-//! checked before allocation/insertion, including conservative Box conversion
+//! document, cache, structural-span, accepted-projection, merge-head and report
+//! payloads are checked before allocation/insertion, including conservative Box conversion
 //! destinations. Reservations survive until ownership drops or transfers.
 //!
 //! Logical payload excludes Vec spare capacity, allocator overhead, stack state,
@@ -21,7 +21,7 @@
 //! records. Copying the document, walking caches and global finalization remain
 //! necessary; local enumeration does not promise sublinear total edit cost.
 
-use std::{ops::Range, sync::Arc};
+use std::{cmp::Ordering, collections::BinaryHeap, ops::Range, sync::Arc};
 
 use crate::{
     Confidence, ScanReport, SensitiveCandidate,
@@ -29,7 +29,10 @@ use crate::{
         RECOVERY_LIKE_LEN, detect_owned_spans_with_emit, materialize_candidates_with_emit,
     },
     compiled_rule::{CompiledRuleSet, IncrementalWork, InternalFinding, WorkMetric},
-    scanner::{AcceptedCandidate, finalize_report_accounted, validate_raw_candidate},
+    scanner::{
+        AcceptedCandidate, compare_candidates, finalize_report_accounted_with_order,
+        validate_raw_candidate,
+    },
     validators::{contextual::ValidationContext, dispatch::ValidatorStreamingRequirement},
 };
 
@@ -327,6 +330,7 @@ impl Snapshot {
             per_rule,
             spans,
             IncrementalWork::default(),
+            false,
             operation,
         )
     }
@@ -351,6 +355,7 @@ impl Snapshot {
             per_rule,
             Vec::new(),
             IncrementalWork::default(),
+            false,
             &mut operation,
         )
     }
@@ -363,6 +368,7 @@ impl Snapshot {
         per_rule: Vec<Vec<CachedCandidate>>,
         spans: Vec<(usize, usize)>,
         work: IncrementalWork,
+        ordered_literals: bool,
         operation: &mut Operation,
     ) -> Result<Self, IncrementalError> {
         let span_count = spans.len();
@@ -375,27 +381,12 @@ impl Snapshot {
             Ok(())
         })?;
         operation.release::<(usize, usize)>(span_count)?;
-        let count = per_rule
-            .iter()
-            .flatten()
-            .filter(|record| record.confidence.is_some())
-            .count();
-        operation.reserve::<AcceptedCandidate<'_>>(count)?;
-        let accepted = per_rule
-            .iter()
-            .flatten()
-            .filter_map(|record| {
-                record.confidence.map(|confidence| AcceptedCandidate {
-                    metadata: rules.metadata(record.finding.rule_index()),
-                    start: record.finding.start(),
-                    end: record.finding.end(),
-                    confidence,
-                })
-            })
-            .collect();
+
+        let (accepted, ordered) =
+            project_candidates(rules, &per_rule, ordered_literals, operation)?;
         #[cfg(test)]
         operation.observe_gap(0)?;
-        let report = finalize_report_accounted(
+        let report = finalize_report_accounted_with_order(
             &source,
             accepted,
             |budget| {
@@ -404,6 +395,7 @@ impl Snapshot {
                 Ok(structural.clone())
             },
             operation,
+            ordered,
         )?;
         #[cfg(not(test))]
         let _ = work;
@@ -473,12 +465,6 @@ impl Snapshot {
             owners[index] = edit.literal_starts(source.len(), length, edit.c)?;
             for record in records {
                 let old = record.finding;
-                check_emission(
-                    rules,
-                    &self.source,
-                    old.rule_index().get(),
-                    old.start()..old.end(),
-                )?;
                 if old.rule_index().get() != index
                     || old.end().checked_sub(old.start()) != Some(length)
                 {
@@ -512,6 +498,7 @@ impl Snapshot {
                 });
             }
         }
+
         let mut regenerated = 0;
         let mut emit = |finding| {
             ingest(rules, &source, &mut per_rule, operation, finding)?;
@@ -544,6 +531,7 @@ impl Snapshot {
                     .sort_unstable_by_key(|record| (record.finding.start(), record.finding.end()));
             }
         }
+
         let old_structural = edit.structural_starts(self.source.len(), edit.b)?;
         let new_structural = edit.structural_starts(source.len(), edit.c)?;
         let mut spans = Vec::new();
@@ -574,8 +562,135 @@ impl Snapshot {
         if spans.windows(2).any(|pair| pair[0].0 >= pair[1].0) {
             return Err(invariant);
         }
-        Self::assemble(rules, source, revision, per_rule, spans, work, operation)
+        // Replay makes no ordering promise. This update explicitly sorted every
+        // localized literal cache above; mixed/fallback portfolios stay general.
+        let ordered_literals = lengths.iter().all(Option::is_some);
+        Self::assemble(
+            rules,
+            source,
+            revision,
+            per_rule,
+            spans,
+            work,
+            ordered_literals,
+            operation,
+        )
     }
+}
+
+/// A borrowed accepted projection of one raw cache record; rejections stay cached.
+fn project_record<'a>(
+    rules: &'a CompiledRuleSet,
+    record: &CachedCandidate,
+) -> Option<AcceptedCandidate<'a>> {
+    record.confidence.map(|confidence| AcceptedCandidate {
+        metadata: rules.metadata(record.finding.rule_index()),
+        start: record.finding.start(),
+        end: record.finding.end(),
+        confidence,
+    })
+}
+
+/// One accepted head per nonempty rule, with its next raw record index.
+struct MergeHead<'a> {
+    candidate: AcceptedCandidate<'a>,
+    rule: usize,
+    next: usize,
+}
+impl PartialEq for MergeHead<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        self.cmp(other) == Ordering::Equal
+    }
+}
+impl Eq for MergeHead<'_> {}
+impl PartialOrd for MergeHead<'_> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+impl Ord for MergeHead<'_> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        // BinaryHeap is a max heap: invert the authoritative comparator. The
+        // rule index only breaks otherwise identical ties; nothing is deduplicated.
+        compare_candidates(other.candidate, self.candidate).then_with(|| other.rule.cmp(&self.rule))
+    }
+}
+
+/// Projects literal caches through an O(N log K) merge only when their accepted
+/// records are ordered. The counting pass checks the full comparator, including
+/// confidence at duplicate spans; it never assumes replay enumeration order.
+/// The accepted payload and heap heads are reserved before either allocation.
+fn project_candidates<'a>(
+    rules: &'a CompiledRuleSet,
+    per_rule: &[Vec<CachedCandidate>],
+    allow_ordered: bool,
+    operation: &mut Operation,
+) -> Result<(Vec<AcceptedCandidate<'a>>, bool), IncrementalError> {
+    let mut ordered = allow_ordered;
+    let mut count = 0;
+    let mut active_rules = 0;
+    for records in per_rule {
+        let mut previous = None;
+        let mut active = false;
+        for record in records {
+            let Some(candidate) = project_record(rules, record) else {
+                continue;
+            };
+            count += 1;
+            active = true;
+            if ordered {
+                if previous.is_some_and(|previous| compare_candidates(previous, candidate).is_gt())
+                {
+                    ordered = false;
+                }
+                previous = Some(candidate);
+            }
+        }
+        active_rules += usize::from(active);
+    }
+    operation.reserve::<AcceptedCandidate<'_>>(count)?;
+    if !ordered || active_rules <= 1 {
+        let accepted = per_rule
+            .iter()
+            .flatten()
+            .filter_map(|record| project_record(rules, record))
+            .collect();
+        return Ok((accepted, ordered));
+    }
+    operation.reserve::<MergeHead<'_>>(active_rules)?;
+    let mut heads = BinaryHeap::with_capacity(active_rules);
+    for (rule, records) in per_rule.iter().enumerate() {
+        if let Some((index, candidate)) = records.iter().enumerate().find_map(|(index, record)| {
+            project_record(rules, record).map(|candidate| (index, candidate))
+        }) {
+            heads.push(MergeHead {
+                candidate,
+                rule,
+                next: index + 1,
+            });
+        }
+    }
+    let mut accepted = Vec::with_capacity(count);
+    while let Some(mut head) = heads.peek_mut() {
+        accepted.push(head.candidate);
+        let records = &per_rule[head.rule];
+        let next = records[head.next..]
+            .iter()
+            .enumerate()
+            .find_map(|(offset, record)| {
+                project_record(rules, record).map(|candidate| (head.next + offset + 1, candidate))
+            });
+        if let Some((next, candidate)) = next {
+            head.candidate = candidate;
+            head.next = next;
+            // Dropping PeekMut repairs the heap in O(log K).
+        } else {
+            std::collections::binary_heap::PeekMut::pop(head);
+        }
+    }
+    drop(heads);
+    operation.release::<MergeHead<'_>>(active_rules)?;
+    Ok((accepted, true))
 }
 
 fn ingest(
@@ -761,6 +876,7 @@ impl IncrementalSession {
         })();
         // The old snapshot drops inside commit; all old/staged reservations
         // remain live until that release (or staged cleanup after failure).
+
         let result = self.commit_replay(staged);
         debug_assert!(operation.bytes <= operation.peak);
         result
@@ -1006,6 +1122,245 @@ mod tests {
             structural: session.current.structural.clone(),
             report: session.report().clone(),
         }
+    }
+
+    #[test]
+    fn literal_merge_edits_preserve_overlap_priority_rejection_and_unicode_parity() {
+        let value = "CorrectHorseBatteryStaple";
+        let scanner = scanner(vec![
+            Rule::literal("z-aa", "aa", Severity::High),
+            Rule::literal("a-aa", "aa", Severity::High),
+            Rule::literal("low-aa", "aa", Severity::Low),
+            Rule::literal("a", "a", Severity::Critical),
+            Rule::literal("unicode", "éé", Severity::High),
+            Rule::literal("unicode-overlap", "é", Severity::Low),
+            Rule::literal("crab", "🦀", Severity::High),
+            Rule::literal("fallback", value, Severity::High),
+            Rule::literal("password", value, Severity::Low).with_validator(ValidatorKind::Password),
+        ]);
+        let mut session = scanner
+            .incremental_session(format!("éé🦀aaaa label={value}"))
+            .unwrap();
+        assert_eq!(session.current.per_rule[8][0].confidence, None);
+        // Unicode insertion, deletion, replacement, and overlapping literal edits.
+        edit(&scanner, &mut session, 0..0, "é");
+        edit(&scanner, &mut session, 0..2, "");
+        edit(&scanner, &mut session, 0..4, "ééé");
+        let start = session.source().find("aaaa").unwrap();
+        edit(&scanner, &mut session, start + 1..start + 3, "a");
+        let label = session.source().find("label").unwrap();
+        edit(&scanner, &mut session, label..label + 5, "password");
+        assert!(session.current.per_rule[8][0].confidence.is_some());
+        assert!(
+            session
+                .report()
+                .findings()
+                .iter()
+                .any(|finding| finding.rule_id().as_str() == "password")
+        );
+        let label = session.source().find("password=").unwrap();
+        edit(&scanner, &mut session, label..label + 8, "label");
+        assert_eq!(session.current.per_rule[8][0].confidence, None);
+        // Repeated deterministic edits cover boundary clipping and empty sequences.
+        for step in 0..36 {
+            let boundaries: Vec<_> = (0..=session.source().len())
+                .filter(|&i| session.source().is_char_boundary(i))
+                .collect();
+            let first = step * 7 % boundaries.len();
+            let last = (first + step % 3).min(boundaries.len() - 1);
+            edit(
+                &scanner,
+                &mut session,
+                boundaries[first]..boundaries[last],
+                ["", "aa", "é🦀"][step % 3],
+            );
+        }
+    }
+
+    #[test]
+    fn literal_merge_projection_preserves_duplicates_and_all_ranking_fields() {
+        use crate::compiled_rule::RuleIndex;
+        let rules = CompiledRuleSet::compile(vec![
+            Rule::literal("z-high", "aa", Severity::High),
+            Rule::literal("a-high", "aa", Severity::High),
+            Rule::literal("critical", "aa", Severity::Critical),
+            Rule::literal("low", "aa", Severity::Low),
+            Rule::literal("generic", "aa", Severity::High)
+                .with_validator(ValidatorKind::GenericCredential),
+            Rule::literal("password", "aa", Severity::Low).with_validator(ValidatorKind::Password),
+        ])
+        .unwrap();
+        let record = |rule, start, confidence| CachedCandidate {
+            finding: InternalFinding::new(RuleIndex::new(rule), start, start + 2),
+            confidence,
+        };
+        let high = Some(Confidence::High);
+        let medium = Some(Confidence::Medium);
+        let per_rule = vec![
+            vec![
+                record(0, 0, high),
+                record(0, 0, high),
+                record(0, 0, medium),
+                record(0, 4, high),
+            ],
+            vec![record(1, 0, high), record(1, 0, medium), record(1, 4, high)],
+            vec![record(2, 0, medium), record(2, 4, high)],
+            vec![record(3, 0, high), record(3, 0, None), record(3, 4, high)],
+            vec![record(4, 4, high)],
+            vec![record(5, 4, Some(Confidence::Low))],
+        ];
+        let mut operation = Operation::new(IncrementalLimits::default(), 0, 0).unwrap();
+        let (merged, ordered) =
+            project_candidates(&rules, &per_rule, true, &mut operation).unwrap();
+        assert!(ordered);
+        assert_eq!(merged.len(), 13);
+        assert!(
+            merged
+                .windows(2)
+                .all(|pair| !compare_candidates(pair[0], pair[1]).is_gt())
+        );
+        assert_eq!(
+            operation.bytes,
+            payload::<AcceptedCandidate<'_>>(13).unwrap()
+        );
+        assert_eq!(
+            operation.peak,
+            operation.bytes + payload::<MergeHead<'_>>(6).unwrap()
+        );
+        let reference = per_rule
+            .iter()
+            .flatten()
+            .filter_map(|record| project_record(&rules, record))
+            .collect();
+        let expected = crate::scanner::finalize_report_accounted(
+            "aaaaaa",
+            reference,
+            |_| Ok(Vec::new()),
+            &mut (),
+        )
+        .unwrap();
+        let actual = finalize_report_accounted_with_order(
+            "aaaaaa",
+            merged,
+            |_| Ok(Vec::new()),
+            &mut (),
+            true,
+        )
+        .unwrap();
+        assert_eq!(actual, expected);
+        assert_eq!(
+            actual
+                .findings()
+                .iter()
+                .map(|finding| finding.rule_id().as_str())
+                .collect::<Vec<_>>(),
+            [
+                "a-high", "z-high", "z-high", "low", "critical", "a-high", "z-high", "password"
+            ]
+        );
+    }
+
+    #[test]
+    fn literal_merge_falls_back_for_unordered_or_unestablished_caches() {
+        use crate::compiled_rule::RuleIndex;
+        let rules =
+            CompiledRuleSet::compile(vec![Rule::literal("literal", "aa", Severity::High)]).unwrap();
+        let raw = vec![
+            InternalFinding::new(RuleIndex::new(0), 2, 4),
+            InternalFinding::new(RuleIndex::new(0), 0, 2),
+        ];
+        let replay = Snapshot::from_emissions(&rules, "aaaa".into(), 0, raw.clone()).unwrap();
+        // Replay must not silently sort or otherwise change the raw cache.
+        assert_eq!(
+            replay.per_rule[0]
+                .iter()
+                .map(|record| record.finding)
+                .collect::<Vec<_>>(),
+            raw
+        );
+        let mut operation = Operation::new(IncrementalLimits::default(), 0, 0).unwrap();
+        let (accepted, ordered) =
+            project_candidates(&rules, &replay.per_rule, true, &mut operation).unwrap();
+        assert!(!ordered);
+        let report = finalize_report_accounted_with_order(
+            "aaaa",
+            accepted,
+            |_| Ok(Vec::new()),
+            &mut (),
+            ordered,
+        )
+        .unwrap();
+        assert_eq!(report, replay.report);
+        let mut sorted = replay.per_rule;
+        sorted[0].reverse();
+        assert!(
+            !project_candidates(&rules, &sorted, false, &mut operation)
+                .unwrap()
+                .1
+        );
+        // Byte-span sorting alone does not guarantee confidence tie ordering.
+        sorted[0] = vec![
+            CachedCandidate {
+                finding: raw[1],
+                confidence: Some(Confidence::Low),
+            },
+            CachedCandidate {
+                finding: raw[1],
+                confidence: Some(Confidence::High),
+            },
+        ];
+        assert!(
+            !project_candidates(&rules, &sorted, true, &mut operation)
+                .unwrap()
+                .1
+        );
+    }
+
+    #[test]
+    fn literal_merge_heap_admission_is_preventive_and_transactional() {
+        let scanner = scanner(vec![
+            Rule::literal("a", "aa", Severity::High),
+            Rule::literal("b", "aa", Severity::High),
+        ]);
+        let mut session = scanner.incremental_session("aaaa".into()).unwrap();
+        let old = observe(&session);
+        let count = session.current.cache_len().unwrap();
+        let required = session.current.payload().unwrap()
+            + payload::<Option<usize>>(2).unwrap()
+            + session.source().len()
+            + payload::<Vec<CachedCandidate>>(2).unwrap()
+            + payload::<CachedCandidate>(count).unwrap()
+            + payload::<AcceptedCandidate<'_>>(count).unwrap()
+            + payload::<MergeHead<'_>>(2).unwrap();
+        session.limits =
+            IncrementalLimits::default().with_max_transaction_storage_bytes(Some(required - 1));
+        assert_eq!(
+            session.apply_edit(0, 0..0, ""),
+            Err(IncrementalError::TransactionStorageLimitExceeded {
+                required,
+                limit: required - 1
+            })
+        );
+        assert_eq!(observe(&session), old);
+        assert!(!session.is_active());
+    }
+
+    #[test]
+    fn dense_literal_report_and_cache_parity() {
+        let scanner = scanner(
+            (0..8)
+                .map(|i| Rule::literal(format!("literal-{i}"), "aa", Severity::High))
+                .collect(),
+        );
+        let mut session = scanner.incremental_session("a".repeat(65_536)).unwrap();
+        assert_eq!(session.current.cache_len().unwrap(), 524_280);
+        edit(&scanner, &mut session, 32_768..32_769, "x");
+        assert_eq!(session.current.cache_len().unwrap(), 524_264);
+        assert_eq!(session.report().len(), 524_264);
+        let first = observe(&session);
+        let mut second = scanner.incremental_session("a".repeat(65_536)).unwrap();
+        edit(&scanner, &mut second, 32_768..32_769, "x");
+        assert_eq!(first, observe(&second));
     }
 
     #[test]
