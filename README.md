@@ -8,6 +8,9 @@ Use it directly as a Rust crate, through the canonical CLI as a process boundary
 
 *Cribra provides the engine; the surrounding application decides the workflow.*
 
+See [Ecosystem and Scope](docs/ECOSYSTEM.md) for an overview of related
+projects, integration models, and responsibility boundaries.
+
 Cribra is application-agnostic. Callers retain control of source acquisition,
 I/O, storage, persistence, presentation, and policy. The core owns detection,
 validation, deterministic normalization, metadata-only reporting, querying, and
@@ -436,9 +439,13 @@ See `docs/INTEROP.md` for the native interoperability contract.
 does not route through the C ABI or maintain an independent detector
 implementation.
 
-Cribra produces one optimized WebAssembly artifact using Binaryen `-Oz`.
+Cribra supports two WASM build profiles: Core for scanning/reporting and
+Flow for scanning/reporting plus transformations. Flow is the default and
+official distribution profile. Each selected profile can produce an optimized
+WebAssembly artifact using Binaryen `-Oz`.
+
 Browser consumers can use the generated URL/fetch initialization path, while
-server-side JavaScript runtimes can initialize the same artifact explicitly
+server-side JavaScript runtimes can initialize the selected artifact explicitly
 from its Wasm bytes.
 
 The production artifact has been exercised directly from a browser and from
@@ -564,9 +571,11 @@ Cribra v1.0 will be determined by demonstrated correctness, API stability,
 portability, performance stability, integration quality and repeatable
 release/security processes, rather than by adding more core features.
 
-A v0.8 release is not scheduled automatically. It will be introduced only
-when justified by demonstrated changes. Swift, Python and other bindings
-are independent workstreams and do not require new core features.
+A v0.8 core release is not scheduled automatically. It requires a
+demonstrated reason to change the core. CLI parity, C ABI, WASM and
+Swift/Python/Kotlin bindings evolve independently when they can reuse
+existing core capabilities. Adapter feature parity is not a prerequisite
+for core v1.0.
 
 See [Road to 1.0](ROADMAP.md#road-to-10--maturity-not-feature-expansion)
 for the maturity gates and versioning policy.

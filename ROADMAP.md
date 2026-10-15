@@ -263,11 +263,12 @@ Evidence: [configuration qualification](docs/0.7-configuration-qualification.md)
 - [x] Q1 — Qualify WASM Core/Flow compilation and JS runtime contracts.
 - [x] Q2 — Integrate performance changes and pass combined regression.
 - [x] Q3 — Consolidate configuration documentation and roadmap.
-- [ ] Q4 — Publish reproducible performance, footprint and dependency
+- [x] Q4 — Publish reproducible performance, footprint and dependency
       measurements in README with explicit limitations.
-- [ ] Q5 — Document a source-verified comparison with relevant scanners
-      covering privacy, responsibility, embeddability, size, portability,
-      scanning capabilities and limitations.
+- [x] Q5 — Document the ecosystem and scope of related tools using
+      primary sources, distinguishing responsibilities, workflows,
+      privacy boundaries, integration models and explicit limitations.
+      No competitive performance rankings or footprint comparisons.
 - [ ] Q6 — Audit existing Rust, C, WASM and CLI adapter boundaries without
       architectural redesign.
 - [ ] Q7 — Evaluate whether a capability manifest adds concrete value;
@@ -333,9 +334,14 @@ It does not require adding new scanning modes or redesigning the engine.
 - v0.9 is not a mandatory milestone.
 - Progression directly from v0.7 to v1.0 is permitted when maturity gates
   are satisfied.
-- Swift, Python and other language bindings evolve as independent
-  interoperability workstreams; their releases do not automatically require
-  a new core minor version.
+- CLI capability parity, C ABI, WASM and native language bindings are
+  independently versioned interoperability workstreams.
+- Extending an adapter over existing core capabilities does not justify a new
+  core minor release or make that capability a missing core feature.
+- Adapter evolution may require a core change only when a concrete,
+  independently justified core contract or implementation change is necessary.
+- Swift, Python, Kotlin and other bindings do not automatically require
+  synchronized core releases.
 
 ## Independent interoperability and ecosystem workstreams
 
