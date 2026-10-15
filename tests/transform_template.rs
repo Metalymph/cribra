@@ -1,3 +1,5 @@
+#![cfg(feature = "transform")]
+
 //! Public semantic-template transformation tests.
 
 use cribra::{

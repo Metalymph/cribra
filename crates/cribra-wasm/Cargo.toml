@@ -15,9 +15,17 @@ categories = ["wasm", "development-tools"]
 [lib]
 crate-type = ["cdylib", "rlib"]
 
+[features]
+default = ["transform"]
+transform = ["cribra/transform"]
+
 [dependencies]
 cribra = { version = "^0.6", path = "../..", default-features = false }
 wasm-bindgen = "0.2"
+
+[[example]]
+name = "parity_oracle"
+required-features = ["transform"]
 
 [dev-dependencies]
 serde = { version = "1", features = ["derive"] }

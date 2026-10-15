@@ -9,11 +9,11 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use cribra::{
-    Remediation, Rule, ScanSort, Scanner, Severity,
-    transform::{
-        PseudonymizationOptions, SynthesisOptions, pseudonymize, redact, synthesize, template,
-    },
+use cribra::{Remediation, Rule, ScanSort, Scanner, Severity};
+
+#[cfg(feature = "transform")]
+use cribra::transform::{
+    PseudonymizationOptions, SynthesisOptions, pseudonymize, redact, synthesize, template,
 };
 
 #[path = "../examples/fixtures/corpus.rs"]
@@ -77,6 +77,7 @@ fn canonical_corpus_serial_and_parallel_results_are_identical() {
     );
 }
 
+#[cfg(feature = "transform")]
 #[test]
 fn canonical_transformations_are_repeatable_for_every_input() {
     let scanner = corpus::scanner().expect("canonical scanner should build");
@@ -112,6 +113,7 @@ fn canonical_transformations_are_repeatable_for_every_input() {
     }
 }
 
+#[cfg(feature = "transform")]
 #[test]
 fn transformation_output_never_reintroduces_detected_values() {
     let scanner = corpus::scanner().expect("canonical scanner should build");
@@ -155,6 +157,7 @@ fn transformation_output_never_reintroduces_detected_values() {
     }
 }
 
+#[cfg(feature = "transform")]
 #[test]
 fn canonical_transformation_outputs_are_clean_when_rescanned() {
     let scanner = corpus::scanner().expect("canonical scanner should build");
@@ -214,26 +217,29 @@ fn empty_input_is_clean_and_all_transformations_are_identity() {
     let report = results.single_report().expect("one source");
 
     assert!(report.is_empty());
-    assert_eq!(redact(source, report).unwrap(), source);
-    assert_eq!(template(source, report).unwrap(), source);
-    assert_eq!(
-        pseudonymize(
+    #[cfg(feature = "transform")]
+    {
+        assert_eq!(redact(source, report).unwrap(), source);
+        assert_eq!(template(source, report).unwrap(), source);
+        assert_eq!(
+            pseudonymize(
+                source,
+                report,
+                &PseudonymizationOptions::new(corpus::PSEUDONYMIZATION_KEY),
+            )
+            .unwrap(),
             source,
-            report,
-            &PseudonymizationOptions::new(corpus::PSEUDONYMIZATION_KEY),
-        )
-        .unwrap(),
-        source,
-    );
-    assert_eq!(
-        synthesize(
+        );
+        assert_eq!(
+            synthesize(
+                source,
+                report,
+                &SynthesisOptions::new(corpus::SYNTHESIS_KEY),
+            )
+            .unwrap(),
             source,
-            report,
-            &SynthesisOptions::new(corpus::SYNTHESIS_KEY),
-        )
-        .unwrap(),
-        source,
-    );
+        );
+    }
 }
 
 #[test]
@@ -339,12 +345,15 @@ fn crlf_positions_and_transforms_remain_stable() {
     assert_eq!(finding.location().line(), 2);
     assert_eq!(finding.location().column(), 8);
 
-    for output in [
-        redact(source, report).unwrap(),
-        template(source, report).unwrap(),
-    ] {
-        assert!(output.contains("\r\n"));
-        assert!(!output.replace("\r\n", "").contains('\n'));
+    #[cfg(feature = "transform")]
+    {
+        for output in [
+            redact(source, report).unwrap(),
+            template(source, report).unwrap(),
+        ] {
+            assert!(output.contains("\r\n"));
+            assert!(!output.replace("\r\n", "").contains('\n'));
+        }
     }
 }
 

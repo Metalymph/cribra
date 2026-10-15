@@ -165,7 +165,17 @@ the C ABI/FFI boundary. The core engine itself does not permit unsafe Rust.
 cribra = "0.6"
 ```
 
-Optional features:
+Flow enables transformations by default. Core keeps scanner, built-ins,
+streaming, incremental sessions and reporting without the transformation layer
+or its BLAKE3 dependency:
+
+```toml
+cribra = { version = "0.6", default-features = false }
+```
+
+The standalone `Redaction` marker type remains available in Core. Enable
+`transform` explicitly to restore transformation APIs. Fuse combines Flow
+with `serde` and `parallel`:
 
 ```toml
 cribra = { version = "0.6", features = ["serde", "parallel"] }
@@ -173,6 +183,7 @@ cribra = { version = "0.6", features = ["serde", "parallel"] }
 
 | Feature | Default | Purpose |
 | --- | --- | --- |
+| `transform` | yes | Redaction, templates, keyed pseudonymization, synthesis and share bundles |
 | `serde` | no | Serialize supported public data contracts |
 | `parallel` | no | Scan independent inputs concurrently with Rayon |
 

@@ -7,7 +7,9 @@
 
 use cribra::{Remediation, Rule, Scanner, Severity};
 
+#[cfg(feature = "transform")]
 pub const PSEUDONYMIZATION_KEY: [u8; 32] = [0x31; 32];
+#[cfg(feature = "transform")]
 pub const SYNTHESIS_KEY: [u8; 32] = [0x53; 32];
 
 pub fn scanner() -> Result<Scanner, cribra::ScannerBuildError> {

@@ -1,3 +1,5 @@
+#![cfg(feature = "transform")]
+
 //! Public ShareBundle orchestration tests.
 
 use cribra::{

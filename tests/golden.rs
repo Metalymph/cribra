@@ -10,11 +10,11 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use cribra::{
-    Scanner,
-    transform::{
-        PseudonymizationOptions, SynthesisOptions, pseudonymize, redact, synthesize, template,
-    },
+use cribra::Scanner;
+
+#[cfg(feature = "transform")]
+use cribra::transform::{
+    PseudonymizationOptions, SynthesisOptions, pseudonymize, redact, synthesize, template,
 };
 
 #[path = "../examples/fixtures/corpus.rs"]
@@ -164,7 +164,6 @@ fn verify_fixture(scanner: &Scanner, inputs: &Path, outputs: &Path, input_path: 
         .replace('\\', "/");
 
     let results = scanner.scan([(relative.as_str(), source.as_str())]);
-    let report = results.single_report().expect("one source scanned");
 
     let actual_report = serde_json::to_string_pretty(&results).unwrap() + "\n";
     assert_golden(
@@ -172,37 +171,41 @@ fn verify_fixture(scanner: &Scanner, inputs: &Path, outputs: &Path, input_path: 
         actual_report.as_bytes(),
     );
 
-    assert_golden(
-        outputs.join("redacted").join(&relative),
-        redact(&source, report).unwrap().as_bytes(),
-    );
+    #[cfg(feature = "transform")]
+    {
+        let report = results.single_report().expect("one source scanned");
+        assert_golden(
+            outputs.join("redacted").join(&relative),
+            redact(&source, report).unwrap().as_bytes(),
+        );
 
-    assert_golden(
-        outputs.join("templates").join(&relative),
-        template(&source, report).unwrap().as_bytes(),
-    );
+        assert_golden(
+            outputs.join("templates").join(&relative),
+            template(&source, report).unwrap().as_bytes(),
+        );
 
-    assert_golden(
-        outputs.join("pseudonymized").join(&relative),
-        pseudonymize(
-            &source,
-            report,
-            &PseudonymizationOptions::new(corpus::PSEUDONYMIZATION_KEY),
-        )
-        .unwrap()
-        .as_bytes(),
-    );
+        assert_golden(
+            outputs.join("pseudonymized").join(&relative),
+            pseudonymize(
+                &source,
+                report,
+                &PseudonymizationOptions::new(corpus::PSEUDONYMIZATION_KEY),
+            )
+            .unwrap()
+            .as_bytes(),
+        );
 
-    assert_golden(
-        outputs.join("synthesized").join(&relative),
-        synthesize(
-            &source,
-            report,
-            &SynthesisOptions::new(corpus::SYNTHESIS_KEY),
-        )
-        .unwrap()
-        .as_bytes(),
-    );
+        assert_golden(
+            outputs.join("synthesized").join(&relative),
+            synthesize(
+                &source,
+                report,
+                &SynthesisOptions::new(corpus::SYNTHESIS_KEY),
+            )
+            .unwrap()
+            .as_bytes(),
+        );
+    }
 }
 
 fn assert_golden(path: PathBuf, actual: &[u8]) {

@@ -1,12 +1,13 @@
-use cribra::{
-    Confidence, Remediation, Rule, Scanner, Severity,
-    transform::{ShareBundle, ShareMode, ShareModeKind},
-};
+use cribra::{Confidence, Remediation, Rule, Scanner, Severity};
+
+#[cfg(feature = "transform")]
+use cribra::transform::{ShareBundle, ShareMode, ShareModeKind};
 
 #[test]
 fn scalar_display_is_plain_and_stable() {
     assert_eq!(Severity::Critical.to_string(), "critical");
     assert_eq!(Confidence::High.to_string(), "high");
+    #[cfg(feature = "transform")]
     assert_eq!(ShareModeKind::Template.to_string(), "template");
     assert_eq!(
         Remediation::RotatePassword.to_string(),
@@ -51,6 +52,7 @@ fn report_display_uses_one_plain_text_diagnostic_per_finding() {
     assert!(rendered.contains("beta"));
 }
 
+#[cfg(feature = "transform")]
 #[test]
 fn manifest_display_composes_mode_and_existing_scan_summary() {
     let scanner = Scanner::builder()

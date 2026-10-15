@@ -1,4 +1,6 @@
-use cribra::{Scanner, transform::redact};
+use cribra::Scanner;
+#[cfg(feature = "transform")]
+use cribra::transform::redact;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Financial detection is deliberately opt-in. Compose it with Cribra's
@@ -38,11 +40,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         );
     }
 
-    // Transformations operate from authoritative finding spans. Review-only
-    // candidates are never transformed automatically.
-    let safe_copy = redact(source, report)?;
+    #[cfg(feature = "transform")]
+    {
+        // Transformations operate from authoritative finding spans. Review-only
+        // candidates are never transformed automatically.
+        let safe_copy = redact(source, report)?;
 
-    println!("\nSafe derivative:\n{safe_copy}");
-
+        println!("\nSafe derivative:\n{safe_copy}");
+    }
     Ok(())
 }

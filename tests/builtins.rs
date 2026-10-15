@@ -9,10 +9,10 @@
 
 use std::collections::BTreeSet;
 
-use cribra::{
-    Confidence, DetectionMode, Remediation, Scanner, Severity, builtins,
-    transform::{SynthesisOptions, synthesize},
-};
+use cribra::{Confidence, DetectionMode, Remediation, Scanner, Severity, builtins};
+
+#[cfg(feature = "transform")]
+use cribra::transform::{SynthesisOptions, synthesize};
 
 fn scanner_for(rules: impl IntoIterator<Item = cribra::RuleSpec>) -> Scanner {
     Scanner::builder()
@@ -525,6 +525,7 @@ fn nuget_environment_credentials_are_explicitly_not_classified_as_nuget() {
     );
 }
 
+#[cfg(feature = "transform")]
 #[test]
 fn nuget_synthesis_is_invalid_under_normal_validation_on_rescan() {
     let scanner = scanner_for([builtins::NUGET_PACKAGE_SOURCE_CLEARTEXT_PASSWORD]);
@@ -551,6 +552,7 @@ fn nuget_synthesis_is_invalid_under_normal_validation_on_rescan() {
     );
 }
 
+#[cfg(feature = "transform")]
 #[test]
 fn maven_synthesis_is_invalid_under_normal_validation_on_rescan() {
     let scanner = scanner_for([builtins::MAVEN_SERVER_PASSWORD]);
@@ -1150,6 +1152,7 @@ fn pgp_private_key_remains_independent_from_other_private_key_families() {
     );
 }
 
+#[cfg(feature = "transform")]
 #[test]
 fn pgp_private_key_redaction_replaces_the_entire_armored_block() {
     let scanner = scanner_for([builtins::PGP_PRIVATE_KEY]);
@@ -4302,6 +4305,7 @@ fn nats_nkeys_reject_corrupted_or_noncanonical_material() {
     }
 }
 
+#[cfg(feature = "transform")]
 #[test]
 fn nats_nkey_synthesis_is_invalid_under_normal_validation_on_rescan() {
     let scanner = scanner_for([builtins::NATS_NKEY_SEED, builtins::NATS_NKEY_PRIVATE_KEY]);

@@ -9,9 +9,10 @@
 //! - transformations continue to consume findings only;
 //! - serialized candidates expose metadata, never the source value.
 
-use cribra::{
-    CandidateEvidence, Rule, Scanner, SensitiveCandidateKind, Severity, transform::redact,
-};
+use cribra::{CandidateEvidence, Rule, Scanner, SensitiveCandidateKind, Severity};
+
+#[cfg(feature = "transform")]
+use cribra::transform::redact;
 
 const AMBIGUOUS: &str = include_str!("fixtures/ambiguous-recovery-like.txt");
 const FALSE_POSITIVES: &str = include_str!("fixtures/ambiguous-false-positives.txt");
@@ -133,9 +134,13 @@ fn candidate_only_report_is_not_transformed_automatically() {
     assert_eq!(report.len(), 0);
     assert_eq!(report.candidate_len(), 1);
 
-    let transformed = redact(ISOLATED, report).expect("candidate-only redaction should be valid");
+    #[cfg(feature = "transform")]
+    {
+        let transformed =
+            redact(ISOLATED, report).expect("candidate-only redaction should be valid");
 
-    assert_eq!(transformed, ISOLATED);
+        assert_eq!(transformed, ISOLATED);
+    }
 }
 
 #[test]

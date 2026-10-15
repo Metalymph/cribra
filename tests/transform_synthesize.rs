@@ -1,3 +1,5 @@
+#![cfg(feature = "transform")]
+
 //! Public provider-aware synthesis tests.
 
 use cribra::{
