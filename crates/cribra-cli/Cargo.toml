@@ -17,4 +17,4 @@ name = "cribra"
 path = "src/main.rs"
 
 [dependencies]
-cribra = { version = "^0.6", path = "../.." }
+cribra = { version = "^0.7", path = "../.." }

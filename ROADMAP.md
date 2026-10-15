@@ -205,10 +205,11 @@ indexed coordinate trees, incremental normalization, and adapter exposure are
 not part of the minimum v0.6 commitment. They require their own correctness
 proofs, profiling evidence, or consumer demand.
 
-## v0.7.0 — Performance, Configurability and Integration Quality — IN PROGRESS
+## v0.7.0 — Performance, Configurability and Integration Quality — RELEASE CANDIDATE
 
-**Status:** implementation integrated and locally qualified; final documentation,
-integration-quality review and release qualification remain open.
+**Status:** implementation and Q1-Q9 qualification complete. The versioned
+release candidate is under final release validation; remote CI, integration
+and publication remain separate authorization gates.
 
 v0.7 consolidates the existing architecture. It does not introduce a new
 detection engine, change semantic authority or require architectural redesign.
