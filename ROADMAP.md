@@ -286,6 +286,57 @@ After v0.7 closure, prioritize independently versioned Swift and Python
 bindings over the existing authoritative Rust core and applicable C ABI.
 No automatic streaming or incremental adapter parity is implied.
 
+## Road to 1.0 — Maturity, not feature expansion
+
+**Core feature-complete target: v0.7.0.**
+
+Cribra has implemented the planned core execution architecture:
+
+- Three scanning modes: whole-source, admitted-configuration streaming,
+  and exact incremental scanning.
+- Synchronous execution and optional Rayon parallel scanning of independent
+  inputs; parallelism is not promised for every scanning mode.
+- Three Rust build profiles: Core, Flow and Fuse.
+- Two WASM build profiles: Core and Flow, exposing their documented
+scanning/reporting surface rather than Rust streaming/incremental APIs.
+- An independently versioned C ABI adapter exposing its documented
+  applicable surface, not automatic parity with every Rust profile.
+
+Feature-complete means the planned core capability set is implemented.
+It does not imply universal streaming support, complete adapter parity,
+zero false positives, unrestricted input sizes or production qualification
+on every platform.
+
+### v1.0 maturity gates
+
+- [ ] **Correctness:** deterministic semantic parity and sustained regression
+      qualification across supported execution modes.
+- [ ] **API stability:** documented public contracts, compatibility policy
+      and justified handling of breaking changes.
+- [ ] **Portability:** explicit platform support matrix backed by CI or
+      reproducible qualification evidence.
+- [ ] **Performance stability:** reproducible representative baselines,
+      evaluated regressions and documented resource limitations.
+- [ ] **Integration maturity:** qualified adapter contracts, ownership,
+      error handling and independently versioned binding compatibility.
+- [ ] **Release maturity:** repeatable packaging, security maintenance,
+      release validation and documented support policy.
+
+A v1.0 release requires evidence that these gates are satisfied.
+It does not require adding new scanning modes or redesigning the engine.
+
+### Post-v0.7 versioning policy
+
+- v0.7 closes the planned core feature set and completes its qualification.
+- v0.8 is conditional: create it only for demonstrated, justified changes
+  that warrant a new core minor release.
+- v0.9 is not a mandatory milestone.
+- Progression directly from v0.7 to v1.0 is permitted when maturity gates
+  are satisfied.
+- Swift, Python and other language bindings evolve as independent
+  interoperability workstreams; their releases do not automatically require
+  a new core minor version.
+
 ## Independent interoperability and ecosystem workstreams
 
 These workstreams remain separate from the v0.6/v0.7 core milestones. New core
