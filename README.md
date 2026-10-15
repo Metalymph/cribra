@@ -8,6 +8,9 @@ Use it directly as a Rust crate, through the canonical CLI as a process boundary
 
 *Cribra provides the engine; the surrounding application decides the workflow.*
 
+See [Ecosystem and Scope](docs/ECOSYSTEM.md) for an overview of related
+projects, integration models, and responsibility boundaries.
+
 Cribra is application-agnostic. Callers retain control of source acquisition,
 I/O, storage, persistence, presentation, and policy. The core owns detection,
 validation, deterministic normalization, metadata-only reporting, querying, and
@@ -165,7 +168,17 @@ the C ABI/FFI boundary. The core engine itself does not permit unsafe Rust.
 cribra = "0.6"
 ```
 
-Optional features:
+Flow enables transformations by default. Core keeps scanner, built-ins,
+streaming, incremental sessions and reporting without the transformation layer
+or its BLAKE3 dependency:
+
+```toml
+cribra = { version = "0.6", default-features = false }
+```
+
+The standalone `Redaction` marker type remains available in Core. Enable
+`transform` explicitly to restore transformation APIs. Fuse combines Flow
+with `serde` and `parallel`:
 
 ```toml
 cribra = { version = "0.6", features = ["serde", "parallel"] }
@@ -173,8 +186,53 @@ cribra = { version = "0.6", features = ["serde", "parallel"] }
 
 | Feature | Default | Purpose |
 | --- | --- | --- |
+| `transform` | yes | Redaction, templates, keyed pseudonymization, synthesis and share bundles |
 | `serde` | no | Serialize supported public data contracts |
 | `parallel` | no | Scan independent inputs concurrently with Rayon |
+
+### v0.7 performance and footprint
+
+Cribra v0.7 introduces measurement-led incremental optimizations and
+configurable build profiles. These results are local qualification data,
+not cross-platform performance or release-size guarantees.
+
+**Incremental edit latency versus v0.6:**
+
+| Workload | v0.7 | Change |
+| --- | ---: | ---: |
+| Dense, 8 rules, 64 KiB | 19.654 ms | -46.62% |
+| Mixed, 64 KiB | 488.09 us | -8.76% |
+| Sparse, 64 rules, 64 KiB | 33.813 us | -2.02% |
+| Sparse, 4 rules, 1 KiB | 783.20 ns | +3.60% |
+
+The small-input regression is included deliberately. These performance
+measurements precede integration with the configurable build profiles;
+the combined implementation subsequently passed regression testing.
+
+**WASM footprint (optimized, Brotli level 11):**
+
+| Profile | Compressed WASM |
+| --- | ---: |
+| Core | 294,690 bytes |
+| Flow | 311,469 bytes |
+
+Core is approximately 5.39% smaller than Flow in this measurement.
+
+**Rust dependency footprint:**
+
+| Profile | Distinct normal dependency packages |
+| --- | ---: |
+| Core | 6 |
+| Flow | 10 |
+| Fuse | 24 |
+
+Counts exclude Cribra itself. Native executable sizes were nearly
+identical for the scanning-only consumer used in qualification; fewer
+dependencies do not imply proportionally smaller linked executables.
+
+Measurements: macOS ARM64, Rust 1.99.0. See
+[performance methodology](docs/PERFORMANCE.md) and
+[configuration qualification](docs/0.7-configuration-qualification.md).
 
 ### Canonical CLI
 
@@ -381,9 +439,13 @@ See `docs/INTEROP.md` for the native interoperability contract.
 does not route through the C ABI or maintain an independent detector
 implementation.
 
-Cribra produces one optimized WebAssembly artifact using Binaryen `-Oz`.
+Cribra supports two WASM build profiles: Core for scanning/reporting and
+Flow for scanning/reporting plus transformations. Flow is the default and
+official distribution profile. Each selected profile can produce an optimized
+WebAssembly artifact using Binaryen `-Oz`.
+
 Browser consumers can use the generated URL/fetch initialization path, while
-server-side JavaScript runtimes can initialize the same artifact explicitly
+server-side JavaScript runtimes can initialize the selected artifact explicitly
 from its Wasm bytes.
 
 The production artifact has been exercised directly from a browser and from
@@ -485,8 +547,9 @@ but are supported by the incremental API.
 See [the D4 evidence](docs/0.6-d4-qualification.md) and
 [the D5 qualification record](docs/0.6-d5-qualification.md).
 
-**v0.7.0 is planned** for profiling, resource reuse and evidence-driven
-optimization. Existing Rayon execution of independent sources remains available;
+**v0.7.0 is in development and locally qualified** for incremental
+performance optimization, configurable Rust/WASM profiles and integration
+quality. Existing Rayon execution of independent sources remains available;
 it is not a future implementation milestone.
 
 CLI, C, WASM, native bindings and distribution remain independently versioned
@@ -494,6 +557,28 @@ workstreams with their own documented capability surfaces.
 
 See `ROADMAP.md` for the architectural roadmap and the independent interface
 and ecosystem workstreams.
+
+## Road to 1.0
+
+Cribra's v0.7 development line implements the planned core feature set: whole-source,
+streaming and incremental scanning; synchronous execution and optional
+parallel scanning of independent inputs; Core/Flow/Fuse Rust profiles;
+Core/Flow WASM profiles; and a separately qualified native C ABI.
+
+**Feature-complete is not the same as maturity-complete.**
+
+Cribra v1.0 will be determined by demonstrated correctness, API stability,
+portability, performance stability, integration quality and repeatable
+release/security processes, rather than by adding more core features.
+
+A v0.8 core release is not scheduled automatically. It requires a
+demonstrated reason to change the core. CLI parity, C ABI, WASM and
+Swift/Python/Kotlin bindings evolve independently when they can reuse
+existing core capabilities. Adapter feature parity is not a prerequisite
+for core v1.0.
+
+See [Road to 1.0](ROADMAP.md#road-to-10--maturity-not-feature-expansion)
+for the maturity gates and versioning policy.
 
 ## Examples
 

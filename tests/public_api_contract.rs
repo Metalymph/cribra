@@ -1,4 +1,6 @@
-use cribra::{Rule, Scanner, Severity, builtins, transform};
+#[cfg(feature = "transform")]
+use cribra::transform;
+use cribra::{Rule, Scanner, Severity, builtins};
 
 #[test]
 fn default_scanner_is_external_consumer_accessible() {
@@ -55,6 +57,7 @@ fn custom_and_builtin_rules_are_composable() {
     );
 }
 
+#[cfg(feature = "transform")]
 #[test]
 fn transform_namespace_is_external_consumer_accessible() {
     let scanner = Scanner::builder()

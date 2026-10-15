@@ -1,3 +1,5 @@
+#![cfg(feature = "transform")]
+
 //! Parity invariants for transformations that operate on finding metadata.
 
 use cribra::{

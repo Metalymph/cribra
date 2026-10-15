@@ -16,7 +16,7 @@ parallel = ["cribra/parallel"]
 crate-type = ["rlib", "staticlib", "cdylib"]
 
 [dependencies]
-cribra = { path = "../.." }
+cribra = { path = "../..", features = ["transform"] }
 
 [dev-dependencies]
 criterion = "0.8.2"

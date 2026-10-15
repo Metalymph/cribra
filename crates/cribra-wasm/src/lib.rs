@@ -12,8 +12,12 @@
 //! scanned source text or matched sensitive values.
 
 use cribra::{
-    CandidateEvidence, Confidence, DetectionMode, Explanation, Finding, Redaction, Remediation,
-    Rule, ScanReport, Scanner, SensitiveCandidate, SensitiveCandidateKind, Severity,
+    CandidateEvidence, Confidence, DetectionMode, Explanation, Finding, Remediation, Rule,
+    ScanReport, Scanner, SensitiveCandidate, SensitiveCandidateKind, Severity,
+};
+#[cfg(feature = "transform")]
+use cribra::{
+    Redaction,
     transform::{
         PseudonymizationOptions, SynthesisOptions, TemplateOptions, pseudonymize, redact,
         redact_with, synthesize, template, template_with,
@@ -21,11 +25,13 @@ use cribra::{
 };
 use wasm_bindgen::{JsError, prelude::*};
 
+#[cfg(feature = "transform")]
 fn key32(key: &[u8]) -> Result<[u8; 32], JsError> {
     key.try_into()
         .map_err(|_| JsError::new("transformation key must contain exactly 32 bytes"))
 }
 
+#[cfg(feature = "transform")]
 fn transform_error(error: impl std::fmt::Display) -> JsError {
     JsError::new(&error.to_string())
 }
@@ -593,6 +599,7 @@ impl ScanResult {
     /// Applies Cribra's conservative default redaction to classified findings.
     ///
     /// Ambiguous candidates are never transformed.
+    #[cfg(feature = "transform")]
     pub fn redact(&self, source: &str) -> Result<String, JsError> {
         redact(source, &self.report).map_err(transform_error)
     }
@@ -600,6 +607,7 @@ impl ScanResult {
     /// Applies caller-selected replacement text to classified findings.
     ///
     /// Ambiguous candidates are never transformed.
+    #[cfg(feature = "transform")]
     #[wasm_bindgen(js_name = redactWith)]
     pub fn redact_with(&self, source: &str, replacement: &str) -> Result<String, JsError> {
         let redaction = Redaction::new(replacement);
@@ -607,12 +615,14 @@ impl ScanResult {
     }
 
     /// Produces semantic placeholders using Cribra's default template options.
+    #[cfg(feature = "transform")]
     pub fn template(&self, source: &str) -> Result<String, JsError> {
         template(source, &self.report).map_err(transform_error)
     }
 
     /// Produces semantic placeholders with an explicit namespace and optional
     /// per-rule occurrence numbering.
+    #[cfg(feature = "transform")]
     #[wasm_bindgen(js_name = templateWith)]
     pub fn template_with(
         &self,
@@ -631,6 +641,7 @@ impl ScanResult {
     ///
     /// `key` must contain exactly 32 bytes. The key is borrowed only for this
     /// call and is never retained by the result or adapter.
+    #[cfg(feature = "transform")]
     pub fn pseudonymize(
         &self,
         source: &str,
@@ -649,6 +660,7 @@ impl ScanResult {
     ///
     /// `key` must contain exactly 32 bytes. The key is borrowed only for this
     /// call and is never retained by the result or adapter.
+    #[cfg(feature = "transform")]
     pub fn synthesize(&self, source: &str, key: &[u8], marker: &str) -> Result<String, JsError> {
         let options = SynthesisOptions::new(key32(key)?).marker(marker);
 
@@ -760,6 +772,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "transform")]
     #[test]
     fn redact_transforms_findings_without_touching_candidates() {
         let engine = ScanEngine::new();
@@ -772,6 +785,7 @@ mod tests {
         assert!(output.contains("[REDACTED]"));
     }
 
+    #[cfg(feature = "transform")]
     #[test]
     fn template_uses_typed_report_without_serialization() {
         let engine = ScanEngine::new();
@@ -786,6 +800,7 @@ mod tests {
         assert!(!output.contains("ghp_AbCdEf0123456789_AbCdEf0123456789"));
     }
 
+    #[cfg(feature = "transform")]
     #[test]
     fn keyed_transforms_are_deterministic_and_do_not_retain_keys() {
         let engine = ScanEngine::new();
@@ -817,8 +832,11 @@ mod tests {
 
         assert_eq!(result.finding_count(), 0);
         assert_eq!(result.candidate_count(), 1);
-        assert_eq!(result.redact(source).unwrap(), source);
-        assert_eq!(result.template(source).unwrap(), source);
+        #[cfg(feature = "transform")]
+        {
+            assert_eq!(result.redact(source).unwrap(), source);
+            assert_eq!(result.template(source).unwrap(), source);
+        }
     }
 
     #[test]

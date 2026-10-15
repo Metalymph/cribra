@@ -1,9 +1,9 @@
 #![cfg(feature = "serde")]
 
-use cribra::{
-    Confidence, Remediation, Rule, ScanResults, Scanner, Severity,
-    transform::{ShareBundle, ShareMode, ShareModeKind},
-};
+use cribra::{Confidence, Remediation, Rule, ScanResults, Scanner, Severity};
+
+#[cfg(feature = "transform")]
+use cribra::transform::{ShareBundle, ShareMode, ShareModeKind};
 
 #[test]
 fn finding_json_is_structured_and_never_contains_the_matched_secret() {
@@ -64,12 +64,14 @@ fn enum_wire_names_are_stable_snake_case() {
         serde_json::to_string(&Remediation::RotatePassword).unwrap(),
         r#""rotate_password""#,
     );
+    #[cfg(feature = "transform")]
     assert_eq!(
         serde_json::to_string(&ShareModeKind::Pseudonymize).unwrap(),
         r#""pseudonymize""#,
     );
 }
 
+#[cfg(feature = "transform")]
 #[test]
 fn share_bundle_round_trip_preserves_safe_transformed_content_and_manifest() {
     let scanner = Scanner::builder()

@@ -155,7 +155,7 @@ prefilters and other unsupported configurations fail admission explicitly. See
 [the streaming contract](streaming.md) for exact restrictions and ownership.
 This chunked execution does not implement incremental rescanning after edits.
 
-## Incremental rescanning — implemented, unreleased v0.6.0
+## Incremental rescanning — available since v0.6.0
 
 `IncrementalSession` owns a revisioned UTF-8 `String` and shares immutable
 compiled scanner configuration. It retains per-rule raw candidates and validator

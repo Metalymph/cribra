@@ -1,0 +1,138 @@
+{
+  "CandidateEvidenceKind": {
+    "kind": "enum",
+    "members": [
+      "Structural = 0",
+      "Unknown = 1"
+    ]
+  },
+  "CandidateKind": {
+    "kind": "enum",
+    "members": [
+      "RecoveryLikeCode = 0",
+      "Unknown = 1"
+    ]
+  },
+  "CandidateView": {
+    "kind": "class",
+    "members": [
+      "readonly column: number",
+      "readonly end: number",
+      "readonly evidence: CandidateEvidenceKind",
+      "readonly kind: CandidateKind",
+      "readonly line: number",
+      "readonly start: number"
+    ]
+  },
+  "DetectionModeKind": {
+    "kind": "enum",
+    "members": [
+      "MatcherOnly = 0",
+      "Deterministic = 1",
+      "Contextual = 2"
+    ]
+  },
+  "ExplanationKind": {
+    "kind": "enum",
+    "members": [
+      "Classified = 0",
+      "Ambiguous = 1",
+      "Unknown = 2"
+    ]
+  },
+  "ExplanationView": {
+    "kind": "class",
+    "members": [
+      "readonly candidateEvidence: CandidateEvidenceKind | undefined",
+      "readonly detectionMode: DetectionModeKind | undefined",
+      "readonly kind: ExplanationKind"
+    ]
+  },
+  "FindingConfidence": {
+    "kind": "enum",
+    "members": [
+      "Low = 0",
+      "Medium = 1",
+      "High = 2"
+    ]
+  },
+  "FindingSeverity": {
+    "kind": "enum",
+    "members": [
+      "Info = 0",
+      "Low = 1",
+      "Medium = 2",
+      "High = 3",
+      "Critical = 4"
+    ]
+  },
+  "FindingView": {
+    "kind": "class",
+    "members": [
+      "readonly column: number",
+      "readonly confidence: FindingConfidence",
+      "readonly end: number",
+      "readonly line: number",
+      "readonly remediation: RemediationKind",
+      "readonly ruleId: string",
+      "readonly severity: FindingSeverity",
+      "readonly start: number"
+    ]
+  },
+  "RemediationKind": {
+    "kind": "enum",
+    "members": [
+      "None = 0",
+      "RevokeAndRotateCredential = 1",
+      "RotateCredential = 2",
+      "RotatePassword = 3",
+      "ReplacePrivateKey = 4",
+      "RemoveSensitiveValue = 5",
+      "ReviewSensitiveHash = 6",
+      "ReviewPasswordVerifier = 7",
+      "Unknown = 8"
+    ]
+  },
+  "ScanEngine": {
+    "kind": "class",
+    "members": [
+      "explainFinding(result: ScanResult, index: number): ExplanationView",
+      "constructor()",
+      "rulesCount(): number",
+      "scan(source: string): ScanResult"
+    ]
+  },
+  "ScanEngineBuilder": {
+    "kind": "class",
+    "members": [
+      "addFinancialBuiltins(): void",
+      "addLiteral(id: string, value: string, severity: FindingSeverity): void",
+      "addPattern(id: string, pattern: string, severity: FindingSeverity): void",
+      "addPersonalBuiltins(): void",
+      "addPrefix(id: string, value: string, severity: FindingSeverity): void",
+      "addSuffix(id: string, value: string, severity: FindingSeverity): void",
+      "build(): ScanEngine",
+      "customRuleCount(): number",
+      "constructor(include_builtins: boolean)"
+    ]
+  },
+  "ScanResult": {
+    "kind": "class",
+    "members": [
+      "candidateAt(index: number): CandidateView",
+      "candidateCount(): number",
+      "candidateExplanationAt(index: number): ExplanationView",
+      "findingAt(index: number): FindingView",
+      "findingCount(): number",
+      "hasCritical(): boolean",
+      "needsReview(): boolean",
+      "pseudonymize(source: string, key: Uint8Array, prefix: string, digest_bytes: number): string",
+      "redact(source: string): string",
+      "redactWith(source: string, replacement: string): string",
+      "synthesize(source: string, key: Uint8Array, marker: string): string",
+      "template(source: string): string",
+      "templateWith(source: string, namespace: string, numbered: boolean): string",
+      "readonly sourceBytes: number"
+    ]
+  }
+}

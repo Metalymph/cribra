@@ -63,16 +63,19 @@ jobs:
         run: cargo fmt --all -- --check
 
       - name: Check cribra-wasm
-        run: cargo check -p cribra-wasm
+        run: cargo check -p cribra-wasm --no-default-features --features transform
 
       - name: Check wasm32 target
-        run: cargo check -p cribra-wasm --target wasm32-unknown-unknown
+        run: cargo check -p cribra-wasm --target wasm32-unknown-unknown --no-default-features --features transform
 
       - name: Test cribra-wasm
-        run: cargo test -p cribra-wasm
+        run: cargo test -p cribra-wasm --no-default-features --features transform
 
       - name: Clippy cribra-wasm
-        run: cargo clippy -p cribra-wasm --all-targets -- -D warnings
+        run: cargo clippy -p cribra-wasm --no-default-features --features transform --all-targets -- -D warnings
+
+      - name: Qualify official Flow WASM distribution
+        run: node crates/cribra-wasm/tests/runtime/qualify.mjs flow --install-bindgen
 
       - name: Package
         run: cargo package -p cribra-wasm

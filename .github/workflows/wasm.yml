@@ -38,6 +38,15 @@ jobs:
       - name: Check WASM build with serde
         run: cargo check --target wasm32-unknown-unknown --features serde
 
+      - name: Check Core WASM adapter
+        run: cargo check -p cribra-wasm --target wasm32-unknown-unknown --no-default-features
+
+      - name: Check Flow WASM adapter
+        run: cargo check -p cribra-wasm --target wasm32-unknown-unknown --no-default-features --features transform
+
+      - name: Qualify Core and Flow generated APIs and runtime
+        run: node crates/cribra-wasm/tests/runtime/qualify.mjs --install-bindgen
+
       - name: Ensure parallel is not part of the browser WASM contract
         shell: bash
         run: |

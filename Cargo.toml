@@ -1,6 +1,6 @@
 [package]
 name = "cribra"
-version = "0.6.0"
+version = "0.7.0"
 edition = "2024"
 description = "Embeddable, local-first, fully synchronous Rust engine for detecting, reviewing, and safely transforming secrets and sensitive data."
 license = "MIT"
@@ -12,18 +12,27 @@ categories = ["development-tools", "text-processing"]
 rust-version = "1.97"
 
 [features]
-default = []
+default = ["transform"]
+transform = ["dep:blake3"]
 parallel = ["dep:rayon"]
 serde = ["dep:serde"]
 
 [dependencies]
 aho-corasick = "1.1.4"
 base64 = "0.23"
-blake3 = "1"
+blake3 = { version = "1", optional = true }
 rayon = { version = "1.12.0", optional = true }
 regex = "1.13.1"
 regex-syntax = "0.8.8"
 serde = { version = "1.0", features = ["derive", "rc"], optional = true }
+
+[[example]]
+name = "share_safe"
+required-features = ["transform"]
+
+[[example]]
+name = "generate_fixtures"
+required-features = ["transform"]
 
 [[bench]]
 name = "scan"

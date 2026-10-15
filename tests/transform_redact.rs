@@ -1,3 +1,5 @@
+#![cfg(feature = "transform")]
+
 //! Public transformation tests.
 
 use cribra::{

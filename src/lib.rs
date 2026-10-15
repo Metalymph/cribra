@@ -84,16 +84,18 @@
 //!
 //! # Transformations
 //!
-//! [`transform`] provides explicit share-safe transformations:
+//! The default-enabled `transform` feature provides explicit share-safe transformations:
 //!
-//! - [`transform::redact`] for conservative replacement;
-//! - [`transform::template`] for semantic placeholders;
-//! - [`transform::pseudonymize`] for deterministic keyed pseudonyms;
-//! - [`transform::synthesize`] for deterministic keyed synthetic values;
-//! - [`transform::ShareBundle`] for transformed keyed batches plus manifest
+//! - `transform::redact` for conservative replacement;
+//! - `transform::template` for semantic placeholders;
+//! - `transform::pseudonymize` for deterministic keyed pseudonyms;
+//! - `transform::synthesize` for deterministic keyed synthetic values;
+//! - `transform::ShareBundle` for transformed keyed batches plus manifest
 //!   metadata.
 //!
 //! ```
+//! # #[cfg(feature = "transform")]
+//! # {
 //! use cribra::{Rule, Scanner, Severity, transform::redact};
 //!
 //! let scanner = Scanner::builder()
@@ -105,11 +107,17 @@
 //! let report = results.single_report().expect("one report");
 //!
 //! assert_eq!(redact(source, report)?, "TOKEN=[REDACTED]");
+//! # }
 //!
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
 //!
 //! # Optional features
+//!
+//! Minimal (`default-features = false`) includes scanning, built-ins, reporting,
+//! streaming and incremental sessions, with the standalone [`Redaction`] type.
+//! Standard (the default) adds `transform`, including keyed transformations backed
+//! by BLAKE3. Full adds `parallel` and `serde` to Standard.
 //!
 //! `serde` enables serialization support for public data contracts.
 //!
@@ -131,7 +139,7 @@
 //! bounded retained source history and successful-EOF-only complete reports.
 //! Complete built-in portfolios remain unsupported for streaming.
 //!
-//! The implemented, unreleased v0.6.0 [`IncrementalSession`] owns a revisioned
+//! Available since v0.6.0, [`IncrementalSession`] owns a revisioned
 //! UTF-8 document and maintains exact complete reports after replacement edits.
 //! Literal and structural matching use local invalidation; Prefix, Suffix and
 //! regex rules use authoritative whole-rule fallback. This is mutable-document
@@ -174,6 +182,7 @@ mod source_coordinates;
 )]
 mod source_session;
 mod stream;
+#[cfg(feature = "transform")]
 pub mod transform;
 #[cfg_attr(
     not(test),
@@ -200,6 +209,7 @@ pub use scanner_builder::{ScannerBuildError, ScannerBuilder};
 pub use sensitive_candidate::{CandidateEvidence, SensitiveCandidate, SensitiveCandidateKind};
 pub use severity::Severity;
 pub use stream::{StreamError, StreamLimits, StreamSession};
+#[cfg(feature = "transform")]
 pub use transform::redact;
 
 pub use incremental_session::{IncrementalError, IncrementalLimits, IncrementalSession};

@@ -1,3 +1,5 @@
+#![cfg(feature = "transform")]
+
 //! Public deterministic pseudonymization tests.
 
 use cribra::{

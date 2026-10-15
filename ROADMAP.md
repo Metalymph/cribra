@@ -5,7 +5,7 @@ and safely transforming secrets and sensitive material. The Rust core is the
 semantic authority; adapters project applicable core behavior rather than
 reimplementing detection policy.
 
-**Current focus: v0.7.0 — profiling and measurement-led performance optimization.**
+**Current focus: v0.7.0 — final performance, configurability and integration-quality qualification.**
 
 ## Engineering principles
 
@@ -33,7 +33,7 @@ reimplementing detection policy.
 | `cribra-c` v0.3.0 | Existing independent release | Native interoperability; no new streaming or incremental interface implied |
 | `cribra` **v0.6.0** | **Released — complete** | Exact incremental scanning of mutable documents |
 | `cribra-wasm` **v0.4.7** | **Released — complete** | Compatibility update to core `^0.6`; existing JS/WASM API unchanged |
-| `cribra` **v0.7.0** | Planned | Resource reuse, profiling, and measurement-led performance improvements |
+| `cribra` **v0.7.0** | In development — locally qualified | Incremental performance, configurable profiles and integration quality |
 
 Core release-line numbering does not force synchronized CLI, C, WASM, or
 language-binding versions. Adapter parity applies to each adapter's documented,
@@ -205,23 +205,144 @@ indexed coordinate trees, incremental normalization, and adapter exposure are
 not part of the minimum v0.6 commitment. They require their own correctness
 proofs, profiling evidence, or consumer demand.
 
-## v0.7.0 — Resource Reuse and Performance Profiling — PLANNED
+## v0.7.0 — Performance, Configurability and Integration Quality — RELEASE CANDIDATE
 
-Use v0.6's benchmark baseline and real consumer workloads to identify dominant
-costs before optimizing. Candidate work includes reusable per-session buffers,
-allocation and cache churn reduction, document-copy and offset-shifting costs,
-coordinate/materialization overhead, and better scheduling of existing Rayon
-whole-source work where evidence warrants it.
+**Status:** implementation and Q1-Q9 qualification complete. The versioned
+release candidate is under final release validation; remote CI, integration
+and publication remain separate authorization gates.
 
-- [ ] Establish reproducible profiles and allocation measurements.
-- [ ] Prioritize optimizations by **end-to-end** latency, throughput, memory,
-      and regression risk, not by synthetic matcher-only wins.
-- [ ] Preserve exact semantics, stable public contracts, and streaming bounds.
-- [ ] Demonstrate improvements on representative small-edit, dense-result,
-      mixed-rule, and whole-document workloads.
+v0.7 consolidates the existing architecture. It does not introduce a new
+detection engine, change semantic authority or require architectural redesign.
 
-No blanket SIMD, parallelism, rope, or allocator redesign is promised. Existing
-Rayon support is a baseline, not a feature to reimplement.
+### Delivered performance optimizations
+
+- [x] P0.3 — Profile incremental edit phases and identify dominant costs.
+- [x] P1.1 — Ordered heap merge for eligible literal candidate caches,
+      preserving authoritative ordering and retention.
+- [x] P2.1 — Remove redundant old-source emission validation during cache
+      transfer without weakening transactional or resource contracts.
+- [x] Integrate the performance changes with the configurable build profiles.
+- [x] Pass combined Rust Core/Flow/Fuse and adapter regression.
+
+Measured incremental edit latency versus the v0.6 baseline:
+
+| Workload | v0.7 | Change |
+| --- | ---: | ---: |
+| `dense-8-64k` | 19.654 ms | -46.62% |
+| `mixed-64k` | 488.09 us | -8.76% |
+| `sparse-64-64k` | 33.813 us | -2.02% |
+| `sparse-4-1k` | 783.20 ns | +3.60% |
+
+These measurements were collected on the performance branch before
+integration with P5. The combined implementation subsequently passed local
+regression, but was not independently rebenchmarked. Results are not
+cross-platform guarantees. The small-input regression is retained explicitly.
+
+Evidence: [performance](docs/PERFORMANCE.md) and
+[historical phase profile](docs/0.7-p03-incremental-phase-profile.md).
+
+### Delivered configurable profiles
+
+- [x] P5.1 — Rust Core, Flow and Fuse profiles using existing Cargo features.
+- [x] P5.2 — WASM Core and Flow; Flow remains the default and official profile.
+- [x] P5.3 — Automated JS/TypeScript API contract and Node.js runtime qualification.
+- [x] P5.4 — Measure binary sizes, compression and dependency differences.
+- [x] P5.5 — Consolidate naming, documentation and regression.
+
+Profiles:
+
+| Profile | Rust | WASM |
+| --- | --- | --- |
+| Core | Scanner without default features | Scanning/reporting API |
+| Flow | Default; transformations enabled | Default; transformations enabled |
+| Fuse | All features; parallel and Serde | Not supported |
+
+Evidence: [configuration qualification](docs/0.7-configuration-qualification.md).
+
+### Final qualification checklist
+
+- [x] Q1 — Qualify WASM Core/Flow compilation and JS runtime contracts.
+- [x] Q2 — Integrate performance changes and pass combined regression.
+- [x] Q3 — Consolidate configuration documentation and roadmap.
+- [x] Q4 — Publish reproducible performance, footprint and dependency
+      measurements in README with explicit limitations.
+- [x] Q5 — Document the ecosystem and scope of related tools using
+      primary sources, distinguishing responsibilities, workflows,
+      privacy boundaries, integration models and explicit limitations.
+      No competitive performance rankings or footprint comparisons.
+- [x] Q6 — Audit existing Rust, C, WASM and CLI adapter boundaries without
+      architectural redesign.
+- [x] Q7 — Evaluate whether a capability manifest adds concrete value;
+      document the decision without assuming implementation is required.
+- [x] Q8 — Evaluate precompiled WASM distribution and packaging;
+      document the decision and any independently scheduled follow-up.
+- [x] Q9 — Verify C ABI compatibility, ownership, errors and existing
+      conformance coverage; make only justified compatibility corrections.
+
+Final release gates remain separate: strict CI, packaging, versioning,
+publication and release evidence must be qualified explicitly.
+
+### Next workstream
+
+After v0.7 closure, prioritize independently versioned Swift and Python
+bindings over the existing authoritative Rust core and applicable C ABI.
+No automatic streaming or incremental adapter parity is implied.
+
+## Road to 1.0 — Maturity, not feature expansion
+
+**Core feature-complete target: v0.7.0.**
+
+Cribra has implemented the planned core execution architecture:
+
+- Three scanning modes: whole-source, admitted-configuration streaming,
+  and exact incremental scanning.
+- Synchronous execution and optional Rayon parallel scanning of independent
+  inputs; parallelism is not promised for every scanning mode.
+- Three Rust build profiles: Core, Flow and Fuse.
+- Two WASM build profiles: Core and Flow, exposing their documented
+scanning/reporting surface rather than Rust streaming/incremental APIs.
+- An independently versioned C ABI adapter exposing its documented
+  applicable surface, not automatic parity with every Rust profile.
+
+Feature-complete means the planned core capability set is implemented.
+It does not imply universal streaming support, complete adapter parity,
+zero false positives, unrestricted input sizes or production qualification
+on every platform.
+
+### v1.0 maturity gates
+
+- [ ] **Correctness:** deterministic semantic parity and sustained regression
+      qualification across supported execution modes.
+- [ ] **API stability:** documented public contracts, compatibility policy
+      and justified handling of breaking changes.
+- [ ] **Portability:** explicit platform support matrix backed by CI or
+      reproducible qualification evidence.
+- [ ] **Performance stability:** reproducible representative baselines,
+      evaluated regressions and documented resource limitations.
+- [ ] **Integration maturity:** qualified adapter contracts, ownership,
+      error handling and independently versioned binding compatibility.
+- [ ] **Release maturity:** repeatable packaging, security maintenance,
+      release validation and documented support policy.
+
+A v1.0 release requires evidence that these gates are satisfied.
+It does not require adding new scanning modes or redesigning the engine.
+
+### Post-v0.7 versioning policy
+
+- v0.7 closes the planned core feature set and completes its qualification.
+- v0.8 is conditional: create it only for demonstrated, justified changes
+  that warrant a new core minor release.
+- v0.9 is not a mandatory milestone.
+- Progression directly from v0.7 to v1.0 is permitted when maturity gates
+  are satisfied.
+- CLI capability parity, C ABI, WASM and native language bindings are
+  independently versioned interoperability workstreams.
+- Extending an adapter over existing core capabilities does not justify a new
+  core minor release or make that capability a missing core feature.
+- Adapter evolution may require a core change only when a concrete,
+  independently justified core contract or implementation change is necessary.
+- Swift, Python, Kotlin and other bindings do not automatically require
+  synchronized core releases.
 
 ## Independent interoperability and ecosystem workstreams
 
