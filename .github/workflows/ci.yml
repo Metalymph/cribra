@@ -55,6 +55,155 @@ jobs:
       - name: Clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
 
+  linux-arm64:
+    name: Native Linux ARM64 qualification
+    runs-on: ubuntu-24.04-arm
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust artifacts
+        uses: Swatinem/rust-cache@v2.9.1
+
+      - name: Verify native ARM64 architecture
+        run: |
+          uname -m
+          test "$(uname -m)" = "aarch64"
+
+      - name: Check all features
+        run: cargo check -p cribra --all-features
+
+      - name: Test default features
+        run: cargo test -p cribra
+
+      - name: Test all features
+        run: cargo test -p cribra --all-features
+
+      - name: Test CLI
+        run: cargo test -p cribra-cli
+
+      - name: Test C ABI
+        run: cargo test -p cribra-capi
+
+      - name: Build native C ABI artifacts
+        run: cargo build -p cribra-capi
+
+      - name: Verify Linux native artifacts
+        run: |
+          test -f target/debug/libcribra_capi.a
+          test -f target/debug/libcribra_capi.so
+
+  linux-riscv64:
+    name: Linux RISC-V 64 qualification (QEMU)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      CARGO_TARGET_RISCV64GC_UNKNOWN_LINUX_GNU_LINKER: riscv64-linux-gnu-gcc
+      CARGO_TARGET_RISCV64GC_UNKNOWN_LINUX_GNU_RUNNER: qemu-riscv64 -L /usr/riscv64-linux-gnu
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: riscv64gc-unknown-linux-gnu
+
+      - name: Cache Rust artifacts
+        uses: Swatinem/rust-cache@v2.9.1
+
+      - name: Install GNU cross-toolchain and QEMU
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes gcc-riscv64-linux-gnu libc6-dev-riscv64-cross qemu-user binutils-riscv64-linux-gnu
+
+      - name: Verify host, toolchain and runtime
+        run: |
+          uname -m
+          test "$(uname -m)" = "x86_64"
+          command -v riscv64-linux-gnu-gcc
+          command -v riscv64-linux-gnu-readelf
+          command -v qemu-riscv64
+          test "$(riscv64-linux-gnu-gcc -dumpmachine)" = "riscv64-linux-gnu"
+          riscv64-linux-gnu-gcc --version
+          qemu-riscv64 --version
+          test -f /usr/riscv64-linux-gnu/lib/ld-linux-riscv64-lp64d.so.1
+          rustup target list --installed | grep -Fx riscv64gc-unknown-linux-gnu
+
+      - name: Build target test executables
+        run: |
+          cargo test -p cribra --target riscv64gc-unknown-linux-gnu --no-run --message-format=json > "$RUNNER_TEMP/riscv64-default.jsonl"
+          cargo test -p cribra --target riscv64gc-unknown-linux-gnu --all-features --no-run --message-format=json > "$RUNNER_TEMP/riscv64-all-features.jsonl"
+
+      - name: Verify test executable architecture
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          import re
+          import subprocess
+
+          target_dir = Path("target/riscv64gc-unknown-linux-gnu").resolve()
+          for suite in ("default", "all-features"):
+              manifest = Path(os.environ["RUNNER_TEMP"]) / f"riscv64-{suite}.jsonl"
+              executables = set()
+              for line in manifest.read_text().splitlines():
+                  artifact = json.loads(line)
+                  if (artifact.get("reason") == "compiler-artifact"
+                          and artifact.get("profile", {}).get("test")
+                          and artifact.get("executable")):
+                      executables.add(Path(artifact["executable"]).resolve())
+              if not executables:
+                  raise RuntimeError(f"No test executables reported for {suite}")
+              for executable in sorted(executables):
+                  if not executable.is_relative_to(target_dir):
+                      raise RuntimeError(f"Unexpected test executable path: {executable}")
+                  header = subprocess.check_output(
+                      ["riscv64-linux-gnu-readelf", "-h", str(executable)],
+                      text=True, env={**os.environ, "LC_ALL": "C"},
+                  )
+                  print(f"{suite}: {executable}\n{header}")
+                  if (not re.search(r"Class:\s+ELF64\s*$", header, re.MULTILINE)
+                          or not re.search(r"Machine:\s+RISC-V\s*$", header, re.MULTILINE)):
+                      raise RuntimeError(f"Expected RISC-V ELF64: {executable}")
+          PY
+
+      - name: Run selected runtime smoke tests through QEMU
+        shell: bash
+        env:
+          RAYON_NUM_THREADS: "2"
+        run: |
+          set -euo pipefail
+
+          run_smoke() {
+            local test_target="$1"
+            local test_name="$2"
+            shift 2
+            local log="$RUNNER_TEMP/riscv64-smoke-$test_target"
+
+            cargo test -p cribra --target riscv64gc-unknown-linux-gnu \
+              --test "$test_target" "$@" "$test_name" -- --exact --list | tee "$log.list"
+            grep -Fx "$test_name: test" "$log.list"
+
+            cargo test -p cribra --target riscv64gc-unknown-linux-gnu \
+              --test "$test_target" "$@" "$test_name" -- --exact | tee "$log.run"
+            grep -F 'test result: ok. 1 passed; 0 failed; 0 ignored;' "$log.run"
+          }
+
+          # Custom rule compilation, detection and report generation.
+          run_smoke custom_rules custom_literal_promotes_domain_knowledge_to_a_finding
+          run_smoke streaming public_session_is_send_and_returns_the_existing_report
+          run_smoke incremental public_document_ownership_and_revisioned_utf8_edits
+          run_smoke transform_redact public_redaction_uses_scanner_spans
+          run_smoke transform_pseudonymization same_secret_across_sources_has_same_pseudonym
+          run_smoke parallel serial_and_parallel_summaries_are_identical --all-features
+
   cross-platform:
     name: Test ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
