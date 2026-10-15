@@ -173,12 +173,29 @@ operation and is not retained merely to support later report traversal.
 Rust-owned memory MUST be released through Cribra's destruction functions,
 never through the caller allocator.
 
+### Error-output slots
+
+An optional `out_error` slot is initialized to null before each operation
+that supports diagnostic errors.
+
+The caller MUST release any previously returned `CribraError` using
+`cribra_error_free` before reusing the same output slot. Clearing the slot
+does not release an existing error handle.
+
+An error handle is owned by the caller until explicitly released.
+Borrowed diagnostic message views remain valid only while their error
+handle remains alive.
+
 ### Builder consumption
 
-`cribra_builder_build` consumes a non-null builder on every build attempt.
+`cribra_builder_build` consumes a non-null builder after validating
+`out_scanner`, regardless of whether scanner construction succeeds.
 
-After calling it, the caller MUST NOT reuse or free that builder independently,
-regardless of whether scanner construction succeeds.
+If `out_scanner` is null, the call returns `CRIBRA_INVALID_ARGUMENT` without
+consuming the builder.
+
+Once the builder has been consumed, the caller MUST NOT reuse or free it
+independently.
 
 This consuming ownership rule is part of the public ABI contract.
 

@@ -269,13 +269,13 @@ Evidence: [configuration qualification](docs/0.7-configuration-qualification.md)
       primary sources, distinguishing responsibilities, workflows,
       privacy boundaries, integration models and explicit limitations.
       No competitive performance rankings or footprint comparisons.
-- [ ] Q6 — Audit existing Rust, C, WASM and CLI adapter boundaries without
+- [x] Q6 — Audit existing Rust, C, WASM and CLI adapter boundaries without
       architectural redesign.
-- [ ] Q7 — Evaluate whether a capability manifest adds concrete value;
+- [x] Q7 — Evaluate whether a capability manifest adds concrete value;
       document the decision without assuming implementation is required.
-- [ ] Q8 — Evaluate precompiled WASM distribution and packaging;
+- [x] Q8 — Evaluate precompiled WASM distribution and packaging;
       document the decision and any independently scheduled follow-up.
-- [ ] Q9 — Verify C ABI compatibility, ownership, errors and existing
+- [x] Q9 — Verify C ABI compatibility, ownership, errors and existing
       conformance coverage; make only justified compatibility corrections.
 
 Final release gates remain separate: strict CI, packaging, versioning,

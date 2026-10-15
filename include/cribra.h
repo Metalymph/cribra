@@ -955,7 +955,8 @@ CribraStatus cribra_builder_add_rule(struct CribraBuilder *builder,
 /**
  * Consumes a builder and compiles an immutable scanner.
  *
- * The builder is consumed by every non-null build attempt.
+ * A non-null builder is consumed once `out_scanner` has been validated.
+ * If `out_scanner` is null, the call fails without consuming the builder.
  *
  * # Safety
  *

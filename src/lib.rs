@@ -139,7 +139,7 @@
 //! bounded retained source history and successful-EOF-only complete reports.
 //! Complete built-in portfolios remain unsupported for streaming.
 //!
-//! The implemented, unreleased v0.6.0 [`IncrementalSession`] owns a revisioned
+//! Available since v0.6.0, [`IncrementalSession`] owns a revisioned
 //! UTF-8 document and maintains exact complete reports after replacement edits.
 //! Literal and structural matching use local invalidation; Prefix, Suffix and
 //! regex rules use authoritative whole-rule fallback. This is mutable-document
