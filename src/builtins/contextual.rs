@@ -540,7 +540,7 @@ pub const SHADOW_PASSWORD_VERIFIER: RuleSpec = RuleSpec::captured_pattern(
 /// record.
 pub const HTPASSWD_PASSWORD_VERIFIER: RuleSpec = RuleSpec::captured_pattern(
     "system.htpasswd-password-verifier",
-    r"(?m)^[^:\r\n\s]+:(?P<value>(?:\$apr1\$[^:\r\n]{1,64}|\$2[aby]\$[^:\r\n]{1,128}))$",
+    r"(?m)^[^:\r\n\s]+:(?P<value>(?:\$apr1\$[^:\r\n]{1,64}|\$2[aby]\$[^:\r\n]{1,128}))\r?$",
     "value",
     Severity::High,
 )

@@ -91,7 +91,9 @@ fn is_htpasswd_verifier_field(context: &ValidationContext<'_>) -> bool {
     let after = context.after_window(LINE_WINDOW);
 
     let prefix = before.rsplit_once('\n').map_or(before, |(_, line)| line);
-    let suffix = after.split_once('\n').map_or(after, |(line, _)| line);
+    let suffix = after
+        .split_once('\n')
+        .map_or(after, |(line, _)| line.strip_suffix('\r').unwrap_or(line));
 
     let Some(username) = prefix.strip_suffix(':') else {
         return false;
