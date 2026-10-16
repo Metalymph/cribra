@@ -9,6 +9,19 @@ history.
 
 ## [Unreleased]
 
+## [0.7.1] — unreleased
+
+### Fixed
+
+- Fixed APR1 and bcrypt `.htpasswd` verifier detection on CRLF lines while
+  preserving exact verifier spans and byte coordinates. Line terminators are
+  excluded from findings; LF, mixed line endings and EOF remain supported.
+
+### Compatibility
+
+- No API or ABI changes and no new features.
+- CLI, WASM and C ABI adapter versions remain unchanged.
+
 ## [0.6.0] — published 2026-10-13
 
 ### Added
