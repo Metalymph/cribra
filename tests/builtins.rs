@@ -2758,17 +2758,90 @@ fn htpasswd_password_verifier_detects_supported_families() {
 }
 
 #[test]
+fn htpasswd_password_verifier_preserves_spans_across_line_endings() {
+    let scanner = scanner_for([builtins::HTPASSWD_PASSWORD_VERIFIER]);
+    let records = [
+        ("élise", "$apr1$hfT7jp2q$2VbDVlM1QY3wP1uQYxJYB/"),
+        (
+            "bob",
+            "$2a$12$123456789012345678901u1234567890123456789012345678901",
+        ),
+        (
+            "carol",
+            "$2b$12$123456789012345678901u1234567890123456789012345678901",
+        ),
+        (
+            "dave",
+            "$2y$12$123456789012345678901u1234567890123456789012345678901",
+        ),
+    ];
+
+    for endings in [
+        ["\n", "\n", "\n", "\n"],
+        ["\r\n", "\r\n", "\r\n", "\r\n"],
+        ["\n", "\r\n", "\n", "\r\n"],
+        ["\r\n", "\n", "\r\n", ""],
+    ] {
+        let mut source = String::new();
+        let mut expected = Vec::new();
+        for ((username, verifier), ending) in records.iter().zip(endings) {
+            let start = source.len() + username.len() + 1;
+            expected.push((start, start + verifier.len(), *verifier));
+            source.push_str(username);
+            source.push(':');
+            source.push_str(verifier);
+            source.push_str(ending);
+        }
+
+        let results = scan_one(&scanner, &source);
+        let report = results.single_report().expect("one source");
+        assert_eq!(report.len(), records.len(), "line endings: {endings:?}");
+        for (finding, (start, end, verifier)) in report.iter().zip(expected) {
+            assert_eq!(finding.location().start(), start);
+            assert_eq!(finding.location().end(), end);
+            assert_eq!(matched(&source, finding), verifier);
+            assert!(!matched(&source, finding).contains(['\r', '\n']));
+        }
+    }
+}
+
+#[test]
 fn htpasswd_password_verifier_projects_only_the_verifier() {
     let scanner = scanner_for([builtins::HTPASSWD_PASSWORD_VERIFIER]);
 
-    let verifier = "$apr1$hfT7jp2q$2VbDVlM1QY3wP1uQYxJYB/";
-    let source = format!("alice:{verifier}");
+    for verifier in [
+        "$apr1$hfT7jp2q$2VbDVlM1QY3wP1uQYxJYB/",
+        "$2a$12$123456789012345678901u1234567890123456789012345678901",
+        "$2b$12$123456789012345678901u1234567890123456789012345678901",
+        "$2y$12$123456789012345678901u1234567890123456789012345678901",
+    ] {
+        let source = format!("alice:{verifier}");
 
-    let results = scan_one(&scanner, &source);
-    let report = results.single_report().expect("one source");
+        let results = scan_one(&scanner, &source);
+        let report = results.single_report().expect("one source");
 
-    assert_eq!(report.len(), 1);
-    assert_eq!(matched(&source, &report.findings()[0]), verifier);
+        assert_eq!(report.len(), 1);
+        assert_eq!(report.findings()[0].location().start(), "alice:".len());
+        assert_eq!(report.findings()[0].location().end(), source.len());
+        assert_eq!(matched(&source, &report.findings()[0]), verifier);
+    }
+}
+
+#[test]
+fn htpasswd_password_verifier_rejects_trailing_content_and_bare_cr() {
+    let scanner = scanner_for([builtins::HTPASSWD_PASSWORD_VERIFIER]);
+
+    for verifier in [
+        "$apr1$hfT7jp2q$2VbDVlM1QY3wP1uQYxJYB/",
+        "$2b$12$123456789012345678901u1234567890123456789012345678901",
+    ] {
+        for suffix in ["\r", "\r\r\n", " \r\n", ":extra\r\n"] {
+            let source = format!("alice:{verifier}{suffix}");
+            let results = scan_one(&scanner, &source);
+            let report = results.single_report().expect("one source");
+            assert!(report.is_empty(), "unexpected detection for {source:?}");
+        }
+    }
 }
 
 #[test]
@@ -2785,13 +2858,16 @@ fn htpasswd_password_verifier_rejects_standalone_and_malformed_values() {
         "alice:$2b$32$123456789012345678901u1234567890123456789012345678901".to_owned(),
         "alice:$2x$12$123456789012345678901u1234567890123456789012345678901".to_owned(),
     ] {
-        let results = scan_one(&scanner, &source);
-        let report = results.single_report().expect("one source");
+        for ending in ["", "\n", "\r\n"] {
+            let source = format!("{source}{ending}");
+            let results = scan_one(&scanner, &source);
+            let report = results.single_report().expect("one source");
 
-        assert!(
-            report.is_empty(),
-            "unexpected htpasswd verifier detection for {source:?}",
-        );
+            assert!(
+                report.is_empty(),
+                "unexpected htpasswd verifier detection for {source:?}",
+            );
+        }
     }
 }
 
