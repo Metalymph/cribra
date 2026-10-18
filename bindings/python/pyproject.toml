@@ -16,4 +16,6 @@ dependencies = []
 packages = ["cribra_uniffi"]
 
 [tool.setuptools.package-data]
-cribra_uniffi = ["libcribra_uniffi.dylib"]
+# The builder stages exactly one native library (the host's) in the package
+# directory, so listing both names packages exactly one library per wheel.
+cribra_uniffi = ["libcribra_uniffi.dylib", "libcribra_uniffi.so"]

@@ -200,7 +200,10 @@ Distribution metadata is `cribra`, version `0.7.1+fuse`, checked against the Cor
 version during builds. Import remains `import cribra_uniffi`. The generated
 `cribra_uniffi.py` is copied byte-for-byte to `cribra_uniffi/__init__.py`, with
 the platform library (`libcribra_uniffi.dylib` on macOS, `libcribra_uniffi.so`
-on Linux) in the same package directory. No generated code is patched or
+on Linux) in the same package directory. `[tool.setuptools.package-data]` lists
+both native names, so exactly the one the builder stages is packaged: the builder
+and `wheel_smoke.py` both fail closed unless each wheel contains exactly that
+library. No generated code is patched or
 wrapped: UniFFI's existing `__file__`-relative loader remains intact, and it
 already selects the `.so` filename on ELF platforms. The small setuptools hook
 marks the wheel non-pure and platform-specific with no CPython extension ABI

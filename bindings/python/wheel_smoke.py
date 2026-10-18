@@ -88,7 +88,15 @@ def inspect_wheel(wheel):
         else:
             raise QualificationError(f"unsupported host platform: {sys.platform}")
         assert wheel.name.endswith(tag + ".whl")
-        native = archive.read("cribra_uniffi/" + library_name)
+        # Fail closed unless the wheel packages exactly the host platform's native
+        # library: a missing or foreign-platform library would otherwise surface as
+        # an opaque zip KeyError, or load the wrong binary.
+        expected = "cribra_uniffi/" + library_name
+        packaged = sorted(name for name in archive.namelist()
+                          if name.startswith("cribra_uniffi/libcribra_uniffi."))
+        assert packaged == [expected], (
+            f"expected exactly one native library {expected} in {wheel.name}, found {packaged}")
+        native = archive.read(expected)
         assert archive.read("cribra_uniffi/__init__.py") == generated.read_bytes()
         assert native == native_library.read_bytes()
         assert any(name.endswith("/LICENSE") for name in archive.namelist())

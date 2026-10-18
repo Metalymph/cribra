@@ -11,6 +11,7 @@ import subprocess
 import sys
 import tempfile
 import tomllib
+import zipfile
 
 
 # Explicit, host-independent macOS deployment target. Override with
@@ -92,6 +93,19 @@ def verify_linux(library):
     print(f"Verified {library}: ELF64 little-endian ET_DYN, machine EM_X86_64.")
 
 
+def verify_wheel_native(wheel, library_name):
+    """Fail closed unless the wheel packages exactly the built native library."""
+    with zipfile.ZipFile(wheel) as archive:
+        packaged = sorted(name for name in archive.namelist()
+                          if name.startswith("cribra_uniffi/libcribra_uniffi."))
+    expected = f"cribra_uniffi/{library_name}"
+    if packaged != [expected]:
+        raise SystemExit(
+            f"Wheel {wheel.name} packages {packaged}; expected exactly [{expected}]. "
+            "Check [tool.setuptools.package-data] in bindings/python/pyproject.toml.")
+    print(f"Verified {wheel.name}: packages exactly {expected}.")
+
+
 def main():
     if sys.version_info < (3, 13):
         raise SystemExit("This local wheel builder supports Python 3.13+ only.")
@@ -166,6 +180,7 @@ def main():
              "--outdir", str(output / "dist"), str(stage)])
     wheel = output / "dist" / (
         f"cribra-{metadata['project']['version']}-py3-none-{wheel_platform}.whl")
+    verify_wheel_native(wheel, library_name)
     info = {"wheel": str(wheel), "wheelBytes": wheel.stat().st_size,
             "nativeLibrary": str(library), "nativeBytes": library.stat().st_size,
             "generatedModule": str(generated / "cribra_uniffi.py"),
