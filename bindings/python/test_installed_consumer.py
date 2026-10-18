@@ -8,6 +8,7 @@ import unittest
 
 
 REPOSITORY = Path(sys.argv[1]).resolve()
+LIBRARY = "libcribra_uniffi.dylib" if sys.platform == "darwin" else "libcribra_uniffi.so"
 
 
 def deny_repository(event, args):
@@ -41,7 +42,7 @@ class InstalledConsumerTests(unittest.TestCase):
     def test_installed_metadata_and_library(self):
         module = Path(cribra.__file__).resolve()
         self.assertTrue(module.is_relative_to(Path(sys.prefix)))
-        self.assertTrue(module.with_name("libcribra_uniffi.dylib").is_file())
+        self.assertTrue(module.with_name(LIBRARY).is_file())
         self.assertEqual(metadata.version("cribra"), cribra.cribra_version() + "+fuse")
         self.assertEqual(metadata.requires("cribra"), None)
 

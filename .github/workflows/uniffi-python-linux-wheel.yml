@@ -1,0 +1,74 @@
+name: UniFFI Python Linux wheel
+
+# Manually triggered qualification of the local Linux x86_64 Fuse wheel. It builds
+# the wheel with the existing builder, verifies the generated ELF shared library and
+# runs the installed-consumer smoke. It never publishes, never claims manylinux
+# compatibility and does not touch the Rust Core, Swift bindings or release workflows.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: uniffi-python-linux-wheel-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: "1"
+  WHEEL_PLATFORM_DIR: target/uniffi-python-wheel/fuse/linux_x86_64
+
+jobs:
+  linux-x86_64-wheel:
+    name: Linux x86_64 Fuse wheel qualification
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install Rust 1.97
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.97.0"
+
+      - name: Cache Rust artifacts
+        uses: Swatinem/rust-cache@v2.9.1
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+
+      - name: Install pinned Python build requirements
+        run: python -m pip install --disable-pip-version-check -r bindings/python/build-requirements.txt
+
+      - name: Build the Fuse wheel
+        run: |
+          python bindings/python/build_wheel.py
+          WHEEL="$(python -c "import json; print(json.load(open('$WHEEL_PLATFORM_DIR/build-info.json'))['wheel'])")"
+          echo "WHEEL=$WHEEL" >> "$GITHUB_ENV"
+
+      - name: Verify the ELF shared library
+        run: |
+          LIBRARY="$(python -c "import json; print(json.load(open('$WHEEL_PLATFORM_DIR/build-info.json'))['nativeLibrary'])")"
+          test -f "$LIBRARY"
+          file "$LIBRARY"
+          readelf -h "$LIBRARY"
+          readelf -d "$LIBRARY"
+          ldd "$LIBRARY"
+
+      - name: Qualify the installed wheel
+        run: python bindings/python/wheel_smoke.py "$WHEEL" --python "$(command -v python3)"
+
+      - name: Upload the Linux wheel and build metadata
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: cribra-fuse-linux-x86_64
+          path: |
+            target/uniffi-python-wheel/fuse/linux_x86_64/dist/*.whl
+            target/uniffi-python-wheel/fuse/linux_x86_64/build-info.json
+          if-no-files-found: warn

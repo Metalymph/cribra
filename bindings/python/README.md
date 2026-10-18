@@ -1,4 +1,4 @@
-# Local Python consumers and Fuse wheel (NB-2.5B.3)
+# Local Python consumers and Fuse wheel (NB-2.6A.2)
 
 A minimal consumer of the existing `cribra-uniffi` crate and UniFFI **0.32.2**
 generator. No PyO3, second Rust adapter, hand-written Python facade, publishing
@@ -155,7 +155,8 @@ The local wheel uses the standard [PyPA build frontend](https://build.pypa.io/en
 and `setuptools.build_meta` backend. Build-only dependencies are pinned in
 `build-requirements.txt`: build 1.6.1, setuptools 84.0.0, packaging 26.3 and
 pyproject_hooks 1.3.3. The wheel has no Python runtime dependencies. Rust 1.97.0,
-the Apple SDK/toolchain and Cargo are needed only to build it.
+Cargo and the platform C toolchain (the Apple SDK on macOS, `cc`/linker on
+Linux) are needed only to build it.
 
 Build from the repository root:
 
@@ -163,54 +164,96 @@ Build from the repository root:
 python3.13 -m venv target/uniffi-python-wheel/build-venv
 target/uniffi-python-wheel/build-venv/bin/python -m pip install --index-url https://pypi.org/simple -r bindings/python/build-requirements.txt
 just uniffi-python-wheel target/uniffi-python-wheel/build-venv/bin/python
-# On the qualified macOS 27 ARM64 host, qualify the same wheel across the
+# The builder writes into a per-platform directory (macOS example):
+#   target/uniffi-python-wheel/fuse/macosx_13_0_arm64/dist/cribra-0.7.1+fuse-py3-none-macosx_13_0_arm64.whl
+# On the qualified macOS 27 ARM64 host, qualify that same wheel across the
 # pyenv interpreter matrix (or use uniffi-python-wheel-smoke for one version):
-just uniffi-python-wheel-matrix target/uniffi-python-wheel/fuse/dist/cribra-0.7.1+fuse-py3-none-macosx_13_0_arm64.whl
-just uniffi-python-wheel-smoke target/uniffi-python-wheel/fuse/dist/cribra-0.7.1+fuse-py3-none-macosx_13_0_arm64.whl 3.13.7
+just uniffi-python-wheel-matrix target/uniffi-python-wheel/fuse/macosx_13_0_arm64/dist/cribra-0.7.1+fuse-py3-none-macosx_13_0_arm64.whl
+just uniffi-python-wheel-smoke target/uniffi-python-wheel/fuse/macosx_13_0_arm64/dist/cribra-0.7.1+fuse-py3-none-macosx_13_0_arm64.whl 3.13.7
 ```
 
-`build_wheel.py` builds `cribra-uniffi` with `--release --no-default-features
---features fuse --target aarch64-apple-darwin`, then runs the existing UniFFI
-0.32.2 generator against that release dylib. It compiles against an explicit,
-host-independent deployment target: **macOS 13.0** by default, overridable with
-`CRIBRA_MACOS_DEPLOYMENT_TARGET` as `MAJOR.MINOR`. Cargo does not fingerprint the
-deployment-target variable, so the builder drops the cached cdylib before
-linking to force the link step to run with the configured target. It then reads
-the `LC_BUILD_VERSION` load command from the compiled dylib, requires exactly one
-`platform MACOS` command whose `minos` equals the configured target, and fails
-closed on any mismatch. The wheel platform tag
-(`py3-none-macosx_<minos>_arm64`, for example `macosx_13_0_arm64`) is derived
-from that verified `minos`, never from the host macOS version. Its separate
-Cargo directory, generated files, setuptools staging and final wheel are all
-under ignored `target/uniffi-python-wheel/fuse/`; the build environment is also
-under `target/`. The ordinary smoke profile artifacts are preserved.
-`build-info.json` records artifact paths, byte sizes, the configured deployment
-target and the verified `minos`.
+`build_wheel.py` selects the native target from the host: **macOS ARM64**
+(`aarch64-apple-darwin`, `libcribra_uniffi.dylib`) or **Linux x86_64**
+(`x86_64-unknown-linux-gnu`, `libcribra_uniffi.so`). It builds `cribra-uniffi`
+with `--release --no-default-features --features fuse --target <triple>`, then
+runs the existing UniFFI 0.32.2 generator against that release library. On macOS
+it compiles against an explicit, host-independent deployment target: **macOS
+13.0** by default, overridable with `CRIBRA_MACOS_DEPLOYMENT_TARGET` as
+`MAJOR.MINOR`. Cargo does not fingerprint the deployment-target variable, so the
+builder drops the cached library before linking to force the link step to run
+with the configured target. It then verifies the compiled artifact and fails
+closed on mismatch: on macOS it reads the `LC_BUILD_VERSION` load command and
+requires exactly one `platform MACOS` command whose `minos` equals the
+configured target; on Linux it requires a 64-bit little-endian x86_64 `ET_DYN`
+ELF object. The wheel platform tag is derived from the verified artifact
+(`py3-none-macosx_<minos>_arm64`, for example `macosx_13_0_arm64`, on macOS;
+`py3-none-linux_x86_64` on Linux), never from the host. Each host/target writes
+into its own platform directory under ignored
+`target/uniffi-python-wheel/fuse/<platform>/` (`cargo/`, `generated/`, `dist/`,
+`build-info.json`), so macOS and Linux artifacts never overwrite each other; the
+build environment is also under `target/`. The ordinary smoke profile artifacts
+are preserved. `build-info.json` records artifact paths, byte sizes, the host,
+target triple, platform tag and, on macOS, the configured deployment target and
+the verified `minos`.
 
 Distribution metadata is `cribra`, version `0.7.1+fuse`, checked against the Core
 version during builds. Import remains `import cribra_uniffi`. The generated
 `cribra_uniffi.py` is copied byte-for-byte to `cribra_uniffi/__init__.py`, with
-`libcribra_uniffi.dylib` in the same package directory. No generated code is
-patched or wrapped: UniFFI's existing `__file__`-relative loader remains intact.
-The small setuptools hook marks the wheel non-pure and platform-specific with
-no CPython extension ABI (`py3-none-macosx_<minos>_arm64`). This is not a
-universal wheel or a promise of compatibility beyond the tested host/interpreter.
-Only this build driver is supported; direct source/editable installs and sdists
-are outside scope.
+the platform library (`libcribra_uniffi.dylib` on macOS, `libcribra_uniffi.so`
+on Linux) in the same package directory. No generated code is patched or
+wrapped: UniFFI's existing `__file__`-relative loader remains intact, and it
+already selects the `.so` filename on ELF platforms. The small setuptools hook
+marks the wheel non-pure and platform-specific with no CPython extension ABI
+(`py3-none-<platform>`). This is not a universal wheel or a promise of
+compatibility beyond the tested host/interpreter. Only this build driver is
+supported; direct source/editable installs and sdists are outside scope.
 
-`wheel_smoke.py` checks METADATA, platform/non-pure tags, every RECORD hash/size,
-the included MIT license, byte identity of both generated and native payloads,
-ARM64 architecture, Mach-O deployment information and system-only native
-dependencies once, then qualifies that same wheel against each interpreter in
-turn. It copies the wheel and standalone tests to a fresh directory in
-`/private/tmp`, creates a separate isolated virtual environment per interpreter
-with `python -m venv`, installs offline with `--no-index --no-deps` and runs the
-seven installed-consumer tests with no Cargo/Rust on `PATH`. The tests run in
-Python isolated mode, under OS sandbox rules denying repository reads and network
-access plus a Python audit hook rejecting repository opens/dylib loads. They
-exercise Scanner, UTF-8 coordinates, `scan_many`, all four Flow transforms, all
-Share modes through both build paths, and repeated Fuse `parallel_scan`. No
-independent manifest timestamps are compared for equality.
+**Linux (x86_64) build prerequisites.** Linux builds must run natively on
+x86_64 Linux; the builder refuses other hosts. It needs Rust 1.97.0 with the
+`x86_64-unknown-linux-gnu` target (the default host target), a C linker/`cc` for
+that triple, Python 3.13+ in the build environment and the pinned build frontend
+dependencies. Prepare the build environment exactly as on macOS, then run
+`just uniffi-python-wheel target/uniffi-python-wheel/build-venv/bin/python`; the
+result is `cribra-0.7.1+fuse-py3-none-linux_x86_64.whl` under
+`target/uniffi-python-wheel/fuse/linux_x86_64/dist/`.
+
+**Linux current limits.** The Linux wheel is deliberately tagged
+`linux_x86_64` (the local, non-portable tag), **not** `manylinux_*` or
+`musllinux_*`: the glibc baseline, the `auditwheel` reconciliation and the
+portability guarantees required by those contracts have not been verified, so no
+such tag is claimed and the builder assigns none. Only the ELF class,
+endianness, machine and shared-object type are checked, plus the `.so`'s
+`DT_NEEDED` set: it must stay within the expected glibc libraries and must not
+contain a repository-local `NEEDED` entry, `RPATH`/`RUNPATH` or `ldd` resolution.
+The manually triggered **UniFFI Python Linux wheel** workflow
+(`.github/workflows/uniffi-python-linux-wheel.yml`) performs this build, the ELF
+verification and the installed-consumer smoke on `ubuntu-24.04` with Rust 1.97.0
+and Python 3.13, then uploads the wheel and `build-info.json` as artifacts; it
+never publishes. Nothing here is exercised by the macOS qualification above.
+Windows, ARM64 Linux and musl-based distributions are out of scope for this
+foundation.
+
+`wheel_smoke.py` (the installed-wheel smoke) checks METADATA,
+platform/non-pure tags, every RECORD hash/size, the included MIT license and byte
+identity of both generated and native payloads once, verifies the native library
+for the host platform, then qualifies that same wheel against each interpreter in
+turn. On macOS it asserts the ARM64 architecture, Mach-O deployment information
+and system-only native dependencies (`lipo`, `otool`, `vtool`); on Linux it
+asserts the `.so` is an ELF64 `ET_DYN` x86_64 object whose `DT_NEEDED` set stays
+within the expected glibc libraries and resolves only to system paths, with no
+repository-local `NEEDED`, `RPATH`/`RUNPATH` or `ldd` resolution. It then copies
+the wheel and standalone tests to a fresh temporary directory, creates a separate
+isolated virtual environment per interpreter with `python -m venv`, installs
+offline with `--no-index --no-deps` and runs the seven installed-consumer tests
+with no Cargo/Rust on `PATH`. On macOS those tests run under OS sandbox rules
+denying repository reads and network access plus a Python audit hook rejecting
+repository opens and dylib loads; Linux has no `sandbox-exec` equivalent, so the
+consumer's Python audit hook is the isolation boundary there. The interpreter
+matrix defaults to the qualified pyenv versions on macOS and to the running
+interpreter on Linux (a CI runner provides one). The tests exercise Scanner,
+UTF-8 coordinates, `scan_many`, all four Flow transforms, all Share modes through
+both build paths, and repeated Fuse `parallel_scan`. No independent manifest
+timestamps are compared for equality.
 
 The default matrix is Python **3.11.17, 3.12.15, 3.13.7 and 3.14.8** from
 `pyenv`, and each version is reported separately. Distribution `requires-python`
@@ -246,11 +289,11 @@ the binary's declared minimum OS: **runtime compatibility with macOS 13 is not
 verified** — the wheel has only been exercised on the macOS 27.0.1 host above.
 The consumer smoke runner recognizes native library names on macOS, Linux and
 Windows; other platforms and interpreters are not qualified by this step. The
-local wheel builder supports macOS ARM64 only; Linux, Windows, Intel macOS,
-older macOS versions, Python outside 3.11–3.14, signing/notarization, repair
-tools and distribution/release qualification are outside scope. The installed
-consumer is a focused seven-test smoke; the full Core/Flow/Fuse oracle suites
-remain the separate smoke commands above.
+local wheel builder supports macOS ARM64 and Linux x86_64; Windows, Intel macOS,
+ARM64 Linux, musl-based Linux, older macOS versions, Python outside 3.11–3.14,
+signing/notarization, repair tools and distribution/release qualification are
+outside scope. The installed consumer is a focused seven-test smoke; the full
+Core/Flow/Fuse oracle suites remain the separate smoke commands above.
 Parallel tests qualify observable results and repeatability, not speedup, worker
 counts, scheduling or concurrent Python callers.
 Representation/unknown-future-Core transform errors are
