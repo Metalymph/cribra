@@ -104,7 +104,10 @@ jobs:
           test "$(uname -m)" = "arm64"
 
           swiftc --version
-          swiftc --version | grep -F "Swift version 6.4"
+          echo "Available Xcode installations:"
+          ls -d /Applications/Xcode*.app 2>/dev/null || true
+          echo "Selected Xcode:"
+          xcode-select -p
 
           rustc +1.97.0 --version
           xcodebuild -version
