@@ -28,6 +28,10 @@ check:
 check-all:
     cargo check --all-features
 
+# Build/generate the Core-only UniFFI Python consumer and run its focused tests.
+uniffi-python-smoke python="python3.13":
+    "{{python}}" bindings/python/smoke.py
+
 # Build the native library and generate Swift bindings under target/.
 uniffi-swift-bindings features="core":
     test "$(uname -s)" = Darwin && test "$(uname -m)" = arm64
