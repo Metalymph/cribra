@@ -107,6 +107,7 @@ class ConsumerTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.generated = Path(sys.argv[1]).resolve()
+        cls.profile = sys.argv[4] if len(sys.argv) > 4 else "core"
         fixture = Path(sys.argv[2])
         cls.inputs = json.loads(fixture.read_text(encoding="utf-8"))
         cls.configurations = json.loads(fixture.with_name("configurations.json").read_text(encoding="utf-8"))
@@ -525,16 +526,19 @@ class ConsumerTests(unittest.TestCase):
         self.assertEqual(report_snapshot(batch.reports[1]), expected_report)
         self.assertEqual(report_snapshot(scanner.scan(source)), expected_report)
 
-    def test_core_only_feature_boundary(self):
+    def test_profile_feature_boundary(self):
         for name in (
             "redact", "template", "pseudonymize", "synthesize", "scan_and_build", "build",
-            "RedactOptions", "TemplateOptions", "PseudonymizationOptions", "SynthesisOptions",
-            "TransformResult", "TransformError", "ShareMode", "ShareBundleOptions",
-            "ShareBundle", "ShareManifest", "ShareError",
+            "ByteSpan", "RedactOptions", "TemplateOptions", "PseudonymizationOptions",
+            "SynthesisOptions", "TransformResult", "TransformError", "TransformErrorCode",
+            "ShareMode", "ShareModeKind", "ShareBundleOptions", "ShareBundle", "ShareManifest",
+            "ShareTimestamp", "ShareError", "ShareErrorCode", "ShareReport", "ShareCandidate",
+            "ShareCandidateKind", "ShareCandidateEvidence", "TransformedSource",
         ):
             with self.subTest(api=name):
-                self.assertFalse(hasattr(cribra, name))
-        self.assertFalse(hasattr(cribra.Scanner, "parallel_scan"))
+                self.assertEqual(hasattr(cribra, name), self.profile in ("flow", "fuse"))
+        self.assertEqual(hasattr(cribra.Scanner, "scan_for_share"), self.profile in ("flow", "fuse"))
+        self.assertEqual(hasattr(cribra.Scanner, "parallel_scan"), self.profile == "fuse")
 
 
 if __name__ == "__main__":

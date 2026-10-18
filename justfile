@@ -32,6 +32,14 @@ check-all:
 uniffi-python-smoke python="python3.13":
     "{{python}}" bindings/python/smoke.py
 
+# Build/generate isolated Flow bindings and qualify Core, Flow and Share in Python.
+uniffi-python-flow-smoke python="python3.13":
+    "{{python}}" bindings/python/smoke.py flow
+
+# Qualify Core, Flow/Share and Core-owned parallel scanning with isolated Fuse bindings.
+uniffi-python-fuse-smoke python="python3.13":
+    "{{python}}" bindings/python/smoke.py fuse
+
 # Build the native library and generate Swift bindings under target/.
 uniffi-swift-bindings features="core":
     test "$(uname -s)" = Darwin && test "$(uname -m)" = arm64
