@@ -153,6 +153,49 @@ def dynamic_entries(readelf_output, key):
     return values
 
 
+def check_ldd_dependencies(listing, needed, library, repository):
+    """Fail closed unless every NEEDED entry resolves to an allowed system path.
+
+    `ldd` prints most libraries as `name => /absolute/path (0x...)`, but the
+    dynamic loader itself without `=>`: `/lib64/ld-linux-x86-64.so.2 (0x...)`.
+    Each resolved file is matched, by exact basename, against the DT_NEEDED set.
+    Kernel-provided entries such as `linux-vdso.so.1` carry no file path.
+    """
+    resolved = set()
+    for line in listing.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        _, separator, target = stripped.partition("=>")
+        if separator:
+            target = target.strip()
+            if not target:
+                raise QualificationError(f"malformed ldd entry: {stripped}")
+            if target == "not found":
+                raise QualificationError(f"unresolved shared-library dependency: {stripped}")
+            path = target.split(" ", 1)[0]
+        else:
+            path = stripped.split(" ", 1)[0]
+            if not path.startswith("/"):
+                # Informational bare names (for example `linux-vdso.so.1`) are not
+                # files; a NEEDED entry listed this way is unexpected output.
+                if path in needed:
+                    raise QualificationError(f"malformed ldd entry for dependency {path!r}: {stripped}")
+                continue
+        if not path.startswith("/"):
+            raise QualificationError(f"malformed ldd entry: {stripped}")
+        resolved_path = Path(path).resolve()
+        if resolved_path.is_relative_to(repository):
+            raise QualificationError(f"{library} loads a repository-local dependency: {path}")
+        if not any(resolved_path.is_relative_to(prefix) for prefix in ("/lib", "/lib64", "/usr")):
+            raise QualificationError(f"{library} loads a dependency outside system directories: {path}")
+        resolved.add(Path(path).name)
+    missing = sorted(set(needed) - resolved)
+    if missing:
+        raise QualificationError(f"{library} dependencies did not resolve: {missing}")
+    return resolved
+
+
 def verify_linux_native(native, library, root):
     """Fail closed unless the `.so` is an x86_64 ELF linking only to system libraries."""
     check_linux_elf_header(native, library)
@@ -181,25 +224,7 @@ def verify_linux_native(native, library, root):
     print(listing.stderr, end="")
     if listing.returncode != 0:
         raise QualificationError(f"ldd failed for {library}: {listing.stderr.strip()}")
-    resolved = set()
-    for line in listing.stdout.splitlines():
-        _, separator, target = line.partition("=>")
-        if not separator:
-            continue
-        target = target.strip()
-        if not target:
-            continue
-        if target == "not found":
-            raise QualificationError(f"unresolved shared-library dependency: {line.strip()}")
-        resolved_path = Path(target.split(" ", 1)[0]).resolve()
-        if resolved_path.is_relative_to(repository):
-            raise QualificationError(f"{library} loads a repository-local dependency: {target}")
-        if not any(resolved_path.is_relative_to(prefix) for prefix in ("/lib", "/lib64", "/usr")):
-            raise QualificationError(f"{library} loads a dependency outside system directories: {target}")
-        resolved.add(resolved_path.name)
-    missing = sorted(set(needed) - resolved)
-    if missing:
-        raise QualificationError(f"{library} dependencies did not resolve: {missing}")
+    check_ldd_dependencies(listing.stdout, needed, library, repository)
     print(f"Verified {library}: ELF64 ET_DYN x86_64, dependencies {sorted(set(needed))}.")
 
 
