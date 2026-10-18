@@ -71,7 +71,7 @@ jobs:
 
   uniffi-swift:
     name: Swift Apple integration
-    runs-on: macos-26
+    runs-on: xcode-27
     timeout-minutes: 90
 
     steps:
@@ -104,6 +104,7 @@ jobs:
           test "$(uname -m)" = "arm64"
 
           swiftc --version
+          swiftc --version | grep -F "Swift version 6.4"
           echo "Available Xcode installations:"
           ls -d /Applications/Xcode*.app 2>/dev/null || true
           echo "Selected Xcode:"
