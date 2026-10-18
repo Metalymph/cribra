@@ -40,6 +40,18 @@ uniffi-python-flow-smoke python="python3.13":
 uniffi-python-fuse-smoke python="python3.13":
     "{{python}}" bindings/python/smoke.py fuse
 
+# Build the local Fuse wheel with a Python environment containing build-requirements.txt.
+uniffi-python-wheel python="python3.13":
+    "{{python}}" bindings/python/build_wheel.py
+
+# Qualify the prebuilt Fuse wheel across the local pyenv interpreter matrix.
+uniffi-python-wheel-matrix wheel python="python3.13":
+    "{{python}}" bindings/python/wheel_smoke.py "{{wheel}}"
+
+# Qualify the prebuilt Fuse wheel on one pyenv version or interpreter path.
+uniffi-python-wheel-smoke wheel interpreter="3.13.7" python="python3.13":
+    "{{python}}" bindings/python/wheel_smoke.py "{{wheel}}" --python "{{interpreter}}"
+
 # Build the native library and generate Swift bindings under target/.
 uniffi-swift-bindings features="core":
     test "$(uname -s)" = Darwin && test "$(uname -m)" = arm64

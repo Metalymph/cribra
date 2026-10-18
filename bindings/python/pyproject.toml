@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools==84.0.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cribra"
+version = "0.7.1+fuse"
+description = "Local Fuse-profile Cribra UniFFI bindings"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+license-files = ["LICENSE"]
+dependencies = []
+
+[tool.setuptools]
+packages = ["cribra_uniffi"]
+
+[tool.setuptools.package-data]
+cribra_uniffi = ["libcribra_uniffi.dylib"]
