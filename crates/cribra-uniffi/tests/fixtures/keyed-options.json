@@ -1,0 +1,11 @@
+[
+  {"name":"default-a","key":"a"},
+  {"name":"default-b","key":"b"},
+  {"name":"digest-zero","key":"a","prefix":"p:","digestBytes":0,"marker":""},
+  {"name":"digest-one","key":"a","prefix":"p:","digestBytes":1,"marker":"bad<>é!🙂"},
+  {"name":"digest-eight","key":"a","prefix":"","digestBytes":8,"marker":"demo!"},
+  {"name":"digest-sixteen","key":"a","prefix":"p:","digestBytes":16,"marker":"demo"},
+  {"name":"digest-thirty-two","key":"a","prefix":"p:","digestBytes":32},
+  {"name":"digest-too-large","key":"a","prefix":"p:","digestBytes":33},
+  {"name":"digest-usize-max","key":"a","prefix":"p:","digestBytes":18446744073709551615}
+]

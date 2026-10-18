@@ -1,0 +1,53 @@
+[package]
+name = "cribra-uniffi"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.97"
+description = "Shared UniFFI adapter foundation for Cribra"
+license = "MIT"
+repository = "https://github.com/Metalymph/cribra"
+readme = "README.md"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib", "staticlib"]
+
+[[bin]]
+name = "cribra-uniffi-bindgen"
+path = "src/bin/bindgen.rs"
+required-features = ["bindgen"]
+
+[[example]]
+name = "scanner_oracle"
+required-features = ["core"]
+
+[[example]]
+name = "flow_oracle"
+required-features = ["flow"]
+
+[[example]]
+name = "share_oracle"
+required-features = ["flow"]
+
+[[example]]
+name = "parallel_oracle"
+required-features = ["fuse"]
+
+[features]
+default = ["core"]
+core = []
+bindgen = ["uniffi/cli"]
+flow = ["core", "cribra/transform", "cribra/serde", "dep:serde_json"]
+fuse = ["flow", "cribra/parallel"]
+
+[dependencies]
+cribra = { path = "../..", version = "^0.7", default-features = false }
+uniffi = { version = "=0.32.2", default-features = false }
+serde_json = { version = "1", optional = true }
+
+[build-dependencies]
+toml = { version = "1", default-features = false, features = ["parse", "std", "serde"] }
+
+[dev-dependencies]
+toml = { version = "1", default-features = false, features = ["parse", "std", "serde"] }
+serde_json = "1"

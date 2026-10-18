@@ -62,6 +62,7 @@ serde_json = "1.0"
 members = [
     "crates/cribra-capi",
     "crates/cribra-wasm",
-    "crates/cribra-cli"
+    "crates/cribra-cli",
+    "crates/cribra-uniffi"
 ]
 resolver = "3"

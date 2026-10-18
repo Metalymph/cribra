@@ -1,0 +1,396 @@
+{
+  "groups": {
+    "common": {
+      "types": [
+        "Confidence",
+        "Finding",
+        "Location",
+        "RuleId",
+        "ScanReport",
+        "ScanResults",
+        "ScanSource",
+        "ScanSummary",
+        "Severity",
+        "SourceId"
+      ],
+      "functions": [
+        "cribraVersion() -> String"
+      ],
+      "methods": [],
+      "constructors": []
+    },
+    "core": {
+      "types": [
+        "BuildErrorCode",
+        "DetectionMode",
+        "IncrementalError",
+        "IncrementalErrorCode",
+        "IncrementalLimits",
+        "IncrementalSession",
+        "IncrementalSessionProtocol",
+        "IncrementalSnapshot",
+        "IncrementalState",
+        "Remediation",
+        "RemediationMetadata",
+        "RuleKind",
+        "RuleMetadata",
+        "RuleSpec",
+        "Scanner",
+        "ScannerBuildError",
+        "ScannerConfig",
+        "ScannerProtocol",
+        "StreamError",
+        "StreamErrorCode",
+        "StreamLimits",
+        "StreamSession",
+        "StreamSessionProtocol",
+        "StreamState"
+      ],
+      "functions": [
+        "smokeScanText(source: String) -> [Finding]"
+      ],
+      "methods": [
+        "IncrementalSession.applyEdit(expectedRevision: UInt64, start: UInt64, end: UInt64, replacement: String) throws -> UInt64",
+        "IncrementalSession.report() throws -> ScanReport",
+        "IncrementalSession.revision() throws -> UInt64",
+        "IncrementalSession.snapshot() throws -> IncrementalSnapshot",
+        "IncrementalSession.state() -> IncrementalState",
+        "Scanner.activeRules() -> [RuleMetadata]",
+        "Scanner.incremental(source: ScanSource) throws -> IncrementalSession",
+        "Scanner.incrementalWithLimits(source: ScanSource, limits: IncrementalLimits) throws -> IncrementalSession",
+        "Scanner.scan(source: ScanSource) -> ScanReport",
+        "Scanner.scanMany(sources: [ScanSource]) -> ScanResults",
+        "Scanner.stream(sourceId: SourceId) throws -> StreamSession",
+        "Scanner.streamWithLimits(sourceId: SourceId, limits: StreamLimits) throws -> StreamSession",
+        "StreamSession.finish() throws -> ScanReport",
+        "StreamSession.push(chunk: Data) throws",
+        "StreamSession.state() -> StreamState"
+      ],
+      "constructors": [
+        "init()",
+        "configured(config: ScannerConfig)throws -> Scanner"
+      ]
+    },
+    "flow": {
+      "types": [
+        "ByteSpan",
+        "PseudonymizationOptions",
+        "RedactOptions",
+        "ShareBundle",
+        "ShareBundleOptions",
+        "ShareCandidate",
+        "ShareCandidateEvidence",
+        "ShareCandidateKind",
+        "ShareError",
+        "ShareErrorCode",
+        "ShareManifest",
+        "ShareMode",
+        "ShareModeKind",
+        "ShareReport",
+        "ShareTimestamp",
+        "SynthesisOptions",
+        "TemplateOptions",
+        "TransformError",
+        "TransformErrorCode",
+        "TransformResult",
+        "TransformedSource"
+      ],
+      "functions": [
+        "build(reports: [ShareReport], sources: [String], options: ShareBundleOptions)throws -> ShareBundle",
+        "pseudonymize(source: String, findings: [Finding], options: PseudonymizationOptions)throws -> TransformResult",
+        "redact(source: String, findings: [Finding], options: RedactOptions)throws -> TransformResult",
+        "scanAndBuild(scanner: Scanner, sources: [ScanSource], options: ShareBundleOptions)throws -> ShareBundle",
+        "synthesize(source: String, findings: [Finding], options: SynthesisOptions)throws -> TransformResult",
+        "template(source: String, findings: [Finding], options: TemplateOptions)throws -> TransformResult"
+      ],
+      "methods": [
+        "Scanner.scanForShare(sources: [ScanSource]) throws -> [ShareReport]"
+      ],
+      "constructors": []
+    },
+    "fuse": {
+      "types": [],
+      "functions": [],
+      "methods": [
+        "Scanner.parallelScan(sources: [ScanSource]) -> ScanResults"
+      ],
+      "constructors": []
+    }
+  },
+  "recordFields": {
+    "ByteSpan": [
+      "start: UInt64",
+      "end: UInt64"
+    ],
+    "Finding": [
+      "ruleId: RuleId",
+      "location: Location",
+      "severity: Severity",
+      "confidence: Confidence"
+    ],
+    "IncrementalLimits": [
+      "maxCandidates: UInt64?",
+      "maxRetainedCacheRecords: UInt64?",
+      "maxMaterializedResults: UInt64?",
+      "maxTransactionStorageBytes: UInt64?"
+    ],
+    "Location": [
+      "start: UInt64",
+      "end: UInt64",
+      "line: UInt64",
+      "column: UInt64"
+    ],
+    "PseudonymizationOptions": [
+      "key: Data",
+      "prefix: String?",
+      "digestBytes: UInt64?"
+    ],
+    "RedactOptions": [
+      "replacement: String?"
+    ],
+    "RemediationMetadata": [
+      "label: String",
+      "message: String"
+    ],
+    "RuleId": [
+      "value: String"
+    ],
+    "RuleMetadata": [
+      "id: RuleId",
+      "kind: RuleKind",
+      "detectionMode: DetectionMode",
+      "severity: Severity",
+      "remediation: RemediationMetadata?"
+    ],
+    "RuleSpec": [
+      "id: RuleId",
+      "kind: RuleKind",
+      "value: String",
+      "severity: Severity",
+      "remediation: Remediation?"
+    ],
+    "ScanReport": [
+      "sourceId: SourceId",
+      "sourceBytes: UInt64",
+      "findings: [Finding]",
+      "candidateCount: UInt64",
+      "needsReview: Bool"
+    ],
+    "ScanResults": [
+      "reports: [ScanReport]",
+      "summary: ScanSummary"
+    ],
+    "ScanSource": [
+      "id: SourceId",
+      "text: String"
+    ],
+    "ScanSummary": [
+      "scannedSources: UInt64",
+      "scannedBytes: UInt64",
+      "reportsWithFindings: UInt64",
+      "reportsWithoutFindings: UInt64",
+      "totalFindings: UInt64",
+      "totalCandidates: UInt64",
+      "reportsWithCandidates: UInt64",
+      "critical: UInt64",
+      "high: UInt64",
+      "medium: UInt64",
+      "low: UInt64",
+      "info: UInt64"
+    ],
+    "ShareBundle": [
+      "sources: [TransformedSource]",
+      "manifest: ShareManifest"
+    ],
+    "ShareBundleOptions": [
+      "mode: ShareMode?"
+    ],
+    "ShareCandidate": [
+      "kind: ShareCandidateKind",
+      "location: Location",
+      "evidence: ShareCandidateEvidence"
+    ],
+    "ShareManifest": [
+      "mode: ShareModeKind",
+      "summary: ScanSummary",
+      "generatedAt: ShareTimestamp"
+    ],
+    "ShareReport": [
+      "sourceId: SourceId",
+      "sourceBytes: UInt64",
+      "findings: [Finding]",
+      "candidates: [ShareCandidate]"
+    ],
+    "ShareTimestamp": [
+      "seconds: UInt64",
+      "nanoseconds: UInt32"
+    ],
+    "SourceId": [
+      "value: String"
+    ],
+    "StreamLimits": [
+      "maxCandidates: UInt64?",
+      "maxStreamStorageBytes: UInt64?",
+      "maxRetainedResults: UInt64?"
+    ],
+    "SynthesisOptions": [
+      "key: Data",
+      "marker: String?"
+    ],
+    "TemplateOptions": [
+      "namespace: String?",
+      "numbered: Bool"
+    ],
+    "TransformResult": [
+      "content: String"
+    ],
+    "TransformedSource": [
+      "sourceId: SourceId",
+      "content: String"
+    ],
+    "IncrementalSnapshot": [
+      "revision: UInt64",
+      "report: ScanReport"
+    ]
+  },
+  "enumCases": {
+    "BuildErrorCode": [
+      "invalidPattern",
+      "patternMatchesEmpty",
+      "missingCaptureGroup",
+      "emptyRuleId",
+      "duplicateRuleId",
+      "emptyMatcher",
+      "tooManyRules",
+      "automatonBuild"
+    ],
+    "Confidence": [
+      "low",
+      "medium",
+      "high"
+    ],
+    "DetectionMode": [
+      "matcherOnly",
+      "deterministic",
+      "contextual"
+    ],
+    "IncrementalError": [
+      "Rejected( code: IncrementalErrorCode, terminal: Bool, expectedRevision: UInt64?, actualRevision: UInt64?, limit: UInt64?, required: UInt64?, detail: String )"
+    ],
+    "IncrementalErrorCode": [
+      "notActive",
+      "staleRevision",
+      "invalidRange",
+      "invalidUtf8Boundary",
+      "revisionOverflow",
+      "documentLengthOverflow",
+      "candidateLimitExceeded",
+      "cacheLimitExceeded",
+      "resultLimitExceeded",
+      "transactionStorageLimitExceeded",
+      "resourceAccountingOverflow",
+      "executionInvariantViolated",
+      "unknownCoreError",
+      "limitOutOfRange",
+      "offsetOutOfRange",
+      "sessionPoisoned"
+    ],
+    "IncrementalState": [
+      "active",
+      "failed"
+    ],
+    "Remediation": [
+      "revokeAndRotateCredential",
+      "rotateCredential",
+      "rotatePassword",
+      "replacePrivateKey",
+      "removeSensitiveValue",
+      "reviewSensitiveHash",
+      "reviewPasswordVerifier"
+    ],
+    "RuleKind": [
+      "literal",
+      "prefix",
+      "suffix",
+      "pattern"
+    ],
+    "ScannerBuildError": [
+      "Rejected( code: BuildErrorCode, ruleId: RuleId?, detail: String )"
+    ],
+    "ScannerConfig": [
+      "builtInOnly",
+      "customOnly( rules: [RuleSpec] )",
+      "builtInAndCustom( rules: [RuleSpec] )"
+    ],
+    "Severity": [
+      "info",
+      "low",
+      "medium",
+      "high",
+      "critical"
+    ],
+    "ShareCandidateEvidence": [
+      "structural"
+    ],
+    "ShareCandidateKind": [
+      "recoveryLikeCode"
+    ],
+    "ShareError": [
+      "Transform( error: TransformError )",
+      "Rejected( code: ShareErrorCode, expected: UInt64?, actual: UInt64?, index: UInt64?, detail: String )"
+    ],
+    "ShareErrorCode": [
+      "missingShareMode",
+      "sourceCountMismatch",
+      "sourceLengthMismatch",
+      "inputConversion"
+    ],
+    "ShareMode": [
+      "redact",
+      "template",
+      "pseudonymize( options: PseudonymizationOptions )",
+      "synthesize( options: SynthesisOptions )"
+    ],
+    "ShareModeKind": [
+      "redact",
+      "template",
+      "pseudonymize",
+      "synthesize"
+    ],
+    "StreamError": [
+      "Rejected( code: StreamErrorCode, limit: UInt64?, required: UInt64?, detail: String )"
+    ],
+    "StreamErrorCode": [
+      "unsupportedRuleSet",
+      "notActive",
+      "invalidUtf8",
+      "incompleteUtf8",
+      "candidateLimitExceeded",
+      "resultLimitExceeded",
+      "storageLimitExceeded",
+      "storageRequirementOverflow",
+      "sourceOffsetOverflow",
+      "coordinateOverflow",
+      "executionInvariantViolated",
+      "unknownCoreError",
+      "limitOutOfRange",
+      "sessionPoisoned"
+    ],
+    "StreamState": [
+      "active",
+      "finished",
+      "failed"
+    ],
+    "TransformError": [
+      "Rejected( code: TransformErrorCode, span: ByteSpan?, otherSpan: ByteSpan?, sourceLen: UInt64?, detail: String )"
+    ],
+    "TransformErrorCode": [
+      "invalidSpan",
+      "invalidUtf8Boundary",
+      "overlappingSpans",
+      "inputConversion",
+      "unknownCoreError",
+      "invalidKeyLength"
+    ]
+  }
+}

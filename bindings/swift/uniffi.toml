@@ -1,0 +1,5 @@
+[crates.cribra_uniffi.bindings.swift]
+module_name = "Cribra"
+ffi_module_name = "CribraFFI"
+ffi_module_filename = "CribraFFI"
+generate_module_map = true
