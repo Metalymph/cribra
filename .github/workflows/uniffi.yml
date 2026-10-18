@@ -1,0 +1,136 @@
+name: UniFFI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "src/**"
+      - "crates/cribra-uniffi/**"
+      - "bindings/swift/**"
+      - "justfile"
+      - ".github/workflows/uniffi.yml"
+  pull_request:
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "src/**"
+      - "crates/cribra-uniffi/**"
+      - "bindings/swift/**"
+      - "justfile"
+      - ".github/workflows/uniffi.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: uniffi-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: "1"
+
+jobs:
+  uniffi-rust:
+    name: UniFFI Rust profiles
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install Rust 1.97
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.97.0"
+          components: rustfmt
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2.9.1
+
+      - name: Check formatting
+        run: cargo +1.97.0 fmt --all -- --check
+
+      - name: Test Core
+        run: >
+          cargo +1.97.0 test -p cribra-uniffi
+          --locked --no-default-features --features core
+
+      - name: Test Flow
+        run: >
+          cargo +1.97.0 test -p cribra-uniffi
+          --locked --no-default-features --features flow
+
+      - name: Test Fuse
+        run: >
+          cargo +1.97.0 test -p cribra-uniffi
+          --locked --no-default-features --features fuse
+
+  uniffi-swift:
+    name: Swift Apple integration
+    runs-on: xcode-27
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install Rust 1.97 and Apple targets
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.97.0"
+          targets: >
+            aarch64-apple-darwin,
+            aarch64-apple-ios,
+            aarch64-apple-ios-sim
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2.9.1
+        with:
+          key: uniffi-swift-apple
+
+      - name: Install just
+        run: brew install just
+
+      - name: Verify host and toolchains
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          test "$(uname -s)" = "Darwin"
+          test "$(uname -m)" = "arm64"
+
+          swiftc --version
+          swiftc --version | grep -F "Swift version 6.4"
+          echo "Available Xcode installations:"
+          ls -d /Applications/Xcode*.app 2>/dev/null || true
+          echo "Selected Xcode:"
+          xcode-select -p
+
+          rustc +1.97.0 --version
+          xcodebuild -version
+
+          xcrun --sdk macosx --show-sdk-path
+          xcrun --sdk iphoneos --show-sdk-path
+          xcrun --sdk iphonesimulator --show-sdk-path
+
+      - name: Build Core package
+        run: just swift-apple core
+
+      - name: Test external Core consumer
+        run: just swift-apple-consumer core
+
+      - name: Build Flow package
+        run: just swift-apple flow
+
+      - name: Test external Flow consumer
+        run: just swift-apple-consumer flow
+
+      - name: Build Fuse package
+        run: just swift-apple fuse
+
+      - name: Test external Fuse consumer
+        run: just swift-apple-consumer fuse

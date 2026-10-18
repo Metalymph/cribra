@@ -28,6 +28,86 @@ check:
 check-all:
     cargo check --all-features
 
+# Build the native library and generate Swift bindings under target/.
+uniffi-swift-bindings features="core":
+    test "$(uname -s)" = Darwin && test "$(uname -m)" = arm64
+    CARGO_TARGET_DIR=target cargo +1.97.0 build -p cribra-uniffi --no-default-features --features "{{features}}" --lib
+    CARGO_TARGET_DIR=target cargo +1.97.0 run -p cribra-uniffi --no-default-features --features "bindgen,{{features}}" --bin cribra-uniffi-bindgen -- generate --library target/debug/libcribra_uniffi.dylib --language swift --out-dir target/uniffi-swift-smoke/generated
+
+# Compile a Swift 6 module and executable, then run against the real cdylib.
+uniffi-swift-smoke features="core": (uniffi-swift-bindings features)
+    swiftc --version | grep 'Swift version 6.4'
+    CARGO_TARGET_DIR=target cargo +1.97.0 run -p cribra-uniffi --no-default-features --features "{{features}}" --example scanner_oracle > target/uniffi-swift-smoke/core-oracle.json
+    swiftc -swift-version 6 -module-cache-path target/uniffi-swift-smoke/module-cache -emit-library -emit-module -module-name cribra_uniffi target/uniffi-swift-smoke/generated/cribra_uniffi.swift -I target/uniffi-swift-smoke/generated -Xcc -fmodule-map-file=target/uniffi-swift-smoke/generated/cribra_uniffiFFI.modulemap -L target/debug -lcribra_uniffi -Xlinker -rpath -Xlinker @loader_path/../debug -emit-module-path target/uniffi-swift-smoke/cribra_uniffi.swiftmodule -o target/uniffi-swift-smoke/libcribra_uniffi_swift.dylib
+    swiftc -swift-version 6 -module-cache-path target/uniffi-swift-smoke/module-cache -parse-as-library -I target/uniffi-swift-smoke -I target/uniffi-swift-smoke/generated -Xcc -fmodule-map-file=target/uniffi-swift-smoke/generated/cribra_uniffiFFI.modulemap crates/cribra-uniffi/tests/swift/Smoke.swift -L target/uniffi-swift-smoke -lcribra_uniffi_swift -Xlinker -rpath -Xlinker @loader_path -o target/uniffi-swift-smoke/smoke
+    target/uniffi-swift-smoke/smoke "$(cargo +1.97.0 pkgid -p cribra | sed 's/.*#//')" crates/cribra-uniffi/tests/fixtures/scanner.json target/uniffi-swift-smoke/core-oracle.json crates/cribra-uniffi/tests/fixtures/configurations.json crates/cribra-uniffi/tests/fixtures/incremental.json
+
+# Generate the feature-gated Flow interface separately from the core-only smoke.
+uniffi-swift-flow-bindings features="flow":
+    test "$(uname -s)" = Darwin && test "$(uname -m)" = arm64
+    CARGO_TARGET_DIR=target cargo +1.97.0 build -p cribra-uniffi --no-default-features --features "{{features}}" --lib
+    CARGO_TARGET_DIR=target cargo +1.97.0 run -p cribra-uniffi --no-default-features --features "bindgen,{{features}}" --bin cribra-uniffi-bindgen -- generate --library target/debug/libcribra_uniffi.dylib --language swift --out-dir target/uniffi-flow-smoke/generated
+
+# Compile and run real Swift Flow transformations against a direct Core oracle.
+uniffi-swift-flow-smoke features="flow": (uniffi-swift-flow-bindings features)
+    swiftc --version | grep 'Swift version 6.4'
+    CARGO_TARGET_DIR=target cargo +1.97.0 run -p cribra-uniffi --no-default-features --features "{{features}}" --example flow_oracle > target/uniffi-flow-smoke/core-oracle.json
+    swiftc -swift-version 6 -module-cache-path target/uniffi-flow-smoke/module-cache -emit-library -emit-module -module-name cribra_uniffi target/uniffi-flow-smoke/generated/cribra_uniffi.swift -I target/uniffi-flow-smoke/generated -Xcc -fmodule-map-file=target/uniffi-flow-smoke/generated/cribra_uniffiFFI.modulemap -L target/debug -lcribra_uniffi -Xlinker -rpath -Xlinker @loader_path/../debug -emit-module-path target/uniffi-flow-smoke/cribra_uniffi.swiftmodule -o target/uniffi-flow-smoke/libcribra_uniffi_swift.dylib
+    swiftc -swift-version 6 -module-cache-path target/uniffi-flow-smoke/module-cache -parse-as-library -I target/uniffi-flow-smoke -I target/uniffi-flow-smoke/generated -Xcc -fmodule-map-file=target/uniffi-flow-smoke/generated/cribra_uniffiFFI.modulemap crates/cribra-uniffi/tests/swift/FlowSmoke.swift -L target/uniffi-flow-smoke -lcribra_uniffi_swift -Xlinker -rpath -Xlinker @loader_path -o target/uniffi-flow-smoke/smoke
+    target/uniffi-flow-smoke/smoke crates/cribra-uniffi/tests/fixtures/flow.json target/uniffi-flow-smoke/core-oracle.json crates/cribra-uniffi/tests/fixtures/keyed-flow.json crates/cribra-uniffi/tests/fixtures/keyed-options.json
+
+# Verify in-memory Share Bundles using real Swift and a direct Core oracle.
+uniffi-swift-share-smoke features="flow": (uniffi-swift-flow-smoke features)
+    CARGO_TARGET_DIR=target cargo +1.97.0 run -p cribra-uniffi --no-default-features --features "{{features}}" --example share_oracle > target/uniffi-flow-smoke/share-oracle.json
+    swiftc -swift-version 6 -module-cache-path target/uniffi-flow-smoke/module-cache -parse-as-library -I target/uniffi-flow-smoke -I target/uniffi-flow-smoke/generated -Xcc -fmodule-map-file=target/uniffi-flow-smoke/generated/cribra_uniffiFFI.modulemap crates/cribra-uniffi/tests/swift/ShareSmoke.swift -L target/uniffi-flow-smoke -lcribra_uniffi_swift -Xlinker -rpath -Xlinker @loader_path -o target/uniffi-flow-smoke/share-smoke
+    target/uniffi-flow-smoke/share-smoke crates/cribra-uniffi/tests/fixtures/share.json crates/cribra-uniffi/tests/fixtures/flow.json target/uniffi-flow-smoke/share-oracle.json
+
+# Compile and execute the fuse-only parallel scanner against a direct Core oracle.
+uniffi-swift-parallel-smoke: (uniffi-swift-flow-bindings "fuse")
+    swiftc --version | grep 'Swift version 6.4'
+    CARGO_TARGET_DIR=target cargo +1.97.0 run -p cribra-uniffi --no-default-features --features fuse --example parallel_oracle > target/uniffi-flow-smoke/parallel-oracle.json
+    swiftc -swift-version 6 -module-cache-path target/uniffi-flow-smoke/module-cache -emit-library -emit-module -module-name cribra_uniffi target/uniffi-flow-smoke/generated/cribra_uniffi.swift -I target/uniffi-flow-smoke/generated -Xcc -fmodule-map-file=target/uniffi-flow-smoke/generated/cribra_uniffiFFI.modulemap -L target/debug -lcribra_uniffi -Xlinker -rpath -Xlinker @loader_path/../debug -emit-module-path target/uniffi-flow-smoke/cribra_uniffi.swiftmodule -o target/uniffi-flow-smoke/libcribra_uniffi_swift.dylib
+    swiftc -swift-version 6 -module-cache-path target/uniffi-flow-smoke/module-cache -parse-as-library -I target/uniffi-flow-smoke -I target/uniffi-flow-smoke/generated -Xcc -fmodule-map-file=target/uniffi-flow-smoke/generated/cribra_uniffiFFI.modulemap crates/cribra-uniffi/tests/swift/ParallelSmoke.swift -L target/uniffi-flow-smoke -lcribra_uniffi_swift -Xlinker -rpath -Xlinker @loader_path -o target/uniffi-flow-smoke/parallel-smoke
+    target/uniffi-flow-smoke/parallel-smoke crates/cribra-uniffi/tests/fixtures/parallel.json target/uniffi-flow-smoke/parallel-oracle.json
+
+# Regenerate core/flow bindings and verify that parallel scanning stays fuse-only.
+uniffi-swift-parallel-gating:
+    just uniffi-swift-bindings
+    test -s target/uniffi-swift-smoke/generated/cribra_uniffi.swift && ! rg -n 'parallelScan|parallel_scan' target/uniffi-swift-smoke/generated/cribra_uniffi.swift
+    just uniffi-swift-flow-bindings flow
+    test -s target/uniffi-flow-smoke/generated/cribra_uniffi.swift && ! rg -n 'parallelScan|parallel_scan' target/uniffi-flow-smoke/generated/cribra_uniffi.swift
+
+# Check the complete generated Swift API/DTO/error contract for all profiles.
+uniffi-swift-api-contract:
+    mkdir -p target/uniffi-swift-smoke
+    swiftc -swift-version 6 -parse-as-library -module-cache-path target/uniffi-swift-smoke/module-cache crates/cribra-uniffi/tests/swift/APIContract.swift -o target/uniffi-swift-smoke/api-contract
+    just uniffi-swift-bindings core
+    target/uniffi-swift-smoke/api-contract core crates/cribra-uniffi/tests/fixtures/api-contract.json target/uniffi-swift-smoke/generated/cribra_uniffi.swift
+    just uniffi-swift-flow-bindings flow
+    target/uniffi-swift-smoke/api-contract flow crates/cribra-uniffi/tests/fixtures/api-contract.json target/uniffi-flow-smoke/generated/cribra_uniffi.swift
+    just uniffi-swift-flow-bindings fuse
+    target/uniffi-swift-smoke/api-contract fuse crates/cribra-uniffi/tests/fixtures/api-contract.json target/uniffi-flow-smoke/generated/cribra_uniffi.swift
+    CARGO_TARGET_DIR=target cargo +1.97.0 build -p cribra-uniffi --no-default-features --lib
+    CARGO_TARGET_DIR=target cargo +1.97.0 run -p cribra-uniffi --no-default-features --features bindgen --bin cribra-uniffi-bindgen -- generate --library target/debug/libcribra_uniffi.dylib --language swift --out-dir target/uniffi-profile-none/generated
+    target/uniffi-swift-smoke/api-contract none crates/cribra-uniffi/tests/fixtures/api-contract.json target/uniffi-profile-none/generated/cribra_uniffi.swift
+
+# Build the dependency-free Rust driver for Apple distribution workflows.
+_swift-apple-tool:
+    mkdir -p target/swift-apple
+    tool_dir="$(mktemp -d target/swift-apple/tool.XXXXXX)" && rustc +1.97.0 --edition 2024 bindings/swift/tools/apple.rs -o "$tool_dir/apple" && mv -f "$tool_dir/apple" target/swift-apple/apple && rmdir "$tool_dir"
+
+# Build all three static Apple slices and publish one coherent Swift Package profile.
+swift-apple profile="core": _swift-apple-tool
+    target/swift-apple/apple "{{justfile_directory()}}" build "{{profile}}"
+
+# Inspect architecture/platform tags and XCFramework entries without rebuilding.
+swift-apple-inspect profile="core": _swift-apple-tool
+    target/swift-apple/apple "{{justfile_directory()}}" inspect "{{profile}}"
+
+# Copy the distribution and consumer outside this checkout; run macOS and compile iOS Simulator.
+swift-apple-consumer profile="core" directory="": _swift-apple-tool
+    target/swift-apple/apple "{{justfile_directory()}}" consumer "{{profile}}" "{{directory}}"
+
 # Check, lint, and build the native C adapter artifact skeleton.
 capi:
     cargo check -p cribra-capi

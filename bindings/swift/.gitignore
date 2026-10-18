@@ -1,0 +1,10 @@
+# Build products and generated UniFFI sources are never source-controlled.
+/Generated/
+/Profiles/*/Generated/
+**/.build/
+**/.swiftpm/
+**/Package.resolved
+/Generated.staging-*/
+/Generated.previous-*/
+/Profiles/*/Generated.staging-*/
+/Profiles/*/Generated.previous-*/

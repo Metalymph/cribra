@@ -1,0 +1,59 @@
+{
+  "rules": [
+    {
+      "id": "custom.info",
+      "value": "INFO_MARK",
+      "severity": "info"
+    },
+    {
+      "id": "custom.low",
+      "value": "LOW_MARK",
+      "severity": "low"
+    },
+    {
+      "id": "custom.medium",
+      "value": "MEDIUM_MARK",
+      "severity": "medium"
+    },
+    {
+      "id": "custom.high",
+      "value": "HIGH_MARK",
+      "severity": "high"
+    },
+    {
+      "id": "custom.critical",
+      "value": "CRITICAL_MARK",
+      "severity": "critical"
+    }
+  ],
+  "sources": [
+    {
+      "id": "文書/é🙂é",
+      "text": "前\r\né🙂é GITHUB_TOKEN=ghp_AbCdEf0123456789_AbCdEf0123456789\n"
+    },
+    {
+      "id": "empty",
+      "text": ""
+    },
+    {
+      "id": "",
+      "text": "ordinary text: é🙂"
+    },
+    {
+      "id": "review/候補",
+      "text": "ABCD-EFGH-IJKL-MNOP"
+    },
+    {
+      "id": "文書/é🙂é",
+      "text": "GITHUB_TOKEN=ghp_AbCdEf0123456789_AbCdEf0123456789\nSTRIPE_SECRET_KEY=sk_test_AbCdEf0123456789_AbCdEf0123456789\n"
+    },
+    {
+      "id": "é",
+      "text": "😀 é\r\nINFO_MARK LOW_MARK MEDIUM_MARK HIGH_MARK CRITICAL_MARK INFO_MARK\n"
+    },
+    {
+      "id": "é",
+      "text": "HIGH_MARK\r\nCRITICAL_MARK"
+    }
+  ]
+}

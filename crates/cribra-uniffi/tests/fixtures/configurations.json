@@ -1,0 +1,39 @@
+[
+  {"name":"builtins", "mode":"builtInOnly", "rules":[], "source":"GITHUB_TOKEN=ghp_AbCdEf0123456789_AbCdEf0123456789 LIT_é"},
+  {"name":"custom", "mode":"customOnly", "rules":[
+    {"id":"custom/literal-é", "kind":"literal", "value":"LIT_é", "severity":"high", "remediation":"removeSensitiveValue"},
+    {"id":"custom/prefix", "kind":"prefix", "value":"pre_", "severity":"critical"},
+    {"id":"custom/suffix", "kind":"suffix", "value":"_END", "severity":"medium"},
+    {"id":"custom/pattern", "kind":"pattern", "value":"code[0-9]{2}", "severity":"low"}
+  ], "source":"前\r\né🙂é zLIT_éz pre_ABC-12 token_END code42\nGITHUB_TOKEN=ghp_AbCdEf0123456789_AbCdEf0123456789\n"},
+  {"name":"mixed", "mode":"builtInAndCustom", "rules":[
+    {"id":"custom/literal-é", "kind":"literal", "value":"LIT_é", "severity":"info"}
+  ], "source":"LIT_é GITHUB_TOKEN=ghp_AbCdEf0123456789_AbCdEf0123456789"},
+  {"name":"no-rules", "mode":"customOnly", "rules":[], "source":"GITHUB_TOKEN=ghp_AbCdEf0123456789_AbCdEf0123456789"},
+  {"name":"duplicate", "mode":"customOnly", "rules":[
+    {"id":"same", "kind":"literal", "value":"FIRST", "severity":"high"},
+    {"id":"same", "kind":"prefix", "value":"second_", "severity":"low"}
+  ]},
+  {"name":"builtin-collision", "mode":"builtInAndCustom", "rules":[
+    {"id":"github.classic-pat", "kind":"literal", "value":"CUSTOM", "severity":"high"}
+  ]},
+  {"name":"empty-id", "mode":"customOnly", "rules":[{"id":"", "kind":"literal", "value":"TOKEN", "severity":"high"}]},
+  {"name":"empty-literal", "mode":"customOnly", "rules":[{"id":"empty/literal", "kind":"literal", "value":"", "severity":"high"}]},
+  {"name":"empty-prefix", "mode":"customOnly", "rules":[{"id":"empty/prefix", "kind":"prefix", "value":"", "severity":"high"}]},
+  {"name":"empty-suffix", "mode":"customOnly", "rules":[{"id":"empty/suffix", "kind":"suffix", "value":"", "severity":"high"}]},
+  {"name":"invalid-pattern", "mode":"customOnly", "rules":[{"id":"invalid", "kind":"pattern", "value":"[", "severity":"high"}]},
+  {"name":"unsupported-lookaround", "mode":"customOnly", "rules":[{"id":"lookaround", "kind":"pattern", "value":"(?=a)", "severity":"high"}]},
+  {"name":"regex-size-limit", "mode":"customOnly", "rules":[{"id":"huge", "kind":"pattern", "value":"a{1000000000}", "severity":"high"}]},
+  {"name":"empty-pattern", "mode":"customOnly", "rules":[{"id":"nullable", "kind":"pattern", "value":"", "severity":"high"}]},
+  {"name":"nullable-pattern", "mode":"customOnly", "rules":[{"id":"nullable", "kind":"pattern", "value":"a*", "severity":"high"}]},
+  {"name":"zero-width-pattern", "mode":"customOnly", "rules":[{"id":"zero", "kind":"pattern", "value":"\\b", "severity":"high"}]},
+  {"name":"whitespace-id", "mode":"customOnly", "rules":[{"id":" ", "kind":"literal", "value":"TOKEN", "severity":"info"}], "source":"TOKEN"},
+  {"name":"duplicate-before-empty-matcher", "mode":"customOnly", "rules":[
+    {"id":"same", "kind":"literal", "value":"", "severity":"high"},
+    {"id":"same", "kind":"literal", "value":"OTHER", "severity":"low"}
+  ]},
+  {"name":"pattern-error-before-builder-validation", "mode":"customOnly", "rules":[
+    {"id":"", "kind":"literal", "value":"", "severity":"high"},
+    {"id":"invalid", "kind":"pattern", "value":"[", "severity":"high"}
+  ]}
+]

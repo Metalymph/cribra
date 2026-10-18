@@ -1,0 +1,7 @@
+[
+  {"name":"empty-batch","sources":[]},
+  {"name":"single","sources":[{"id":"único😀","text":"SECRET"}]},
+  {"name":"unicode-duplicates","sources":[{"id":"同じ😀","text":"é😀 é\r\nSECRET + SECRET"},{"id":"同じ😀","text":"SECRET"},{"id":"","text":""},{"id":"é","text":"clean"}]},
+  {"name":"no-findings","sources":[{"id":"vuoto","text":""},{"id":"pulito","text":"😀é\r\n"}]},
+  {"name":"built-in-candidates","builtins":true,"sources":[{"id":"review","text":"ABCD-EFGH-IJKL-MNOP"},{"id":"token","text":"GITHUB_TOKEN=ghp_AbCdEf0123456789_AbCdEf0123456789"}]}
+]

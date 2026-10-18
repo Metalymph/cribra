@@ -1,0 +1,6 @@
+[
+  {"name":"equal-values","source":"SECRET x SECRET","findings":[{"id":"first","start":0,"end":6},{"id":"different-id","start":9,"end":15}]},
+  {"name":"provider-synthesis","source":"ghp_AbCdEf0123456789_AbCdEf0123456789","findings":[{"id":"github.classic-pat","start":0,"end":37}]},
+  {"name":"content-a","source":"SECRET","findings":[{"id":"custom","start":0,"end":6}]},
+  {"name":"content-b","source":"PUBLIC","findings":[{"id":"custom","start":0,"end":6}]}
+]
