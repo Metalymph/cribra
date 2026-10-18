@@ -28,6 +28,30 @@ check:
 check-all:
     cargo check --all-features
 
+# Build/generate the Core-only UniFFI Python consumer and run its focused tests.
+uniffi-python-smoke python="python3.13":
+    "{{python}}" bindings/python/smoke.py
+
+# Build/generate isolated Flow bindings and qualify Core, Flow and Share in Python.
+uniffi-python-flow-smoke python="python3.13":
+    "{{python}}" bindings/python/smoke.py flow
+
+# Qualify Core, Flow/Share and Core-owned parallel scanning with isolated Fuse bindings.
+uniffi-python-fuse-smoke python="python3.13":
+    "{{python}}" bindings/python/smoke.py fuse
+
+# Build the local Fuse wheel with a Python environment containing build-requirements.txt.
+uniffi-python-wheel python="python3.13":
+    "{{python}}" bindings/python/build_wheel.py
+
+# Qualify the prebuilt Fuse wheel across the local pyenv interpreter matrix.
+uniffi-python-wheel-matrix wheel python="python3.13":
+    "{{python}}" bindings/python/wheel_smoke.py "{{wheel}}"
+
+# Qualify the prebuilt Fuse wheel on one pyenv version or interpreter path.
+uniffi-python-wheel-smoke wheel interpreter="3.13.7" python="python3.13":
+    "{{python}}" bindings/python/wheel_smoke.py "{{wheel}}" --python "{{interpreter}}"
+
 # Build the native library and generate Swift bindings under target/.
 uniffi-swift-bindings features="core":
     test "$(uname -s)" = Darwin && test "$(uname -m)" = arm64

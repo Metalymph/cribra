@@ -204,6 +204,51 @@ jobs:
           run_smoke transform_pseudonymization same_secret_across_sources_has_same_pseudonym
           run_smoke parallel serial_and_parallel_summaries_are_identical --all-features
 
+  python-linux-wheel:
+    name: Python Linux wheel qualification
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      WHEEL_PLATFORM_DIR: target/uniffi-python-wheel/fuse/linux_x86_64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install Rust 1.97
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.97.0"
+
+      - name: Cache Rust artifacts
+        uses: Swatinem/rust-cache@v2.9.1
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+
+      - name: Install pinned Python build requirements
+        run: python -m pip install --disable-pip-version-check -r bindings/python/build-requirements.txt
+
+      - name: Build the Fuse wheel
+        run: |
+          python bindings/python/build_wheel.py
+          WHEEL="$(python -c "import json; print(json.load(open('$WHEEL_PLATFORM_DIR/build-info.json'))['wheel'])")"
+          echo "WHEEL=$WHEEL" >> "$GITHUB_ENV"
+
+      - name: Verify the ELF shared library
+        run: |
+          LIBRARY="$(python -c "import json; print(json.load(open('$WHEEL_PLATFORM_DIR/build-info.json'))['nativeLibrary'])")"
+          test -f "$LIBRARY"
+          file "$LIBRARY"
+          readelf -h "$LIBRARY"
+          readelf -d "$LIBRARY"
+          ldd "$LIBRARY"
+
+      - name: Qualify the installed wheel
+        run: python bindings/python/wheel_smoke.py "$WHEEL" --python "$(command -v python3)"
+
   cross-platform:
     name: Test ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
