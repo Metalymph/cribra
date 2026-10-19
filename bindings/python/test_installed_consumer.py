@@ -46,7 +46,10 @@ class InstalledConsumerTests(unittest.TestCase):
 
     def test_installed_metadata_and_library(self):
         module = Path(cribra.__file__).resolve()
-        self.assertTrue(module.is_relative_to(Path(sys.prefix)))
+        # `is_relative_to` is purely lexical, so both sides must be canonicalized:
+        # a Windows venv can report `sys.prefix` with 8.3 short names or a junction
+        # (for example C:\Users\RUNNER~1) while the module resolves to the long form.
+        self.assertTrue(module.is_relative_to(Path(sys.prefix).resolve()))
         self.assertTrue(module.with_name(LIBRARY).is_file())
         self.assertEqual(metadata.version("cribra"), cribra.cribra_version() + "+fuse")
         self.assertEqual(metadata.requires("cribra"), None)
