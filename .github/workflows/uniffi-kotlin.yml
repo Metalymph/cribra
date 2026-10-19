@@ -1,0 +1,180 @@
+name: UniFFI Kotlin JVM
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "src/**"
+      - "crates/cribra-uniffi/**"
+      - "bindings/kotlin/**"
+      - "justfile"
+      - ".github/workflows/uniffi-kotlin.yml"
+  pull_request:
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "src/**"
+      - "crates/cribra-uniffi/**"
+      - "bindings/kotlin/**"
+      - "justfile"
+      - ".github/workflows/uniffi-kotlin.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: uniffi-kotlin-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: "1"
+  PYTHONDONTWRITEBYTECODE: "1"
+
+jobs:
+  bundles:
+    name: Kotlin JVM / ${{ matrix.platform }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            platform: macos-arm64
+            arch: aarch64
+            rust-target: aarch64-apple-darwin
+          - runner: ubuntu-24.04
+            platform: linux-x86_64
+            arch: x86_64
+            rust-target: x86_64-unknown-linux-gnu
+          - runner: windows-2022
+            platform: windows-x86_64
+            arch: x86_64
+            rust-target: x86_64-pc-windows-msvc
+    defaults:
+      run:
+        shell: python
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+
+      - name: Install Rust 1.97
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.97.0"
+          targets: ${{ matrix.rust-target }}
+
+      - name: Install JDK 17
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+          cache-dependency-path: |
+            bindings/kotlin/*.gradle.kts
+            bindings/kotlin/gradle/wrapper/gradle-wrapper.properties
+
+      - name: Install Kotlin compiler 2.4.21
+        run: |
+          import hashlib
+          import os
+          from pathlib import Path
+          import sys
+          import urllib.request
+          import zipfile
+
+          archive = Path(os.environ["RUNNER_TEMP"]) / "kotlin-compiler-2.4.21.zip"
+          urllib.request.urlretrieve(
+              "https://github.com/JetBrains/kotlin/releases/download/v2.4.21/kotlin-compiler-2.4.21.zip",
+              archive,
+          )
+          expected = "7cc140e76daf416a0424a5557f99afd7ca89ebd463ea1101261e3e01c33e75cd"
+          if hashlib.sha256(archive.read_bytes()).hexdigest() != expected:
+              raise SystemExit("Kotlin compiler archive SHA-256 mismatch")
+          destination = Path(os.environ["RUNNER_TEMP"]) / "cribra-kotlin-compiler"
+          with zipfile.ZipFile(archive) as compiler:
+              compiler.extractall(destination)
+          home = destination / "kotlinc"
+          windows = sys.platform == "win32"
+          launcher = home / "bin" / ("kotlinc.bat" if windows else "kotlinc")
+          java = Path(os.environ["JAVA_HOME"]) / "bin" / ("java.exe" if windows else "java")
+          if not windows:
+              for script in (home / "bin").iterdir():
+                  script.chmod(0o755)
+              Path("bindings/kotlin/gradlew").chmod(0o755)
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as environment:
+              environment.write(f"KOTLIN_HOME={home}\nKOTLINC={launcher}\nJAVA={java}\n")
+
+      - name: Verify host, toolchains and Python syntax
+        env:
+          EXPECTED_PLATFORM: ${{ matrix.platform }}
+          EXPECTED_ARCH: ${{ matrix.arch }}
+        run: |
+          import ast
+          import importlib.util
+          import os
+          from pathlib import Path
+          import subprocess
+          import sys
+
+          path = Path("bindings/kotlin/build_bundle.py")
+          spec = importlib.util.spec_from_file_location("bundle_builder", path)
+          builder = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(builder)
+          host = builder.host_spec()
+          if (host["platform"], host["arch"]) != (os.environ["EXPECTED_PLATFORM"], os.environ["EXPECTED_ARCH"]):
+              raise SystemExit(f"Unexpected runner host: {host}")
+          for source in (path, Path("bindings/kotlin/qualify_bundle_consumer.py")):
+              ast.parse(source.read_text(encoding="utf-8"), filename=str(source))
+          rust = subprocess.check_output(["rustc", "+1.97.0", "--version"], text=True)
+          if not rust.startswith("rustc 1.97.0 "):
+              raise SystemExit(rust)
+          print(rust, end="")
+          subprocess.run([os.environ["JAVA"], "-version"], check=True)
+          subprocess.run([os.environ["KOTLINC"], "-version"], check=True, shell=sys.platform == "win32")
+
+      - name: Build bundles and qualify isolated JVM consumers
+        run: |
+          import os
+          from pathlib import Path
+          import subprocess
+          import sys
+
+          diagnostics = Path("target/uniffi-kotlin-bundle-consumer")
+          diagnostics.mkdir(parents=True, exist_ok=True)
+          commands = (
+              ("build", [sys.executable, "bindings/kotlin/build_bundle.py"]),
+              ("consumer", [sys.executable, "bindings/kotlin/qualify_bundle_consumer.py",
+                            "--report", str(diagnostics / "qualification.json")]),
+          )
+          for name, command in commands:
+              with (diagnostics / f"{name}.log").open("w", encoding="utf-8") as log:
+                  process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                             text=True, encoding="utf-8", errors="replace")
+                  for line in process.stdout:
+                      print(line, end="", flush=True)
+                      log.write(line)
+                  code = process.wait()
+              if code:
+                  raise SystemExit(code)
+
+      - name: Upload bundles and qualification diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: cribra-kotlin-${{ matrix.platform }}
+          path: |
+            target/uniffi-kotlin-bundles/dist/*.zip
+            target/uniffi-kotlin-bundle-consumer/qualification.json
+            target/uniffi-kotlin-bundle-consumer/*.log
+          if-no-files-found: warn

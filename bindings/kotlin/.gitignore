@@ -1,0 +1,7 @@
+# Gradle build products are never source-controlled.
+/.gradle/
+/build/
+
+# Python bytecode from build_bundle.py.
+__pycache__/
+*.pyc

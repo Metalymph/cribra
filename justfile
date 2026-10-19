@@ -60,6 +60,90 @@ uniffi-python-manylinux-wheel:
 uniffi-python-manylinux-wheel-matrix wheel="":
     sh bindings/python/qualify_manylinux_wheel.sh "{{wheel}}"
 
+# Build the Core native library for the host, generate the Kotlin/JVM binding under
+# target/ and run the JVM consumer smoke against the real cdylib (needs JDK 17).
+uniffi-kotlin-smoke:
+    CARGO_TARGET_DIR=target cargo +1.97.0 build -p cribra-uniffi --no-default-features --features core --lib
+    case "$(uname -s)" in Darwin) library="libcribra_uniffi.dylib" ;; Linux) library="libcribra_uniffi.so" ;; MINGW*|MSYS*|CYGWIN*) library="cribra_uniffi.dll" ;; *) echo "uniffi-kotlin-smoke: unsupported host $(uname -s)" >&2; exit 2 ;; esac; \
+    CARGO_TARGET_DIR=target cargo +1.97.0 run -p cribra-uniffi --no-default-features --features bindgen,core --bin cribra-uniffi-bindgen -- generate --library "target/debug/$library" --language kotlin --out-dir target/uniffi-kotlin-smoke/generated
+    bindings/kotlin/gradlew -p bindings/kotlin --console=plain run
+
+# Build the Flow/Share native library, generate the Kotlin/JVM binding and the
+# direct-Core oracle outputs under target/, then run the Flow/Share JVM smoke
+# against the real cdylib (needs JDK 17).
+uniffi-kotlin-flow-smoke:
+    case "$(uname -s)" in Darwin) library="libcribra_uniffi.dylib" ;; Linux) library="libcribra_uniffi.so" ;; MINGW*|MSYS*|CYGWIN*) library="cribra_uniffi.dll" ;; *) echo "uniffi-kotlin-flow-smoke: unsupported host $(uname -s)" >&2; exit 2 ;; esac; \
+    mkdir -p target/uniffi-kotlin-flow-smoke && \
+    CARGO_TARGET_DIR=target cargo +1.97.0 build -p cribra-uniffi --no-default-features --features flow --lib && \
+    CARGO_TARGET_DIR=target cargo +1.97.0 run -p cribra-uniffi --no-default-features --features bindgen,flow --bin cribra-uniffi-bindgen -- generate --library "target/debug/$library" --language kotlin --out-dir target/uniffi-kotlin-flow-smoke/generated && \
+    CARGO_TARGET_DIR=target cargo +1.97.0 run -p cribra-uniffi --no-default-features --features flow --example flow_oracle > target/uniffi-kotlin-flow-smoke/flow-oracle.json && \
+    CARGO_TARGET_DIR=target cargo +1.97.0 run -p cribra-uniffi --no-default-features --features flow --example share_oracle > target/uniffi-kotlin-flow-smoke/share-oracle.json
+    bindings/kotlin/gradlew -p bindings/kotlin --console=plain runFlow
+
+# Build the Fuse native library, generate the Kotlin/JVM binding and the
+# direct-Core oracle output under target/, then run the Fuse parallel-scanning
+# smoke against the real cdylib (needs JDK 17).
+uniffi-kotlin-fuse-smoke:
+    case "$(uname -s)" in Darwin) library="libcribra_uniffi.dylib" ;; Linux) library="libcribra_uniffi.so" ;; MINGW*|MSYS*|CYGWIN*) library="cribra_uniffi.dll" ;; *) echo "uniffi-kotlin-fuse-smoke: unsupported host $(uname -s)" >&2; exit 2 ;; esac; \
+    mkdir -p target/uniffi-kotlin-fuse-smoke && \
+    CARGO_TARGET_DIR=target cargo +1.97.0 build -p cribra-uniffi --no-default-features --features fuse --lib && \
+    CARGO_TARGET_DIR=target cargo +1.97.0 run -p cribra-uniffi --no-default-features --features bindgen,fuse --bin cribra-uniffi-bindgen -- generate --library "target/debug/$library" --language kotlin --out-dir target/uniffi-kotlin-fuse-smoke/generated && \
+    CARGO_TARGET_DIR=target cargo +1.97.0 run -p cribra-uniffi --no-default-features --features fuse --example parallel_oracle > target/uniffi-kotlin-fuse-smoke/parallel-oracle.json
+    bindings/kotlin/gradlew -p bindings/kotlin --console=plain runFuse
+
+# Regenerate the Core, Flow and Fuse Kotlin bindings and verify that Core-owned
+# parallel scanning is exported only by the Fuse profile.
+uniffi-kotlin-parallel-gating:
+    case "$(uname -s)" in Darwin) library="libcribra_uniffi.dylib" ;; Linux) library="libcribra_uniffi.so" ;; MINGW*|MSYS*|CYGWIN*) library="cribra_uniffi.dll" ;; *) echo "uniffi-kotlin-parallel-gating: unsupported host $(uname -s)" >&2; exit 2 ;; esac; \
+    mkdir -p target/uniffi-kotlin-smoke/generated target/uniffi-kotlin-flow-smoke/generated target/uniffi-kotlin-fuse-smoke/generated && \
+    CARGO_TARGET_DIR=target cargo +1.97.0 build -p cribra-uniffi --no-default-features --features core --lib && \
+    CARGO_TARGET_DIR=target cargo +1.97.0 run -p cribra-uniffi --no-default-features --features bindgen,core --bin cribra-uniffi-bindgen -- generate --library "target/debug/$library" --language kotlin --out-dir target/uniffi-kotlin-smoke/generated && \
+    CARGO_TARGET_DIR=target cargo +1.97.0 build -p cribra-uniffi --no-default-features --features flow --lib && \
+    CARGO_TARGET_DIR=target cargo +1.97.0 run -p cribra-uniffi --no-default-features --features bindgen,flow --bin cribra-uniffi-bindgen -- generate --library "target/debug/$library" --language kotlin --out-dir target/uniffi-kotlin-flow-smoke/generated && \
+    CARGO_TARGET_DIR=target cargo +1.97.0 build -p cribra-uniffi --no-default-features --features fuse --lib && \
+    CARGO_TARGET_DIR=target cargo +1.97.0 run -p cribra-uniffi --no-default-features --features bindgen,fuse --bin cribra-uniffi-bindgen -- generate --library "target/debug/$library" --language kotlin --out-dir target/uniffi-kotlin-fuse-smoke/generated
+    test -s target/uniffi-kotlin-smoke/generated/uniffi/cribra_uniffi/cribra_uniffi.kt && ! grep -Eq 'parallelScan|parallel_scan' target/uniffi-kotlin-smoke/generated/uniffi/cribra_uniffi/cribra_uniffi.kt
+    test -s target/uniffi-kotlin-flow-smoke/generated/uniffi/cribra_uniffi/cribra_uniffi.kt && ! grep -Eq 'parallelScan|parallel_scan' target/uniffi-kotlin-flow-smoke/generated/uniffi/cribra_uniffi/cribra_uniffi.kt
+    test -s target/uniffi-kotlin-fuse-smoke/generated/uniffi/cribra_uniffi/cribra_uniffi.kt && grep -Eq 'parallelScan|parallel_scan' target/uniffi-kotlin-fuse-smoke/generated/uniffi/cribra_uniffi/cribra_uniffi.kt
+
+# Generate Core, Flow and Fuse Kotlin bindings from scratch, package each as an
+# independent profile JAR under bindings/kotlin/build/libs, then verify contents,
+# manifests, Java 17 classfiles, API gating and the single-profile classpath rule
+# (needs JDK 17).
+uniffi-kotlin-jars:
+    case "$(uname -s)" in Darwin) library="libcribra_uniffi.dylib" ;; Linux) library="libcribra_uniffi.so" ;; MINGW*|MSYS*|CYGWIN*) library="cribra_uniffi.dll" ;; *) echo "uniffi-kotlin-jars: unsupported host $(uname -s)" >&2; exit 2 ;; esac; \
+    rm -rf target/uniffi-kotlin-smoke/generated target/uniffi-kotlin-flow-smoke/generated target/uniffi-kotlin-fuse-smoke/generated && \
+    mkdir -p target/uniffi-kotlin-smoke target/uniffi-kotlin-flow-smoke target/uniffi-kotlin-fuse-smoke target/uniffi-kotlin-jars && \
+    CARGO_TARGET_DIR=target cargo +1.97.0 build -p cribra-uniffi --no-default-features --features core --lib && \
+    CARGO_TARGET_DIR=target cargo +1.97.0 run -p cribra-uniffi --no-default-features --features bindgen,core --bin cribra-uniffi-bindgen -- generate --library "target/debug/$library" --language kotlin --out-dir target/uniffi-kotlin-smoke/generated && \
+    CARGO_TARGET_DIR=target cargo +1.97.0 build -p cribra-uniffi --no-default-features --features flow --lib && \
+    CARGO_TARGET_DIR=target cargo +1.97.0 run -p cribra-uniffi --no-default-features --features bindgen,flow --bin cribra-uniffi-bindgen -- generate --library "target/debug/$library" --language kotlin --out-dir target/uniffi-kotlin-flow-smoke/generated && \
+    CARGO_TARGET_DIR=target cargo +1.97.0 build -p cribra-uniffi --no-default-features --features fuse --lib && \
+    CARGO_TARGET_DIR=target cargo +1.97.0 run -p cribra-uniffi --no-default-features --features bindgen,fuse --bin cribra-uniffi-bindgen -- generate --library "target/debug/$library" --language kotlin --out-dir target/uniffi-kotlin-fuse-smoke/generated
+    bindings/kotlin/gradlew -p bindings/kotlin --console=plain clean
+    bindings/kotlin/gradlew -p bindings/kotlin --console=plain profileJars verifyProfileJars
+    javap -classpath bindings/kotlin/build/libs/cribra-kotlin-core-0.7.1.jar uniffi.cribra_uniffi.Scanner > target/uniffi-kotlin-jars/core-scanner.txt && ! grep -q parallelScan target/uniffi-kotlin-jars/core-scanner.txt
+    javap -classpath bindings/kotlin/build/libs/cribra-kotlin-flow-0.7.1.jar uniffi.cribra_uniffi.Scanner > target/uniffi-kotlin-jars/flow-scanner.txt && ! grep -q parallelScan target/uniffi-kotlin-jars/flow-scanner.txt
+    javap -classpath bindings/kotlin/build/libs/cribra-kotlin-fuse-0.7.1.jar uniffi.cribra_uniffi.Scanner > target/uniffi-kotlin-jars/fuse-scanner.txt && grep -q parallelScan target/uniffi-kotlin-jars/fuse-scanner.txt
+    java --class-path bindings/kotlin/build/libs/cribra-kotlin-core-0.7.1.jar bindings/kotlin/verify/ClasspathCheck.java core single
+    java --class-path bindings/kotlin/build/libs/cribra-kotlin-flow-0.7.1.jar bindings/kotlin/verify/ClasspathCheck.java flow single
+    java --class-path bindings/kotlin/build/libs/cribra-kotlin-fuse-0.7.1.jar bindings/kotlin/verify/ClasspathCheck.java fuse single
+    java --class-path bindings/kotlin/build/libs/cribra-kotlin-core-0.7.1.jar:bindings/kotlin/build/libs/cribra-kotlin-flow-0.7.1.jar bindings/kotlin/verify/ClasspathCheck.java core mixed
+    java --class-path bindings/kotlin/build/libs/cribra-kotlin-flow-0.7.1.jar:bindings/kotlin/build/libs/cribra-kotlin-fuse-0.7.1.jar bindings/kotlin/verify/ClasspathCheck.java flow mixed
+    java --class-path bindings/kotlin/build/libs/cribra-kotlin-core-0.7.1.jar:bindings/kotlin/build/libs/cribra-kotlin-fuse-0.7.1.jar bindings/kotlin/verify/ClasspathCheck.java fuse mixed
+    @echo "Profile JARs:"
+    @ls -l bindings/kotlin/build/libs/cribra-kotlin-*-0.7.1.jar
+
+# Build reproducible, host-specific Core, Flow/Share and Fuse Kotlin/JVM
+# distribution bundles (profile JAR + JNA + native library + metadata + README)
+# under target/uniffi-kotlin-bundles (needs JDK 17 and Python 3.11+).
+uniffi-kotlin-bundles python="python3":
+    "{{python}}" bindings/kotlin/build_bundle.py
+
+# Qualify the existing ZIP bundles with isolated JVM consumers; never rebuild them.
+uniffi-kotlin-bundle-consumer python="python3" dist="target/uniffi-kotlin-bundles/dist":
+    "{{python}}" bindings/kotlin/qualify_bundle_consumer.py --dist "{{dist}}"
+
 # Build the native library and generate Swift bindings under target/.
 uniffi-swift-bindings features="core":
     test "$(uname -s)" = Darwin && test "$(uname -m)" = arm64
