@@ -220,11 +220,11 @@ dependencies. Prepare the build environment exactly as on macOS, then run
 result is `cribra-0.7.1+fuse-py3-none-linux_x86_64.whl` under
 `target/uniffi-python-wheel/fuse/linux_x86_64/dist/`.
 
-**Linux current limits.** The Linux wheel is deliberately tagged
+**Linux current limits.** The native Linux wheel is deliberately tagged
 `linux_x86_64` (the local, non-portable tag), **not** `manylinux_*` or
-`musllinux_*`: the glibc baseline, the `auditwheel` reconciliation and the
-portability guarantees required by those contracts have not been verified, so no
-such tag is claimed and the builder assigns none. Only the ELF class,
+`musllinux_*`: the native build performs no glibc/`auditwheel` reconciliation and
+claims no portability contract. (A separate, opt-in `manylinux_2_28_x86_64`
+foundation is described below.) Only the ELF class,
 endianness, machine and shared-object type are checked, plus the `.so`'s
 `DT_NEEDED` set: it must stay within the expected glibc libraries and must not
 contain a repository-local `NEEDED` entry, `RPATH`/`RUNPATH` or `ldd` resolution.
@@ -236,11 +236,63 @@ never publishes. Nothing here is exercised by the macOS qualification above.
 Windows, ARM64 Linux and musl-based distributions are out of scope for this
 foundation.
 
+**manylinux_2_28_x86_64 foundation.** An isolated, opt-in path builds the same
+Fuse wheel inside the official PyPA manylinux image pinned by digest
+(`quay.io/pypa/manylinux_2_28_x86_64@sha256:1e7b8460ad8fb3fb0fbe1cd818845159ac896b4fd17452d56e892c291f3b97a8`,
+AlmaLinux 8 / glibc 2.28) on `linux/amd64`, installing Rust 1.97.0 inside it:
+
+```sh
+just uniffi-python-manylinux-wheel
+```
+
+`build_manylinux_wheel.sh` runs that container (Docker required; emulated on a
+non-x86_64 host) and executes `manylinux/entrypoint.sh`, which installs the
+pinned build frontend and `auditwheel` and runs `build_wheel.py` with
+`CRIBRA_MANYLINUX_PLATFORM=manylinux_2_28_x86_64`. That opt-in only redirects
+the builder to its own `target/uniffi-python-wheel/fuse/manylinux_2_28_x86_64/`
+directory and leaves the native macOS and `linux_x86_64` paths untouched. The
+builder still writes a provisional `py3-none-linux_x86_64` wheel there, runs
+`auditwheel show` (saved to `auditwheel-show.txt`) and then
+`auditwheel repair --plat manylinux_2_28_x86_64`. The platform tag is applied
+only by auditwheel: if `repair` refuses the requested policy the builder fails
+closed and claims nothing, and it re-verifies that the qualified wheel packages
+exactly the native library, stays non-pure and keeps the ABI-independent
+`py3-none` tag. Nothing is published.
+
+**manylinux installed-consumer qualification.** The repaired wheel is qualified
+with the same installed-consumer smoke, against the final
+`py3-none-manylinux_2_28_x86_64` wheel (never the provisional `linux_x86_64`
+one):
+
+```sh
+just uniffi-python-manylinux-wheel          # build and auditwheel repair first
+just uniffi-python-manylinux-wheel-matrix   # qualify the repaired wheel
+```
+
+`wheel_smoke.py` accepts exactly two Linux tags — the local
+`py3-none-linux_x86_64` and the auditwheel-confirmed
+`py3-none-manylinux_2_28_x86_64` — and still rejects every other platform,
+architecture and ABI (any other manylinux/musllinux version, the
+`manylinux2014`/`manylinux_2_17` aliases, `aarch64`, a `cp3xx-*` or `abi3` ABI,
+...). `qualify_manylinux_wheel.sh` runs `manylinux/consumer_entrypoint.sh` in
+the same digest-pinned image, which passes every CPython the image provides
+(3.11, 3.12, 3.13, 3.14) to `wheel_smoke.py`; ELF and `DT_NEEDED`/`ldd`
+verification is the existing Linux path, unchanged. Each interpreter gets its
+own fresh `venv`, installs the wheel offline (`--no-index --no-deps`, no
+Rust/Cargo on `PATH`) and runs the seven installed-consumer tests; the
+consumer's Python audit hook is the isolation boundary. Nothing is rebuilt,
+downloaded or published.
+
 `wheel_smoke.py` (the installed-wheel smoke) checks METADATA,
 platform/non-pure tags, every RECORD hash/size, the included MIT license and byte
 identity of both generated and native payloads once, verifies the native library
 for the host platform, then qualifies that same wheel against each interpreter in
-turn. On macOS it asserts the ARM64 architecture, Mach-O deployment information
+turn. The tag check is strict: on macOS a `py3-none-macosx_*_arm64` tag, on Linux
+`py3-none-linux_x86_64` or the auditwheel-confirmed
+`py3-none-manylinux_2_28_x86_64`; every other platform, architecture and ABI
+fails closed. RECORD is compared against the archive's files, because the
+auditwheel-repaired wheel also carries explicit directory entries (RECORD lists
+files only). On macOS it asserts the ARM64 architecture, Mach-O deployment information
 and system-only native dependencies (`lipo`, `otool`, `vtool`); on Linux it
 asserts the `.so` is an ELF64 `ET_DYN` x86_64 object whose `DT_NEEDED` set stays
 within the expected glibc libraries and resolves only to system paths, with no
@@ -294,8 +346,9 @@ The consumer smoke runner recognizes native library names on macOS, Linux and
 Windows; other platforms and interpreters are not qualified by this step. The
 local wheel builder supports macOS ARM64 and Linux x86_64; Windows, Intel macOS,
 ARM64 Linux, musl-based Linux, older macOS versions, Python outside 3.11–3.14,
-signing/notarization, repair tools and distribution/release qualification are
-outside scope. The installed consumer is a focused seven-test smoke; the full
+signing/notarization and distribution/release qualification are outside scope.
+`auditwheel repair` is used only by the opt-in manylinux_2_28_x86_64 foundation
+above; no other repair tool and no publishing is introduced. The installed consumer is a focused seven-test smoke; the full
 Core/Flow/Fuse oracle suites remain the separate smoke commands above.
 Parallel tests qualify observable results and repeatability, not speedup, worker
 counts, scheduling or concurrent Python callers.

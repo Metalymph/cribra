@@ -23,8 +23,13 @@ DEFAULT_INTERPRETERS = ("3.11.17", "3.12.15", "3.13.7", "3.14.8")
 
 MACOS_LIBRARY = "libcribra_uniffi.dylib"
 LINUX_LIBRARY = "libcribra_uniffi.so"
-# The Linux builder keeps the local, non-portable tag: no manylinux/musllinux claim.
+# The native Linux builder keeps the local, non-portable tag: no manylinux/musllinux
+# claim. The auditwheel-qualified policy in CRIBRA_MANYLINUX_PLATFORM (build_wheel.py)
+# is the only additional tag accepted, and only at the exact verified version.
 LINUX_WHEEL_PLATFORM = "linux_x86_64"
+MANYLINUX_WHEEL_PLATFORM = "manylinux_2_28_x86_64"
+# Exact, verified Linux platform tags. Nothing else is accepted by the qualification.
+LINUX_WHEEL_PLATFORMS = (LINUX_WHEEL_PLATFORM, MANYLINUX_WHEEL_PLATFORM)
 # Shared libraries expected in a release cdylib linked against glibc. Any other
 # dependency, and any repository-local dependency, fails the qualification closed.
 LINUX_ALLOWED_LIBRARIES = frozenset({
@@ -62,6 +67,27 @@ def interpreter_version(executable):
     return tuple(int(part) for part in output.strip().split("."))
 
 
+def qualified_library(tag, host):
+    """Return the native library name for a strictly qualified wheel tag.
+
+    Only the exact, verified tags pass: on macOS a `py3-none-macosx_*_arm64` tag;
+    on Linux `py3-none-linux_x86_64` or the auditwheel-confirmed
+    `py3-none-manylinux_2_28_x86_64`. Every other platform, architecture and ABI
+    (a CPython extension ABI, another manylinux/musllinux version, ARM64 Linux,
+    ...) fails closed before the payload is inspected.
+    """
+    if host == "darwin":
+        if not (tag.startswith("py3-none-macosx_") and tag.endswith("_arm64")):
+            raise QualificationError(f"unexpected macOS wheel tag: {tag!r}")
+        return MACOS_LIBRARY
+    if host.startswith("linux"):
+        allowed = frozenset("py3-none-" + platform for platform in LINUX_WHEEL_PLATFORMS)
+        if tag not in allowed:
+            raise QualificationError(f"unexpected Linux wheel tag: {tag!r}")
+        return LINUX_LIBRARY
+    raise QualificationError(f"unsupported host platform: {host}")
+
+
 def inspect_wheel(wheel):
     """Check wheel metadata/RECORD/platform/native payload; return payload and name."""
     build = json.loads((wheel.parent.parent / "build-info.json").read_text())
@@ -77,16 +103,11 @@ def inspect_wheel(wheel):
         assert not metadata.get_all("Requires-Dist")
         assert tags["Root-Is-Purelib"] == "false"
         tag = tags["Tag"]
-        if sys.platform == "darwin":
-            assert tag.startswith("py3-none-macosx_") and tag.endswith("_arm64")
-            library_name = MACOS_LIBRARY
-        elif sys.platform.startswith("linux"):
-            # The local, non-portable tag is asserted so a manylinux/musllinux tag
-            # can never slip through a qualification that has not verified it.
-            assert tag == "py3-none-" + LINUX_WHEEL_PLATFORM, tag
-            library_name = LINUX_LIBRARY
-        else:
-            raise QualificationError(f"unsupported host platform: {sys.platform}")
+        # The local `linux_x86_64` tag and the exact auditwheel-confirmed manylinux
+        # policy are the only Linux tags accepted, so an unverified manylinux/
+        # musllinux tag can never slip through, and every ABI other than `none`
+        # stays rejected.
+        library_name = qualified_library(tag, sys.platform)
         assert wheel.name.endswith(tag + ".whl")
         # Fail closed unless the wheel packages exactly the host platform's native
         # library: a missing or foreign-platform library would otherwise surface as
@@ -100,9 +121,12 @@ def inspect_wheel(wheel):
         assert archive.read("cribra_uniffi/__init__.py") == generated.read_bytes()
         assert native == native_library.read_bytes()
         assert any(name.endswith("/LICENSE") for name in archive.namelist())
-        # Check every archive member against standard wheel RECORD hashes/sizes.
+        # Check every archive file against standard wheel RECORD hashes/sizes.
+        # RECORD lists files, not directories; auditwheel's repaired wheel adds
+        # explicit directory entries, so compare against the file members.
         records = list(csv.reader(io.StringIO(archive.read(dist_info + "/RECORD").decode())))
-        assert {row[0] for row in records} == set(archive.namelist())
+        files = {name for name in archive.namelist() if not name.endswith("/")}
+        assert {row[0] for row in records} == files
         for name, digest, size in records:
             if name.endswith("/RECORD"):
                 continue

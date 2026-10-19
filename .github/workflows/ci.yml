@@ -249,6 +249,71 @@ jobs:
       - name: Qualify the installed wheel
         run: python bindings/python/wheel_smoke.py "$WHEEL" --python "$(command -v python3)"
 
+  python-manylinux-wheel:
+    name: Python manylinux_2_28 x86_64 qualification
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      MANYLINUX_DIR: target/uniffi-python-wheel/fuse/manylinux_2_28_x86_64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # Reuses the 3.1 + 3.2 tooling: build_manylinux_wheel.sh runs the
+      # digest-pinned official PyPA manylinux_2_28_x86_64 image and fails closed
+      # unless auditwheel show *and* repair both succeed. Nothing is published.
+      - name: Build and auditwheel-repair the manylinux wheel
+        run: sh bindings/python/build_manylinux_wheel.sh
+
+      - name: Verify the auditwheel evidence and the repaired wheel
+        run: |
+          set -euo pipefail
+          test -f "$MANYLINUX_DIR/auditwheel-show.txt"
+          test -f "$MANYLINUX_DIR/build-info.json"
+          wheel="$(find "$MANYLINUX_DIR/dist" -maxdepth 1 -name 'cribra-*-py3-none-manylinux_2_28_x86_64.whl')"
+          test -n "$wheel"
+          test "$(printf '%s\n' "$wheel" | wc -l)" -eq 1
+          echo "WHEEL=$wheel" >> "$GITHUB_ENV"
+          cat "$MANYLINUX_DIR/auditwheel-show.txt"
+          grep -q 'consistent with' "$MANYLINUX_DIR/auditwheel-show.txt"
+          grep -q 'manylinux_2_28_x86_64' "$MANYLINUX_DIR/auditwheel-show.txt"
+
+      # Reuses the 3.2 tooling: qualify_manylinux_wheel.sh runs the repaired
+      # wheel through wheel_smoke.py's isolated, offline, no-Rust consumer venvs.
+      - name: Qualify the repaired wheel on CPython 3.11-3.14
+        run: |
+          set -euo pipefail
+          sh bindings/python/qualify_manylinux_wheel.sh "$WHEEL" 2>&1 | tee manylinux-consumer.log
+
+      - name: Require all four CPython versions and 28/28 consumer tests
+        run: |
+          set -euo pipefail
+          for minor in 11 12 13 14; do
+            grep -qE "^  PASS: /opt/python/cp3${minor}-cp3${minor}/bin/python - Python 3\.${minor}\." manylinux-consumer.log
+          done
+          test "$(grep -c '^  PASS: /opt/python/cp3' manylinux-consumer.log)" -eq 4
+          test "$(grep -cE '\.\.\. ok$' manylinux-consumer.log)" -eq 28
+          test "$(grep -c '^Ran 7 tests in' manylinux-consumer.log)" -eq 4
+          if grep -q 'FAIL' manylinux-consumer.log; then
+            echo "an installed-consumer interpreter failed" >&2
+            exit 1
+          fi
+          grep -qF 'PASS: wheel metadata/RECORD, native library, offline installs and installed consumer:' manylinux-consumer.log
+          grep -qF 'py3-none-manylinux_2_28_x86_64.whl' manylinux-consumer.log
+
+      - name: Upload the repaired wheel and auditwheel evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: cribra-fuse-manylinux_2_28_x86_64
+          path: |
+            target/uniffi-python-wheel/fuse/manylinux_2_28_x86_64/dist/*.whl
+            target/uniffi-python-wheel/fuse/manylinux_2_28_x86_64/auditwheel-show.txt
+            target/uniffi-python-wheel/fuse/manylinux_2_28_x86_64/build-info.json
+            manylinux-consumer.log
+          if-no-files-found: warn
+
   cross-platform:
     name: Test ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
