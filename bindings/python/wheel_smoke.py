@@ -7,6 +7,7 @@ from email.parser import BytesParser
 import hashlib
 import io
 import json
+import os
 from pathlib import Path
 import shutil
 import struct
@@ -14,6 +15,10 @@ import subprocess
 import sys
 import tempfile
 import zipfile
+
+# The builder owns the single PE32+ parser and the native-library name set; the
+# smoke reuses them so the two tools can never disagree about what is native.
+import build_wheel
 
 
 # Local pyenv interpreters qualified by NB-2.5B.3. Distribution requires-python is
@@ -23,11 +28,15 @@ DEFAULT_INTERPRETERS = ("3.11.17", "3.12.15", "3.13.7", "3.14.8")
 
 MACOS_LIBRARY = "libcribra_uniffi.dylib"
 LINUX_LIBRARY = "libcribra_uniffi.so"
+WINDOWS_LIBRARY = "cribra_uniffi.dll"
 # The native Linux builder keeps the local, non-portable tag: no manylinux/musllinux
 # claim. The auditwheel-qualified policy in CRIBRA_MANYLINUX_PLATFORM (build_wheel.py)
 # is the only additional tag accepted, and only at the exact verified version.
 LINUX_WHEEL_PLATFORM = "linux_x86_64"
 MANYLINUX_WHEEL_PLATFORM = "manylinux_2_28_x86_64"
+# Native Windows accepts only the AMD64 tag; like the Linux/macOS tags above it is
+# one exact policy, so win_arm64, win32 and any CPython ABI tag fail closed.
+WINDOWS_WHEEL_PLATFORM = "win_amd64"
 # Exact, verified Linux platform tags. Nothing else is accepted by the qualification.
 LINUX_WHEEL_PLATFORMS = (LINUX_WHEEL_PLATFORM, MANYLINUX_WHEEL_PLATFORM)
 # Shared libraries expected in a release cdylib linked against glibc. Any other
@@ -44,7 +53,7 @@ class QualificationError(RuntimeError):
 
 def resolve_interpreter(spec):
     """Map a pyenv version name or an explicit interpreter path to an executable."""
-    if "/" in spec or Path(spec).is_file():
+    if "/" in spec or os.sep in spec or Path(spec).is_file():
         executable = Path(spec).resolve()
         if not executable.is_file():
             raise QualificationError(f"interpreter not found: {spec}")
@@ -72,9 +81,10 @@ def qualified_library(tag, host):
 
     Only the exact, verified tags pass: on macOS a `py3-none-macosx_*_arm64` tag;
     on Linux `py3-none-linux_x86_64` or the auditwheel-confirmed
-    `py3-none-manylinux_2_28_x86_64`. Every other platform, architecture and ABI
-    (a CPython extension ABI, another manylinux/musllinux version, ARM64 Linux,
-    ...) fails closed before the payload is inspected.
+    `py3-none-manylinux_2_28_x86_64`; on Windows exactly `py3-none-win_amd64`.
+    Every other platform, architecture and ABI (a CPython extension ABI, another
+    manylinux/musllinux version, ARM64 Linux, Windows ARM64/32-bit, ...) fails
+    closed before the payload is inspected.
     """
     if host == "darwin":
         if not (tag.startswith("py3-none-macosx_") and tag.endswith("_arm64")):
@@ -85,6 +95,10 @@ def qualified_library(tag, host):
         if tag not in allowed:
             raise QualificationError(f"unexpected Linux wheel tag: {tag!r}")
         return LINUX_LIBRARY
+    if host == "win32":
+        if tag != "py3-none-" + WINDOWS_WHEEL_PLATFORM:
+            raise QualificationError(f"unexpected Windows wheel tag: {tag!r}")
+        return WINDOWS_LIBRARY
     raise QualificationError(f"unsupported host platform: {host}")
 
 
@@ -111,10 +125,10 @@ def inspect_wheel(wheel):
         assert wheel.name.endswith(tag + ".whl")
         # Fail closed unless the wheel packages exactly the host platform's native
         # library: a missing or foreign-platform library would otherwise surface as
-        # an opaque zip KeyError, or load the wrong binary.
+        # an opaque zip KeyError, or load the wrong binary. The builder owns the set
+        # of recognised native-library names, so both tools apply the same rule.
         expected = "cribra_uniffi/" + library_name
-        packaged = sorted(name for name in archive.namelist()
-                          if name.startswith("cribra_uniffi/libcribra_uniffi."))
+        packaged = build_wheel.packaged_native_libraries(archive)
         assert packaged == [expected], (
             f"expected exactly one native library {expected} in {wheel.name}, found {packaged}")
         native = archive.read(expected)
@@ -252,15 +266,62 @@ def verify_linux_native(native, library, root):
     print(f"Verified {library}: ELF64 ET_DYN x86_64, dependencies {sorted(set(needed))}.")
 
 
+def check_windows_pe_header(native, library):
+    """Fail closed unless the payload is a 64-bit x86_64 PE DLL.
+
+    The PE32+ / machine / DLL rules come from the builder's single parser
+    (`build_wheel.pe_amd64_dll_error`); Windows has no `file`/`otool`/`ldd`
+    equivalent, so this is the native-dependency boundary on that host.
+    """
+    error = build_wheel.pe_amd64_dll_error(native)
+    if error is not None:
+        raise QualificationError(f"{library} {error}.")
+
+
+def verify_windows_native(native, library):
+    """Fail closed unless the installed `.dll` is a 64-bit x86_64 PE dynamic library."""
+    check_windows_pe_header(native, library)
+    library.write_bytes(native)
+    print(f"Verified {library}: PE32+ x86_64 DLL.")
+
+
+def venv_name(spec):
+    """Return a filesystem-safe venv directory name for an interpreter spec."""
+    return "venv-" + spec.replace("/", "_").replace("\\", "_").replace(":", "_")
+
+
+def venv_python(virtual):
+    """Return the venv interpreter path: `Scripts/python.exe` on Windows."""
+    if sys.platform == "win32":
+        return virtual / "Scripts" / "python.exe"
+    return virtual / "bin" / "python"
+
+
+def isolated_environment(external, empty_path):
+    """Return a minimal environment with no Rust/Cargo toolchain on PATH.
+
+    Windows additionally needs the system root to start processes and load
+    system DLLs, and uses TEMP/TMP and USERPROFILE instead of TMPDIR/HOME.
+    """
+    if sys.platform == "win32":
+        return {"PATH": str(empty_path),
+                "SystemRoot": os.environ.get("SystemRoot", "C:\\Windows"),
+                "SystemDrive": os.environ.get("SystemDrive", "C:"),
+                "TEMP": str(external), "TMP": str(external),
+                "USERPROFILE": str(external), "APPDATA": str(external),
+                "LOCALAPPDATA": str(external), "PYTHONDONTWRITEBYTECODE": "1"}
+    return {"PATH": str(empty_path), "HOME": str(external), "TMPDIR": str(external),
+            "PYTHONDONTWRITEBYTECODE": "1", "LC_CTYPE": "UTF-8"}
+
+
 def qualify_interpreter(spec, wheel, test, root, external, empty_path):
     """Install offline in a fresh venv and run the installed consumer on one interpreter."""
     executable = resolve_interpreter(spec)
     actual = interpreter_version(executable)
-    environment = {"PATH": str(empty_path), "HOME": str(external), "TMPDIR": str(external),
-                   "PYTHONDONTWRITEBYTECODE": "1", "LC_CTYPE": "UTF-8"}
-    virtual = external / ("venv-" + spec.replace("/", "_"))
+    environment = isolated_environment(external, empty_path)
+    virtual = external / venv_name(spec)
     subprocess.run([str(executable), "-m", "venv", str(virtual)], env=environment, check=True)
-    python = virtual / "bin" / "python"
+    python = venv_python(virtual)
     install = [str(python), "-I", "-B", "-m", "pip", "--isolated", "--disable-pip-version-check",
                "install", "--no-index", "--no-deps", str(wheel)]
     result = subprocess.run(install, cwd=external, env=environment, text=True, capture_output=True)
@@ -273,8 +334,9 @@ def qualify_interpreter(spec, wheel, test, root, external, empty_path):
         policy = f'(version 1)(allow default)(deny network*)(deny file-read* (subpath {json.dumps(str(root))}))'
         command = ["/usr/bin/sandbox-exec", "-p", policy, str(python), "-I", "-B", str(test), str(root)]
     else:
-        # Linux has no sandbox-exec equivalent; the consumer's Python audit hook is
-        # the isolation boundary and rejects repository opens and dylib loads.
+        # Linux and Windows have no sandbox-exec equivalent; the consumer's Python
+        # audit hook is the isolation boundary and rejects repository opens and
+        # dylib/DLL loads. See the README for the Windows isolation limits.
         command = [str(python), "-I", "-B", str(test), str(root)]
     subprocess.run(command, cwd=external, env=environment, check=True)
     return actual
@@ -285,7 +347,8 @@ def main():
     parser.add_argument("wheel", type=Path)
     parser.add_argument("--python", dest="interpreters", action="append", metavar="VERSION",
                         help="pyenv version name or interpreter path; repeatable "
-                             "(default: the qualified macOS matrix, or this interpreter on Linux)")
+                             "(default: the qualified macOS matrix, or this interpreter on "
+                             "Linux/Windows)")
     args = parser.parse_args()
     wheel = args.wheel.resolve()
     root = Path(__file__).resolve().parents[2]
@@ -294,7 +357,8 @@ def main():
     elif sys.platform == "darwin":
         interpreters = DEFAULT_INTERPRETERS
     else:
-        # A Linux CI runner has one interpreter, not a pyenv matrix.
+        # A Linux CI runner or a native Windows host has one interpreter, not a
+        # pyenv matrix; pass --python for additional Windows interpreters.
         interpreters = (sys.executable,)
     temporary_root = "/private/tmp" if sys.platform == "darwin" else None
     results = []
@@ -306,6 +370,8 @@ def main():
             verify_macos_native(native, library)
         elif sys.platform.startswith("linux"):
             verify_linux_native(native, library, root)
+        elif sys.platform == "win32":
+            verify_windows_native(native, library)
         else:
             raise QualificationError(f"unsupported host platform: {sys.platform}")
         local_wheel = external / wheel.name

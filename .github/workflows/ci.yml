@@ -314,6 +314,179 @@ jobs:
             manylinux-consumer.log
           if-no-files-found: warn
 
+  python-windows-wheel:
+    name: Python Windows x86_64 qualification
+    runs-on: windows-2022
+    timeout-minutes: 60
+    env:
+      WHEEL_PLATFORM_DIR: target/uniffi-python-wheel/fuse/windows_x86_64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Verify native x86_64 architecture
+        shell: pwsh
+        run: |
+          Write-Host "PROCESSOR_ARCHITECTURE=$env:PROCESSOR_ARCHITECTURE"
+          if ($env:PROCESSOR_ARCHITECTURE -ne "AMD64") {
+            throw "windows-2022 must run on native x86_64 (AMD64), found $env:PROCESSOR_ARCHITECTURE"
+          }
+
+      # Exactly the toolchain the builder pins (`cargo +1.97.0`) plus the native
+      # MSVC x86_64 target of windows-2022. Nothing else is installed.
+      - name: Install Rust 1.97.0 with the MSVC x86_64 target
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.97.0"
+          targets: x86_64-pc-windows-msvc
+
+      - name: Configure MSVC build tools
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Cache Rust artifacts
+        uses: Swatinem/rust-cache@v2.9.1
+
+      - name: Set up Python 3.11
+        id: python311
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+
+      - name: Set up Python 3.12
+        id: python312
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Set up Python 3.14
+        id: python314
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+
+      # 3.13 is set up last so a bare `python` also resolves to the build interpreter.
+      - name: Set up Python 3.13
+        id: python313
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+
+      - name: Install pinned Python build requirements with Python 3.13
+        shell: pwsh
+        run: |
+          $python = '${{ steps.python313.outputs.python-path }}'
+          & $python --version
+          & $python -m pip install --disable-pip-version-check -r bindings/python/build-requirements.txt
+
+      - name: Build the Windows Fuse wheel with Python 3.13
+        shell: pwsh
+        run: |
+          $python = '${{ steps.python313.outputs.python-path }}'
+          & $python bindings/python/build_wheel.py
+          $wheel = (Get-Content "$env:WHEEL_PLATFORM_DIR\build-info.json" | ConvertFrom-Json).wheel
+          "WHEEL=$wheel" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          Write-Host "WHEEL=$wheel"
+
+      # Reuses the builder's own logic - build_wheel.pe_amd64_dll_error (PE32+ /
+      # IMAGE_FILE_MACHINE_AMD64 / IMAGE_FILE_DLL) and
+      # build_wheel.packaged_native_libraries (exactly one native library, never a
+      # foreign platform). No PE parser or native-library rule is re-implemented.
+      - name: Verify the wheel (PE32+ AMD64 DLL, win_amd64 tag, non-pure)
+        shell: pwsh
+        run: |
+          $python = '${{ steps.python313.outputs.python-path }}'
+          $verifier = Join-Path $env:RUNNER_TEMP "verify-windows-wheel.py"
+          @'
+          import json
+          from email.parser import BytesParser
+          from pathlib import Path
+          import sys
+          import zipfile
+
+          sys.path.insert(0, "bindings/python")
+          import build_wheel
+
+          info = json.loads((Path(sys.argv[1]) / "build-info.json").read_text())
+          wheel = Path(info["wheel"])
+          native = Path(info["nativeLibrary"])
+          assert wheel.is_file() and native.is_file(), (wheel, native)
+          assert wheel.name.endswith("py3-none-win_amd64.whl"), wheel.name
+          error = build_wheel.pe_amd64_dll_error(native.read_bytes())
+          assert error is None, error
+          with zipfile.ZipFile(wheel) as archive:
+              names = archive.namelist()
+              packaged = build_wheel.packaged_native_libraries(archive)
+              assert packaged == ["cribra_uniffi/cribra_uniffi.dll"], packaged
+              foreign = [name for name in names
+                         if name.endswith(("libcribra_uniffi.so", "libcribra_uniffi.dylib"))]
+              assert not foreign, foreign
+              metadata_name = next(name for name in names if name.endswith(".dist-info/WHEEL"))
+              fields = BytesParser().parsebytes(archive.read(metadata_name))
+              assert fields["Tag"] == "py3-none-win_amd64", fields["Tag"]
+              assert fields["Root-Is-Purelib"] == "false", fields["Root-Is-Purelib"]
+          print(f"Verified {wheel.name}: exactly one cribra_uniffi/cribra_uniffi.dll "
+                f"(PE32+ AMD64 DLL), tag py3-none-win_amd64, non-pure, no foreign native libraries.")
+          '@ | Set-Content -Path $verifier -Encoding utf8
+          & $python $verifier "$env:WHEEL_PLATFORM_DIR"
+
+      # Reuses the existing smoke runner and the real wheel, with explicit paths
+      # so each CPython 3.11-3.14 is installed and qualified independently.
+      - name: Qualify the installed wheel on Python 3.11, 3.12, 3.13 and 3.14
+        shell: pwsh
+        run: |
+          $python = '${{ steps.python313.outputs.python-path }}'
+          $interpreters = @(
+            '${{ steps.python311.outputs.python-path }}',
+            '${{ steps.python312.outputs.python-path }}',
+            '${{ steps.python313.outputs.python-path }}',
+            '${{ steps.python314.outputs.python-path }}'
+          )
+          $wheel = (Get-Content "$env:WHEEL_PLATFORM_DIR\build-info.json" | ConvertFrom-Json).wheel
+          $arguments = @("bindings/python/wheel_smoke.py", $wheel)
+          foreach ($interpreter in $interpreters) {
+            $arguments += @("--python", $interpreter)
+          }
+          & $python @arguments 2>&1 | Tee-Object -FilePath windows-consumer.log
+          if ($LASTEXITCODE -ne 0) {
+            throw "wheel_smoke.py exited with $LASTEXITCODE"
+          }
+
+      - name: Require all four CPython versions and 28/28 consumer tests
+        shell: pwsh
+        run: |
+          $lines = Get-Content windows-consumer.log
+          foreach ($minor in 11, 12, 13, 14) {
+            if (-not ($lines | Select-String -Pattern "^  PASS: .* - Python 3\.$minor\.")) {
+              throw "Python 3.$minor did not pass the installed-consumer qualification"
+            }
+          }
+          $passes = ($lines | Select-String -Pattern "^  PASS: ").Count
+          $tests = ($lines | Select-String -Pattern "\.\.\. ok$").Count
+          $runs = ($lines | Select-String -Pattern "^Ran 7 tests in").Count
+          if ($passes -ne 4) { throw "expected 4 passing interpreters, found $passes" }
+          if ($tests -ne 28) { throw "expected 28 passing consumer tests, found $tests" }
+          if ($runs -ne 4) { throw "expected 4 consumer runs, found $runs" }
+          if ($lines | Select-String -Pattern "FAIL") { throw "an installed-consumer interpreter failed" }
+          if (-not ($lines | Select-String -SimpleMatch "PASS: wheel metadata/RECORD, native library, offline installs and installed consumer:")) {
+            throw "missing the final qualification PASS line"
+          }
+          if (-not ($lines | Select-String -Pattern "py3-none-win_amd64\.whl")) {
+            throw "qualification evidence does not mention the win_amd64 wheel"
+          }
+          Write-Host "All four CPython versions passed all 28 installed-consumer tests."
+
+      - name: Upload the Windows wheel and qualification evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: cribra-fuse-windows_x86_64
+          path: |
+            target/uniffi-python-wheel/fuse/windows_x86_64/dist/*.whl
+            target/uniffi-python-wheel/fuse/windows_x86_64/build-info.json
+            windows-consumer.log
+          if-no-files-found: warn
+
   cross-platform:
     name: Test ${{ matrix.os }}
     runs-on: ${{ matrix.os }}

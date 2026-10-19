@@ -1,16 +1,19 @@
-"""Regression tests for the opt-in manylinux path in build_wheel.py.
+"""Regression tests for the platform selection and fail-closed verification in build_wheel.py.
 
 Run from the repository root:
 
     python3.13 -B -m unittest discover -s bindings/python -p 'test_build_wheel.py'
 
 These tests never build a wheel and never invoke the real auditwheel: they cover
-the tag parsing, the fail-closed wheel verification and the fact that a
-platform tag only ever comes from a successful `auditwheel repair`.
+the host/platform detection (including native Windows x86_64), native-library
+selection, the tag parsing, the fail-closed wheel structure verification and the
+fact that a manylinux platform tag only ever comes from a successful
+`auditwheel repair`.
 """
 
 import os
 from pathlib import Path
+import struct
 import subprocess
 import tempfile
 import types
@@ -23,6 +26,8 @@ import build_wheel
 
 PLATFORM = "manylinux_2_28_x86_64"
 LIBRARY = "libcribra_uniffi.so"
+WINDOWS_PLATFORM = "win_amd64"
+WINDOWS_LIBRARY = "cribra_uniffi.dll"
 
 
 def make_wheel(path, tag=f"py3-none-{PLATFORM}", purelib="false",
@@ -35,6 +40,14 @@ def make_wheel(path, tag=f"py3-none-{PLATFORM}", purelib="false",
         for name in members:
             archive.writestr(name, b"native")
     return path
+
+
+def pe_dll(machine=0x8664, characteristics=0x2000 | 0x0002):
+    """Return a minimal synthetic PE32+ header identifying an x86_64 DLL."""
+    pe_offset = 0x80
+    coff = struct.pack("<HHIIIHH", machine, 1, 0, 0, 0, 0xF0, characteristics)
+    header = b"MZ" + b"\x00" * (0x3C - 2) + struct.pack("<I", pe_offset)
+    return header + b"\x00" * (pe_offset - len(header)) + b"PE\x00\x00" + coff + b"\x00" * 0xF0
 
 
 class ManylinuxPlatformTests(unittest.TestCase):
@@ -164,6 +177,140 @@ class QualifyManylinuxTests(unittest.TestCase):
             build_wheel.qualify_manylinux(self.provisional, LIBRARY, PLATFORM,
                                           self.output, self.dist)
         self.assertIn(f"Expected exactly one {PLATFORM} wheel", str(caught.exception))
+
+
+class HostSpecTests(unittest.TestCase):
+    """`host_spec` selects the native target triple and library per compiled host."""
+
+    def host(self, platform_name, machine):
+        with mock.patch.object(build_wheel.sys, "platform", platform_name), \
+                mock.patch.object(build_wheel.platform, "machine", return_value=machine):
+            return build_wheel.host_spec()
+
+    def test_macos_arm64_is_unchanged(self):
+        self.assertEqual(self.host("darwin", "arm64"),
+                         ("macos", "aarch64-apple-darwin", "libcribra_uniffi.dylib"))
+
+    def test_linux_x86_64_is_unchanged(self):
+        self.assertEqual(self.host("linux", "x86_64"),
+                         ("linux", "x86_64-unknown-linux-gnu", "libcribra_uniffi.so"))
+
+    def test_windows_x86_64_selects_the_dll(self):
+        self.assertEqual(self.host("win32", "AMD64"),
+                         ("windows", "x86_64-pc-windows-msvc", "cribra_uniffi.dll"))
+
+    def test_windows_x86_64_machine_alias(self):
+        self.assertEqual(self.host("win32", "x86_64"),
+                         ("windows", "x86_64-pc-windows-msvc", "cribra_uniffi.dll"))
+
+    def test_windows_32_bit_is_rejected(self):
+        with self.assertRaises(SystemExit):
+            self.host("win32", "x86")
+
+    def test_windows_arm64_is_rejected(self):
+        with self.assertRaises(SystemExit):
+            self.host("win32", "ARM64")
+
+    def test_macos_intel_is_rejected(self):
+        with self.assertRaises(SystemExit):
+            self.host("darwin", "x86_64")
+
+    def test_windows_directory_and_tag_are_explicit(self):
+        # The isolated output directory names the host; the wheel tag is win_amd64.
+        self.assertEqual(build_wheel.WINDOWS_OUTPUT_KEY, "windows_x86_64")
+        self.assertEqual(build_wheel.WINDOWS_WHEEL_PLATFORM, WINDOWS_PLATFORM)
+        self.assertIn(WINDOWS_LIBRARY, build_wheel.NATIVE_LIBRARY_NAMES)
+
+
+class VerifyWheelStructureTests(unittest.TestCase):
+    """`verify_wheel` is the fail-closed structure gate for native (non-auditwheel) wheels."""
+
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.root = Path(self.temporary.name)
+
+    def verify(self, name=f"cribra-0.7.1+fuse-py3-none-{WINDOWS_PLATFORM}.whl", **kwargs):
+        kwargs.setdefault("tag", f"py3-none-{WINDOWS_PLATFORM}")
+        kwargs.setdefault("members", (f"cribra_uniffi/{WINDOWS_LIBRARY}",))
+        return build_wheel.verify_wheel(make_wheel(self.root / name, **kwargs),
+                                        WINDOWS_LIBRARY, WINDOWS_PLATFORM)
+
+    def test_accepts_the_windows_dll_wheel(self):
+        self.verify()
+
+    def test_rejects_missing_dll(self):
+        with self.assertRaises(SystemExit) as caught:
+            self.verify(members=())
+        self.assertIn("expected exactly", str(caught.exception))
+
+    def test_rejects_foreign_linux_library(self):
+        with self.assertRaises(SystemExit):
+            self.verify(members=(f"cribra_uniffi/{WINDOWS_LIBRARY}",
+                                 "cribra_uniffi/libcribra_uniffi.so"))
+
+    def test_rejects_foreign_macos_library(self):
+        with self.assertRaises(SystemExit):
+            self.verify(members=("cribra_uniffi/libcribra_uniffi.dylib",))
+
+    def test_rejects_cpython_abi_tag(self):
+        with self.assertRaises(SystemExit):
+            self.verify(name="cribra-0.7.1+fuse-cp313-cp313-win_amd64.whl",
+                        tag="cp313-cp313-win_amd64")
+
+    def test_rejects_pure_wheel(self):
+        with self.assertRaises(SystemExit) as caught:
+            self.verify(purelib="true")
+        self.assertIn("Root-Is-Purelib", str(caught.exception))
+
+    def test_rejects_linux_platform_tag(self):
+        with self.assertRaises(SystemExit) as caught:
+            self.verify(name="cribra-0.7.1+fuse-py3-none-linux_x86_64.whl",
+                        tag="py3-none-linux_x86_64")
+        self.assertIn("Tag", str(caught.exception))
+
+
+class WindowsPeHeaderTests(unittest.TestCase):
+    """`verify_windows` fails closed unless the artifact is an x86_64 PE DLL."""
+
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.library = Path(self.temporary.name) / WINDOWS_LIBRARY
+
+    def test_accepts_synthetic_x86_64_dll(self):
+        self.library.write_bytes(pe_dll())
+        build_wheel.verify_windows(self.library)
+
+    def test_rejects_non_pe_payload(self):
+        self.library.write_bytes(b"not a PE image")
+        with self.assertRaises(SystemExit) as caught:
+            build_wheel.verify_windows(self.library)
+        self.assertIn("PE image", str(caught.exception))
+
+    def test_rejects_short_mz_file(self):
+        self.library.write_bytes(b"MZ")
+        with self.assertRaises(SystemExit) as caught:
+            build_wheel.verify_windows(self.library)
+        self.assertIn("PE image", str(caught.exception))
+
+    def test_rejects_truncated_pe_header(self):
+        self.library.write_bytes(b"MZ" + b"\x00" * (0x3C - 2) + struct.pack("<I", 0x1000))
+        with self.assertRaises(SystemExit) as caught:
+            build_wheel.verify_windows(self.library)
+        self.assertIn("PE header", str(caught.exception))
+
+    def test_rejects_arm64_machine(self):
+        self.library.write_bytes(pe_dll(machine=0xAA64))
+        with self.assertRaises(SystemExit) as caught:
+            build_wheel.verify_windows(self.library)
+        self.assertIn("x86_64 PE image", str(caught.exception))
+
+    def test_rejects_non_dll_image(self):
+        self.library.write_bytes(pe_dll(characteristics=0x0002))
+        with self.assertRaises(SystemExit) as caught:
+            build_wheel.verify_windows(self.library)
+        self.assertIn("PE dynamic library", str(caught.exception))
 
 
 if __name__ == "__main__":
