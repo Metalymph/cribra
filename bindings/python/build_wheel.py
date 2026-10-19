@@ -1,5 +1,6 @@
 """Build a local macOS ARM64 or Linux x86_64 Fuse wheel using PEP 517 tooling."""
 
+from email.parser import BytesParser
 import json
 import os
 from pathlib import Path
@@ -22,6 +23,12 @@ DEFAULT_DEPLOYMENT_TARGET = "13.0"
 # Local Linux builds are tagged for the build host only. A manylinux/musllinux tag
 # is intentionally not assigned until that compatibility contract is verified.
 LINUX_WHEEL_PLATFORM = "linux_x86_64"
+# Opt-in manylinux qualification (Linux only). When CRIBRA_MANYLINUX_PLATFORM names
+# an exact manylinux x86_64 platform tag, the builder keeps the provisional wheel
+# under its native `linux_x86_64` tag in its own directory and only surfaces a
+# relabelled wheel once `auditwheel repair --plat` accepts the requested policy.
+# The macOS and native Linux paths are unchanged when the variable is unset.
+MANYLINUX_PLATFORM = "CRIBRA_MANYLINUX_PLATFORM"
 
 
 def deployment_target():
@@ -106,10 +113,71 @@ def verify_wheel_native(wheel, library_name):
     print(f"Verified {wheel.name}: packages exactly {expected}.")
 
 
+def manylinux_platform():
+    """Return the requested manylinux x86_64 platform tag, or None when unset."""
+    value = os.environ.get(MANYLINUX_PLATFORM, "").strip()
+    if not value:
+        return None
+    if not re.fullmatch(r"manylinux_\d+_\d+_x86_64", value):
+        raise SystemExit(
+            f"{MANYLINUX_PLATFORM} must name a manylinux x86_64 platform tag, "
+            f"for example manylinux_2_28_x86_64; got {value!r}.")
+    return value
+
+
+def verify_manylinux_wheel(wheel, library_name, platform):
+    """Fail closed unless auditwheel produced an ABI-independent platform wheel."""
+    verify_wheel_native(wheel, library_name)
+    with zipfile.ZipFile(wheel) as archive:
+        metadata = next(name for name in archive.namelist()
+                        if name.endswith(".dist-info/WHEEL"))
+        tags = BytesParser().parsebytes(archive.read(metadata))
+    expected = f"py3-none-{platform}"
+    if tags["Tag"] != expected or tags["Root-Is-Purelib"] != "false":
+        raise SystemExit(
+            f"Wheel {wheel.name} declares Tag {tags['Tag']!r} and "
+            f"Root-Is-Purelib {tags['Root-Is-Purelib']!r}; expected {expected!r} "
+            "and false. The ABI-independent tag must be preserved by auditwheel.")
+    print(f"Verified {wheel.name}: ABI-independent tag {expected}.")
+
+
+def qualify_manylinux(wheel, library_name, platform, output, dist):
+    """Relabel a wheel only via auditwheel, and only to a confirmed policy."""
+    show = subprocess.run([sys.executable, "-m", "auditwheel", "show", str(wheel)],
+                          text=True, capture_output=True)
+    report = show.stdout + show.stderr
+    (output / "auditwheel-show.txt").write_text(report)
+    print(report, end="")
+    if show.returncode != 0:
+        raise SystemExit(f"auditwheel show failed for {wheel.name}.")
+    # A repeated build must not inherit a stale qualified wheel (or the
+    # "exactly one" check below would refuse a previously good output).
+    if dist.exists():
+        shutil.rmtree(dist)
+    dist.mkdir(parents=True)
+    repair = subprocess.run(
+        [sys.executable, "-m", "auditwheel", "repair", "--plat", platform,
+         "--wheel-dir", str(dist), str(wheel)],
+        text=True, capture_output=True)
+    print(repair.stdout + repair.stderr, end="")
+    if repair.returncode != 0:
+        raise SystemExit(
+            f"auditwheel repair --plat {platform} refused {wheel.name}; "
+            "refusing to claim manylinux compatibility.")
+    qualified = sorted(dist.glob(f"*-{platform}.whl"))
+    if len(qualified) != 1:
+        raise SystemExit(
+            f"Expected exactly one {platform} wheel in {dist}, "
+            f"found {[path.name for path in qualified]}.")
+    verify_manylinux_wheel(qualified[0], library_name, platform)
+    return qualified[0]
+
+
 def main():
     if sys.version_info < (3, 13):
         raise SystemExit("This local wheel builder supports Python 3.13+ only.")
     operating_system, triple, library_name = host_spec()
+    manylinux = manylinux_platform() if operating_system == "linux" else None
     if operating_system == "macos":
         target = deployment_target()
         target_text = f"{target[0]}.{target[1]}"
@@ -117,7 +185,9 @@ def main():
     else:
         target = None
         target_text = None
-        platform_key = LINUX_WHEEL_PLATFORM
+        # A requested manylinux build keeps its own directory, so it never
+        # overwrites the native `linux_x86_64` artifacts.
+        platform_key = manylinux or LINUX_WHEEL_PLATFORM
     root = Path(__file__).resolve().parents[2]
     source = root / "bindings/python"
     # Each host/target writes to its own platform directory, so macOS and Linux
@@ -167,6 +237,10 @@ def main():
     # The generated module is used byte-for-byte as the package initializer, so
     # its existing __file__-relative library loader needs no patch or facade; on
     # Linux that loader already resolves `libcribra_uniffi.so`.
+    dist = output / "dist"
+    # A manylinux build keeps the provisional wheel under its native tag in a
+    # separate directory; auditwheel owns the qualified `dist/` output.
+    provisional_dir = output / "provisional" if manylinux is not None else dist
     with tempfile.TemporaryDirectory(prefix="stage-", dir=output) as temporary:
         stage = Path(temporary)
         for name in ("pyproject.toml", "setup.py", "README.md"):
@@ -177,10 +251,15 @@ def main():
         shutil.copy2(generated / "cribra_uniffi.py", package / "__init__.py")
         shutil.copy2(library, package / library.name)
         run([sys.executable, "-B", "-m", "build", "--wheel", "--no-isolation",
-             "--outdir", str(output / "dist"), str(stage)])
-    wheel = output / "dist" / (
+             "--outdir", str(provisional_dir), str(stage)])
+    provisional = provisional_dir / (
         f"cribra-{metadata['project']['version']}-py3-none-{wheel_platform}.whl")
-    verify_wheel_native(wheel, library_name)
+    if manylinux is not None:
+        wheel = qualify_manylinux(provisional, library_name, manylinux, output, dist)
+        wheel_platform = manylinux
+    else:
+        wheel = provisional
+        verify_wheel_native(wheel, library_name)
     info = {"wheel": str(wheel), "wheelBytes": wheel.stat().st_size,
             "nativeLibrary": str(library), "nativeBytes": library.stat().st_size,
             "generatedModule": str(generated / "cribra_uniffi.py"),

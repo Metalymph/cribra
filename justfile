@@ -52,6 +52,14 @@ uniffi-python-wheel-matrix wheel python="python3.13":
 uniffi-python-wheel-smoke wheel interpreter="3.13.7" python="python3.13":
     "{{python}}" bindings/python/wheel_smoke.py "{{wheel}}" --python "{{interpreter}}"
 
+# Build and auditwheel-qualify the manylinux_2_28_x86_64 Fuse wheel (needs Docker).
+uniffi-python-manylinux-wheel:
+    sh bindings/python/build_manylinux_wheel.sh
+
+# Qualify the repaired manylinux wheel on the container's CPython 3.11-3.14 (needs Docker).
+uniffi-python-manylinux-wheel-matrix wheel="":
+    sh bindings/python/qualify_manylinux_wheel.sh "{{wheel}}"
+
 # Build the native library and generate Swift bindings under target/.
 uniffi-swift-bindings features="core":
     test "$(uname -s)" = Darwin && test "$(uname -m)" = arm64
