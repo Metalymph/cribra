@@ -1,4 +1,8 @@
-"""Build a local macOS ARM64 or Linux x86_64 Fuse wheel using PEP 517 tooling."""
+"""Build a local macOS ARM64, Linux x86_64 or Windows x86_64 Fuse wheel."""
+
+# macOS ARM64, native Linux x86_64 (optionally auditwheel-qualified manylinux) and
+# native Windows x86_64 use the same PEP 517 tooling and the existing UniFFI
+# bindings; no PyO3, second Rust adapter or hand-written Python facade.
 
 from email.parser import BytesParser
 import json
@@ -29,6 +33,15 @@ LINUX_WHEEL_PLATFORM = "linux_x86_64"
 # relabelled wheel once `auditwheel repair --plat` accepts the requested policy.
 # The macOS and native Linux paths are unchanged when the variable is unset.
 MANYLINUX_PLATFORM = "CRIBRA_MANYLINUX_PLATFORM"
+# Native Windows x86_64 writes into a host-stable output directory that
+# deliberately differs from its wheel platform tag (`win_amd64`): the directory
+# names the host, the tag names the wheel. Windows claims no portability policy.
+WINDOWS_OUTPUT_KEY = "windows_x86_64"
+WINDOWS_WHEEL_PLATFORM = "win_amd64"
+# Every native library name this builder can package. Exactly the current host's
+# entry is staged, so a wheel must contain exactly one of these and never a
+# foreign-platform library.
+NATIVE_LIBRARY_NAMES = ("libcribra_uniffi.dylib", "libcribra_uniffi.so", "cribra_uniffi.dll")
 
 
 def deployment_target():
@@ -51,7 +64,15 @@ def host_spec():
         if platform.machine() not in ("x86_64", "amd64"):
             raise SystemExit("This local wheel builder supports Linux x86_64 only.")
         return "linux", "x86_64-unknown-linux-gnu", "libcribra_uniffi.so"
-    raise SystemExit("This local wheel builder supports macOS ARM64 and Linux x86_64 only.")
+    if sys.platform == "win32":
+        if platform.machine().lower() not in ("amd64", "x86_64"):
+            raise SystemExit("This local wheel builder supports native Windows x86_64 only.")
+        # The UniFFI-generated loader looks for `cribra_uniffi.dll` (no `lib`
+        # prefix) next to the package module; native MSVC is the default toolchain.
+        return "windows", "x86_64-pc-windows-msvc", "cribra_uniffi.dll"
+    raise SystemExit(
+        "This local wheel builder supports macOS ARM64, Linux x86_64 and "
+        "Windows x86_64 only.")
 
 
 def build_version(library):
@@ -100,11 +121,45 @@ def verify_linux(library):
     print(f"Verified {library}: ELF64 little-endian ET_DYN, machine EM_X86_64.")
 
 
+def pe_amd64_dll_error(image):
+    """Return why `image` is not a 64-bit x86_64 PE DLL, or None when it is.
+
+    Shared by this builder and the installed-wheel smoke (`wheel_smoke.py`) so the
+    PE32+ / machine / DLL rules live in exactly one place.
+    """
+    if len(image) < 0x40 or image[:2] != b"MZ":
+        return "is not a PE image"
+    pe_offset, = struct.unpack_from("<I", image, 0x3C)
+    if pe_offset + 24 > len(image) or image[pe_offset:pe_offset + 4] != b"PE\x00\x00":
+        return "has no valid PE header"
+    machine, = struct.unpack_from("<H", image, pe_offset + 4)
+    if machine != 0x8664:  # IMAGE_FILE_MACHINE_AMD64
+        return f"is not an x86_64 PE image (machine=0x{machine:x})"
+    characteristics, = struct.unpack_from("<H", image, pe_offset + 4 + 18)
+    if not characteristics & 0x2000:  # IMAGE_FILE_DLL
+        return "is not a PE dynamic library"
+    return None
+
+
+def verify_windows(library):
+    """Fail closed unless the compiled module is a 64-bit x86_64 PE dynamic library."""
+    error = pe_amd64_dll_error(library.read_bytes())
+    if error is not None:
+        raise SystemExit(f"{library} {error}.")
+    print(f"Verified {library}: PE32+ x86_64 DLL, machine IMAGE_FILE_MACHINE_AMD64.")
+
+
+def packaged_native_libraries(archive):
+    """Return the sorted native libraries this wheel packages, by wheel path."""
+    return sorted(name for name in archive.namelist()
+                  if name.startswith("cribra_uniffi/")
+                  and name.rsplit("/", 1)[-1] in NATIVE_LIBRARY_NAMES)
+
+
 def verify_wheel_native(wheel, library_name):
     """Fail closed unless the wheel packages exactly the built native library."""
     with zipfile.ZipFile(wheel) as archive:
-        packaged = sorted(name for name in archive.namelist()
-                          if name.startswith("cribra_uniffi/libcribra_uniffi."))
+        packaged = packaged_native_libraries(archive)
     expected = f"cribra_uniffi/{library_name}"
     if packaged != [expected]:
         raise SystemExit(
@@ -125,20 +180,38 @@ def manylinux_platform():
     return value
 
 
-def verify_manylinux_wheel(wheel, library_name, platform):
-    """Fail closed unless auditwheel produced an ABI-independent platform wheel."""
-    verify_wheel_native(wheel, library_name)
+def wheel_tags(wheel):
+    """Return the parsed WHEEL metadata for a built wheel."""
     with zipfile.ZipFile(wheel) as archive:
         metadata = next(name for name in archive.namelist()
                         if name.endswith(".dist-info/WHEEL"))
-        tags = BytesParser().parsebytes(archive.read(metadata))
+        return BytesParser().parsebytes(archive.read(metadata))
+
+
+def require_platform_tags(wheel, platform, reason):
+    """Fail closed unless the wheel keeps the ABI-independent, non-pure tag."""
+    tags = wheel_tags(wheel)
     expected = f"py3-none-{platform}"
     if tags["Tag"] != expected or tags["Root-Is-Purelib"] != "false":
         raise SystemExit(
             f"Wheel {wheel.name} declares Tag {tags['Tag']!r} and "
             f"Root-Is-Purelib {tags['Root-Is-Purelib']!r}; expected {expected!r} "
-            "and false. The ABI-independent tag must be preserved by auditwheel.")
+            f"and false. {reason}")
     print(f"Verified {wheel.name}: ABI-independent tag {expected}.")
+
+
+def verify_wheel(wheel, library_name, platform):
+    """Fail closed unless a native wheel packages the platform library with py3-none tags."""
+    verify_wheel_native(wheel, library_name)
+    require_platform_tags(wheel, platform,
+                          "The wheel must keep the py3-none ABI-independent tag.")
+
+
+def verify_manylinux_wheel(wheel, library_name, platform):
+    """Fail closed unless auditwheel produced an ABI-independent platform wheel."""
+    verify_wheel_native(wheel, library_name)
+    require_platform_tags(wheel, platform,
+                          "The ABI-independent tag must be preserved by auditwheel.")
 
 
 def qualify_manylinux(wheel, library_name, platform, output, dist):
@@ -182,6 +255,12 @@ def main():
         target = deployment_target()
         target_text = f"{target[0]}.{target[1]}"
         platform_key = "macosx_" + target_text.replace(".", "_") + "_arm64"
+    elif operating_system == "windows":
+        target = None
+        target_text = None
+        # The Windows directory names the host and stays stable; the wheel tag
+        # (`win_amd64`) is applied separately below.
+        platform_key = WINDOWS_OUTPUT_KEY
     else:
         target = None
         target_text = None
@@ -190,8 +269,8 @@ def main():
         platform_key = manylinux or LINUX_WHEEL_PLATFORM
     root = Path(__file__).resolve().parents[2]
     source = root / "bindings/python"
-    # Each host/target writes to its own platform directory, so macOS and Linux
-    # Cargo, generated files, dist and metadata never overwrite one another.
+    # Each host/target writes to its own platform directory, so macOS, Linux and
+    # Windows Cargo, generated files, dist and metadata never overwrite one another.
     output = root / "target/uniffi-python-wheel/fuse" / platform_key
     output.mkdir(parents=True, exist_ok=True)
     metadata = tomllib.loads((source / "pyproject.toml").read_text())
@@ -224,6 +303,10 @@ def main():
         minos = verify_macos(library, target)
         # Derive the wheel platform tag from the verified binary target, never the host.
         wheel_platform = "macosx_" + minos.replace(".", "_") + "_arm64"
+    elif operating_system == "windows":
+        verify_windows(library)
+        minos = None
+        wheel_platform = WINDOWS_WHEEL_PLATFORM
     else:
         verify_linux(library)
         minos = None
@@ -235,8 +318,9 @@ def main():
                                    "--language", "python", "--out-dir", str(generated)])
     # All setuptools staging, egg-info and build outputs stay under ignored target/.
     # The generated module is used byte-for-byte as the package initializer, so
-    # its existing __file__-relative library loader needs no patch or facade; on
-    # Linux that loader already resolves `libcribra_uniffi.so`.
+    # its existing __file__-relative library loader needs no patch or facade; that
+    # loader already resolves `libcribra_uniffi.so` on Linux and
+    # `cribra_uniffi.dll` on Windows.
     dist = output / "dist"
     # A manylinux build keeps the provisional wheel under its native tag in a
     # separate directory; auditwheel owns the qualified `dist/` output.
@@ -259,7 +343,9 @@ def main():
         wheel_platform = manylinux
     else:
         wheel = provisional
-        verify_wheel_native(wheel, library_name)
+        # The macOS, native Linux and Windows wheels keep the ABI-independent
+        # `py3-none-<platform>` tag and must package exactly the host library.
+        verify_wheel(wheel, library_name, wheel_platform)
     info = {"wheel": str(wheel), "wheelBytes": wheel.stat().st_size,
             "nativeLibrary": str(library), "nativeBytes": library.stat().st_size,
             "generatedModule": str(generated / "cribra_uniffi.py"),

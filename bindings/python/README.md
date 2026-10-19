@@ -173,8 +173,9 @@ just uniffi-python-wheel-smoke target/uniffi-python-wheel/fuse/macosx_13_0_arm64
 ```
 
 `build_wheel.py` selects the native target from the host: **macOS ARM64**
-(`aarch64-apple-darwin`, `libcribra_uniffi.dylib`) or **Linux x86_64**
-(`x86_64-unknown-linux-gnu`, `libcribra_uniffi.so`). It builds `cribra-uniffi`
+(`aarch64-apple-darwin`, `libcribra_uniffi.dylib`), **Linux x86_64**
+(`x86_64-unknown-linux-gnu`, `libcribra_uniffi.so`) or **Windows x86_64**
+(`x86_64-pc-windows-msvc`, `cribra_uniffi.dll`). It builds `cribra-uniffi`
 with `--release --no-default-features --features fuse --target <triple>`, then
 runs the existing UniFFI 0.32.2 generator against that release library. On macOS
 it compiles against an explicit, host-independent deployment target: **macOS
@@ -185,27 +186,35 @@ with the configured target. It then verifies the compiled artifact and fails
 closed on mismatch: on macOS it reads the `LC_BUILD_VERSION` load command and
 requires exactly one `platform MACOS` command whose `minos` equals the
 configured target; on Linux it requires a 64-bit little-endian x86_64 `ET_DYN`
-ELF object. The wheel platform tag is derived from the verified artifact
-(`py3-none-macosx_<minos>_arm64`, for example `macosx_13_0_arm64`, on macOS;
-`py3-none-linux_x86_64` on Linux), never from the host. Each host/target writes
+ELF object; on Windows it requires a 64-bit x86_64 PE dynamic library
+(`IMAGE_FILE_MACHINE_AMD64`, `IMAGE_FILE_DLL`). The wheel platform tag is derived
+from the verified artifact (`py3-none-macosx_<minos>_arm64`, for example
+`macosx_13_0_arm64`, on macOS; `py3-none-linux_x86_64` on Linux;
+`py3-none-win_amd64` on Windows), never from the host. Each host/target writes
 into its own platform directory under ignored
 `target/uniffi-python-wheel/fuse/<platform>/` (`cargo/`, `generated/`, `dist/`,
-`build-info.json`), so macOS and Linux artifacts never overwrite each other; the
-build environment is also under `target/`. The ordinary smoke profile artifacts
-are preserved. `build-info.json` records artifact paths, byte sizes, the host,
-target triple, platform tag and, on macOS, the configured deployment target and
-the verified `minos`.
+`build-info.json`), so macOS, Linux and Windows artifacts never overwrite each
+other; the Windows directory is `windows_x86_64/` (the host name, deliberately
+different from its `win_amd64` tag); the build environment is also under
+`target/`. The ordinary smoke profile artifacts are preserved.
+`build-info.json` records artifact paths, byte sizes, the host, target triple,
+platform tag and, on macOS, the configured deployment target and the verified
+`minos`. After packaging, the builder fails closed unless the wheel packages
+exactly the one host native library (never a foreign-platform library), keeps
+the ABI-independent `py3-none-<platform>` tag and stays non-pure
+(`Root-Is-Purelib: false`).
 
 Distribution metadata is `cribra`, version `0.7.1+fuse`, checked against the Core
 version during builds. Import remains `import cribra_uniffi`. The generated
 `cribra_uniffi.py` is copied byte-for-byte to `cribra_uniffi/__init__.py`, with
 the platform library (`libcribra_uniffi.dylib` on macOS, `libcribra_uniffi.so`
-on Linux) in the same package directory. `[tool.setuptools.package-data]` lists
-both native names, so exactly the one the builder stages is packaged: the builder
-and `wheel_smoke.py` both fail closed unless each wheel contains exactly that
-library. No generated code is patched or
+on Linux, `cribra_uniffi.dll` on Windows) in the same package directory.
+`[tool.setuptools.package-data]` lists all three native names, so exactly the one
+the builder stages is packaged: the builder and `wheel_smoke.py` both fail closed
+unless each wheel contains exactly that library. No generated code is patched or
 wrapped: UniFFI's existing `__file__`-relative loader remains intact, and it
-already selects the `.so` filename on ELF platforms. The small setuptools hook
+already selects the `.so` filename on ELF platforms and `cribra_uniffi.dll` next
+to the module on Windows. The small setuptools hook
 marks the wheel non-pure and platform-specific with no CPython extension ABI
 (`py3-none-<platform>`). This is not a universal wheel or a promise of
 compatibility beyond the tested host/interpreter. Only this build driver is
@@ -233,8 +242,73 @@ The manually triggered **UniFFI Python Linux wheel** workflow
 verification and the installed-consumer smoke on `ubuntu-24.04` with Rust 1.97.0
 and Python 3.13, then uploads the wheel and `build-info.json` as artifacts; it
 never publishes. Nothing here is exercised by the macOS qualification above.
-Windows, ARM64 Linux and musl-based distributions are out of scope for this
-foundation.
+ARM64 Linux and musl-based distributions are out of scope for this foundation.
+(The separate Windows foundation is described next.)
+
+**Windows (x86_64) build procedure.** The Windows wheel is an isolated native
+build path that reuses the same PEP 517 driver, the same UniFFI 0.32.2 bindings
+and the same setuptools backend. It introduces no PyO3, no second Rust adapter
+and no hand-written Python facade, and it must run natively on 64-bit Windows
+with the MSVC toolchain; the builder refuses any other Windows architecture.
+Prepare the build environment exactly as on macOS — Python 3.13+ and the pinned
+build frontend — then run:
+
+```powershell
+python -m venv target/uniffi-python-wheel/build-venv
+target/uniffi-python-wheel/build-venv/Scripts/python -m pip install --index-url https://pypi.org/simple -r bindings/python/build-requirements.txt
+just uniffi-python-wheel target/uniffi-python-wheel/build-venv/Scripts/python
+# Equivalent direct invocation:
+target/uniffi-python-wheel/build-venv/Scripts/python bindings/python/build_wheel.py
+```
+
+The result is `cribra-0.7.1+fuse-py3-none-win_amd64.whl` under
+`target/uniffi-python-wheel/fuse/windows_x86_64/dist/`. Requirements: Rust 1.97.0
+with the `x86_64-pc-windows-msvc` target (the default host toolchain on 64-bit
+Windows), a C toolchain for that triple, and Python 3.13+ in the build
+environment. The builder compiles `cribra-uniffi`, runs the generator, verifies
+that the compiled `cribra_uniffi.dll` is a 64-bit x86_64 PE dynamic library, and
+stages only that one library next to the generated `__init__.py`. It then fails
+closed unless the wheel contains exactly that one native library (never
+`libcribra_uniffi.so`/`libcribra_uniffi.dylib`), keeps the `py3-none-win_amd64`
+ABI-independent tag and stays non-pure (`Root-Is-Purelib: false`); the tag is
+never derived from the host. `build-info.json` records the artifact paths, byte
+sizes, host `windows`, triple `x86_64-pc-windows-msvc` and platform `win_amd64`.
+
+**Windows (x86_64) installed-consumer qualification.** On a native 64-bit
+Windows host the built wheel is qualified with the same installed-consumer smoke
+used on macOS and Linux, against the final `py3-none-win_amd64` wheel:
+
+```powershell
+# Default: qualify the running interpreter (sys.executable).
+target/uniffi-python-wheel/build-venv/Scripts/python bindings/python/wheel_smoke.py target/uniffi-python-wheel/fuse/windows_x86_64/dist/cribra-0.7.1+fuse-py3-none-win_amd64.whl
+# Additional interpreters (repeatable, an explicit interpreter path):
+target/uniffi-python-wheel/build-venv/Scripts/python bindings/python/wheel_smoke.py <wheel> --python C:\Python311\python.exe --python C:\Python314\python.exe
+```
+
+`wheel_smoke.py` accepts exactly one Windows tag, `py3-none-win_amd64`, on a
+native Windows host and rejects every other platform, architecture and ABI
+(`win_arm64`, `win32`, a `cp3xx-*`/`abi3` ABI, ...). It verifies the installed
+`cribra_uniffi.dll` with the same PE32+ parser the builder uses
+(`build_wheel.pe_amd64_dll_error`, so there is only one PE parser): the payload
+must be a 64-bit x86_64 PE dynamic library (`IMAGE_FILE_MACHINE_AMD64`,
+`IMAGE_FILE_DLL`). The wheel must package exactly that one native library and no
+foreign library. Each interpreter gets its own fresh `venv`, whose interpreter is
+`Scripts/python.exe`, installs the wheel offline (`--no-index --no-deps`, no
+Rust/Cargo on `PATH`) and runs the seven installed-consumer tests against the
+**installed** package, which loads the DLL and exercises Core/Flow/Fuse (Scanner,
+UTF-8 coordinates, `scan_many`, all four Flow transforms, all Share modes through
+both build paths, and repeated Fuse `parallel_scan`). The default interpreter is
+the running one; pass `--python` for more. Nothing is rebuilt, downloaded or
+published.
+
+**Windows (x86_64) CI qualification.** The `python-windows-wheel` job in
+`.github/workflows/ci.yml` runs this entire path on GitHub Actions
+`windows-2022` (native x86_64, Rust 1.97.0 with the `x86_64-pc-windows-msvc`
+target, MSVC build tools and Python 3.11–3.14): it builds the wheel with Python
+3.13, re-verifies the PE32+ AMD64 DLL, the `py3-none-win_amd64` tag, the
+non-pure metadata and the exactly-one-native-library rule, qualifies all four
+interpreters (28/28 installed-consumer tests) and uploads the wheel and
+`windows-consumer.log` as artifacts. Nothing is signed, published or released.
 
 **manylinux_2_28_x86_64 foundation.** An isolated, opt-in path builds the same
 Fuse wheel inside the official PyPA manylinux image pinned by digest
@@ -289,26 +363,45 @@ identity of both generated and native payloads once, verifies the native library
 for the host platform, then qualifies that same wheel against each interpreter in
 turn. The tag check is strict: on macOS a `py3-none-macosx_*_arm64` tag, on Linux
 `py3-none-linux_x86_64` or the auditwheel-confirmed
-`py3-none-manylinux_2_28_x86_64`; every other platform, architecture and ABI
-fails closed. RECORD is compared against the archive's files, because the
+`py3-none-manylinux_2_28_x86_64`, and on Windows exactly `py3-none-win_amd64`;
+every other platform, architecture and ABI fails closed. RECORD is compared
+against the archive's files, because the
 auditwheel-repaired wheel also carries explicit directory entries (RECORD lists
 files only). On macOS it asserts the ARM64 architecture, Mach-O deployment information
 and system-only native dependencies (`lipo`, `otool`, `vtool`); on Linux it
 asserts the `.so` is an ELF64 `ET_DYN` x86_64 object whose `DT_NEEDED` set stays
 within the expected glibc libraries and resolves only to system paths, with no
-repository-local `NEEDED`, `RPATH`/`RUNPATH` or `ldd` resolution. It then copies
+repository-local `NEEDED`, `RPATH`/`RUNPATH` or `ldd` resolution; on Windows it
+asserts the `.dll` is a 64-bit x86_64 PE dynamic library using the builder's
+single PE32+ parser. It then copies
 the wheel and standalone tests to a fresh temporary directory, creates a separate
-isolated virtual environment per interpreter with `python -m venv`, installs
+isolated virtual environment per interpreter with `python -m venv` (the venv
+interpreter is `Scripts/python.exe` on Windows), installs
 offline with `--no-index --no-deps` and runs the seven installed-consumer tests
 with no Cargo/Rust on `PATH`. On macOS those tests run under OS sandbox rules
 denying repository reads and network access plus a Python audit hook rejecting
-repository opens and dylib loads; Linux has no `sandbox-exec` equivalent, so the
-consumer's Python audit hook is the isolation boundary there. The interpreter
+repository opens and dylib loads; Linux and Windows have no `sandbox-exec`
+equivalent, so the consumer's Python audit hook is the isolation boundary there.
+The interpreter
 matrix defaults to the qualified pyenv versions on macOS and to the running
-interpreter on Linux (a CI runner provides one). The tests exercise Scanner,
+interpreter on Linux and Windows (a CI runner or a Windows host provides one).
+The tests exercise Scanner,
 UTF-8 coordinates, `scan_many`, all four Flow transforms, all Share modes through
 both build paths, and repeated Fuse `parallel_scan`. No independent manifest
 timestamps are compared for equality.
+
+**Windows isolation limits.** Windows has no OS sandbox (`sandbox-exec`)
+equivalent, so the installed-consumer isolation there is the in-process Python
+audit hook (`sys.addaudithook`) that rejects repository opens,
+`os.listdir`/`os.scandir` and `ctypes.dlopen` of repository paths, exactly as on
+Linux. That hook is a Python-level boundary, not an OS one: it is not enforced
+against native code that loads a DLL directly, and network access is **not**
+denied on Windows or Linux — only the macOS sandbox denies `network*`. The empty
+`PATH` (no Cargo/Rust), the offline `--no-index --no-deps` install and the
+`--isolated` pip run are the other controls. On Windows no import-table/`ldd`
+dependency audit is performed: only the PE32+ header (machine/DLL) is verified,
+so a repository-local DLL dependency would not be detected at the binary level.
+These limits match the Linux qualification, minus macOS's OS sandbox.
 
 The default matrix is Python **3.11.17, 3.12.15, 3.13.7 and 3.14.8** from
 `pyenv`, and each version is reported separately. Distribution `requires-python`
@@ -342,10 +435,13 @@ offline `pip` path. The configured deployment target defaults to **macOS 13.0**,
 and the compiled dylib's `minos` is verified to match it, but that only records
 the binary's declared minimum OS: **runtime compatibility with macOS 13 is not
 verified** — the wheel has only been exercised on the macOS 27.0.1 host above.
-The consumer smoke runner recognizes native library names on macOS, Linux and
-Windows; other platforms and interpreters are not qualified by this step. The
-local wheel builder supports macOS ARM64 and Linux x86_64; Windows, Intel macOS,
-ARM64 Linux, musl-based Linux, older macOS versions, Python outside 3.11–3.14,
+The consumer smoke runner (`wheel_smoke.py`) recognizes native library names on
+macOS, Linux and Windows, and the installed-consumer qualification covers macOS
+ARM64, Linux x86_64/`manylinux_2_28_x86_64` and native Windows AMD64. Windows
+qualification requires a native Windows host (there is no emulation path); the
+`python-windows-wheel` CI job runs it on GitHub Actions `windows-2022`. The local
+wheel builder supports macOS ARM64, Linux x86_64 and Windows x86_64; Intel macOS, ARM64 Linux, ARM64 Windows, 32-bit Windows,
+musl-based Linux, older macOS versions, Python outside 3.11–3.14,
 signing/notarization and distribution/release qualification are outside scope.
 `auditwheel repair` is used only by the opt-in manylinux_2_28_x86_64 foundation
 above; no other repair tool and no publishing is introduced. The installed consumer is a focused seven-test smoke; the full

@@ -8,7 +8,12 @@ import unittest
 
 
 REPOSITORY = Path(sys.argv[1]).resolve()
-LIBRARY = "libcribra_uniffi.dylib" if sys.platform == "darwin" else "libcribra_uniffi.so"
+if sys.platform == "darwin":
+    LIBRARY = "libcribra_uniffi.dylib"
+elif sys.platform == "win32":
+    LIBRARY = "cribra_uniffi.dll"
+else:
+    LIBRARY = "libcribra_uniffi.so"
 
 
 def deny_repository(event, args):
