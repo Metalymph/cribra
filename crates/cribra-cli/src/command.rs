@@ -14,11 +14,27 @@ pub enum Command {
     /// Template all findings in one explicit UTF-8 source using Core defaults.
     Template(ScanInput),
 
+    /// Pseudonymize all findings using an explicit binary key file.
+    Pseudonymize(KeyedTransformCommand),
+
+    /// Synthesize all findings using an explicit binary key file.
+    Synthesize(KeyedTransformCommand),
+
     /// Render command-line help.
     Help,
 
     /// Render the CLI version.
     Version,
+}
+
+/// A keyed transformation of one explicit UTF-8 source.
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct KeyedTransformCommand {
+    /// Source selected by the caller.
+    pub input: ScanInput,
+
+    /// Regular file containing exactly 32 raw binary key bytes.
+    pub key_file: PathBuf,
 }
 
 /// Parsed `scan` command.

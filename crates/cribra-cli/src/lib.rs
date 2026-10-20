@@ -19,7 +19,8 @@ use std::{
 };
 
 pub use command::{
-    Command, ConfidenceFilter, OutputFormat, ScanCommand, ScanFilters, ScanInput, SeverityFilter,
+    Command, ConfidenceFilter, KeyedTransformCommand, OutputFormat, ScanCommand, ScanFilters,
+    ScanInput, SeverityFilter,
 };
 pub use execute::{CommandOutput, ExecuteError, execute};
 
@@ -183,6 +184,17 @@ where
             })
         }
 
+        Some(argument)
+            if argument == OsStr::new("pseudonymize") || argument == OsStr::new("synthesize") =>
+        {
+            let command = parse_keyed_transform(args)?;
+            Ok(if argument == OsStr::new("pseudonymize") {
+                Command::Pseudonymize(command)
+            } else {
+                Command::Synthesize(command)
+            })
+        }
+
         Some(argument) if argument == OsStr::new("--help") || argument == OsStr::new("-h") => {
             Ok(Command::Help)
         }
@@ -196,6 +208,46 @@ where
             argument.to_string_lossy()
         ))),
     }
+}
+
+fn parse_keyed_transform(
+    mut args: impl Iterator<Item = OsString>,
+) -> Result<KeyedTransformCommand, ParseError> {
+    let mut input = None;
+    let mut key_file = None;
+    while let Some(argument) = args.next() {
+        if argument == OsStr::new("--key-file") {
+            if key_file.is_some() {
+                return Err(ParseError::new("duplicate --key-file option"));
+            }
+            let path = args
+                .next()
+                .ok_or_else(|| ParseError::new("--key-file requires a path"))?;
+            if path.is_empty() || path.as_encoded_bytes().starts_with(b"-") {
+                return Err(ParseError::new("--key-file requires a filesystem path"));
+            }
+            key_file = Some(path.into());
+        } else {
+            if argument != OsStr::new("-") && argument.as_encoded_bytes().starts_with(b"-") {
+                return Err(ParseError::new("unsupported keyed transformation option"));
+            }
+            if input.is_some() {
+                return Err(ParseError::new(
+                    "keyed transformations require exactly one source",
+                ));
+            }
+            input = Some(if argument == OsStr::new("-") {
+                ScanInput::Stdin
+            } else {
+                ScanInput::File(argument.into())
+            });
+        }
+    }
+    Ok(KeyedTransformCommand {
+        input: input
+            .ok_or_else(|| ParseError::new("a source path or '-' for stdin is required"))?,
+        key_file: key_file.ok_or_else(|| ParseError::new("--key-file is required"))?,
+    })
 }
 
 fn parse_severity(value: &str) -> Option<cribra::Severity> {
@@ -271,6 +323,8 @@ Usage:
   cribra scan - [SCAN OPTIONS]
   cribra redact <FILE|->
   cribra template <FILE|->
+  cribra pseudonymize <FILE|-> --key-file <PATH>
+  cribra synthesize <FILE|-> --key-file <PATH>
   cribra [OPTIONS]
 
 Commands:
@@ -278,9 +332,14 @@ Commands:
   scan -            Scan UTF-8 from standard input
   redact <FILE|->   Replace all findings with [REDACTED]
   template <FILE|-> Replace all findings with <CRIBRA:rule-id>
+  pseudonymize      Transform findings to stable keyed pseudonyms
+  synthesize        Transform findings to keyed synthetic values
 
 Transformations emit only transformed text, without an added newline.
-Candidates and undetected sensitive data may remain. No options are accepted.
+Candidates and undetected sensitive data may remain.
+Redact and template accept no options. Keyed commands require --key-file PATH
+before or after the source: exactly 32 raw binary bytes in a regular file.
+Keys are never read from stdin, inline arguments, or environment variables.
 
 Scan options:
   --format FORMAT         Output format: human or json
@@ -337,6 +396,80 @@ mod tests {
                 parse(["cribra", "template", input]).unwrap(),
                 Command::Template(expected)
             );
+        }
+    }
+
+    #[test]
+    fn keyed_commands_parse_file_and_stdin_in_either_order() {
+        for name in ["pseudonymize", "synthesize"] {
+            for source in ["config.env", "-"] {
+                let expected = KeyedTransformCommand {
+                    input: if source == "-" {
+                        ScanInput::Stdin
+                    } else {
+                        ScanInput::File(source.into())
+                    },
+                    key_file: "key.bin".into(),
+                };
+                let expected = if name == "pseudonymize" {
+                    Command::Pseudonymize(expected)
+                } else {
+                    Command::Synthesize(expected)
+                };
+                for args in [
+                    ["cribra", name, source, "--key-file", "key.bin"],
+                    ["cribra", name, "--key-file", "key.bin", source],
+                ] {
+                    assert_eq!(parse(args).unwrap(), expected);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn keyed_commands_require_one_source_and_one_key_path() {
+        for name in ["pseudonymize", "synthesize"] {
+            for args in [
+                &[][..],
+                &["-"][..],
+                &["--key-file", "key.bin"][..],
+                &["-", "--key-file"][..],
+                &["-", "--key-file", ""][..],
+                &["-", "--key-file", "-"][..],
+                &["-", "--key-file", "--explain"][..],
+                &["-", "--key-file", "key.bin", "--key-file", "other.bin"][..],
+                &["one.env", "--key-file", "key.bin", "two.env"][..],
+            ] {
+                assert!(parse(["cribra", name].into_iter().chain(args.iter().copied())).is_err());
+            }
+        }
+    }
+
+    #[test]
+    fn keyed_commands_reject_all_other_options() {
+        for name in ["pseudonymize", "synthesize"] {
+            for option in [
+                "--format",
+                "--explain",
+                "--severity",
+                "--min-severity",
+                "--confidence",
+                "--min-confidence",
+                "--rule-id",
+                "--sort",
+                "--key",
+                "--key-env",
+                "--generate-key",
+                "--prefix",
+                "--marker",
+                "--output",
+                "--help",
+                "--key-file=key.bin",
+                "--unknown",
+            ] {
+                assert!(parse(["cribra", name, "-", "--key-file", "key.bin", option]).is_err());
+                assert!(parse(["cribra", name, option, "-", "--key-file", "key.bin"]).is_err());
+            }
         }
     }
 

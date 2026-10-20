@@ -827,3 +827,382 @@ fn transformation_usage_failures_have_exit_code_two_and_no_stdout() {
         }
     }
 }
+
+fn keyed_output(
+    command: &str,
+    source: &[u8],
+    key_file: &std::path::Path,
+    stdin: bool,
+    key_first: bool,
+) -> std::process::Output {
+    let mut process = Command::new(cribra_bin());
+    process
+        .arg(command)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    if key_first {
+        process.arg("--key-file").arg(key_file);
+    }
+    let path = if stdin {
+        process.arg("-").stdin(Stdio::piped());
+        None
+    } else {
+        let path = temp_file("keyed-source.txt", source);
+        process.arg(&path);
+        Some(path)
+    };
+    if !key_first {
+        process.arg("--key-file").arg(key_file);
+    }
+    let mut child = process.spawn().unwrap();
+    if stdin {
+        child.stdin.take().unwrap().write_all(source).unwrap();
+    }
+    let output = child.wait_with_output().unwrap();
+    if let Some(path) = path {
+        assert_eq!(fs::read(&path).unwrap(), source);
+        fs::remove_file(path).unwrap();
+    }
+    output
+}
+
+fn assert_key_absent(output: &std::process::Output, key: &[u8]) {
+    assert!(!key.is_empty());
+    assert!(!output.stdout.windows(key.len()).any(|window| window == key));
+    assert!(!output.stderr.windows(key.len()).any(|window| window == key));
+}
+
+#[test]
+fn keyed_commands_match_core_preserve_bytes_and_are_deterministic() {
+    use cribra::transform::{PseudonymizationOptions, SynthesisOptions, pseudonymize, synthesize};
+    let source = "\u{feff}π 😀 café\r\n\
+GITHUB_TOKEN=ghp_AbCdEf0123456789_AbCdEf0123456789\r\n\
+repeat=ghp_AbCdEf0123456789_AbCdEf0123456789\r\n\
+password=CorrectHorseBatteryStaple!\r\n\
+ABCD-EFGH-IJKL-MNOP";
+    let scanner = cribra::Scanner::default();
+    let results = scanner.scan([("fixture", source)]);
+    let report = results.single_report().unwrap();
+    assert_eq!(report.len(), 3);
+    assert_eq!(report.candidate_len(), 1);
+    // Includes NUL, LF, CR, and invalid UTF-8: the key is raw binary, not text.
+    let mut key: [u8; 32] = std::array::from_fn(|index| index as u8);
+    key[31] = 0xff;
+    let key_file = temp_file("binary-key.bin", &key);
+    let different_key = [0xa7; 32];
+    let other_file = temp_file("different-key.bin", &different_key);
+    for (name, expected, different) in [
+        (
+            "pseudonymize",
+            pseudonymize(source, report, &PseudonymizationOptions::new(key)).unwrap(),
+            pseudonymize(source, report, &PseudonymizationOptions::new(different_key)).unwrap(),
+        ),
+        (
+            "synthesize",
+            synthesize(source, report, &SynthesisOptions::new(key)).unwrap(),
+            synthesize(source, report, &SynthesisOptions::new(different_key)).unwrap(),
+        ),
+    ] {
+        assert_ne!(expected, different);
+        for stdin in [false, true] {
+            for key_first in [false, true] {
+                let output = keyed_output(name, source.as_bytes(), &key_file, stdin, key_first);
+                assert_eq!(output.status.code(), Some(0));
+                assert!(output.stderr.is_empty());
+                assert_key_absent(&output, &key);
+                assert_eq!(output.stdout, expected.as_bytes());
+            }
+        }
+        let output = keyed_output(name, source.as_bytes(), &other_file, true, false);
+        assert_eq!(output.status.code(), Some(0));
+        assert!(output.stderr.is_empty());
+        assert_key_absent(&output, &different_key);
+        assert_eq!(output.stdout, different.as_bytes());
+        for finding in report.findings() {
+            let location = finding.location();
+            assert!(!expected.contains(&source[location.start()..location.end()]));
+        }
+        assert!(expected.starts_with("\u{feff}π 😀 café\r\nGITHUB_TOKEN="));
+        assert!(expected.ends_with("\r\nABCD-EFGH-IJKL-MNOP"));
+        assert_eq!(expected.matches("\r\n").count(), 4);
+        let first = expected.lines().nth(1).unwrap().split_once('=').unwrap().1;
+        let repeated = expected.lines().nth(2).unwrap().split_once('=').unwrap().1;
+        if name == "pseudonymize" {
+            assert_eq!(first, repeated);
+            assert!(first.starts_with("cribra_pseudo_"));
+        } else {
+            assert_ne!(first, repeated);
+            assert!(first.starts_with("ghp_!"));
+            assert!(repeated.starts_with("ghp_!"));
+            assert_eq!(first.len(), 37);
+            assert_eq!(repeated.len(), 37);
+            assert!(expected.contains("cribra_synthetic"));
+        }
+    }
+    assert!(fs::read(&key_file).unwrap() == key);
+    assert!(fs::read(&other_file).unwrap() == different_key);
+    fs::remove_file(key_file).unwrap();
+    fs::remove_file(other_file).unwrap();
+}
+
+#[test]
+fn keyed_commands_preserve_empty_clean_and_candidate_only_sources() {
+    let key = b"0123456789ABCDEFfedcba9876543210";
+    let key_file = temp_file("unchanged-key.bin", key);
+    for source in [
+        "",
+        "\u{feff}π 😀 café\r\nordinary text\r\n",
+        "ABCD-EFGH-IJKL-MNOP\r\n",
+    ] {
+        for command in ["pseudonymize", "synthesize"] {
+            for stdin in [false, true] {
+                let output = keyed_output(command, source.as_bytes(), &key_file, stdin, false);
+                assert_eq!(output.status.code(), Some(0));
+                assert!(output.stderr.is_empty());
+                assert_key_absent(&output, key);
+                assert_eq!(output.stdout, source.as_bytes());
+            }
+        }
+    }
+    // Identical bytes independently present in unchanged source are preserved.
+    let source = "note=0123456789ABCDEFfedcba9876543210";
+    for command in ["pseudonymize", "synthesize"] {
+        let output = keyed_output(command, source.as_bytes(), &key_file, true, false);
+        assert_eq!(output.status.code(), Some(0));
+        assert_eq!(output.stdout, source.as_bytes());
+        assert!(output.stderr.is_empty());
+    }
+    fs::remove_file(key_file).unwrap();
+}
+
+#[test]
+fn keyed_commands_reject_overlaps_without_partial_stdout() {
+    use cribra::transform::{PseudonymizationOptions, SynthesisOptions, pseudonymize, synthesize};
+    use cribra_cli::{
+        Command as CliCommand, ExecuteError, KeyedTransformCommand, ScanInput, execute,
+    };
+    let source = "-----BEGIN PRIVATE KEY-----\nghp_AbCdEf0123456789_AbCdEf0123456789\n-----END PRIVATE KEY-----";
+    let key = *b"0123456789ABCDEFfedcba9876543210";
+    let key_file = temp_file("overlap-key.bin", &key);
+    let results = cribra::Scanner::default().scan([("fixture", source)]);
+    let report = results.single_report().unwrap();
+    for (name, error) in [
+        (
+            "pseudonymize",
+            pseudonymize(source, report, &PseudonymizationOptions::new(key)).unwrap_err(),
+        ),
+        (
+            "synthesize",
+            synthesize(source, report, &SynthesisOptions::new(key)).unwrap_err(),
+        ),
+    ] {
+        for stdin in [false, true] {
+            let output = keyed_output(name, source.as_bytes(), &key_file, stdin, false);
+            assert_eq!(output.status.code(), Some(1));
+            assert!(output.stdout.is_empty());
+            assert_key_absent(&output, &key);
+            assert_eq!(output.stderr, format!("cribra: {error}\n").as_bytes());
+        }
+    }
+    let source_file = temp_file("keyed-reusable.txt", source.as_bytes());
+    let options = KeyedTransformCommand {
+        input: ScanInput::File(source_file.clone()),
+        key_file: key_file.clone(),
+    };
+    assert!(matches!(
+        execute(&CliCommand::Pseudonymize(options.clone())),
+        Err(ExecuteError::Transform(_))
+    ));
+    assert!(matches!(
+        execute(&CliCommand::Synthesize(options)),
+        Err(ExecuteError::Transform(_))
+    ));
+    fs::remove_file(source_file).unwrap();
+    fs::remove_file(key_file).unwrap();
+}
+
+// Keep stdin open and unwritten: key errors must finish before trying to read it.
+fn key_failure_before_stdin(command: &str, key_file: &std::path::Path) -> std::process::Output {
+    use std::time::{Duration, Instant};
+    let mut child = Command::new(cribra_bin())
+        .args([command, "-", "--key-file"])
+        .arg(key_file)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let stdin = child.stdin.take().unwrap();
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while child.try_wait().unwrap().is_none() {
+        if Instant::now() >= deadline {
+            child.kill().unwrap();
+            child.wait().unwrap();
+            panic!("key failure must not wait for source stdin");
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    drop(stdin);
+    let output = child.wait_with_output().unwrap();
+    assert_eq!(output.status.code(), Some(1));
+    assert!(output.stdout.is_empty());
+    output
+}
+
+#[test]
+fn keyed_commands_validate_key_length_and_existence_before_stdin() {
+    use cribra_cli::{
+        Command as CliCommand, ExecuteError, KeyedTransformCommand, ScanInput, execute,
+    };
+    for bytes in [
+        vec![],
+        vec![b'Q'; 31],
+        vec![b'Q'; 33],
+        vec![b'Q'; 1024 * 1024],
+        vec![b'0'; 64],
+    ] {
+        let path = temp_file("invalid-key.bin", &bytes);
+        for name in ["pseudonymize", "synthesize"] {
+            let output = key_failure_before_stdin(name, &path);
+            assert_eq!(
+                output.stderr,
+                b"cribra: key file must contain exactly 32 raw bytes\n"
+            );
+            if bytes.len() >= 31 {
+                assert_key_absent(&output, &bytes[..31]);
+            }
+        }
+        let command = CliCommand::Pseudonymize(KeyedTransformCommand {
+            input: ScanInput::Stdin,
+            key_file: path.clone(),
+        });
+        assert!(matches!(
+            execute(&command),
+            Err(ExecuteError::InvalidKeyLength)
+        ));
+        assert!(fs::read(&path).unwrap() == bytes);
+        fs::remove_file(path).unwrap();
+    }
+    let missing = temp_file("missing-key.bin", b"");
+    fs::remove_file(&missing).unwrap();
+    for name in ["pseudonymize", "synthesize"] {
+        let output = key_failure_before_stdin(name, &missing);
+        assert!(
+            String::from_utf8(output.stderr)
+                .unwrap()
+                .starts_with("cribra: could not read key file:")
+        );
+    }
+    let command = CliCommand::Synthesize(KeyedTransformCommand {
+        input: ScanInput::Stdin,
+        key_file: missing,
+    });
+    assert!(matches!(execute(&command), Err(ExecuteError::KeyRead(_))));
+}
+
+#[test]
+fn keyed_commands_reject_directories_before_stdin() {
+    for name in ["pseudonymize", "synthesize"] {
+        let output = key_failure_before_stdin(name, &std::env::temp_dir());
+        assert_eq!(
+            output.stderr,
+            b"cribra: could not read key file: key file must be a regular file\n"
+        );
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn keyed_commands_accept_regular_symlinks_and_reject_special_or_unreadable_files() {
+    use std::os::unix::{
+        fs::{PermissionsExt, symlink},
+        net::UnixListener,
+    };
+    let key = b"0123456789ABCDEFfedcba9876543210";
+    let path = temp_file("symlink-key.bin", key);
+    let link = path.with_extension("link");
+    symlink(&path, &link).unwrap();
+    let socket_path = std::path::Path::new("/tmp")
+        .join(path.file_name().unwrap())
+        .with_extension("socket");
+    let socket = UnixListener::bind(&socket_path).unwrap();
+    for name in ["pseudonymize", "synthesize"] {
+        let output = keyed_output(name, b"", &link, true, false);
+        assert_eq!(output.status.code(), Some(0));
+        assert!(output.stdout.is_empty());
+        assert!(output.stderr.is_empty());
+        assert_key_absent(&output, key);
+        let failed = key_failure_before_stdin(name, &socket_path);
+        assert_eq!(
+            failed.stderr,
+            b"cribra: could not read key file: key file must be a regular file\n"
+        );
+        let device = key_failure_before_stdin(name, std::path::Path::new("/dev/null"));
+        assert_eq!(device.stderr, failed.stderr);
+    }
+    fs::set_permissions(&path, fs::Permissions::from_mode(0o000)).unwrap();
+    // Some privileged test environments can read mode-000 files; test the real
+    // permission failure when the host enforces it for the current user.
+    if fs::File::open(&path).is_err() {
+        for name in ["pseudonymize", "synthesize"] {
+            let output = key_failure_before_stdin(name, &path);
+            assert!(
+                String::from_utf8(output.stderr)
+                    .unwrap()
+                    .starts_with("cribra: could not read key file:")
+            );
+        }
+    }
+    fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).unwrap();
+    assert!(fs::read(&path).unwrap() == key);
+    drop(socket);
+    fs::remove_file(socket_path).unwrap();
+    fs::remove_file(link).unwrap();
+    fs::remove_file(path).unwrap();
+}
+
+#[test]
+fn keyed_commands_usage_and_source_failures_preserve_exit_codes() {
+    for name in ["pseudonymize", "synthesize"] {
+        for args in [
+            &[][..],
+            &["-"][..],
+            &["-", "--key-file"][..],
+            &["-", "--key-file", "-"][..],
+            &["-", "--key-file", "key.bin", "--key-file", "other.bin"][..],
+            &["-", "--key-file", "key.bin", "extra.env"][..],
+            &["-", "--key-file", "key.bin", "--explain"][..],
+        ] {
+            let output = Command::new(cribra_bin())
+                .arg(name)
+                .args(args)
+                .output()
+                .unwrap();
+            assert_eq!(output.status.code(), Some(2));
+            assert!(output.stdout.is_empty());
+        }
+    }
+    let key = b"0123456789ABCDEFfedcba9876543210";
+    let key_file = temp_file("source-error-key.bin", key);
+    for name in ["pseudonymize", "synthesize"] {
+        for stdin in [false, true] {
+            let output = keyed_output(name, &[0xff], &key_file, stdin, false);
+            assert_eq!(output.status.code(), Some(1));
+            assert!(output.stdout.is_empty());
+            assert_eq!(output.stderr, b"cribra: invalid UTF-8\n");
+            assert_key_absent(&output, key);
+        }
+        let missing = key_file.with_extension("missing");
+        let output = Command::new(cribra_bin())
+            .arg(name)
+            .arg(missing)
+            .arg("--key-file")
+            .arg(&key_file)
+            .output()
+            .unwrap();
+        assert_eq!(output.status.code(), Some(1));
+        assert!(output.stdout.is_empty());
+        assert_key_absent(&output, key);
+    }
+    fs::remove_file(key_file).unwrap();
+}

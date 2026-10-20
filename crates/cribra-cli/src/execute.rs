@@ -3,7 +3,12 @@
 //! Execution delegates all detection semantics to the `cribra` core. This
 //! module owns only CLI-level source acquisition and presentation selection.
 
-use std::fmt;
+use std::{
+    fmt,
+    fs::File,
+    io::{self, Read},
+    path::Path,
+};
 
 use crate::{
     command::{Command, ConfidenceFilter, ScanInput, SeverityFilter},
@@ -48,6 +53,12 @@ pub enum ExecuteError {
 
     /// Core could not safely transform the original source and report.
     Transform(cribra::transform::TransformError),
+
+    /// The key file could not be read or was not a regular file.
+    KeyRead(std::io::Error),
+
+    /// The key file did not contain exactly 32 raw bytes.
+    InvalidKeyLength,
 }
 
 impl From<input::InputError> for ExecuteError {
@@ -65,6 +76,10 @@ impl fmt::Display for ExecuteError {
             Self::InputRead(error) => error.fmt(formatter),
             Self::InvalidUtf8 => formatter.write_str("invalid UTF-8"),
             Self::Transform(error) => error.fmt(formatter),
+            Self::KeyRead(error) => write!(formatter, "could not read key file: {error}"),
+            Self::InvalidKeyLength => {
+                formatter.write_str("key file must contain exactly 32 raw bytes")
+            }
         }
     }
 }
@@ -76,6 +91,41 @@ impl From<cribra::transform::TransformError> for ExecuteError {
 }
 
 impl std::error::Error for ExecuteError {}
+
+fn read_key_file(path: &Path) -> Result<[u8; 32], ExecuteError> {
+    // Follow symlinks, but reject special files before opening to avoid reading
+    // from devices or blocking on a named pipe. Check the opened handle too.
+    let metadata = std::fs::metadata(path).map_err(ExecuteError::KeyRead)?;
+    if !metadata.is_file() {
+        return Err(non_regular_key_file());
+    }
+    let mut file = File::open(path).map_err(ExecuteError::KeyRead)?;
+    if !file.metadata().map_err(ExecuteError::KeyRead)?.is_file() {
+        return Err(non_regular_key_file());
+    }
+
+    let mut key = [0; 32];
+    file.read_exact(&mut key).map_err(|error| {
+        if error.kind() == io::ErrorKind::UnexpectedEof {
+            ExecuteError::InvalidKeyLength
+        } else {
+            ExecuteError::KeyRead(error)
+        }
+    })?;
+    // Probe one extra byte without reading or retaining an unbounded file.
+    match file.read_exact(&mut [0; 1]) {
+        Ok(()) => Err(ExecuteError::InvalidKeyLength),
+        Err(error) if error.kind() == io::ErrorKind::UnexpectedEof => Ok(key),
+        Err(error) => Err(ExecuteError::KeyRead(error)),
+    }
+}
+
+fn non_regular_key_file() -> ExecuteError {
+    ExecuteError::KeyRead(io::Error::new(
+        io::ErrorKind::InvalidInput,
+        "key file must be a regular file",
+    ))
+}
 
 /// Executes one already parsed Cribra command.
 ///
@@ -160,6 +210,35 @@ pub fn execute(command: &Command) -> Result<CommandOutput, ExecuteError> {
                 Command::Redact(_) => cribra::transform::redact(source.text(), report),
                 Command::Template(_) => cribra::transform::template(source.text(), report),
                 _ => unreachable!("only transformation commands enter this branch"),
+            }?;
+            Ok(CommandOutput::new(transformed))
+        }
+
+        Command::Pseudonymize(options) | Command::Synthesize(options) => {
+            // Validate the key before acquiring the source, especially stdin.
+            let key = read_key_file(&options.key_file)?;
+            let input = match &options.input {
+                ScanInput::File(path) => input::Input::File(path.clone()),
+                ScanInput::Stdin => input::Input::Stdin,
+            };
+            let source = input::read(&input)?;
+            let scanner = cribra::Scanner::default();
+            let results = scanner.scan([(source.name(), source.text())]);
+            let report = results
+                .single_report()
+                .expect("single CLI input must produce exactly one report");
+            let transformed = match command {
+                Command::Pseudonymize(_) => cribra::transform::pseudonymize(
+                    source.text(),
+                    report,
+                    &cribra::transform::PseudonymizationOptions::new(key),
+                ),
+                Command::Synthesize(_) => cribra::transform::synthesize(
+                    source.text(),
+                    report,
+                    &cribra::transform::SynthesisOptions::new(key),
+                ),
+                _ => unreachable!("only keyed transformation commands enter this branch"),
             }?;
             Ok(CommandOutput::new(transformed))
         }

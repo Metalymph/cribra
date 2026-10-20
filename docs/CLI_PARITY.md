@@ -70,11 +70,13 @@ cribra
 │   └── --sort rule-id|rule-id-desc|severity|severity-desc|
 │              confidence|confidence-desc|location|location-desc
 ├── redact <FILE|->
-└── template <FILE|->
+├── template <FILE|->
+├── pseudonymize <FILE|-> --key-file <PATH>
+└── synthesize <FILE|-> --key-file <PATH>
 ```
 
-`scan`, `redact`, and `template` each accept exactly one explicit UTF-8
-filesystem path or standard input.
+All five source commands accept exactly one explicit UTF-8 filesystem path or
+standard input. Keyed commands also require an explicit key file.
 
 Input acquisition preserves valid UTF-8 text without newline normalization,
 BOM stripping, lossy decoding, or encoding auto-detection. Invalid UTF-8 is
@@ -118,9 +120,9 @@ The CLI must not independently implement detector or validator behavior.
 
 | Core capability | CLI state | Current projection |
 | --- | --- | --- |
-| Default scanner | EXPOSED | all three source commands use `Scanner::default()` |
-| Explicit UTF-8 file input | EXPOSED | one explicit file for `scan`, `redact`, or `template` |
-| Standard input | EXPOSED | `-` input for `scan`, `redact`, or `template` |
+| Default scanner | EXPOSED | all five source commands use `Scanner::default()` |
+| Explicit UTF-8 file input | EXPOSED | one explicit file per source command |
+| Standard input | EXPOSED | `-` source input for all five commands |
 | Findings | EXPOSED | human and JSON output |
 | Rule identity | EXPOSED | rule ID |
 | Byte location | EXPOSED | start and end offsets |
@@ -149,8 +151,8 @@ The CLI must not independently implement detector or validator behavior.
 | Candidate explanation | EXPOSED | existing candidate evidence projects `Explanation::Ambiguous` facts |
 | Redaction | EXPOSED | `cribra redact` delegates to `cribra::transform::redact()` |
 | Template transformation | EXPOSED | `cribra template` delegates to `cribra::transform::template()` |
-| Pseudonymization | GAP | core transformation has no CLI operation |
-| Synthesis | GAP | core transformation has no CLI operation |
+| Pseudonymization | EXPOSED | `cribra pseudonymize` with mandatory `--key-file`, using Core defaults |
+| Synthesis | EXPOSED | `cribra synthesize` with mandatory `--key-file`, using Core defaults |
 | Share bundle | GAP | core transformation/batch capability has no CLI operation |
 | Custom `Rule` construction | LIBRARY-ONLY | programmable Rust API |
 | Custom `ScannerBuilder` construction | LIBRARY-ONLY | programmable Rust API |
@@ -284,6 +286,73 @@ unsupported options, or extra arguments return exit code `2`. Input and Core
 transformation errors return `1` with empty stdout; diagnostics do not include
 matched source values. Successful transformations return `0`.
 
+## Keyed transformations
+
+```text
+cribra pseudonymize <FILE|-> --key-file <PATH>
+cribra synthesize <FILE|-> --key-file <PATH>
+```
+
+`--key-file <PATH>` may appear before or after the source. Exactly one source
+and one key-file option are required. Duplicate key options, missing values,
+extra positional arguments, unknown options, and scan-only options are usage
+errors. There are no inline, environment, generated, default, or stdin keys;
+`--key-file -` is rejected. Keyed commands expose no custom prefix, marker,
+filtering, sorting, or output-file options.
+
+The key file must resolve to a regular file containing **exactly 32 raw binary
+bytes**. Symlinks to regular files are permitted; directories, devices, sockets,
+and named pipes are rejected. Key loading reads at most 33 bytes, rejecting
+shorter or longer files. Hex and Base64 text are not decoded. Whitespace,
+newlines, NULs, and arbitrary binary values are neither trimmed nor normalized;
+a trailing newline is part of the key and counts toward the 32 bytes.
+
+The key is read and validated before any source acquisition, including source
+stdin. The CLI does not print or serialize key contents, store key bytes in the
+public command model, or include them in diagnostics. It does not modify the
+key file. Key bytes are held in local execution state and passed to Core options
+without explicit cloning. **Memory zeroization is not guaranteed.**
+
+Both commands scan with `Scanner::default()` and pass the complete original
+report and original source to `cribra::transform::pseudonymize()` or
+`cribra::transform::synthesize()`, using only
+`PseudonymizationOptions::new([u8; 32])` or
+`SynthesisOptions::new([u8; 32])`. The CLI does not implement replacement logic.
+Core rejects overlapping findings for both keyed transformations. Successful
+stdout contains only exact Core-transformed UTF-8 bytes, without headers,
+summaries, or an added newline. Neither input nor key files are modified, and
+the CLI writes no output file. Text outside finding spans retains its original
+UTF-8, BOM, CRLF, and trailing-newline bytes.
+
+Pseudonymization is deterministic for a matched value and key: repeated equal
+values receive the same pseudonym even at different positions or in different
+sources. Reusing a key therefore enables correlation across runs and datasets.
+Synthesis is deterministic for the key, rule ID, and source span; repeated
+equal source values at different positions need not receive equal replacements.
+For supported providers, Core preserves recognizable structure while breaking
+validation invariants; contextual/generic output uses synthetic markers. These
+values do not retain the original matched secret and are not provider-verified
+credentials.
+
+Reusing a key preserves reproducibility; changing it changes pseudonyms and
+suitable synthesized fixtures. Manage key creation and storage outside the CLI,
+restrict file access, keep keys out of shared outputs and version control, and
+use separate keys where cross-dataset correlation is unwanted. Losing a key
+loses reproducibility for outputs made with it. Key reuse is an explicit choice,
+not an assurance of anonymity.
+
+Candidates are not transformed independently. Empty, clean, and candidate-only
+sources remain unchanged; mixed sources transform only classified finding
+spans. Output can still contain sensitive candidates and undetected values.
+Key-file bytes independently present in unchanged source text also remain;
+the CLI does not scrub arbitrary text outside findings.
+
+Usage failures return `2`. Dedicated key-read/non-regular-file and invalid-key-
+length errors, source input failures, and Core transformation failures return
+`1` with empty stdout. Diagnostics contain no source values or key contents.
+Successful execution returns `0`. Existing scan, redaction, and template output
+contracts are unchanged.
+
 ## Exit semantics
 
 The current process exit contract is:
@@ -291,7 +360,7 @@ The current process exit contract is:
 | Code | Meaning |
 | ---: | --- |
 | `0` | successful execution, including clean, review-only, and finding-bearing scans |
-| `1` | input, transformation, or other execution failure |
+| `1` | key, input, transformation, or other execution failure |
 | `2` | command-line usage or parse failure |
 
 Finding presence is deliberately not an execution failure.
@@ -309,7 +378,7 @@ source material, or source snippets to scan output or diagnostics.
 Current tests cover source-value non-disclosure for classified findings,
 review-only candidates, JSON output, and invalid UTF-8 diagnostics.
 
-`redact` and `template` explicitly emit transformed source as their primary
+All four transformation commands emit transformed source as their primary
 result. Core replaces classified findings; candidates and undetected material
 may remain in that source. Errors emit no source text or partial transformed
 stdout.
@@ -339,18 +408,13 @@ or build compatibility.
 
 ## Confirmed parity gaps
 
-### Keyed transformations and share bundles
+### Share bundles and CI exit policy
 
-The core also exposes:
-
-- keyed pseudonymization;
-- keyed synthesis;
-- share bundles.
-
-These remain separate CLI parity gaps. Exposing keyed operations requires an
-explicit key-handling contract; redaction and semantic templating do not add
-keyed options or share-bundle orchestration. Future commands must preserve Core
-authority and the transformation privacy model.
+Core share bundles remain a separate CLI parity gap. The keyed commands accept
+one source and do not add bundle orchestration or manifests. A CI-oriented
+failure-on-findings policy also remains separate from the existing execution
+exit codes. Future commands must preserve Core authority and the transformation
+privacy model.
 
 ## Deliberate non-parity
 
@@ -383,10 +447,8 @@ The current audit suggests the following implementation order if the gaps are
 accepted for future CLI work:
 
 1. complete small metadata projection gaps;
-2. design keyed pseudonymization and synthesis with an explicit key-handling
-   contract;
-3. evaluate multi-source and share-bundle command semantics separately;
-4. evaluate explicit CI failure policy without changing existing exit semantics.
+2. evaluate multi-source and share-bundle command semantics separately;
+3. evaluate explicit CI failure policy without changing existing exit semantics.
 
 This ordering is advisory. Each capability should be implemented as an
 independent, reviewable slice rather than as a broad CLI rewrite.
