@@ -23,6 +23,45 @@ pub struct ScanCommand {
 
     /// Requested output representation.
     pub format: OutputFormat,
+
+    /// Requested finding filters, recorded independently of execution.
+    pub filters: ScanFilters,
+
+    /// Requested finding order, or the default source order when absent.
+    pub sort: Option<cribra::ScanSort>,
+}
+
+/// Optional finding constraints parsed from scan options.
+#[derive(Debug, Clone, Default, Eq, PartialEq)]
+pub struct ScanFilters {
+    /// Exact or minimum finding severity.
+    pub severity: Option<SeverityFilter>,
+
+    /// Exact or minimum finding confidence.
+    pub confidence: Option<ConfidenceFilter>,
+
+    /// Exact rule identifier.
+    pub rule_id: Option<String>,
+}
+
+/// A finding severity constraint.
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub enum SeverityFilter {
+    /// Match only this severity.
+    Exact(cribra::Severity),
+
+    /// Match this severity and higher severities.
+    Minimum(cribra::Severity),
+}
+
+/// A finding confidence constraint.
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub enum ConfidenceFilter {
+    /// Match only this confidence.
+    Exact(cribra::Confidence),
+
+    /// Match this confidence and higher confidence levels.
+    Minimum(cribra::Confidence),
 }
 
 /// Explicit scan input.

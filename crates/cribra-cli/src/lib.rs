@@ -18,7 +18,9 @@ use std::{
     process::ExitCode,
 };
 
-pub use command::{Command, OutputFormat, ScanCommand, ScanInput};
+pub use command::{
+    Command, ConfidenceFilter, OutputFormat, ScanCommand, ScanFilters, ScanInput, SeverityFilter,
+};
 pub use execute::{CommandOutput, ExecuteError, execute};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -77,32 +79,74 @@ where
                 ScanInput::File(input.into())
             };
 
-            let mut format = OutputFormat::Human;
+            let mut format = None;
+            let mut filters = ScanFilters::default();
+            let mut sort = None;
 
             while let Some(argument) = args.next() {
-                if argument == OsStr::new("--format") {
-                    let Some(value) = args.next() else {
-                        return Err(ParseError::new("--format requires 'human' or 'json'"));
-                    };
-
-                    let Some(parsed) = OutputFormat::parse(&value.to_string_lossy()) else {
+                let option = argument.to_string_lossy();
+                let already_set = match option.as_ref() {
+                    "--format" => format.is_some(),
+                    "--severity" | "--min-severity" => filters.severity.is_some(),
+                    "--confidence" | "--min-confidence" => filters.confidence.is_some(),
+                    "--rule-id" => filters.rule_id.is_some(),
+                    "--sort" => sort.is_some(),
+                    _ => {
                         return Err(ParseError::new(format!(
-                            "unsupported output format: {}",
-                            value.to_string_lossy()
+                            "unexpected scan argument: {option}"
                         )));
-                    };
-
-                    format = parsed;
-                    continue;
+                    }
+                };
+                if already_set {
+                    return Err(ParseError::new(format!(
+                        "duplicate or conflicting scan option: {option}"
+                    )));
                 }
 
-                return Err(ParseError::new(format!(
-                    "unexpected scan argument: {}",
-                    argument.to_string_lossy()
-                )));
+                let value = args
+                    .next()
+                    .ok_or_else(|| ParseError::new(format!("{option} requires a value")))?;
+                let value = value.to_str().ok_or_else(|| {
+                    ParseError::new(format!("{option} requires a valid UTF-8 value"))
+                })?;
+                if value.is_empty() || value.starts_with("--") {
+                    return Err(ParseError::new(format!("{option} requires a value")));
+                }
+
+                let invalid_value =
+                    || ParseError::new(format!("unsupported value for {option}: {value}"));
+                match option.as_ref() {
+                    "--format" => {
+                        format = Some(OutputFormat::parse(value).ok_or_else(invalid_value)?);
+                    }
+                    "--severity" | "--min-severity" => {
+                        let severity = parse_severity(value).ok_or_else(invalid_value)?;
+                        filters.severity = Some(if option == "--severity" {
+                            SeverityFilter::Exact(severity)
+                        } else {
+                            SeverityFilter::Minimum(severity)
+                        });
+                    }
+                    "--confidence" | "--min-confidence" => {
+                        let confidence = parse_confidence(value).ok_or_else(invalid_value)?;
+                        filters.confidence = Some(if option == "--confidence" {
+                            ConfidenceFilter::Exact(confidence)
+                        } else {
+                            ConfidenceFilter::Minimum(confidence)
+                        });
+                    }
+                    "--rule-id" => filters.rule_id = Some(value.to_owned()),
+                    "--sort" => sort = Some(parse_sort(value).ok_or_else(invalid_value)?),
+                    _ => unreachable!("scan option was checked before reading its value"),
+                }
             }
 
-            Ok(Command::Scan(ScanCommand { input, format }))
+            Ok(Command::Scan(ScanCommand {
+                input,
+                format: format.unwrap_or_default(),
+                filters,
+                sort,
+            }))
         }
 
         Some(argument) if argument == OsStr::new("--help") || argument == OsStr::new("-h") => {
@@ -117,6 +161,40 @@ where
             "unknown argument: {}",
             argument.to_string_lossy()
         ))),
+    }
+}
+
+fn parse_severity(value: &str) -> Option<cribra::Severity> {
+    match value {
+        "info" => Some(cribra::Severity::Info),
+        "low" => Some(cribra::Severity::Low),
+        "medium" => Some(cribra::Severity::Medium),
+        "high" => Some(cribra::Severity::High),
+        "critical" => Some(cribra::Severity::Critical),
+        _ => None,
+    }
+}
+
+fn parse_confidence(value: &str) -> Option<cribra::Confidence> {
+    match value {
+        "low" => Some(cribra::Confidence::Low),
+        "medium" => Some(cribra::Confidence::Medium),
+        "high" => Some(cribra::Confidence::High),
+        _ => None,
+    }
+}
+
+fn parse_sort(value: &str) -> Option<cribra::ScanSort> {
+    match value {
+        "rule-id" => Some(cribra::ScanSort::RuleId),
+        "rule-id-desc" => Some(cribra::ScanSort::RuleIdDescending),
+        "severity" => Some(cribra::ScanSort::Severity),
+        "severity-desc" => Some(cribra::ScanSort::SeverityDescending),
+        "confidence" => Some(cribra::ScanSort::Confidence),
+        "confidence-desc" => Some(cribra::ScanSort::ConfidenceDescending),
+        "location" => Some(cribra::ScanSort::Location),
+        "location-desc" => Some(cribra::ScanSort::LocationDescending),
+        _ => None,
     }
 }
 
@@ -155,8 +233,8 @@ where
 pub(crate) fn help_text() -> &'static str {
     "\
 Usage:
-  cribra scan <FILE> [--format human|json]
-  cribra scan - [--format human|json]
+  cribra scan <FILE> [SCAN OPTIONS]
+  cribra scan - [SCAN OPTIONS]
   cribra [OPTIONS]
 
 Commands:
@@ -164,7 +242,15 @@ Commands:
   scan -            Scan UTF-8 from standard input
 
 Scan options:
-  --format FORMAT   Output format: human or json
+  --format FORMAT         Output format: human or json
+  --severity LEVEL        Exact severity: info|low|medium|high|critical
+  --min-severity LEVEL    Minimum severity: info|low|medium|high|critical
+  --confidence LEVEL      Exact confidence: low|medium|high
+  --min-confidence LEVEL  Minimum confidence: low|medium|high
+  --rule-id ID            Exact rule ID (nonempty)
+  --sort ORDER            rule-id|rule-id-desc|severity|severity-desc|
+                          confidence|confidence-desc|location|location-desc
+  Exact and minimum constraints in the same dimension are mutually exclusive.
 
 Options:
   -h, --help        Print help
@@ -200,6 +286,8 @@ mod tests {
             Command::Scan(ScanCommand {
                 input: ScanInput::File("config.env".into()),
                 format: OutputFormat::Human,
+                filters: ScanFilters::default(),
+                sort: None,
             })
         );
     }
@@ -211,7 +299,197 @@ mod tests {
             Command::Scan(ScanCommand {
                 input: ScanInput::Stdin,
                 format: OutputFormat::Json,
+                filters: ScanFilters::default(),
+                sort: None,
             })
+        );
+    }
+
+    #[test]
+    fn scan_query_options_are_order_independent() {
+        let options = [
+            ["--severity", "high"],
+            ["--min-confidence", "medium"],
+            ["--rule-id", "github.classic-pat"],
+            ["--sort", "location-desc"],
+            ["--format", "json"],
+        ];
+        for input in ["config.env", "-"] {
+            for offset in 0..options.len() {
+                let args = ["cribra", "scan", input].into_iter().chain(
+                    options
+                        .iter()
+                        .cycle()
+                        .skip(offset)
+                        .take(options.len())
+                        .flatten()
+                        .copied(),
+                );
+                assert_eq!(
+                    parse(args).unwrap(),
+                    Command::Scan(ScanCommand {
+                        input: if input == "-" {
+                            ScanInput::Stdin
+                        } else {
+                            ScanInput::File(input.into())
+                        },
+                        format: OutputFormat::Json,
+                        filters: ScanFilters {
+                            severity: Some(SeverityFilter::Exact(cribra::Severity::High)),
+                            confidence: Some(ConfidenceFilter::Minimum(cribra::Confidence::Medium)),
+                            rule_id: Some("github.classic-pat".into()),
+                        },
+                        sort: Some(cribra::ScanSort::LocationDescending),
+                    })
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn scan_accepts_all_severity_constraints() {
+        for (value, severity) in [
+            ("info", cribra::Severity::Info),
+            ("low", cribra::Severity::Low),
+            ("medium", cribra::Severity::Medium),
+            ("high", cribra::Severity::High),
+            ("critical", cribra::Severity::Critical),
+        ] {
+            for (option, expected) in [
+                ("--severity", SeverityFilter::Exact(severity)),
+                ("--min-severity", SeverityFilter::Minimum(severity)),
+            ] {
+                let Command::Scan(command) = parse(["cribra", "scan", "-", option, value]).unwrap()
+                else {
+                    panic!("expected scan command");
+                };
+                assert_eq!(command.filters.severity, Some(expected));
+            }
+        }
+    }
+
+    #[test]
+    fn scan_accepts_all_confidence_constraints() {
+        for (value, confidence) in [
+            ("low", cribra::Confidence::Low),
+            ("medium", cribra::Confidence::Medium),
+            ("high", cribra::Confidence::High),
+        ] {
+            for (option, expected) in [
+                ("--confidence", ConfidenceFilter::Exact(confidence)),
+                ("--min-confidence", ConfidenceFilter::Minimum(confidence)),
+            ] {
+                let Command::Scan(command) = parse(["cribra", "scan", "-", option, value]).unwrap()
+                else {
+                    panic!("expected scan command");
+                };
+                assert_eq!(command.filters.confidence, Some(expected));
+            }
+        }
+    }
+
+    #[test]
+    fn scan_accepts_all_supported_sorts() {
+        for (value, expected) in [
+            ("rule-id", cribra::ScanSort::RuleId),
+            ("rule-id-desc", cribra::ScanSort::RuleIdDescending),
+            ("severity", cribra::ScanSort::Severity),
+            ("severity-desc", cribra::ScanSort::SeverityDescending),
+            ("confidence", cribra::ScanSort::Confidence),
+            ("confidence-desc", cribra::ScanSort::ConfidenceDescending),
+            ("location", cribra::ScanSort::Location),
+            ("location-desc", cribra::ScanSort::LocationDescending),
+        ] {
+            let Command::Scan(command) = parse(["cribra", "scan", "-", "--sort", value]).unwrap()
+            else {
+                panic!("expected scan command");
+            };
+            assert_eq!(command.sort, Some(expected));
+            assert_eq!(command.filters, ScanFilters::default());
+        }
+    }
+
+    #[test]
+    fn scan_rejects_duplicate_options() {
+        for (option, first, second) in [
+            ("--format", "human", "json"),
+            ("--severity", "low", "high"),
+            ("--min-severity", "low", "high"),
+            ("--confidence", "low", "high"),
+            ("--min-confidence", "low", "high"),
+            ("--rule-id", "one", "two"),
+            ("--sort", "severity", "confidence"),
+        ] {
+            for value in [first, second] {
+                let error =
+                    parse(["cribra", "scan", "-", option, first, option, value]).unwrap_err();
+                assert!(error.message().contains("duplicate or conflicting"));
+            }
+        }
+    }
+
+    #[test]
+    fn scan_rejects_exact_minimum_conflicts_in_either_order() {
+        for (exact, minimum) in [
+            ("--severity", "--min-severity"),
+            ("--confidence", "--min-confidence"),
+        ] {
+            for (first, second) in [(exact, minimum), (minimum, exact)] {
+                let error =
+                    parse(["cribra", "scan", "-", first, "low", second, "high"]).unwrap_err();
+                assert!(error.message().contains("duplicate or conflicting"));
+            }
+        }
+    }
+
+    #[test]
+    fn scan_rejects_missing_option_values() {
+        for option in [
+            "--format",
+            "--severity",
+            "--min-severity",
+            "--confidence",
+            "--min-confidence",
+            "--rule-id",
+            "--sort",
+        ] {
+            assert!(parse(["cribra", "scan", "-", option]).is_err());
+            assert!(parse(["cribra", "scan", "-", option, "--format", "json"]).is_err());
+            assert!(parse(["cribra", "scan", "-", option, ""]).is_err());
+        }
+    }
+
+    #[test]
+    fn scan_rejects_invalid_option_values_and_unknown_options() {
+        for (option, value) in [
+            ("--format", "yaml"),
+            ("--severity", "urgent"),
+            ("--min-severity", "High"),
+            ("--confidence", "critical"),
+            ("--min-confidence", "info"),
+            ("--sort", "source"),
+            ("--sort", "source-desc"),
+            ("--sort", "unknown"),
+            ("--unknown", "high"),
+        ] {
+            assert!(parse(["cribra", "scan", "-", option, value]).is_err());
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn scan_rejects_non_utf8_option_values() {
+        use std::os::unix::ffi::OsStringExt;
+
+        assert!(
+            parse([
+                OsString::from("cribra"),
+                OsString::from("scan"),
+                OsString::from("-"),
+                OsString::from("--rule-id"),
+                OsString::from_vec(vec![0xff]),
+            ])
+            .is_err()
         );
     }
 
@@ -256,6 +534,8 @@ mod tests {
         let command = Command::Scan(ScanCommand {
             input: ScanInput::File(path.clone()),
             format: OutputFormat::Json,
+            filters: ScanFilters::default(),
+            sort: None,
         });
 
         let result = execute(&command).unwrap();
