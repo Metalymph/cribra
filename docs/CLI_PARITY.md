@@ -60,9 +60,14 @@ cribra
 └── scan
     ├── <FILE>
     ├── -
-    └── --format
-        ├── human
-        └── json
+    ├── --format human|json
+    ├── --severity info|low|medium|high|critical
+    ├── --min-severity info|low|medium|high|critical
+    ├── --confidence low|medium|high
+    ├── --min-confidence low|medium|high
+    ├── --rule-id <ID>
+    └── --sort rule-id|rule-id-desc|severity|severity-desc|
+               confidence|confidence-desc|location|location-desc
 ```
 
 `scan` accepts exactly one explicit UTF-8 filesystem path or standard input.
@@ -126,14 +131,14 @@ The CLI must not independently implement detector or validator behavior.
 | Metadata-only finding output | EXPOSED | matched source values are not intentionally rendered |
 | Human representation | EXPOSED | default output format |
 | JSON representation | EXPOSED | deterministic metadata representation |
-| `ScanQuery` filtering | GAP | no CLI filtering surface |
-| Exact severity filter | GAP | available in the core query API only |
-| Minimum severity filter | GAP | available in the core query API only |
-| Exact confidence filter | GAP | available in the core query API only |
-| Minimum confidence filter | GAP | available in the core query API only |
-| Rule-ID filter | GAP | available in the core query API only |
-| Critical/high-priority/high-confidence query helpers | GAP | available in the core query API only |
-| `ScanSort` | GAP | no CLI sorting surface |
+| `ScanQuery` filtering | EXPOSED | composable finding filters delegated to `results.query()` |
+| Exact severity filter | EXPOSED | `--severity` delegates to `query.severity()` |
+| Minimum severity filter | EXPOSED | `--min-severity` delegates to `query.minimum_severity()` |
+| Exact confidence filter | EXPOSED | `--confidence` delegates to `query.confidence()` |
+| Minimum confidence filter | EXPOSED | `--min-confidence` delegates to `query.minimum_confidence()` |
+| Rule-ID filter | EXPOSED | `--rule-id` delegates to `query.rule_id()` |
+| Critical/high-priority/high-confidence query helpers | EXPOSED | equivalent constraints: `--severity critical`, `--min-severity high`, `--confidence high` |
+| `ScanSort` | EXPOSED | `--sort` delegates to `query.sort()` for rule ID, severity, confidence, or location, in either direction |
 | Aggregate `ScanSummary` | GAP | current CLI scans exactly one source |
 | Finding explanation | GAP | `Explanation` is not projected |
 | Detection mode | GAP | classified finding detection mode is not projected |
@@ -177,6 +182,34 @@ clean      no findings and no review candidates
 
 Candidates therefore remain distinct from classified findings and do not
 independently convert a successful scan into a finding-bearing result.
+
+## Finding selection
+
+Any finding filter or explicit sort activates selection, even when it selects
+all findings or no findings. `--format` alone does not activate selection.
+Without a filter or sort option, human and JSON output remain byte-for-byte
+unchanged and contain no selection metadata.
+
+Filters compose through the public core `ScanQuery` API. Exact and minimum
+constraints within the same dimension are mutually exclusive; duplicate
+options are rejected. `--rule-id` requires a nonempty exact identifier.
+Unsorted selection preserves core query iteration order. Explicit sorting uses
+the core's ordering, including deterministic tie-breaking. Source/source-desc
+sorting is not accepted because the CLI scans one source.
+
+Selection changes only the rendered findings and their order. Source status,
+`findings_count`, and `candidates_count` in JSON remain derived from the original
+`ScanReport`. Human `findings:` and `candidates:` counters have the same original
+report semantics. An empty selection therefore does not turn a finding-bearing
+report into a clean report. Candidates remain unfiltered, in their original
+order, with unchanged metadata.
+
+With active selection, JSON additionally includes
+`"selection":{"active":true,"findings_count":N}`. This nested count equals the
+number of objects in the rendered `findings` array; the original top-level
+fields and their types are retained. Human output adds `selected findings: N`
+immediately after the original counters. Selection remains metadata-only and
+does not change input handling or exit codes.
 
 ## Exit semantics
 
@@ -230,17 +263,6 @@ Parity review must therefore include semantic projection changes, not only API
 or build compatibility.
 
 ## Confirmed parity gaps
-
-### Querying and sorting
-
-The core provides composable `ScanQuery` filtering by severity, confidence, rule
-identity, priority helpers, and explicit `ScanSort`.
-
-The canonical CLI currently exposes none of these operations.
-
-This is a genuine command-surface gap because filtering and sorting existing
-scan metadata are coherent shell and pipeline operations and do not require the
-CLI to duplicate core semantics.
 
 ### Explainability
 
@@ -300,13 +322,12 @@ The current audit suggests the following implementation order if the gaps are
 accepted for future CLI work:
 
 1. complete small metadata projection gaps;
-2. expose core-backed querying and sorting;
-3. expose explainability;
-4. expose non-keyed transformations such as redaction and templating;
-5. design keyed pseudonymization and synthesis with an explicit key-handling
+2. expose explainability;
+3. expose non-keyed transformations such as redaction and templating;
+4. design keyed pseudonymization and synthesis with an explicit key-handling
    contract;
-6. evaluate multi-source and share-bundle command semantics separately;
-7. evaluate explicit CI failure policy without changing existing exit semantics.
+5. evaluate multi-source and share-bundle command semantics separately;
+6. evaluate explicit CI failure policy without changing existing exit semantics.
 
 This ordering is advisory. Each capability should be implemented as an
 independent, reviewable slice rather than as a broad CLI rewrite.

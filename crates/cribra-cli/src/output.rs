@@ -6,7 +6,8 @@
 use std::fmt::Write;
 
 use cribra::{
-    CandidateEvidence, Confidence, Remediation, ScanReport, SensitiveCandidateKind, Severity,
+    CandidateEvidence, Confidence, Finding, Remediation, ScanReport, SensitiveCandidateKind,
+    Severity,
 };
 
 use crate::command::OutputFormat;
@@ -41,7 +42,12 @@ fn push_json_string(output: &mut String, value: &str) {
 }
 
 /// Renders one scan report as deterministic metadata-only JSON.
-pub(crate) fn render_json(source_name: &str, report: &ScanReport) -> String {
+pub(crate) fn render_json<'a>(
+    source_name: &str,
+    report: &ScanReport,
+    findings: impl Iterator<Item = &'a Finding>,
+    selected_count: Option<usize>,
+) -> String {
     let mut output = String::new();
 
     let status = if !report.findings().is_empty() {
@@ -65,9 +71,17 @@ pub(crate) fn render_json(source_name: &str, report: &ScanReport) -> String {
     write!(output, "\"candidates_count\":{},", report.candidate_len())
         .expect("writing to String cannot fail");
 
+    if let Some(count) = selected_count {
+        write!(
+            output,
+            "\"selection\":{{\"active\":true,\"findings_count\":{count}}},"
+        )
+        .expect("writing to String cannot fail");
+    }
+
     output.push_str("\"findings\":[");
 
-    for (index, finding) in report.findings().iter().enumerate() {
+    for (index, finding) in findings.enumerate() {
         if index != 0 {
             output.push(',');
         }
@@ -147,10 +161,18 @@ pub(crate) fn render_json(source_name: &str, report: &ScanReport) -> String {
 }
 
 /// Renders one scan report using the requested stable CLI format.
-pub(crate) fn render(format: OutputFormat, source_name: &str, report: &ScanReport) -> String {
+/// `selected_count` is present exactly when a query or sort option is active;
+/// status, original counters, and candidates always come from `report`.
+pub(crate) fn render<'a>(
+    format: OutputFormat,
+    source_name: &str,
+    report: &ScanReport,
+    findings: impl Iterator<Item = &'a Finding>,
+    selected_count: Option<usize>,
+) -> String {
     match format {
-        OutputFormat::Human => render_human(source_name, report),
-        OutputFormat::Json => render_json(source_name, report),
+        OutputFormat::Human => render_human(source_name, report, findings, selected_count),
+        OutputFormat::Json => render_json(source_name, report, findings, selected_count),
     }
 }
 
@@ -158,7 +180,12 @@ pub(crate) fn render(format: OutputFormat, source_name: &str, report: &ScanRepor
 ///
 /// The output contains source identity, aggregate state, finding metadata and
 /// review-candidate metadata. It never includes matched source material.
-pub(crate) fn render_human(source_name: &str, report: &ScanReport) -> String {
+pub(crate) fn render_human<'a>(
+    source_name: &str,
+    report: &ScanReport,
+    findings: impl Iterator<Item = &'a Finding>,
+    selected_count: Option<usize>,
+) -> String {
     let mut output = String::new();
 
     let status = if !report.findings().is_empty() {
@@ -175,7 +202,11 @@ pub(crate) fn render_human(source_name: &str, report: &ScanReport) -> String {
     writeln!(output, "candidates: {}", report.candidate_len())
         .expect("writing to String cannot fail");
 
-    for finding in report.findings() {
+    if let Some(count) = selected_count {
+        writeln!(output, "selected findings: {count}").expect("writing to String cannot fail");
+    }
+
+    for finding in findings {
         let location = finding.location();
 
         writeln!(
@@ -269,7 +300,7 @@ mod tests {
         let report = results.single_report().expect("one report");
 
         assert_eq!(
-            render_human("clean.txt", report),
+            render_human("clean.txt", report, report.findings().iter(), None),
             "\
 source: clean.txt
 status: clean
@@ -287,7 +318,7 @@ candidates: 0
         let results = scanner.scan([("config.env", source.as_str())]);
         let report = results.single_report().expect("one report");
 
-        let output = render_human("config.env", report);
+        let output = render_human("config.env", report, report.findings().iter(), None);
 
         assert!(output.contains("status: findings"));
         assert!(output.contains("github"));
@@ -303,7 +334,7 @@ candidates: 0
         let results = scanner.scan([("candidate.txt", candidate)]);
         let report = results.single_report().expect("one report");
 
-        let output = render_human("candidate.txt", report);
+        let output = render_human("candidate.txt", report, report.findings().iter(), None);
 
         assert!(output.contains("status: review"));
         assert!(output.contains("candidate:"));
@@ -319,7 +350,7 @@ candidates: 0
         let results = scanner.scan([("config.env", source.as_str())]);
         let report = results.single_report().expect("one report");
 
-        let output = render_json("config.env", report);
+        let output = render_json("config.env", report, report.findings().iter(), None);
 
         assert!(output.starts_with('{'));
         assert!(output.ends_with("}\n"));
@@ -337,7 +368,12 @@ candidates: 0
         let results = scanner.scan([("clean", "ordinary text")]);
         let report = results.single_report().expect("one report");
 
-        let output = render_json("dir/\"quoted\"\\file", report);
+        let output = render_json(
+            "dir/\"quoted\"\\file",
+            report,
+            report.findings().iter(),
+            None,
+        );
 
         assert!(output.contains("\"source\":\"dir/\\\"quoted\\\"\\\\file\""));
     }

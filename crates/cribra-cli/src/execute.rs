@@ -6,7 +6,7 @@
 use std::fmt;
 
 use crate::{
-    command::{Command, ScanInput},
+    command::{Command, ConfidenceFilter, ScanInput, SeverityFilter},
     input, output,
 };
 
@@ -87,11 +87,48 @@ pub fn execute(command: &Command) -> Result<CommandOutput, ExecuteError> {
                 .single_report()
                 .expect("single CLI input must produce exactly one report");
 
-            Ok(CommandOutput::new(output::render(
-                command.format,
-                source.name(),
-                report,
-            )))
+            let filters = &command.filters;
+            let selection_active = filters.severity.is_some()
+                || filters.confidence.is_some()
+                || filters.rule_id.is_some()
+                || command.sort.is_some();
+            let mut query = results.query();
+            if let Some(severity) = filters.severity {
+                query = match severity {
+                    SeverityFilter::Exact(value) => query.severity(value),
+                    SeverityFilter::Minimum(value) => query.minimum_severity(value),
+                };
+            }
+            if let Some(confidence) = filters.confidence {
+                query = match confidence {
+                    ConfidenceFilter::Exact(value) => query.confidence(value),
+                    ConfidenceFilter::Minimum(value) => query.minimum_confidence(value),
+                };
+            }
+            if let Some(rule_id) = filters.rule_id.as_deref() {
+                query = query.rule_id(rule_id);
+            }
+
+            let stdout = if let Some(sort) = command.sort {
+                let sorted = query.sort(sort);
+                output::render(
+                    command.format,
+                    source.name(),
+                    report,
+                    sorted.iter().map(|(_, finding)| finding),
+                    Some(sorted.len()),
+                )
+            } else {
+                output::render(
+                    command.format,
+                    source.name(),
+                    report,
+                    query.iter().map(|(_, finding)| finding),
+                    selection_active.then(|| query.count()),
+                )
+            };
+
+            Ok(CommandOutput::new(stdout))
         }
 
         Command::Help => Ok(CommandOutput::new(crate::help_text().to_owned())),
