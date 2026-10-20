@@ -66,6 +66,7 @@ cribra
     ├── --confidence low|medium|high
     ├── --min-confidence low|medium|high
     ├── --rule-id <ID>
+    ├── --explain
     └── --sort rule-id|rule-id-desc|severity|severity-desc|
                confidence|confidence-desc|location|location-desc
 ```
@@ -140,9 +141,9 @@ The CLI must not independently implement detector or validator behavior.
 | Critical/high-priority/high-confidence query helpers | EXPOSED | equivalent constraints: `--severity critical`, `--min-severity high`, `--confidence high` |
 | `ScanSort` | EXPOSED | `--sort` delegates to `query.sort()` for rule ID, severity, confidence, or location, in either direction |
 | Aggregate `ScanSummary` | GAP | current CLI scans exactly one source |
-| Finding explanation | GAP | `Explanation` is not projected |
-| Detection mode | GAP | classified finding detection mode is not projected |
-| Candidate explanation | PARTIAL | evidence is exposed, but the `Explanation` projection is not |
+| Finding explanation | EXPOSED | `--explain` resolves rendered findings through `finding.explanation(&scanner)` |
+| Detection mode | EXPOSED | opt-in human `detection=` and JSON `detection_mode` from the public `Explanation` API |
+| Candidate explanation | EXPOSED | existing candidate evidence projects `Explanation::Ambiguous` facts |
 | Redaction | GAP | core transformation has no CLI operation |
 | Template transformation | GAP | core transformation has no CLI operation |
 | Pseudonymization | GAP | core transformation has no CLI operation |
@@ -186,9 +187,9 @@ independently convert a successful scan into a finding-bearing result.
 ## Finding selection
 
 Any finding filter or explicit sort activates selection, even when it selects
-all findings or no findings. `--format` alone does not activate selection.
-Without a filter or sort option, human and JSON output remain byte-for-byte
-unchanged and contain no selection metadata.
+all findings or no findings. Neither `--format` nor `--explain` alone activates
+selection. Without a filter or sort option, output contains no selection
+metadata.
 
 Filters compose through the public core `ScanQuery` API. Exact and minimum
 constraints within the same dimension are mutually exclusive; duplicate
@@ -210,6 +211,35 @@ number of objects in the rendered `findings` array; the original top-level
 fields and their types are retained. Human output adds `selected findings: N`
 immediately after the original counters. Selection remains metadata-only and
 does not change input handling or exit codes.
+
+## Finding explainability
+
+`--explain` is a valueless, opt-in scan flag; duplicate uses are rejected.
+When absent, existing human and JSON output remain byte-for-byte unchanged,
+including output with finding filters or sorting. With the flag present, each
+rendered finding is resolved against the scanner that produced it through
+`finding.explanation(&scanner)`. Detection mode comes exclusively from the
+public `Explanation::detection_mode()` API.
+
+Human finding lines append `detection=matcher-only`, `detection=deterministic`,
+or `detection=contextual`. JSON finding objects append the `detection_mode`
+field with the same string values after their existing metadata fields. If
+explanation resolution returns `None` or yields no classified detection mode,
+human output appends `detection=unknown` and JSON appends
+`"detection_mode":null`. The CLI does not infer a mode from other finding
+metadata.
+
+Explanations are resolved only for rendered findings, after any filtering and
+sorting. The flag alone does not activate selection, and it leaves original
+status, counters, candidate metadata, input handling, and exit codes unchanged.
+Clean and candidate-only scans therefore produce the same output with or
+without `--explain`.
+
+Candidates remain ambiguous review items. Existing human `evidence=structural`
+and JSON `"evidence":"structural"` already project the evidence represented by
+`Explanation::Ambiguous`; the flag adds no duplicate explanation or detection
+fields to candidates. All explanation output remains metadata-only and never
+contains matched values or source snippets.
 
 ## Exit semantics
 
@@ -251,7 +281,8 @@ Current examples include:
 - `Confidence`;
 - `Remediation`;
 - `SensitiveCandidateKind`;
-- `CandidateEvidence`.
+- `CandidateEvidence`;
+- `DetectionMode` (with `--explain`).
 
 Some forward-compatible enum variants are currently rendered as `unknown`.
 
@@ -263,17 +294,6 @@ Parity review must therefore include semantic projection changes, not only API
 or build compatibility.
 
 ## Confirmed parity gaps
-
-### Explainability
-
-The core distinguishes classified and ambiguous explanations through
-`Explanation`, `DetectionMode`, and `CandidateEvidence`.
-
-The CLI currently exposes finding metadata and candidate evidence, but does not
-project the core explanation model.
-
-Candidate explainability is therefore partial, while classified finding
-explainability is currently absent.
 
 ### Transformations
 
@@ -322,12 +342,11 @@ The current audit suggests the following implementation order if the gaps are
 accepted for future CLI work:
 
 1. complete small metadata projection gaps;
-2. expose explainability;
-3. expose non-keyed transformations such as redaction and templating;
-4. design keyed pseudonymization and synthesis with an explicit key-handling
+2. expose non-keyed transformations such as redaction and templating;
+3. design keyed pseudonymization and synthesis with an explicit key-handling
    contract;
-5. evaluate multi-source and share-bundle command semantics separately;
-6. evaluate explicit CI failure policy without changing existing exit semantics.
+4. evaluate multi-source and share-bundle command semantics separately;
+5. evaluate explicit CI failure policy without changing existing exit semantics.
 
 This ordering is advisory. Each capability should be implemented as an
 independent, reviewable slice rather than as a broad CLI rewrite.

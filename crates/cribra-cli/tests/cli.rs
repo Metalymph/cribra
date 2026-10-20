@@ -480,3 +480,170 @@ fn candidate_only_and_clean_selections_preserve_original_state() {
         }
     }
 }
+
+fn without_detection(output: &str, format: &str) -> String {
+    let mut baseline = output.to_owned();
+    for mode in ["matcher-only", "deterministic", "contextual"] {
+        let field = if format == "json" {
+            format!(",\"detection_mode\":\"{mode}\"")
+        } else {
+            format!(" detection={mode}")
+        };
+        baseline = baseline.replace(&field, "");
+    }
+    baseline
+}
+
+#[test]
+fn explain_projects_all_default_detection_modes_without_activating_selection() {
+    let source = format!(
+        "{QUERY_SOURCE}-----BEGIN PRIVATE KEY-----\nSyntheticPrivateKeyMaterial123456\n-----END PRIVATE KEY-----\n"
+    );
+    for format in ["human", "json"] {
+        let baseline = scan_output(&source, &[], format, true);
+        let explained = scan_output(&source, &["--explain"], format, true);
+        let modes: Vec<_> = if format == "json" {
+            assert!(!explained.contains("\"selection\":"));
+            explained
+                .split("\"detection_mode\":\"")
+                .skip(1)
+                .map(|tail| tail.split('"').next().unwrap())
+                .collect()
+        } else {
+            assert!(!explained.contains("selected findings:"));
+            explained
+                .lines()
+                .filter_map(|line| line.split_once(" detection=").map(|(_, mode)| mode))
+                .collect()
+        };
+        assert_eq!(
+            modes,
+            [
+                "deterministic",
+                "contextual",
+                "contextual",
+                "contextual",
+                "matcher-only"
+            ]
+        );
+        assert_eq!(without_detection(&explained, format), baseline);
+    }
+}
+
+#[test]
+fn explain_composes_with_every_filter_and_sort() {
+    let options: &[&[&str]] = &[
+        &["--severity", "high"],
+        &["--min-severity", "high"],
+        &["--confidence", "medium"],
+        &["--min-confidence", "medium"],
+        &["--rule-id", "generic.api-key"],
+        &["--sort", "rule-id"],
+        &["--sort", "rule-id-desc"],
+        &["--sort", "severity"],
+        &["--sort", "severity-desc"],
+        &["--sort", "confidence"],
+        &["--sort", "confidence-desc"],
+        &["--sort", "location"],
+        &["--sort", "location-desc"],
+        &[
+            "--severity",
+            "high",
+            "--min-confidence",
+            "medium",
+            "--rule-id",
+            "generic.api-key",
+            "--sort",
+            "location-desc",
+        ],
+        &["--rule-id", "missing.rule"],
+    ];
+    for format in ["human", "json"] {
+        for &options in options {
+            let baseline = scan_output(QUERY_SOURCE, options, format, true);
+            let with_explain: Vec<_> = options.iter().copied().chain(["--explain"]).collect();
+            let explained = scan_output(QUERY_SOURCE, &with_explain, format, true);
+            assert_eq!(without_detection(&explained, format), baseline);
+            let detection_field = if format == "json" {
+                "\"detection_mode\":"
+            } else {
+                " detection="
+            };
+            assert_eq!(
+                explained.matches(detection_field).count(),
+                rendered_rule_ids(&explained, format).len()
+            );
+        }
+    }
+}
+
+#[test]
+fn explain_with_selection_preserves_file_and_stdin_semantics() {
+    for format in ["human", "json"] {
+        for stdin in [false, true] {
+            let output = scan_output(
+                QUERY_SOURCE,
+                &[
+                    "--explain",
+                    "--min-severity",
+                    "high",
+                    "--confidence",
+                    "medium",
+                    "--sort",
+                    "rule-id",
+                ],
+                format,
+                stdin,
+            );
+            assert_selection(&output, format, &[QUERY_RULES[3], QUERY_RULES[1]]);
+            let detection_field = if format == "json" {
+                "\"detection_mode\":\"contextual\""
+            } else {
+                " detection=contextual"
+            };
+            assert_eq!(output.matches(detection_field).count(), 2);
+            assert!(!output.contains("deterministic"));
+        }
+    }
+}
+
+#[test]
+fn explain_preserves_candidate_only_and_clean_output() {
+    for source in ["ABCD-EFGH-IJKL-MNOP\n", ""] {
+        for format in ["human", "json"] {
+            let baseline = scan_output(source, &[], format, true);
+            assert_eq!(scan_output(source, &["--explain"], format, true), baseline);
+        }
+    }
+}
+
+#[test]
+fn explain_preserves_input_and_usage_error_exit_codes() {
+    let path = temp_file("explain-invalid.bin", &[0xff]);
+    let output = Command::new(cribra_bin())
+        .arg("scan")
+        .arg(&path)
+        .arg("--explain")
+        .output()
+        .unwrap();
+    fs::remove_file(&path).unwrap();
+    assert_eq!(output.status.code(), Some(1));
+    assert!(output.stdout.is_empty());
+    assert_eq!(output.stderr, b"cribra: invalid UTF-8\n");
+
+    let missing = Command::new(cribra_bin())
+        .arg("scan")
+        .arg(&path)
+        .arg("--explain")
+        .output()
+        .unwrap();
+    assert_eq!(missing.status.code(), Some(1));
+    assert!(missing.stdout.is_empty());
+
+    let duplicate = Command::new(cribra_bin())
+        .args(["scan", "-", "--explain", "--explain"])
+        .output()
+        .unwrap();
+    assert_eq!(duplicate.status.code(), Some(2));
+    assert!(duplicate.stdout.is_empty());
+}

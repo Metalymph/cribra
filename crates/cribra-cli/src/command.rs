@@ -29,6 +29,9 @@ pub struct ScanCommand {
 
     /// Requested finding order, or the default source order when absent.
     pub sort: Option<cribra::ScanSort>,
+
+    /// Include scanner-authoritative detection modes for rendered findings.
+    pub explain: bool,
 }
 
 /// Optional finding constraints parsed from scan options.

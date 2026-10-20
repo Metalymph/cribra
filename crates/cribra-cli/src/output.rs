@@ -6,8 +6,8 @@
 use std::fmt::Write;
 
 use cribra::{
-    CandidateEvidence, Confidence, Finding, Remediation, ScanReport, SensitiveCandidateKind,
-    Severity,
+    CandidateEvidence, Confidence, DetectionMode, Explanation, Finding, Remediation, ScanReport,
+    Scanner, SensitiveCandidateKind, Severity,
 };
 
 use crate::command::OutputFormat;
@@ -47,6 +47,7 @@ pub(crate) fn render_json<'a>(
     report: &ScanReport,
     findings: impl Iterator<Item = &'a Finding>,
     selected_count: Option<usize>,
+    explain_scanner: Option<&Scanner>,
 ) -> String {
     let mut output = String::new();
 
@@ -119,6 +120,15 @@ pub(crate) fn render_json<'a>(
             remediation_name(finding.remediation()),
         );
 
+        if let Some(scanner) = explain_scanner {
+            output.push_str(",\"detection_mode\":");
+            if let Some(mode) = finding_detection_name(finding, scanner) {
+                push_json_string(&mut output, mode);
+            } else {
+                output.push_str("null");
+            }
+        }
+
         output.push('}');
     }
 
@@ -169,10 +179,23 @@ pub(crate) fn render<'a>(
     report: &ScanReport,
     findings: impl Iterator<Item = &'a Finding>,
     selected_count: Option<usize>,
+    explain_scanner: Option<&Scanner>,
 ) -> String {
     match format {
-        OutputFormat::Human => render_human(source_name, report, findings, selected_count),
-        OutputFormat::Json => render_json(source_name, report, findings, selected_count),
+        OutputFormat::Human => render_human(
+            source_name,
+            report,
+            findings,
+            selected_count,
+            explain_scanner,
+        ),
+        OutputFormat::Json => render_json(
+            source_name,
+            report,
+            findings,
+            selected_count,
+            explain_scanner,
+        ),
     }
 }
 
@@ -185,6 +208,7 @@ pub(crate) fn render_human<'a>(
     report: &ScanReport,
     findings: impl Iterator<Item = &'a Finding>,
     selected_count: Option<usize>,
+    explain_scanner: Option<&Scanner>,
 ) -> String {
     let mut output = String::new();
 
@@ -209,7 +233,7 @@ pub(crate) fn render_human<'a>(
     for finding in findings {
         let location = finding.location();
 
-        writeln!(
+        write!(
             output,
             "finding: {} {}:{} bytes={}..{} severity={} confidence={} remediation={}",
             finding.rule_id().as_str(),
@@ -222,6 +246,16 @@ pub(crate) fn render_human<'a>(
             remediation_name(finding.remediation()),
         )
         .expect("writing to String cannot fail");
+
+        if let Some(scanner) = explain_scanner {
+            write!(
+                output,
+                " detection={}",
+                finding_detection_name(finding, scanner).unwrap_or("unknown")
+            )
+            .expect("writing to String cannot fail");
+        }
+        output.push('\n');
     }
 
     for candidate in report.candidates() {
@@ -241,6 +275,17 @@ pub(crate) fn render_human<'a>(
     }
 
     output
+}
+
+fn finding_detection_name(finding: &Finding, scanner: &Scanner) -> Option<&'static str> {
+    finding
+        .explanation(scanner)
+        .and_then(Explanation::detection_mode)
+        .map(|mode| match mode {
+            DetectionMode::MatcherOnly => "matcher-only",
+            DetectionMode::Deterministic => "deterministic",
+            DetectionMode::Contextual => "contextual",
+        })
 }
 
 fn severity_name(severity: Severity) -> &'static str {
@@ -300,7 +345,7 @@ mod tests {
         let report = results.single_report().expect("one report");
 
         assert_eq!(
-            render_human("clean.txt", report, report.findings().iter(), None),
+            render_human("clean.txt", report, report.findings().iter(), None, None),
             "\
 source: clean.txt
 status: clean
@@ -318,7 +363,7 @@ candidates: 0
         let results = scanner.scan([("config.env", source.as_str())]);
         let report = results.single_report().expect("one report");
 
-        let output = render_human("config.env", report, report.findings().iter(), None);
+        let output = render_human("config.env", report, report.findings().iter(), None, None);
 
         assert!(output.contains("status: findings"));
         assert!(output.contains("github"));
@@ -334,7 +379,13 @@ candidates: 0
         let results = scanner.scan([("candidate.txt", candidate)]);
         let report = results.single_report().expect("one report");
 
-        let output = render_human("candidate.txt", report, report.findings().iter(), None);
+        let output = render_human(
+            "candidate.txt",
+            report,
+            report.findings().iter(),
+            None,
+            None,
+        );
 
         assert!(output.contains("status: review"));
         assert!(output.contains("candidate:"));
@@ -350,7 +401,7 @@ candidates: 0
         let results = scanner.scan([("config.env", source.as_str())]);
         let report = results.single_report().expect("one report");
 
-        let output = render_json("config.env", report, report.findings().iter(), None);
+        let output = render_json("config.env", report, report.findings().iter(), None, None);
 
         assert!(output.starts_with('{'));
         assert!(output.ends_with("}\n"));
@@ -373,9 +424,57 @@ candidates: 0
             report,
             report.findings().iter(),
             None,
+            None,
         );
 
         assert!(output.contains("\"source\":\"dir/\\\"quoted\\\"\\\\file\""));
+    }
+
+    #[test]
+    fn unresolved_explanation_uses_unknown_or_null_without_inference() {
+        let scanner = Scanner::builder()
+            .rule(cribra::Rule::literal(
+                "github.classic-pat",
+                "synthetic-value",
+                Severity::High,
+            ))
+            .build()
+            .unwrap();
+        let unrelated_scanner = Scanner::builder().build().unwrap();
+        let results = scanner.scan([("fixture", "synthetic-value")]);
+        let report = results.single_report().unwrap();
+        let finding = &report.findings()[0];
+        assert!(finding.explanation(&unrelated_scanner).is_none());
+
+        for format in [OutputFormat::Human, OutputFormat::Json] {
+            let output = render(
+                format,
+                "fixture",
+                report,
+                report.findings().iter(),
+                None,
+                Some(&unrelated_scanner),
+            );
+            let baseline = render(
+                format,
+                "fixture",
+                report,
+                report.findings().iter(),
+                None,
+                None,
+            );
+            match format {
+                OutputFormat::Human => {
+                    assert!(output.contains(" detection=unknown\n"));
+                    assert_eq!(output.replace(" detection=unknown", ""), baseline);
+                }
+                OutputFormat::Json => {
+                    assert!(output.contains("\"detection_mode\":null"));
+                    assert_eq!(output.replace(",\"detection_mode\":null", ""), baseline);
+                }
+            }
+            assert!(!output.contains("synthetic-value"));
+        }
     }
 
     #[test]

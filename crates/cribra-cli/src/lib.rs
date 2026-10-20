@@ -82,6 +82,7 @@ where
             let mut format = None;
             let mut filters = ScanFilters::default();
             let mut sort = None;
+            let mut explain = false;
 
             while let Some(argument) = args.next() {
                 let option = argument.to_string_lossy();
@@ -91,6 +92,7 @@ where
                     "--confidence" | "--min-confidence" => filters.confidence.is_some(),
                     "--rule-id" => filters.rule_id.is_some(),
                     "--sort" => sort.is_some(),
+                    "--explain" => explain,
                     _ => {
                         return Err(ParseError::new(format!(
                             "unexpected scan argument: {option}"
@@ -101,6 +103,11 @@ where
                     return Err(ParseError::new(format!(
                         "duplicate or conflicting scan option: {option}"
                     )));
+                }
+
+                if option == "--explain" {
+                    explain = true;
+                    continue;
                 }
 
                 let value = args
@@ -146,6 +153,7 @@ where
                 format: format.unwrap_or_default(),
                 filters,
                 sort,
+                explain,
             }))
         }
 
@@ -250,6 +258,7 @@ Scan options:
   --rule-id ID            Exact rule ID (nonempty)
   --sort ORDER            rule-id|rule-id-desc|severity|severity-desc|
                           confidence|confidence-desc|location|location-desc
+  --explain               Include finding detection modes
   Exact and minimum constraints in the same dimension are mutually exclusive.
 
 Options:
@@ -288,6 +297,7 @@ mod tests {
                 format: OutputFormat::Human,
                 filters: ScanFilters::default(),
                 sort: None,
+                explain: false,
             })
         );
     }
@@ -301,8 +311,83 @@ mod tests {
                 format: OutputFormat::Json,
                 filters: ScanFilters::default(),
                 sort: None,
+                explain: false,
             })
         );
+    }
+
+    #[test]
+    fn scan_explain_parses_for_file_and_stdin() {
+        for input in ["config.env", "-"] {
+            let Command::Scan(command) = parse(["cribra", "scan", input, "--explain"]).unwrap()
+            else {
+                panic!("expected scan command");
+            };
+            assert_eq!(
+                command,
+                ScanCommand {
+                    input: if input == "-" {
+                        ScanInput::Stdin
+                    } else {
+                        ScanInput::File(input.into())
+                    },
+                    format: OutputFormat::Human,
+                    filters: ScanFilters::default(),
+                    sort: None,
+                    explain: true,
+                }
+            );
+        }
+    }
+
+    #[test]
+    fn scan_explain_composes_with_options_in_any_position() {
+        let args = [
+            "cribra",
+            "scan",
+            "-",
+            "--severity",
+            "high",
+            "--min-confidence",
+            "medium",
+            "--rule-id",
+            "generic.api-key",
+            "--sort",
+            "rule-id",
+            "--format",
+            "json",
+        ];
+        let Command::Scan(mut expected) = parse(args).unwrap() else {
+            panic!("expected scan command");
+        };
+        expected.explain = true;
+        for position in (3..=args.len()).step_by(2) {
+            let mut with_explain = args.to_vec();
+            with_explain.insert(position, "--explain");
+            assert_eq!(
+                parse(with_explain).unwrap(),
+                Command::Scan(expected.clone())
+            );
+        }
+    }
+
+    #[test]
+    fn scan_rejects_duplicate_explain_and_flag_values() {
+        assert!(parse(["cribra", "scan", "-", "--explain", "--explain"]).is_err());
+        assert!(
+            parse([
+                "cribra",
+                "scan",
+                "-",
+                "--explain",
+                "--sort",
+                "severity",
+                "--explain"
+            ])
+            .is_err()
+        );
+        assert!(parse(["cribra", "scan", "-", "--explain", "true"]).is_err());
+        assert!(parse(["cribra", "scan", "-", "--explain=true"]).is_err());
     }
 
     #[test]
@@ -340,6 +425,7 @@ mod tests {
                             rule_id: Some("github.classic-pat".into()),
                         },
                         sort: Some(cribra::ScanSort::LocationDescending),
+                        explain: false,
                     })
                 );
             }
@@ -536,6 +622,7 @@ mod tests {
             format: OutputFormat::Json,
             filters: ScanFilters::default(),
             sort: None,
+            explain: false,
         });
 
         let result = execute(&command).unwrap();

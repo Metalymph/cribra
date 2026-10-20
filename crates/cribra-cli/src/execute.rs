@@ -117,6 +117,7 @@ pub fn execute(command: &Command) -> Result<CommandOutput, ExecuteError> {
                     report,
                     sorted.iter().map(|(_, finding)| finding),
                     Some(sorted.len()),
+                    command.explain.then_some(&scanner),
                 )
             } else {
                 output::render(
@@ -125,6 +126,7 @@ pub fn execute(command: &Command) -> Result<CommandOutput, ExecuteError> {
                     report,
                     query.iter().map(|(_, finding)| finding),
                     selection_active.then(|| query.count()),
+                    command.explain.then_some(&scanner),
                 )
             };
 
