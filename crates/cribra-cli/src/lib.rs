@@ -8,6 +8,13 @@
 //! Detection, validation, findings, remediation, and transformations remain
 //! authoritative in the `cribra` core crate.
 
+// Preparation is compiled and unit-tested, but public execution remains disabled
+// until NB-5.6b.2. Keep this allowance scoped to the unconnected internal layer.
+#[cfg_attr(
+    not(test),
+    allow(dead_code, reason = "bundle preparation awaits NB-5.6b.2")
+)]
+mod bundle;
 mod command;
 mod execute;
 mod input;

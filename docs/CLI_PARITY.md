@@ -157,7 +157,7 @@ The CLI must not independently implement detector or validator behavior.
 | Template transformation | EXPOSED | `cribra template` delegates to `cribra::transform::template()` |
 | Pseudonymization | EXPOSED | `cribra pseudonymize` with mandatory `--key-file`, using Core defaults |
 | Synthesis | EXPOSED | `cribra synthesize` with mandatory `--key-file`, using Core defaults |
-| Share bundle | GAP | `bundle` parses requests only; execution NOT IMPLEMENTED |
+| Share bundle | GAP | parsing and internal preparation only; CLI execution NOT IMPLEMENTED |
 | Custom `Rule` construction | LIBRARY-ONLY | programmable Rust API |
 | Custom `ScannerBuilder` construction | LIBRARY-ONLY | programmable Rust API |
 | Parallel scanning | LIBRARY-ONLY | current CLI accepts one source |
@@ -393,6 +393,70 @@ stdout and the safe diagnostic `bundle execution is not implemented`. It does
 not read sources or keys, scan, call `ShareBundle`, create directories, or write
 files. Usage errors return `2`. ShareBundle parity remains **GAP** until an
 actual execution contract is implemented and validated.
+
+### Internal preparation and proposed CLI manifest v1
+
+NB-5.6b.1 adds an internal, in-memory preparation layer for reuse by a later
+execution phase. It is not called by public `execute()` and does not make bundle
+export available. Public bundle execution remains **NOT IMPLEMENTED** and
+ShareBundle CLI parity remains **GAP**.
+
+Preparation accepts `BundleCommand`. Keyed modes first read and validate the key
+with the same bounded, exactly-32-raw-byte key helper used by the single-source
+commands, before reading any source. Redaction and templating do not read a key.
+Every source is acquired through the existing exact UTF-8 input layer in
+argument order. Preparation then calls
+`ShareBundle::builder().mode(...).scan_and_build(&scanner, inputs)` once for the
+whole batch using `Scanner::default()`. It does not independently implement
+scanning or transformations.
+
+The internal result owns transformed contents in input order, relative output
+paths, and manifest JSON. Paths are numbered independently of input filenames:
+`sources/0001.txt`, `sources/0002.txt`, and so on. Four digits are a minimum width;
+`sources/9999.txt` is followed by `sources/10000.txt`, without truncation. All
+inputs have an entry, including empty, clean, and candidate-only inputs.
+
+Manifest v1 is an internal proposed contract, not an available exported file.
+Its field order is fixed as below. Production rendering uses compact JSON with
+one trailing newline; this example represents two empty sources:
+
+```json
+{
+  "schema_version": 1,
+  "mode": "redact",
+  "sources": ["sources/0001.txt", "sources/0002.txt"],
+  "summary": {
+    "scanned_sources": 2,
+    "scanned_bytes": 0,
+    "reports_with_findings": 0,
+    "reports_without_findings": 2,
+    "total_findings": 0,
+    "total_candidates": 0,
+    "reports_with_candidates": 0,
+    "critical": 0,
+    "high": 0,
+    "medium": 0,
+    "low": 0,
+    "info": 0
+  }
+}
+```
+
+Mode and original scan counters come only from the Core ShareBundle manifest
+and public `ScanSummary` getters. The JSON deliberately omits Core's
+`generated_at`, original source names and paths, the requested output directory,
+finding and candidate values, key material and paths, and key-derived
+identifiers. The entire Core bundle is never serialized. Summary counters refer
+to the original sources and findings, not transformed byte lengths; candidate-
+only reports count as reports without findings.
+
+Preparation does not modify source or key files, access the requested output
+directory, create output directories or files, or publish anything. It returns
+input/key failures through the existing execution errors and propagates Core
+transformation errors. Core merges overlaps for redaction and rejects them for
+template and keyed modes. Transformed contents are not logged or included in
+manifest rendering. Core transforms findings only: candidates and undetected
+sensitive data may remain, and prepared content is not guaranteed secret-free.
 
 ## Exit semantics
 

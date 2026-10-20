@@ -18,7 +18,7 @@ fn push_json_field(output: &mut String, name: &str, value: &str) {
     push_json_string(output, value);
 }
 
-fn push_json_string(output: &mut String, value: &str) {
+pub(crate) fn push_json_string(output: &mut String, value: &str) {
     output.push('"');
 
     for character in value.chars() {

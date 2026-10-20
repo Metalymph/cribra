@@ -96,7 +96,7 @@ impl From<cribra::transform::TransformError> for ExecuteError {
 
 impl std::error::Error for ExecuteError {}
 
-fn read_key_file(path: &Path) -> Result<[u8; 32], ExecuteError> {
+pub(crate) fn read_key_file(path: &Path) -> Result<[u8; 32], ExecuteError> {
     // Follow symlinks, but reject special files before opening to avoid reading
     // from devices or blocking on a named pipe. Check the opened handle too.
     let metadata = std::fs::metadata(path).map_err(ExecuteError::KeyRead)?;
