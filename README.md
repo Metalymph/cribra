@@ -4,12 +4,15 @@ Cribra is an embeddable, local-first, fully synchronous Rust engine for determin
 
 It is not a file, repository, or vulnerability scanner. Cribra operates on caller-provided data and provides reusable security primitives that applications, CLIs, APIs, pipelines, WebAssembly hosts, and native integrations can compose into their own workflows.
 
-Use it directly as a Rust crate, through the canonical CLI as a process boundary, via C ABI or WebAssembly, with further native language bindings planned independently.
+Use it directly as a Rust crate, through the canonical CLI as a process boundary, via C ABI or WebAssembly, or through the Swift, Python and Kotlin/JVM UniFFI consumers.
 
 *Cribra provides the engine; the surrounding application decides the workflow.*
 
 See [Ecosystem and Scope](docs/ECOSYSTEM.md) for an overview of related
 projects, integration models, and responsibility boundaries.
+Start with [Getting started](docs/GETTING_STARTED.md); check
+[Compatibility and distribution status](docs/COMPATIBILITY.md) before choosing
+a platform or package.
 
 Cribra is application-agnostic. Callers retain control of source acquisition,
 I/O, storage, persistence, presentation, and policy. The core owns detection,
@@ -163,9 +166,12 @@ the C ABI/FFI boundary. The core engine itself does not permit unsafe Rust.
 
 ### Rust core
 
+Core v0.7.1 is available on [crates.io](https://crates.io/crates/cribra/0.7.1)
+(verified against the registry index). Rust 1.97 is the MSRV.
+
 ```toml
 [dependencies]
-cribra = "0.6"
+cribra = "0.7.1"
 ```
 
 Flow enables transformations by default. Core keeps scanner, built-ins,
@@ -173,7 +179,7 @@ streaming, incremental sessions and reporting without the transformation layer
 or its BLAKE3 dependency:
 
 ```toml
-cribra = { version = "0.6", default-features = false }
+cribra = { version = "0.7.1", default-features = false }
 ```
 
 The standalone `Redaction` marker type remains available in Core. Enable
@@ -181,7 +187,7 @@ The standalone `Redaction` marker type remains available in Core. Enable
 with `serde` and `parallel`:
 
 ```toml
-cribra = { version = "0.6", features = ["serde", "parallel"] }
+cribra = { version = "0.7.1", features = ["serde", "parallel"] }
 ```
 
 | Feature | Default | Purpose |
@@ -237,10 +243,14 @@ Measurements: macOS ARM64, Rust 1.99.0. See
 ### Canonical CLI
 
 ```text
-cargo install cribra-cli
+cargo build -p cribra-cli
+target/debug/cribra scan config.env --format json
 ```
 
-The installed executable is `cribra`.
+Build from the repository root; the executable is `target/debug/cribra`
+(`target/debug/cribra.exe` on Windows). The usage below assumes that executable
+is on PATH. CLI registry publication is not established by the Core release;
+see [distribution status](docs/COMPATIBILITY.md).
 
 ```text
 cribra scan config.env
@@ -536,7 +546,12 @@ contracts.
 The completed `0.4.x` line established Cribra's current detection, validation,
 transformation, C ABI, WebAssembly, and downstream-consumer foundation.
 
-Core **v0.6.0 is published** and is the current Rust release. It introduces
+Core **[v0.7.1](https://github.com/Metalymph/cribra/releases/tag/v0.7.1)**
+is the latest GitHub release and is separately verified on crates.io. It fixes
+htpasswd CRLF detection. **v0.7.0**, released before it, introduced incremental
+performance improvements and configurable Rust/WASM profiles.
+
+The historical **v0.6.0** release introduced
 incremental scanning of revisioned UTF-8 documents, transactional edits,
 selective invalidation and conservative fallback with complete whole-source
 report parity.
@@ -547,10 +562,10 @@ but are supported by the incremental API.
 See [the D4 evidence](docs/0.6-d4-qualification.md) and
 [the D5 qualification record](docs/0.6-d5-qualification.md).
 
-**v0.7.0 is in development and locally qualified** for incremental
-performance optimization, configurable Rust/WASM profiles and integration
-quality. Existing Rayon execution of independent sources remains available;
-it is not a future implementation milestone.
+Existing Rayon execution of independent sources remains available. Swift,
+Python and Kotlin/JVM integrations now have qualified consumers and local or CI
+artifacts; their packaging and publication status is documented separately in
+[Compatibility](docs/COMPATIBILITY.md).
 
 CLI, C, WASM, native bindings and distribution remain independently versioned
 workstreams with their own documented capability surfaces.
@@ -560,7 +575,7 @@ and ecosystem workstreams.
 
 ## Road to 1.0
 
-Cribra's v0.7 development line implements the planned core feature set: whole-source,
+Cribra's released v0.7 line implements the planned core feature set: whole-source,
 streaming and incremental scanning; synchronous execution and optional
 parallel scanning of independent inputs; Core/Flow/Fuse Rust profiles;
 Core/Flow WASM profiles; and a separately qualified native C ABI.

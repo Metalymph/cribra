@@ -5,7 +5,10 @@ and safely transforming secrets and sensitive material. The Rust core is the
 semantic authority; adapters project applicable core behavior rather than
 reimplementing detection policy.
 
-**Current focus: v0.7.0 — final performance, configurability and integration-quality qualification.**
+**Latest Core GitHub release: [v0.7.1](https://github.com/Metalymph/cribra/releases/tag/v0.7.1).**
+The registry index independently confirms crates.io publication. Current work
+focuses on independently versioned integrations and developer experience; see
+[Getting started](docs/GETTING_STARTED.md) and [Compatibility](docs/COMPATIBILITY.md).
 
 ## Engineering principles
 
@@ -33,7 +36,8 @@ reimplementing detection policy.
 | `cribra-c` v0.3.0 | Existing independent release | Native interoperability; no new streaming or incremental interface implied |
 | `cribra` **v0.6.0** | **Released — complete** | Exact incremental scanning of mutable documents |
 | `cribra-wasm` **v0.4.7** | **Released — complete** | Compatibility update to core `^0.6`; existing JS/WASM API unchanged |
-| `cribra` **v0.7.0** | In development — locally qualified | Incremental performance, configurable profiles and integration quality |
+| `cribra` **v0.7.0** | Released | Incremental performance, configurable profiles and integration quality |
+| `cribra` **v0.7.1** | Latest Core GitHub release; crates.io verified | htpasswd CRLF detection fix |
 
 Core release-line numbering does not force synchronized CLI, C, WASM, or
 language-binding versions. Adapter parity applies to each adapter's documented,
@@ -194,8 +198,9 @@ establish Linux/Windows CI or publication readiness by itself.
       in the separately authorized release campaign.
 
 Cribra v0.6.0 and the independently versioned cribra-wasm v0.4.7 are
-published. The incremental API remains Rust-only; no new CLI, C or WASM
-incremental interface is implied. Qualification evidence is recorded in
+published. At that release, incremental sessions were Rust-only; later UniFFI
+consumers expose them independently. No CLI, C or WASM incremental interface
+is implied. Qualification evidence is recorded in
 [D5 qualification](docs/0.6-d5-qualification.md).
 
 ### Deferred pending evidence
@@ -205,11 +210,11 @@ indexed coordinate trees, incremental normalization, and adapter exposure are
 not part of the minimum v0.6 commitment. They require their own correctness
 proofs, profiling evidence, or consumer demand.
 
-## v0.7.0 — Performance, Configurability and Integration Quality — RELEASE CANDIDATE
+## v0.7.0 — Performance, Configurability and Integration Quality — RELEASED
 
-**Status:** implementation and Q1-Q9 qualification complete. The versioned
-release candidate is under final release validation; remote CI, integration
-and publication remain separate authorization gates.
+**Status:** released as [v0.7.0](https://github.com/Metalymph/cribra/releases/tag/v0.7.0),
+followed by the [v0.7.1 patch](https://github.com/Metalymph/cribra/releases/tag/v0.7.1).
+The implementation and Q1-Q9 records below retain their historical scope.
 
 v0.7 consolidates the existing architecture. It does not introduce a new
 detection engine, change semantic authority or require architectural redesign.
@@ -279,14 +284,16 @@ Evidence: [configuration qualification](docs/0.7-configuration-qualification.md)
 - [x] Q9 — Verify C ABI compatibility, ownership, errors and existing
       conformance coverage; make only justified compatibility corrections.
 
-Final release gates remain separate: strict CI, packaging, versioning,
-publication and release evidence must be qualified explicitly.
+The release-preparation record in [0.7-release.md](docs/0.7-release.md) captures
+the earlier candidate stage. Published release status is recorded above; adapter
+artifacts and registry publication remain separate evidence requirements.
 
 ### Next workstream
 
-After v0.7 closure, prioritize independently versioned Swift and Python
-bindings over the existing authoritative Rust core and applicable C ABI.
-No automatic streaming or incremental adapter parity is implied.
+Swift, Python and Kotlin/JVM now consume the shared Core-authoritative UniFFI
+adapter. Continue their independent qualification and distribution work;
+[Compatibility](docs/COMPATIBILITY.md) records actual profiles, platforms and
+publication boundaries. No automatic CLI, C or WASM session parity is implied.
 
 ## Road to 1.0 — Maturity, not feature expansion
 
@@ -368,12 +375,27 @@ features are not automatically present in any adapter.
   explicit gaps/N/A decisions, ABI compatibility guarantees, stable lifetime/error
   contracts and a shared adversarial conformance corpus. Existing C interoperability
   does not by itself qualify every future binding. See [interop](docs/INTEROP.md).
-- Planned binding families: Swift; shared JVM Kotlin/Java; Python; Go;
-  .NET/C#; and PHP. Each needs complete applicable FFI parity, lifetime/error
-  semantics, adversarial conformance, packaging, and consumer tests before being
-  marked supported.
-- JavaScript/TypeScript remains covered by `cribra-wasm` for its documented
-  applicable surface; a separate native binding requires concrete need.
+- Swift, Python and Kotlin/JVM have implemented UniFFI consumers and qualified
+  profile-specific distributions; see [Compatibility](docs/COMPATIBILITY.md).
+- Future UniFFI binding candidates:
+  - C#/.NET, evaluating
+    [NordSecurity/uniffi-bindgen-cs](https://github.com/NordSecurity/uniffi-bindgen-cs).
+  - React Native/TypeScript, evaluating
+    [jhugman/uniffi-bindgen-react-native](https://github.com/jhugman/uniffi-bindgen-react-native).
+  Both require generator compatibility, ownership/error semantics, native
+  packaging and consumer qualification before support can be claimed.
+- JavaScript/TypeScript browser and supported JavaScript runtime integration
+  remains available through `cribra-wasm` within its documented capability
+  surface. React Native is a separate integration target, not an established
+  WASM or UniFFI consumer.
+- The existing C ABI is the interoperability foundation for C, C++, Zig, C3,
+  PHP FFI and other compatible native consumers. C and C++ have existing
+  examples; the presence of an ABI does not qualify every language consumer.
+- No additional Rust adapter is planned solely for another language unless
+  demonstrated interoperability limitations justify one.
+- Go and Ruby bindings are not currently planned.
+- Each future integration requires applicable parity, lifetime/ownership and
+  error contracts, adversarial conformance, packaging and consumer tests.
 
 ### Developer integrations
 
@@ -403,6 +425,10 @@ and source-local semantics take precedence over speculative coverage.
 
 | Release | Completed milestone |
 | --- | --- |
+| v0.7.1 | htpasswd CRLF detection fix |
+| v0.7.0 | Incremental performance and configurable profiles |
+| v0.6.0 | Transactional incremental scanning |
+| v0.5.0 | Admitted-subset streaming |
 | v0.4.7 | Sensitive-data and system-security completion; final built-in portfolio and hardening |
 | v0.4.6 | Sensitive-data foundation and financial opt-in semantics |
 | v0.4.5 | Developer ecosystem credential coverage and transformation parity |
