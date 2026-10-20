@@ -72,11 +72,15 @@ cribra
 ├── redact <FILE|->
 ├── template <FILE|->
 ├── pseudonymize <FILE|-> --key-file <PATH>
-└── synthesize <FILE|-> --key-file <PATH>
+├── synthesize <FILE|-> --key-file <PATH>
+└── bundle --mode <MODE> [--key-file <KEY>] --output <DIR> <FILE>...
+    (parsing only; execution NOT IMPLEMENTED)
 ```
 
-All five source commands accept exactly one explicit UTF-8 filesystem path or
-standard input. Keyed commands also require an explicit key file.
+The five executable source commands accept exactly one explicit UTF-8
+filesystem path or standard input. Keyed commands also require an explicit key
+file. `bundle` accepts multiple explicit file paths for parsing only; its
+execution is **NOT IMPLEMENTED** and it rejects stdin sources.
 
 Input acquisition preserves valid UTF-8 text without newline normalization,
 BOM stripping, lossy decoding, or encoding auto-detection. Invalid UTF-8 is
@@ -120,9 +124,9 @@ The CLI must not independently implement detector or validator behavior.
 
 | Core capability | CLI state | Current projection |
 | --- | --- | --- |
-| Default scanner | EXPOSED | all five source commands use `Scanner::default()` |
-| Explicit UTF-8 file input | EXPOSED | one explicit file per source command |
-| Standard input | EXPOSED | `-` source input for all five commands |
+| Default scanner | EXPOSED | all five executable source commands use `Scanner::default()` |
+| Explicit UTF-8 file input | EXPOSED | one explicit file per executable source command |
+| Standard input | EXPOSED | `-` source input for the five executable commands; not accepted by `bundle` |
 | Findings | EXPOSED | human and JSON output |
 | Rule identity | EXPOSED | rule ID |
 | Byte location | EXPOSED | start and end offsets |
@@ -153,7 +157,7 @@ The CLI must not independently implement detector or validator behavior.
 | Template transformation | EXPOSED | `cribra template` delegates to `cribra::transform::template()` |
 | Pseudonymization | EXPOSED | `cribra pseudonymize` with mandatory `--key-file`, using Core defaults |
 | Synthesis | EXPOSED | `cribra synthesize` with mandatory `--key-file`, using Core defaults |
-| Share bundle | GAP | core transformation/batch capability has no CLI operation |
+| Share bundle | GAP | `bundle` parses requests only; execution NOT IMPLEMENTED |
 | Custom `Rule` construction | LIBRARY-ONLY | programmable Rust API |
 | Custom `ScannerBuilder` construction | LIBRARY-ONLY | programmable Rust API |
 | Parallel scanning | LIBRARY-ONLY | current CLI accepts one source |
@@ -353,6 +357,43 @@ length errors, source input failures, and Core transformation failures return
 Successful execution returns `0`. Existing scan, redaction, and template output
 contracts are unchanged.
 
+## Proposed bundle syntax: parsing only
+
+**Bundle execution is NOT IMPLEMENTED.** The public `BundleCommand` and
+`BundleMode` model and CLI parser accept these proposed forms:
+
+```text
+cribra bundle --mode <MODE> --output <DIR> <FILE>...
+cribra bundle --mode <MODE> --key-file <KEY> --output <DIR> <FILE>...
+```
+
+Modes are `redact`, `template`, `pseudonymize`, and `synthesize`. Exactly one
+`--mode` and one `--output` are required, with at least one explicit source file
+path. `pseudonymize` and `synthesize` require exactly one `--key-file`;
+`redact` and `template` reject that option. Options may appear before, between,
+or after source paths. Source argument order is preserved.
+
+Parsing rejects duplicate options, duplicate source paths by `PathBuf` equality,
+missing option values, empty paths, unknown modes, and unsupported flags.
+Source stdin `-` is rejected. Source paths beginning with `-` must be expressed
+as filesystem paths such as `./-name`. Key and output paths follow the existing
+keyed-command path conventions: nonempty filesystem paths, with `-` rejected;
+use an explicit relative path for a filename beginning with `-`.
+
+Parsing performs no filesystem access, canonicalization, key-byte reading or
+validation, recursive discovery, glob expansion, or implicit input selection.
+Non-UTF-8 filesystem paths are retained where supported. `--output` is only a
+recorded proposed directory path: this syntax does not promise any export
+layout, manifest, output naming, or overwrite behavior.
+
+Every parsed bundle request returns
+`ExecuteError::UnsupportedOperation("bundle execution is not implemented")`.
+The process exits `1` with empty
+stdout and the safe diagnostic `bundle execution is not implemented`. It does
+not read sources or keys, scan, call `ShareBundle`, create directories, or write
+files. Usage errors return `2`. ShareBundle parity remains **GAP** until an
+actual execution contract is implemented and validated.
+
 ## Exit semantics
 
 The current process exit contract is:
@@ -360,7 +401,7 @@ The current process exit contract is:
 | Code | Meaning |
 | ---: | --- |
 | `0` | successful execution, including clean, review-only, and finding-bearing scans |
-| `1` | key, input, transformation, or other execution failure |
+| `1` | key, input, transformation, unavailable bundle execution, or other execution failure |
 | `2` | command-line usage or parse failure |
 
 Finding presence is deliberately not an execution failure.
@@ -410,11 +451,12 @@ or build compatibility.
 
 ### Share bundles and CI exit policy
 
-Core share bundles remain a separate CLI parity gap. The keyed commands accept
-one source and do not add bundle orchestration or manifests. A CI-oriented
-failure-on-findings policy also remains separate from the existing execution
-exit codes. Future commands must preserve Core authority and the transformation
-privacy model.
+Core share bundles remain a separate CLI parity gap: `bundle` has a parsing and
+public model surface, but execution is NOT IMPLEMENTED. The executable keyed
+commands accept one source and do not add bundle orchestration or manifests. A
+CI-oriented failure-on-findings policy also remains separate from the existing
+execution exit codes. Future commands must preserve Core authority and the
+transformation privacy model.
 
 ## Deliberate non-parity
 
@@ -425,8 +467,8 @@ currently treated as library responsibilities. They are suitable for embedded
 consumers that require programmatic scanner construction and are not considered
 CLI parity defects.
 
-Likewise, parallel execution is not independently useful while the CLI accepts
-exactly one source.
+Likewise, parallel execution is not independently useful while executable source
+commands each accept exactly one source.
 
 These classifications may be revisited if the command model itself expands.
 

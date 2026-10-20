@@ -19,8 +19,8 @@ use std::{
 };
 
 pub use command::{
-    Command, ConfidenceFilter, KeyedTransformCommand, OutputFormat, ScanCommand, ScanFilters,
-    ScanInput, SeverityFilter,
+    BundleCommand, BundleMode, Command, ConfidenceFilter, KeyedTransformCommand, OutputFormat,
+    ScanCommand, ScanFilters, ScanInput, SeverityFilter,
 };
 pub use execute::{CommandOutput, ExecuteError, execute};
 
@@ -195,6 +195,10 @@ where
             })
         }
 
+        Some(argument) if argument == OsStr::new("bundle") => {
+            parse_bundle(args).map(Command::Bundle)
+        }
+
         Some(argument) if argument == OsStr::new("--help") || argument == OsStr::new("-h") => {
             Ok(Command::Help)
         }
@@ -208,6 +212,80 @@ where
             argument.to_string_lossy()
         ))),
     }
+}
+
+fn parse_bundle(mut args: impl Iterator<Item = OsString>) -> Result<BundleCommand, ParseError> {
+    let mut mode = None;
+    let mut output_dir = None;
+    let mut key_file = None;
+    let mut sources = Vec::new();
+    while let Some(argument) = args.next() {
+        let already_set = match argument.to_str() {
+            Some("--mode") => mode.is_some(),
+            Some("--output") => output_dir.is_some(),
+            Some("--key-file") => key_file.is_some(),
+            _ => {
+                if argument.is_empty() || argument.as_encoded_bytes().starts_with(b"-") {
+                    return Err(ParseError::new(
+                        "bundle requires explicit file paths; stdin and unsupported options are not accepted",
+                    ));
+                }
+                let path = std::path::PathBuf::from(argument);
+                if sources.contains(&path) {
+                    return Err(ParseError::new("duplicate bundle source path"));
+                }
+                sources.push(path);
+                continue;
+            }
+        };
+        let option = argument.to_string_lossy();
+        if already_set {
+            return Err(ParseError::new(format!("duplicate {option} option")));
+        }
+        let value = args
+            .next()
+            .ok_or_else(|| ParseError::new(format!("{option} requires a value")))?;
+        if value.is_empty() || value.as_encoded_bytes().starts_with(b"-") {
+            return Err(ParseError::new(format!(
+                "{option} requires a nonempty value or filesystem path"
+            )));
+        }
+        match option.as_ref() {
+            "--mode" => {
+                mode = Some(
+                    value
+                        .to_str()
+                        .and_then(BundleMode::parse)
+                        .ok_or_else(|| ParseError::new("unsupported bundle mode"))?,
+                );
+            }
+            "--output" => output_dir = Some(value.into()),
+            "--key-file" => key_file = Some(value.into()),
+            _ => unreachable!("bundle option was checked before reading its value"),
+        }
+    }
+    let mode = mode.ok_or_else(|| ParseError::new("bundle requires --mode"))?;
+    let output_dir = output_dir.ok_or_else(|| ParseError::new("bundle requires --output"))?;
+    if sources.is_empty() {
+        return Err(ParseError::new(
+            "bundle requires at least one explicit source file",
+        ));
+    }
+    if matches!(mode, BundleMode::Pseudonymize | BundleMode::Synthesize) {
+        if key_file.is_none() {
+            return Err(ParseError::new("keyed bundle modes require --key-file"));
+        }
+    } else if key_file.is_some() {
+        return Err(ParseError::new(
+            "redact and template bundle modes do not accept --key-file",
+        ));
+    }
+    Ok(BundleCommand {
+        mode,
+        output_dir,
+        sources,
+        key_file,
+    })
 }
 
 fn parse_keyed_transform(
@@ -325,6 +403,7 @@ Usage:
   cribra template <FILE|->
   cribra pseudonymize <FILE|-> --key-file <PATH>
   cribra synthesize <FILE|-> --key-file <PATH>
+  cribra bundle --mode <MODE> [--key-file <KEY>] --output <DIR> <FILE>...
   cribra [OPTIONS]
 
 Commands:
@@ -334,12 +413,20 @@ Commands:
   template <FILE|-> Replace all findings with <CRIBRA:rule-id>
   pseudonymize      Transform findings to stable keyed pseudonyms
   synthesize        Transform findings to keyed synthetic values
+  bundle            Parse a bundle request (execution NOT IMPLEMENTED)
 
 Transformations emit only transformed text, without an added newline.
 Candidates and undetected sensitive data may remain.
 Redact and template accept no options. Keyed commands require --key-file PATH
 before or after the source: exactly 32 raw binary bytes in a regular file.
 Keys are never read from stdin, inline arguments, or environment variables.
+
+Bundle syntax (execution NOT IMPLEMENTED):
+  --mode MODE        redact|template|pseudonymize|synthesize (required once)
+  --output DIR       Proposed output directory (required once)
+  --key-file KEY     Required only for pseudonymize/synthesize
+  One or more explicit source files; stdin and duplicate source paths rejected.
+  Options may occur before, between, or after files. No files are read or written.
 
 Scan options:
   --format FORMAT         Output format: human or json
@@ -378,6 +465,313 @@ mod tests {
     fn version_parses() {
         assert_eq!(parse(["cribra", "--version"]).unwrap(), Command::Version);
         assert_eq!(parse(["cribra", "-V"]).unwrap(), Command::Version);
+    }
+
+    #[test]
+    fn bundle_modes_preserve_source_order_with_options_anywhere() {
+        for (name, mode, keyed) in [
+            ("redact", BundleMode::Redact, false),
+            ("template", BundleMode::Template, false),
+            ("pseudonymize", BundleMode::Pseudonymize, true),
+            ("synthesize", BundleMode::Synthesize, true),
+        ] {
+            let expected = Command::Bundle(BundleCommand {
+                mode,
+                output_dir: "export".into(),
+                sources: ["z.env", "a.env", "m.env"]
+                    .into_iter()
+                    .map(Into::into)
+                    .collect(),
+                key_file: keyed.then(|| "key.bin".into()),
+            });
+            let mut options = vec!["--mode", name, "--output", "export"];
+            if keyed {
+                options.extend(["--key-file", "key.bin"]);
+            }
+            for position in 0..=3 {
+                let sources = ["z.env", "a.env", "m.env"];
+                let mut args = vec!["cribra", "bundle"];
+                for index in 0..=sources.len() {
+                    if index == position {
+                        args.extend(options.iter().copied());
+                    }
+                    if let Some(source) = sources.get(index) {
+                        args.push(source);
+                    }
+                }
+                assert_eq!(parse(args).unwrap(), expected);
+            }
+            let mut interleaved = vec![
+                "cribra", "bundle", "z.env", "--mode", name, "a.env", "--output", "export", "m.env",
+            ];
+            if keyed {
+                interleaved.extend(["--key-file", "key.bin"]);
+            }
+            assert_eq!(parse(interleaved).unwrap(), expected);
+        }
+    }
+
+    #[test]
+    fn bundle_enforces_keyed_mode_rules() {
+        for mode in ["redact", "template"] {
+            assert!(
+                parse([
+                    "cribra",
+                    "bundle",
+                    "--mode",
+                    mode,
+                    "--output",
+                    "export",
+                    "a.env",
+                    "--key-file",
+                    "key.bin"
+                ])
+                .is_err()
+            );
+        }
+        for mode in ["pseudonymize", "synthesize"] {
+            assert!(
+                parse([
+                    "cribra", "bundle", "--mode", mode, "--output", "export", "a.env"
+                ])
+                .is_err()
+            );
+            assert!(
+                parse([
+                    "cribra",
+                    "bundle",
+                    "--mode",
+                    mode,
+                    "--output",
+                    "export",
+                    "a.env",
+                    "--key-file",
+                    "-"
+                ])
+                .is_err()
+            );
+        }
+    }
+
+    #[test]
+    fn bundle_rejects_duplicate_options_and_sources() {
+        let base = [
+            "cribra",
+            "bundle",
+            "--mode",
+            "pseudonymize",
+            "--output",
+            "export",
+            "--key-file",
+            "key.bin",
+            "a.env",
+        ];
+        for extra in [
+            &["--mode", "pseudonymize"][..],
+            &["--mode", "synthesize"][..],
+            &["--output", "export"][..],
+            &["--output", "other"][..],
+            &["--key-file", "key.bin"][..],
+            &["--key-file", "other.bin"][..],
+            &["b.env", "a.env"][..],
+        ] {
+            assert!(parse(base.into_iter().chain(extra.iter().copied())).is_err());
+        }
+        // Use PathBuf equality directly, without canonicalizing filesystem aliases.
+        assert!(parse(base.into_iter().chain(["nested/./b.env", "nested/b.env"])).is_err());
+    }
+
+    #[test]
+    fn bundle_rejects_missing_arguments_and_option_values() {
+        for args in [
+            &[][..],
+            &["a.env"][..],
+            &["--mode", "redact", "a.env"][..],
+            &["--output", "export", "a.env"][..],
+            &["--mode", "redact", "--output", "export"][..],
+        ] {
+            assert!(parse(["cribra", "bundle"].into_iter().chain(args.iter().copied())).is_err());
+        }
+        for option in ["--mode", "--output", "--key-file"] {
+            for tail in [
+                vec![option],
+                vec![option, ""],
+                vec![option, "--explain"],
+                vec![option, "-"],
+            ] {
+                assert!(parse(["cribra", "bundle", "a.env"].into_iter().chain(tail)).is_err());
+            }
+        }
+    }
+
+    #[test]
+    fn bundle_rejects_invalid_modes_empty_paths_and_stdin_sources() {
+        for mode in ["", "REDACT", "unknown", "scan"] {
+            assert!(
+                parse([
+                    "cribra", "bundle", "--mode", mode, "--output", "export", "a.env"
+                ])
+                .is_err()
+            );
+        }
+        for path in ["", "-", "-name"] {
+            assert!(
+                parse([
+                    "cribra", "bundle", "--mode", "redact", "--output", "export", path
+                ])
+                .is_err()
+            );
+            assert!(
+                parse([
+                    "cribra", "bundle", "--mode", "redact", "--output", path, "a.env"
+                ])
+                .is_err()
+            );
+            assert!(
+                parse([
+                    "cribra",
+                    "bundle",
+                    "--mode",
+                    "synthesize",
+                    "--output",
+                    "export",
+                    "--key-file",
+                    path,
+                    "a.env"
+                ])
+                .is_err()
+            );
+        }
+    }
+
+    #[test]
+    fn bundle_rejects_unsupported_flags() {
+        for option in [
+            "--format",
+            "--explain",
+            "--severity",
+            "--min-severity",
+            "--confidence",
+            "--min-confidence",
+            "--rule-id",
+            "--sort",
+            "--recursive",
+            "--glob",
+            "--namespace",
+            "--numbered",
+            "--key",
+            "--key-env",
+            "--output-file",
+            "--help",
+            "-h",
+            "--",
+            "--mode=redact",
+            "--output=export",
+            "--unknown",
+        ] {
+            assert!(
+                parse([
+                    "cribra", "bundle", "--mode", "redact", "--output", "export", "a.env", option
+                ])
+                .is_err()
+            );
+        }
+    }
+
+    #[test]
+    fn bundle_parsing_does_not_access_or_normalize_filesystem_paths() {
+        let parsed = parse([
+            "cribra",
+            "bundle",
+            "--mode",
+            "synthesize",
+            "--output",
+            "missing\0/output",
+            "--key-file",
+            "missing\0/key",
+            "./-source",
+            "a.env",
+            "./a.env",
+            "nested/../a.env",
+            "*.env",
+        ])
+        .unwrap();
+        assert_eq!(
+            parsed,
+            Command::Bundle(BundleCommand {
+                mode: BundleMode::Synthesize,
+                output_dir: "missing\0/output".into(),
+                key_file: Some("missing\0/key".into()),
+                sources: ["./-source", "a.env", "./a.env", "nested/../a.env", "*.env"]
+                    .into_iter()
+                    .map(Into::into)
+                    .collect(),
+            })
+        );
+        let Command::Bundle(command) = parse([
+            "cribra",
+            "bundle",
+            "--mode",
+            "pseudonymize",
+            "--output",
+            "./-export",
+            "--key-file",
+            "./-key",
+            "./-source",
+        ])
+        .unwrap() else {
+            panic!("expected bundle command");
+        };
+        assert_eq!(command.output_dir, std::path::PathBuf::from("./-export"));
+        assert_eq!(command.key_file, Some("./-key".into()));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn bundle_preserves_non_utf8_filesystem_paths() {
+        use std::os::unix::ffi::OsStringExt;
+        let source = OsString::from_vec(b"source-\xff".to_vec());
+        let output = OsString::from_vec(b"output-\xfe".to_vec());
+        let key = OsString::from_vec(b"key-\xfd".to_vec());
+        let args = vec![
+            "cribra".into(),
+            "bundle".into(),
+            "--mode".into(),
+            "synthesize".into(),
+            source.clone(),
+            "--output".into(),
+            output.clone(),
+            "--key-file".into(),
+            key.clone(),
+        ];
+        assert_eq!(
+            parse(args.clone()).unwrap(),
+            Command::Bundle(BundleCommand {
+                mode: BundleMode::Synthesize,
+                output_dir: output.into(),
+                key_file: Some(key.into()),
+                sources: vec![source.clone().into()],
+            })
+        );
+        assert!(parse(args.into_iter().chain([source])).is_err());
+        assert!(
+            parse([
+                OsString::from("cribra"),
+                "bundle".into(),
+                "--mode".into(),
+                OsString::from_vec(vec![0xff]),
+                "--output".into(),
+                "export".into(),
+                "a.env".into()
+            ])
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn bundle_help_marks_execution_unimplemented() {
+        assert!(help_text().contains("Bundle syntax (execution NOT IMPLEMENTED)"));
+        assert!(help_text().contains("redact|template|pseudonymize|synthesize"));
     }
 
     #[test]

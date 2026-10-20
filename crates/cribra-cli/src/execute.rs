@@ -59,6 +59,9 @@ pub enum ExecuteError {
 
     /// The key file did not contain exactly 32 raw bytes.
     InvalidKeyLength,
+
+    /// The requested operation is unavailable, with a presentation-safe reason.
+    UnsupportedOperation(&'static str),
 }
 
 impl From<input::InputError> for ExecuteError {
@@ -80,6 +83,7 @@ impl fmt::Display for ExecuteError {
             Self::InvalidKeyLength => {
                 formatter.write_str("key file must contain exactly 32 raw bytes")
             }
+            Self::UnsupportedOperation(reason) => formatter.write_str(reason),
         }
     }
 }
@@ -242,6 +246,10 @@ pub fn execute(command: &Command) -> Result<CommandOutput, ExecuteError> {
             }?;
             Ok(CommandOutput::new(transformed))
         }
+
+        Command::Bundle(_) => Err(ExecuteError::UnsupportedOperation(
+            "bundle execution is not implemented",
+        )),
 
         Command::Help => Ok(CommandOutput::new(crate::help_text().to_owned())),
 

@@ -1206,3 +1206,101 @@ fn keyed_commands_usage_and_source_failures_preserve_exit_codes() {
     }
     fs::remove_file(key_file).unwrap();
 }
+
+#[test]
+fn bundle_execution_is_unavailable_without_filesystem_side_effects() {
+    use cribra_cli::{Command as CliCommand, ExecuteError, execute, parse};
+    let root = temp_file("bundle-unavailable", b"");
+    fs::remove_file(&root).unwrap();
+    let output_dir = root.join("export");
+    let key = root.join("key.bin");
+    let source = root.join("source.env");
+    for (mode, keyed) in [
+        ("redact", false),
+        ("template", false),
+        ("pseudonymize", true),
+        ("synthesize", true),
+    ] {
+        let mut args = vec![
+            std::ffi::OsString::from("cribra"),
+            "bundle".into(),
+            "--mode".into(),
+            mode.into(),
+            "--output".into(),
+            output_dir.clone().into_os_string(),
+            source.clone().into_os_string(),
+        ];
+        if keyed {
+            args.extend(["--key-file".into(), key.clone().into_os_string()]);
+        }
+        let parsed = parse(args.clone()).unwrap();
+        assert!(matches!(parsed, CliCommand::Bundle(_)));
+        let error = execute(&parsed).unwrap_err();
+        assert!(matches!(
+            error,
+            ExecuteError::UnsupportedOperation("bundle execution is not implemented")
+        ));
+        assert_eq!(error.to_string(), "bundle execution is not implemented");
+        let process = Command::new(cribra_bin())
+            .args(args.into_iter().skip(1))
+            .output()
+            .unwrap();
+        assert_eq!(process.status.code(), Some(1));
+        assert!(process.stdout.is_empty());
+        assert_eq!(
+            process.stderr,
+            b"cribra: bundle execution is not implemented\n"
+        );
+        assert!(!root.exists());
+    }
+}
+
+#[test]
+fn bundle_usage_errors_have_exit_code_two_and_no_stdout() {
+    for args in [
+        &[][..],
+        &["--mode", "redact", "--output", "export"][..],
+        &["--mode", "redact", "--output", "export", "-"][..],
+        &["--mode", "redact", "--output", "export", "a.env", "a.env"][..],
+        &["--mode", "synthesize", "--output", "export", "a.env"][..],
+        &[
+            "--mode",
+            "redact",
+            "--output",
+            "export",
+            "a.env",
+            "--key-file",
+            "key.bin",
+        ][..],
+        &[
+            "--mode",
+            "redact",
+            "--output",
+            "export",
+            "a.env",
+            "--explain",
+        ][..],
+        &[
+            "--mode",
+            "redact",
+            "--output",
+            "export",
+            "a.env",
+            "--output",
+            "elsewhere",
+        ][..],
+    ] {
+        let output = Command::new(cribra_bin())
+            .arg("bundle")
+            .args(args)
+            .output()
+            .unwrap();
+        assert_eq!(output.status.code(), Some(2));
+        assert!(output.stdout.is_empty());
+        assert!(
+            String::from_utf8(output.stderr)
+                .unwrap()
+                .contains("Try 'cribra --help' for usage.")
+        );
+    }
+}

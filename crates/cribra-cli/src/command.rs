@@ -20,11 +20,57 @@ pub enum Command {
     /// Synthesize all findings using an explicit binary key file.
     Synthesize(KeyedTransformCommand),
 
+    /// Parse a proposed bundle request; execution is not implemented.
+    Bundle(BundleCommand),
+
     /// Render command-line help.
     Help,
 
     /// Render the CLI version.
     Version,
+}
+
+/// A parsed bundle request. Bundle execution is not implemented.
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct BundleCommand {
+    /// Requested transformation mode.
+    pub mode: BundleMode,
+
+    /// Proposed output directory; parsing does not access or create it.
+    pub output_dir: PathBuf,
+
+    /// Explicit source file paths in argument order, without filesystem lookup.
+    pub sources: Vec<PathBuf>,
+
+    /// Required for keyed modes and absent for redaction and templating.
+    /// Parsing does not read or validate the key file.
+    pub key_file: Option<PathBuf>,
+}
+
+/// Transformation mode requested by the proposed bundle command.
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub enum BundleMode {
+    /// Redaction; does not accept a key file.
+    Redact,
+    /// Semantic templating; does not accept a key file.
+    Template,
+    /// Pseudonymization; requires a key file.
+    Pseudonymize,
+    /// Synthesis; requires a key file.
+    Synthesize,
+}
+
+impl BundleMode {
+    /// Parses a supported bundle mode name without enabling bundle execution.
+    pub fn parse(value: &str) -> Option<Self> {
+        match value {
+            "redact" => Some(Self::Redact),
+            "template" => Some(Self::Template),
+            "pseudonymize" => Some(Self::Pseudonymize),
+            "synthesize" => Some(Self::Synthesize),
+            _ => None,
+        }
+    }
 }
 
 /// A keyed transformation of one explicit UTF-8 source.
