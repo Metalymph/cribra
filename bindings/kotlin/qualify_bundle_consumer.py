@@ -577,17 +577,18 @@ def compile_consumer(
             fail(f"missing consumer source: {source}")
     classes_dir.mkdir(parents=True, exist_ok=True)
     classpath = os.pathsep.join([str(profile_jar), str(jna_jar)])
+    compiler_args = ["-jvm-target", "17", "-classpath", classpath, "-d", str(classes_dir),
+                     *(str(source) for source in sources)]
+    # Python's Windows argv quoting does not quote a whitespace-free ';' value.
+    # kotlinc.bat then splits that classpath and treats the next JAR as a source.
+    # Let Kotlin parse quoted arguments itself, beyond the batch launcher.
+    argument_file = classes_dir.with_suffix(".args")
+    argument_file.write_text(
+        "\n".join(json.dumps(arg, ensure_ascii=False) for arg in compiler_args) + "\n",
+        encoding="utf-8",
+    )
     run_checked(
-        [
-            kotlinc,
-            "-jvm-target",
-            "17",
-            "-classpath",
-            classpath,
-            "-d",
-            classes_dir,
-            *sources,
-        ],
+        [kotlinc, f"@{argument_file}"],
         cwd=temp_root,
         env=env,
         label=f"compile {profile} consumer",

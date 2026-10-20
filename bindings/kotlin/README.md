@@ -394,6 +394,13 @@ the existing separate Core/Flow/Fuse Cargo trees. Windows uses the checked-in
 launchers, including `kotlinc.bat`. Native executables and POSIX launchers retain
 shell-free execution. The existing macOS Mach-O alignment pass is unchanged.
 
+Consumer compiler options are written to a UTF-8 Kotlin `@argfile`, with each
+argument quoted. This preserves the entire `-classpath` value through the
+Windows batch launcher: `;` separates JARs on Windows and `:` on macOS/Linux.
+The JVM still receives its classpath as one argument directly through
+`java`/`java.exe`, without shell parsing. The workflow runs the standard-library
+`test_bundle_consumer.py` regression checks before building bundles.
+
 The workflow uploads `cribra-kotlin-<platform>` diagnostic artifacts even when a
 job fails: available distribution ZIPs, the successful qualification JSON, and
 `build.log`/`consumer.log` under `target/uniffi-kotlin-bundle-consumer/`. A build

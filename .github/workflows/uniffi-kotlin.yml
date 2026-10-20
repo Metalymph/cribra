@@ -136,6 +136,8 @@ jobs:
               raise SystemExit(f"Unexpected runner host: {host}")
           for source in (path, Path("bindings/kotlin/qualify_bundle_consumer.py")):
               ast.parse(source.read_text(encoding="utf-8"), filename=str(source))
+          subprocess.run([sys.executable, "-B", "-m", "unittest", "discover",
+                          "-s", "bindings/kotlin", "-p", "test_bundle_consumer.py"], check=True)
           rust = subprocess.check_output(["rustc", "+1.97.0", "--version"], text=True)
           if not rust.startswith("rustc 1.97.0 "):
               raise SystemExit(rust)
