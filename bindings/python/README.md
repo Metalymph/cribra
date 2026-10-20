@@ -1,9 +1,15 @@
 # Local Python consumers and Fuse wheel (NB-2.6A.2)
 
+See [Getting started](../../docs/GETTING_STARTED.md) and
+[Compatibility and distribution status](../../docs/COMPATIBILITY.md) for the
+cross-language entry points and evidence boundaries.
+
 A minimal consumer of the existing `cribra-uniffi` crate and UniFFI **0.32.2**
-generator. No PyO3, second Rust adapter, hand-written Python facade, publishing
-or CI integration is introduced. Consumer qualification and local wheel building
-are separate commands; the wheel contains the Fuse profile only.
+generator. No PyO3, second Rust adapter, hand-written Python facade or publishing
+is introduced. Consumer qualification and local wheel building are separate
+commands; the wheel contains the Fuse profile only.
+
+Platform CI qualification is documented below.
 
 From the repository root, with Rust **1.97.0**, Python **3.13+** (the source
 smoke runner and wheel builder; the built wheel itself supports Python 3.11+)

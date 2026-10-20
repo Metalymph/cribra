@@ -1,5 +1,9 @@
 # Cribra for Kotlin/JVM apps
 
+See [Getting started](../../docs/GETTING_STARTED.md) and
+[Compatibility and distribution status](../../docs/COMPATIBILITY.md) for the
+cross-language entry points and evidence boundaries.
+
 Minimal Gradle Kotlin DSL consumer foundation for Cribra Core **0.7.1**, adapter
 **0.1.0**, UniFFI **=0.32.2**, Rust **1.97.0**, Kotlin **2.4.21**, JNA **5.17.0**,
 Gson **2.13.2** and Gradle **9.3.1**. The JVM baseline is **JDK 17**.
@@ -297,15 +301,15 @@ native library.
 
 ### Bundle boundaries
 
-- macOS ARM64 is the qualified host. Linux x86_64 and Windows x86_64 host
-  detection, library naming and ZIP platform naming are implemented but not
-  executed on a native host in this phase.
+- macOS ARM64, Linux x86_64 and Windows x86_64 have passed the native
+  NB-3.6A CI bundle build and isolated-consumer gates for Core, Flow and Fuse.
+  See the [successful run](https://github.com/Metalymph/cribra/actions/runs/39411373200).
 - The macOS library is ad-hoc signed, which is sufficient for local loading but
   not for notarized distribution. The current dyld's LINKEDIT alignment rules
   are handled by the builder; older macOS versions are not exercised.
 - The Kotlin standard library is not bundled; only the profile JAR and JNA are.
-- Bundles are local build artifacts. There is no publishing, distribution
-  signing, fat JAR or CI integration in this phase.
+- Bundles are local build or CI diagnostic artifacts. There is no package
+  publishing, distribution signing or fat JAR.
 - Reproducibility is byte-for-byte for clean rebuilds on the same host and
   toolchain. It is not a cross-platform or cross-toolchain guarantee; the
   deflate stream depends on the host zlib.
@@ -374,10 +378,11 @@ it. Temporary directories are removed on success unless `--keep` is supplied;
 they are retained on failure. Paths recorded for cleaned temporary files are
 historical evidence, not persistent artifacts.
 
-Qualified on **macOS ARM64** with Kotlin **2.4.21** and JDK **17**. Other hosts,
-JDK versions, Android, Gradle integration and publishing are not qualified by
-this command. Runtime classpaths and working directories are isolated; this is
-not an OS sandbox denying all repository access.
+Qualified locally on **macOS ARM64** and in NB-3.6A CI on **macOS ARM64,
+Linux x86_64 and Windows x86_64**, with Kotlin **2.4.21** and JDK **17**.
+Other hosts/JDK versions, Android, external Gradle integration and publishing
+are not qualified by this command. Runtime classpaths and working directories
+are isolated; this is not an OS sandbox denying all repository access.
 
 ### Multiplatform CI (NB-3.6A)
 
@@ -407,10 +412,12 @@ job fails: available distribution ZIPs, the successful qualification JSON, and
 failure prevents consumer execution; a failed qualification may have a log but
 no JSON report. It does not publish a release or package.
 
-Local macOS checks are evidence only for the local host. The new workflow's
-GitHub-hosted macOS, Linux and Windows jobs must actually complete before those
-runners are considered qualified; Windows batch dispatch checks on macOS are
-mock-based and do not replace Windows execution.
+The [completed NB-3.6A run](https://github.com/Metalymph/cribra/actions/runs/39411373200)
+at `0c7ac77f4e3eb959929977f3ecadbb9263824dcf` passed all three native jobs,
+including bundle build/verification, positive consumers and expected negative
+rejections. Each job uploaded its diagnostic artifact. This supersedes the
+earlier macOS-only qualification and mock-based Windows dispatch evidence; it
+does not expand support to other architectures or JDK versions.
 
 ## What the smokes exercise
 

@@ -1,5 +1,9 @@
 # Cribra for native Swift apps
 
+See [Getting started](../../docs/GETTING_STARTED.md) and
+[Compatibility and distribution status](../../docs/COMPATIBILITY.md) for the
+cross-language entry points and evidence boundaries.
+
 Local Swift Package distribution of Cribra Core **0.7.1**, adapter **0.1.0**,
 UniFFI **=0.32.2**, Rust **1.97.0** and Swift **6.4**. The public Swift module and
 library product are named **`Cribra`**. Deployment minimums are macOS 13 and iOS 16.

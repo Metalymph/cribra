@@ -1,5 +1,8 @@
 # cribra-wasm
 
+See [Getting started](../../docs/GETTING_STARTED.md) and
+[Compatibility](../../docs/COMPATIBILITY.md) for integration and distribution status.
+
 Typed WebAssembly and JavaScript interoperability adapter for
 [Cribra](https://github.com/Metalymph/cribra).
 
