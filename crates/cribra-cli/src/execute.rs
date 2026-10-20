@@ -12,8 +12,9 @@ use crate::{
 
 /// Result of executing one reusable CLI command.
 ///
-/// Output contains presentation-safe CLI text only. Matched source values are
-/// never added independently by the CLI layer.
+/// Output contains scan metadata, help/version text, or exact Core-transformed
+/// source. Transformed source may retain candidates and undetected sensitive
+/// data; the CLI never adds matched source values independently.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct CommandOutput {
     stdout: String,
@@ -44,6 +45,9 @@ pub enum ExecuteError {
 
     /// The selected input was not valid UTF-8.
     InvalidUtf8,
+
+    /// Core could not safely transform the original source and report.
+    Transform(cribra::transform::TransformError),
 }
 
 impl From<input::InputError> for ExecuteError {
@@ -60,7 +64,14 @@ impl fmt::Display for ExecuteError {
         match self {
             Self::InputRead(error) => error.fmt(formatter),
             Self::InvalidUtf8 => formatter.write_str("invalid UTF-8"),
+            Self::Transform(error) => error.fmt(formatter),
         }
+    }
+}
+
+impl From<cribra::transform::TransformError> for ExecuteError {
+    fn from(error: cribra::transform::TransformError) -> Self {
+        Self::Transform(error)
     }
 }
 
@@ -131,6 +142,26 @@ pub fn execute(command: &Command) -> Result<CommandOutput, ExecuteError> {
             };
 
             Ok(CommandOutput::new(stdout))
+        }
+
+        Command::Redact(input) | Command::Template(input) => {
+            let input = match input {
+                ScanInput::File(path) => input::Input::File(path.clone()),
+                ScanInput::Stdin => input::Input::Stdin,
+            };
+            let source = input::read(&input)?;
+            let scanner = cribra::Scanner::default();
+            let results = scanner.scan([(source.name(), source.text())]);
+            let report = results
+                .single_report()
+                .expect("single CLI input must produce exactly one report");
+
+            let transformed = match command {
+                Command::Redact(_) => cribra::transform::redact(source.text(), report),
+                Command::Template(_) => cribra::transform::template(source.text(), report),
+                _ => unreachable!("only transformation commands enter this branch"),
+            }?;
+            Ok(CommandOutput::new(transformed))
         }
 
         Command::Help => Ok(CommandOutput::new(crate::help_text().to_owned())),

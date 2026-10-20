@@ -57,21 +57,24 @@ The canonical v0.4.4 command surface is intentionally small:
 cribra
 ├── --help
 ├── --version
-└── scan
-    ├── <FILE>
-    ├── -
-    ├── --format human|json
-    ├── --severity info|low|medium|high|critical
-    ├── --min-severity info|low|medium|high|critical
-    ├── --confidence low|medium|high
-    ├── --min-confidence low|medium|high
-    ├── --rule-id <ID>
-    ├── --explain
-    └── --sort rule-id|rule-id-desc|severity|severity-desc|
-               confidence|confidence-desc|location|location-desc
+├── scan
+│   ├── <FILE>
+│   ├── -
+│   ├── --format human|json
+│   ├── --severity info|low|medium|high|critical
+│   ├── --min-severity info|low|medium|high|critical
+│   ├── --confidence low|medium|high
+│   ├── --min-confidence low|medium|high
+│   ├── --rule-id <ID>
+│   ├── --explain
+│   └── --sort rule-id|rule-id-desc|severity|severity-desc|
+│              confidence|confidence-desc|location|location-desc
+├── redact <FILE|->
+└── template <FILE|->
 ```
 
-`scan` accepts exactly one explicit UTF-8 filesystem path or standard input.
+`scan`, `redact`, and `template` each accept exactly one explicit UTF-8
+filesystem path or standard input.
 
 Input acquisition preserves valid UTF-8 text without newline normalization,
 BOM stripping, lossy decoding, or encoding auto-detection. Invalid UTF-8 is
@@ -115,9 +118,9 @@ The CLI must not independently implement detector or validator behavior.
 
 | Core capability | CLI state | Current projection |
 | --- | --- | --- |
-| Default scanner | EXPOSED | `scan` uses `Scanner::default()` |
-| Explicit UTF-8 file input | EXPOSED | `cribra scan <FILE>` |
-| Standard input | EXPOSED | `cribra scan -` |
+| Default scanner | EXPOSED | all three source commands use `Scanner::default()` |
+| Explicit UTF-8 file input | EXPOSED | one explicit file for `scan`, `redact`, or `template` |
+| Standard input | EXPOSED | `-` input for `scan`, `redact`, or `template` |
 | Findings | EXPOSED | human and JSON output |
 | Rule identity | EXPOSED | rule ID |
 | Byte location | EXPOSED | start and end offsets |
@@ -144,8 +147,8 @@ The CLI must not independently implement detector or validator behavior.
 | Finding explanation | EXPOSED | `--explain` resolves rendered findings through `finding.explanation(&scanner)` |
 | Detection mode | EXPOSED | opt-in human `detection=` and JSON `detection_mode` from the public `Explanation` API |
 | Candidate explanation | EXPOSED | existing candidate evidence projects `Explanation::Ambiguous` facts |
-| Redaction | GAP | core transformation has no CLI operation |
-| Template transformation | GAP | core transformation has no CLI operation |
+| Redaction | EXPOSED | `cribra redact` delegates to `cribra::transform::redact()` |
+| Template transformation | EXPOSED | `cribra template` delegates to `cribra::transform::template()` |
 | Pseudonymization | GAP | core transformation has no CLI operation |
 | Synthesis | GAP | core transformation has no CLI operation |
 | Share bundle | GAP | core transformation/batch capability has no CLI operation |
@@ -241,6 +244,46 @@ and JSON `"evidence":"structural"` already project the evidence represented by
 fields to candidates. All explanation output remains metadata-only and never
 contains matched values or source snippets.
 
+## Redaction and semantic templating
+
+```text
+cribra redact <FILE|->
+cribra template <FILE|->
+```
+
+Each command reads one explicit UTF-8 file or stdin through the same input
+acquisition infrastructure as `scan`, scans with `Scanner::default()`, and
+passes the original source and complete original report directly to the public
+Core transformation API. All original findings are transformed without query
+filters or sorting. The CLI does not implement replacement logic.
+
+`redact` uses `cribra::transform::redact()` and replaces findings with
+`[REDACTED]`. Core merges duplicate or overlapping spans into their complete
+union before redaction; adjacent non-overlapping findings remain separate
+replacements. `template` uses `cribra::transform::template()` and replaces each
+finding with the default semantic placeholder `<CRIBRA:rule-id>`, without
+numbering. Core rejects overlapping findings for templating because their
+individual replacements would be ambiguous.
+
+Successful commands emit only the exact Core-transformed UTF-8 text to stdout:
+no metadata, summary, or added newline. Text outside transformed finding spans
+is preserved byte-for-byte, including UTF-8, BOMs, CRLF, and trailing-newline
+state. Empty and clean inputs remain unchanged. Neither command writes to the
+input file or to an output file.
+
+Candidates are not transformation targets and remain independent of findings.
+Candidate-only sources remain unchanged; in mixed reports only finding spans
+are transformed. **Output can still contain sensitive data**, including review
+candidates and sensitive values the scanner did not classify. A successful
+transformation is not a guarantee that all sensitive material was removed.
+
+These commands accept no options or extra positional arguments. Scan-only
+options (`--format`, `--explain`, filters, and sorting), custom replacement,
+namespace, numbering, and output-file options are unsupported. Missing inputs,
+unsupported options, or extra arguments return exit code `2`. Input and Core
+transformation errors return `1` with empty stdout; diagnostics do not include
+matched source values. Successful transformations return `0`.
+
 ## Exit semantics
 
 The current process exit contract is:
@@ -248,7 +291,7 @@ The current process exit contract is:
 | Code | Meaning |
 | ---: | --- |
 | `0` | successful execution, including clean, review-only, and finding-bearing scans |
-| `1` | input or execution failure |
+| `1` | input, transformation, or other execution failure |
 | `2` | command-line usage or parse failure |
 
 Finding presence is deliberately not an execution failure.
@@ -258,17 +301,18 @@ silently changing the meaning of the existing exit code `0`.
 
 ## Privacy invariant
 
-CLI presentation is metadata-only.
+`scan` presentation is metadata-only.
 
 The command layer must not independently add matched secret values, candidate
-source material, or source snippets to normal output or diagnostics.
+source material, or source snippets to scan output or diagnostics.
 
 Current tests cover source-value non-disclosure for classified findings,
 review-only candidates, JSON output, and invalid UTF-8 diagnostics.
 
-Adding a new output mode or capability must preserve this boundary unless a
-future operation explicitly requires transformed source output as its primary
-result.
+`redact` and `template` explicitly emit transformed source as their primary
+result. Core replaces classified findings; candidates and undetected material
+may remain in that source. Errors emit no source text or partial transformed
+stdout.
 
 ## Semantic projection and drift
 
@@ -295,21 +339,18 @@ or build compatibility.
 
 ## Confirmed parity gaps
 
-### Transformations
+### Keyed transformations and share bundles
 
-The core exposes explicit share-safe transformations:
+The core also exposes:
 
-- redaction;
-- templating;
 - keyed pseudonymization;
 - keyed synthesis;
 - share bundles.
 
-The canonical CLI currently exposes scanning only.
-
-Transformation commands are genuine parity gaps, but their command design must
-preserve the core privacy model and must not duplicate transformation logic in
-`cribra-cli`.
+These remain separate CLI parity gaps. Exposing keyed operations requires an
+explicit key-handling contract; redaction and semantic templating do not add
+keyed options or share-bundle orchestration. Future commands must preserve Core
+authority and the transformation privacy model.
 
 ## Deliberate non-parity
 
@@ -342,11 +383,10 @@ The current audit suggests the following implementation order if the gaps are
 accepted for future CLI work:
 
 1. complete small metadata projection gaps;
-2. expose non-keyed transformations such as redaction and templating;
-3. design keyed pseudonymization and synthesis with an explicit key-handling
+2. design keyed pseudonymization and synthesis with an explicit key-handling
    contract;
-4. evaluate multi-source and share-bundle command semantics separately;
-5. evaluate explicit CI failure policy without changing existing exit semantics.
+3. evaluate multi-source and share-bundle command semantics separately;
+4. evaluate explicit CI failure policy without changing existing exit semantics.
 
 This ordering is advisory. Each capability should be implemented as an
 independent, reviewable slice rather than as a broad CLI rewrite.

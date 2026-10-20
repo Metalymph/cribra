@@ -8,6 +8,12 @@ pub enum Command {
     /// Scan one explicit UTF-8 source.
     Scan(ScanCommand),
 
+    /// Redact all findings in one explicit UTF-8 source using Core defaults.
+    Redact(ScanInput),
+
+    /// Template all findings in one explicit UTF-8 source using Core defaults.
+    Template(ScanInput),
+
     /// Render command-line help.
     Help,
 
@@ -67,7 +73,7 @@ pub enum ConfidenceFilter {
     Minimum(cribra::Confidence),
 }
 
-/// Explicit scan input.
+/// Explicit UTF-8 command input.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum ScanInput {
     /// Read one explicit filesystem path.

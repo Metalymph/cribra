@@ -647,3 +647,183 @@ fn explain_preserves_input_and_usage_error_exit_codes() {
     assert_eq!(duplicate.status.code(), Some(2));
     assert!(duplicate.stdout.is_empty());
 }
+
+fn transform_output(command: &str, source: &[u8], stdin: bool) -> std::process::Output {
+    let mut process = Command::new(cribra_bin());
+    process
+        .arg(command)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    let path = if stdin {
+        process.arg("-").stdin(Stdio::piped());
+        None
+    } else {
+        let path = temp_file("transform.txt", source);
+        process.arg(&path);
+        Some(path)
+    };
+    let mut child = process.spawn().unwrap();
+    if stdin {
+        child.stdin.take().unwrap().write_all(source).unwrap();
+    }
+    let output = child.wait_with_output().unwrap();
+    if let Some(path) = path {
+        assert_eq!(
+            fs::read(&path).unwrap(),
+            source,
+            "input file must not be modified"
+        );
+        fs::remove_file(path).unwrap();
+    }
+    output
+}
+
+#[test]
+fn transformations_emit_exact_core_bytes_for_file_and_stdin() {
+    let source = "\u{feff}π 😀 café\r\n\
+GITHUB_TOKEN=ghp_AbCdEf0123456789_AbCdEf0123456789\r\n\
+password=CorrectHorseBatteryStaple!\r\n\
+repeat=ghp_AbCdEf0123456789_AbCdEf0123456789\r\n\
+ABCD-EFGH-IJKL-MNOP";
+    let scanner = cribra::Scanner::default();
+    let results = scanner.scan([("fixture", source)]);
+    let report = results.single_report().unwrap();
+    assert_eq!(report.len(), 3);
+    assert_eq!(report.candidate_len(), 1);
+    for (command, expected, core) in [
+        (
+            "redact",
+            "\u{feff}π 😀 café\r\nGITHUB_TOKEN=[REDACTED]\r\npassword=[REDACTED]\r\nrepeat=[REDACTED]\r\nABCD-EFGH-IJKL-MNOP",
+            cribra::transform::redact(source, report).unwrap(),
+        ),
+        (
+            "template",
+            "\u{feff}π 😀 café\r\nGITHUB_TOKEN=<CRIBRA:github.classic-pat>\r\npassword=<CRIBRA:generic.password-field>\r\nrepeat=<CRIBRA:github.classic-pat>\r\nABCD-EFGH-IJKL-MNOP",
+            cribra::transform::template(source, report).unwrap(),
+        ),
+    ] {
+        assert_eq!(core, expected);
+        for stdin in [false, true] {
+            let output = transform_output(command, source.as_bytes(), stdin);
+            assert_eq!(output.status.code(), Some(0));
+            assert!(output.stderr.is_empty());
+            assert_eq!(output.stdout, expected.as_bytes());
+            let stdout = String::from_utf8(output.stdout).unwrap();
+            for finding in report.findings() {
+                let location = finding.location();
+                assert!(!stdout.contains(&source[location.start()..location.end()]));
+            }
+        }
+    }
+}
+
+#[test]
+fn transformations_preserve_empty_clean_and_candidate_only_sources() {
+    for source in [
+        "",
+        "\u{feff}π 😀 café\r\nordinary text",
+        "ABCD-EFGH-IJKL-MNOP\r\n",
+    ] {
+        for command in ["redact", "template"] {
+            for stdin in [false, true] {
+                let output = transform_output(command, source.as_bytes(), stdin);
+                assert_eq!(output.status.code(), Some(0));
+                assert!(output.stderr.is_empty());
+                assert_eq!(output.stdout, source.as_bytes());
+            }
+        }
+    }
+}
+
+#[test]
+fn overlapping_findings_redact_as_a_union_and_template_fails_without_stdout() {
+    use cribra::transform::TransformError;
+    use cribra_cli::{Command as CliCommand, ExecuteError, ScanInput, execute};
+
+    let source = "-----BEGIN PRIVATE KEY-----\nghp_AbCdEf0123456789_AbCdEf0123456789\n-----END PRIVATE KEY-----";
+    let scanner = cribra::Scanner::default();
+    let results = scanner.scan([("fixture", source)]);
+    let report = results.single_report().unwrap();
+    assert_eq!(report.len(), 2);
+    assert_eq!(
+        cribra::transform::redact(source, report).unwrap(),
+        "[REDACTED]"
+    );
+    let core_error = cribra::transform::template(source, report).unwrap_err();
+    assert!(matches!(
+        core_error,
+        TransformError::OverlappingSpans { .. }
+    ));
+
+    for stdin in [false, true] {
+        let redacted = transform_output("redact", source.as_bytes(), stdin);
+        assert_eq!(redacted.status.code(), Some(0));
+        assert!(redacted.stderr.is_empty());
+        assert_eq!(redacted.stdout, b"[REDACTED]");
+
+        let failed = transform_output("template", source.as_bytes(), stdin);
+        assert_eq!(failed.status.code(), Some(1));
+        assert!(failed.stdout.is_empty());
+        assert_eq!(failed.stderr, format!("cribra: {core_error}\n").as_bytes());
+    }
+
+    let path = temp_file("reusable-transform.txt", source.as_bytes());
+    let error = execute(&CliCommand::Template(ScanInput::File(path.clone()))).unwrap_err();
+    assert!(matches!(error, ExecuteError::Transform(ref inner) if inner == &core_error));
+    let output = execute(&CliCommand::Redact(ScanInput::File(path.clone()))).unwrap();
+    assert_eq!(output.into_stdout(), "[REDACTED]");
+    fs::remove_file(path).unwrap();
+}
+
+#[test]
+fn transformation_input_failures_have_exit_code_one_and_no_stdout() {
+    for command in ["redact", "template"] {
+        for stdin in [false, true] {
+            let output = transform_output(command, &[0xff, 0xfe], stdin);
+            assert_eq!(output.status.code(), Some(1));
+            assert!(output.stdout.is_empty());
+            assert_eq!(output.stderr, b"cribra: invalid UTF-8\n");
+        }
+        let path = temp_file("missing-transform.txt", b"");
+        fs::remove_file(&path).unwrap();
+        let output = Command::new(cribra_bin())
+            .arg(command)
+            .arg(path)
+            .output()
+            .unwrap();
+        assert_eq!(output.status.code(), Some(1));
+        assert!(output.stdout.is_empty());
+        assert!(
+            String::from_utf8(output.stderr)
+                .unwrap()
+                .starts_with("cribra: ")
+        );
+    }
+}
+
+#[test]
+fn transformation_usage_failures_have_exit_code_two_and_no_stdout() {
+    for command in ["redact", "template"] {
+        for extra in [
+            &[][..],
+            &["one.env", "two.env"][..],
+            &["--explain"][..],
+            &["-", "--format", "json"][..],
+            &["-", "--sort", "severity"][..],
+            &["-", "--output", "result.txt"][..],
+        ] {
+            let output = Command::new(cribra_bin())
+                .arg(command)
+                .args(extra)
+                .output()
+                .unwrap();
+            assert_eq!(output.status.code(), Some(2));
+            assert!(output.stdout.is_empty());
+            assert!(
+                String::from_utf8(output.stderr)
+                    .unwrap()
+                    .contains("Try 'cribra --help' for usage.")
+            );
+        }
+    }
+}

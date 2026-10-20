@@ -157,6 +157,32 @@ where
             }))
         }
 
+        Some(argument)
+            if argument == OsStr::new("redact") || argument == OsStr::new("template") =>
+        {
+            let name = argument.to_string_lossy();
+            let input = args.next().ok_or_else(|| {
+                ParseError::new(format!("{name} requires an input path or '-' for stdin"))
+            })?;
+            if (input != OsStr::new("-") && input.as_encoded_bytes().starts_with(b"-"))
+                || args.next().is_some()
+            {
+                return Err(ParseError::new(format!(
+                    "{name} requires exactly one input and accepts no options"
+                )));
+            }
+            let input = if input == OsStr::new("-") {
+                ScanInput::Stdin
+            } else {
+                ScanInput::File(input.into())
+            };
+            Ok(if argument == OsStr::new("redact") {
+                Command::Redact(input)
+            } else {
+                Command::Template(input)
+            })
+        }
+
         Some(argument) if argument == OsStr::new("--help") || argument == OsStr::new("-h") => {
             Ok(Command::Help)
         }
@@ -243,11 +269,18 @@ pub(crate) fn help_text() -> &'static str {
 Usage:
   cribra scan <FILE> [SCAN OPTIONS]
   cribra scan - [SCAN OPTIONS]
+  cribra redact <FILE|->
+  cribra template <FILE|->
   cribra [OPTIONS]
 
 Commands:
   scan <FILE>       Scan one explicit UTF-8 file
   scan -            Scan UTF-8 from standard input
+  redact <FILE|->   Replace all findings with [REDACTED]
+  template <FILE|-> Replace all findings with <CRIBRA:rule-id>
+
+Transformations emit only transformed text, without an added newline.
+Candidates and undetected sensitive data may remain. No options are accepted.
 
 Scan options:
   --format FORMAT         Output format: human or json
@@ -286,6 +319,63 @@ mod tests {
     fn version_parses() {
         assert_eq!(parse(["cribra", "--version"]).unwrap(), Command::Version);
         assert_eq!(parse(["cribra", "-V"]).unwrap(), Command::Version);
+    }
+
+    #[test]
+    fn transformation_commands_parse_file_and_stdin() {
+        for input in ["config.env", "-"] {
+            let expected = if input == "-" {
+                ScanInput::Stdin
+            } else {
+                ScanInput::File(input.into())
+            };
+            assert_eq!(
+                parse(["cribra", "redact", input]).unwrap(),
+                Command::Redact(expected.clone())
+            );
+            assert_eq!(
+                parse(["cribra", "template", input]).unwrap(),
+                Command::Template(expected)
+            );
+        }
+    }
+
+    #[test]
+    fn transformation_commands_require_exactly_one_input() {
+        for command in ["redact", "template"] {
+            assert!(parse(["cribra", command]).is_err());
+            assert!(parse(["cribra", command, "one.env", "two.env"]).is_err());
+            assert!(parse(["cribra", command, "-", "two.env"]).is_err());
+        }
+    }
+
+    #[test]
+    fn transformation_commands_reject_options() {
+        for command in ["redact", "template"] {
+            for option in [
+                "--format",
+                "--explain",
+                "--severity",
+                "--min-severity",
+                "--confidence",
+                "--min-confidence",
+                "--rule-id",
+                "--sort",
+                "--replacement",
+                "--namespace",
+                "--numbered",
+                "--output",
+                "--output-file",
+                "--unknown",
+                "--help",
+                "-h",
+                "--",
+            ] {
+                assert!(parse(["cribra", command, option]).is_err());
+                assert!(parse(["cribra", command, "-", option]).is_err());
+                assert!(parse(["cribra", command, "config.env", option, "value"]).is_err());
+            }
+        }
     }
 
     #[test]
