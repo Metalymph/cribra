@@ -121,7 +121,7 @@ The CLI must not independently implement detector or validator behavior.
 | Remediation | EXPOSED | human and JSON output |
 | Sensitive candidates | EXPOSED | represented separately from findings |
 | Candidate evidence | EXPOSED | human and JSON output |
-| Candidate kind | PARTIAL | JSON exposes kind; human output currently does not |
+| Candidate kind | EXPOSED | human and JSON output |
 | Clean/review/findings status | EXPOSED | deterministic aggregate status |
 | Metadata-only finding output | EXPOSED | matched source values are not intentionally rendered |
 | Human representation | EXPOSED | default output format |
@@ -164,8 +164,8 @@ For classified findings, the current CLI projects:
 - confidence;
 - remediation.
 
-For review-only candidates, the current CLI projects location and evidence in
-both output formats. JSON additionally projects candidate kind.
+For review-only candidates, the current CLI projects location, kind, and evidence
+in both human and JSON output formats.
 
 The CLI derives one aggregate source status:
 

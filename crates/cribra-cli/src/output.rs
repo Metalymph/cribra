@@ -198,11 +198,12 @@ pub(crate) fn render_human(source_name: &str, report: &ScanReport) -> String {
 
         writeln!(
             output,
-            "candidate: {}:{} bytes={}..{} evidence={}",
+            "candidate: {}:{} bytes={}..{} kind={} evidence={}",
             location.line(),
             location.column(),
             location.start(),
             location.end(),
+            candidate_kind_name(candidate.kind()),
             candidate_evidence_name(candidate.evidence()),
         )
         .expect("writing to String cannot fail");
@@ -306,6 +307,7 @@ candidates: 0
 
         assert!(output.contains("status: review"));
         assert!(output.contains("candidate:"));
+        assert!(output.contains("kind=recovery-like-code evidence=structural"));
         assert!(!output.contains(candidate));
     }
 

@@ -140,6 +140,8 @@ fn candidate_only_exit_is_success() {
     assert!(stdout.contains("status: review"));
     assert!(stdout.contains("findings: 0"));
     assert!(stdout.contains("candidates: 1"));
+    assert!(stdout.contains("kind=recovery-like-code evidence=structural"));
+    assert!(!stdout.contains("ABCD-EFGH-IJKL-MNOP"));
 }
 
 #[test]
