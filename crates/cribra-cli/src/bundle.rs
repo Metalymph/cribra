@@ -132,6 +132,7 @@ mod tests {
     use std::{
         fs,
         path::{Path, PathBuf},
+        sync::atomic::{AtomicU64, Ordering},
         time::{SystemTime, UNIX_EPOCH},
     };
 
@@ -139,22 +140,33 @@ mod tests {
 
     use super::*;
 
+    static NEXT_FIXTURE: AtomicU64 = AtomicU64::new(0);
+
     struct Fixture {
         root: PathBuf,
     }
 
     impl Fixture {
         fn new() -> Self {
-            let unique = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_nanos();
-            let root = std::env::temp_dir().join(format!(
-                "cribra-preparation-{}-{unique}",
-                std::process::id()
-            ));
-            fs::create_dir(&root).unwrap();
-            Self { root }
+            for _ in 0..128 {
+                let nonce = SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap()
+                    .as_nanos();
+                let sequence = NEXT_FIXTURE.fetch_add(1, Ordering::Relaxed);
+                let root = std::env::temp_dir().join(format!(
+                    "cribra-preparation-{}-{nonce:x}-{sequence:x}",
+                    std::process::id()
+                ));
+                match fs::create_dir(&root) {
+                    Ok(()) => return Self { root },
+                    Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
+                    Err(error) => {
+                        panic!("temporary fixture directory should be created: {error}")
+                    }
+                }
+            }
+            panic!("temporary fixture directory should be available");
         }
 
         fn write(&self, name: &str, bytes: &[u8]) -> PathBuf {

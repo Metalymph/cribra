@@ -352,9 +352,15 @@ mod tests {
     use crate::bundle::PreparedSource;
 
     fn root() -> std::path::PathBuf {
-        let path = std::env::temp_dir().join(staging_name());
-        std::fs::create_dir(&path).unwrap();
-        path
+        for _ in 0..128 {
+            let path = std::env::temp_dir().join(staging_name());
+            match std::fs::create_dir(&path) {
+                Ok(()) => return path,
+                Err(error) if error.kind() == io::ErrorKind::AlreadyExists => continue,
+                Err(error) => panic!("temporary fixture directory should be created: {error}"),
+            }
+        }
+        panic!("temporary fixture directory should be available");
     }
 
     #[test]

@@ -2,24 +2,41 @@ use std::{
     fs,
     io::Write,
     process::{Command, Stdio},
+    sync::atomic::{AtomicU64, Ordering},
     time::{SystemTime, UNIX_EPOCH},
 };
+
+static NEXT_TEMP_FILE: AtomicU64 = AtomicU64::new(0);
 
 fn cribra_bin() -> &'static str {
     env!("CARGO_BIN_EXE_cribra")
 }
 
 fn temp_file(name: &str, contents: &[u8]) -> std::path::PathBuf {
-    let unique = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("system clock should be after Unix epoch")
-        .as_nanos();
-
-    let path =
-        std::env::temp_dir().join(format!("cribra-cli-{name}-{}-{unique}", std::process::id()));
-
-    fs::write(&path, contents).expect("temporary fixture should be written");
-    path
+    for _ in 0..128 {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system clock should be after Unix epoch")
+            .as_nanos();
+        let sequence = NEXT_TEMP_FILE.fetch_add(1, Ordering::Relaxed);
+        let path = std::env::temp_dir().join(format!(
+            "cribra-cli-{name}-{}-{nonce:x}-{sequence:x}",
+            std::process::id()
+        ));
+        let mut file = match fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&path)
+        {
+            Ok(file) => file,
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(error) => panic!("temporary fixture should be created: {error}"),
+        };
+        file.write_all(contents)
+            .expect("temporary fixture should be written");
+        return path;
+    }
+    panic!("temporary fixture path should be available");
 }
 
 #[test]
@@ -193,9 +210,8 @@ fn usage_error_returns_exit_code_two() {
 
 #[test]
 fn missing_file_returns_exit_code_one() {
-    let path = std::env::temp_dir().join(format!("cribra-cli-missing-{}", std::process::id()));
-
-    let _ = fs::remove_file(&path);
+    let path = temp_file("missing-input", b"");
+    fs::remove_file(&path).unwrap();
 
     let output = Command::new(cribra_bin())
         .args(["scan", path.to_str().unwrap()])

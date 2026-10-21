@@ -5,7 +5,10 @@ use std::{
     os::unix::fs::{PermissionsExt, symlink},
     path::{Path, PathBuf},
     process::{Command, Output},
-    sync::{Arc, Barrier},
+    sync::{
+        Arc, Barrier,
+        atomic::{AtomicU64, Ordering},
+    },
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -15,19 +18,30 @@ use cribra::{
 };
 use cribra_cli::{BundleCommand, BundleMode, Command as CliCommand, ExecuteError, execute};
 
+static NEXT_FIXTURE: AtomicU64 = AtomicU64::new(0);
+
 struct Fixture {
     root: PathBuf,
 }
 impl Fixture {
     fn new() -> Self {
-        let nonce = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        let root =
-            std::env::temp_dir().join(format!("cribra-export-{}-{nonce}", std::process::id()));
-        fs::create_dir(&root).unwrap();
-        Self { root }
+        for _ in 0..128 {
+            let nonce = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos();
+            let sequence = NEXT_FIXTURE.fetch_add(1, Ordering::Relaxed);
+            let root = std::env::temp_dir().join(format!(
+                "cribra-export-{}-{nonce:x}-{sequence:x}",
+                std::process::id()
+            ));
+            match fs::create_dir(&root) {
+                Ok(()) => return Self { root },
+                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
+                Err(error) => panic!("temporary fixture directory should be created: {error}"),
+            }
+        }
+        panic!("temporary fixture directory should be available");
     }
     fn write(&self, name: &str, contents: &[u8]) -> PathBuf {
         let path = self.root.join(name);
