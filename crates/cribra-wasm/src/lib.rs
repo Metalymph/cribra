@@ -12,6 +12,7 @@
 //! document. Results and snapshots retain metadata only; they never retain the
 //! scanned source text or matched sensitive values.
 
+mod batch;
 mod build_error;
 #[cfg(test)]
 mod configuration_tests;
@@ -21,6 +22,7 @@ mod numeric;
 #[cfg(test)]
 mod remediation_tests;
 mod streaming;
+pub use batch::{ScanBatchEntry, ScanBatchResult, ScanSummaryView};
 use build_error::BuildFailure;
 pub use build_error::ScannerBuildErrorCode;
 pub use incremental::{

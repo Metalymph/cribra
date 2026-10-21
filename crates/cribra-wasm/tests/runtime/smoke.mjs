@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { qualifyStreams } from "./stream.mjs";
 import { qualifyIncremental } from "./incremental.mjs";
+import { qualifyBatch } from "./batch.mjs";
 import { qualifyRemediation } from "./remediation.mjs";
 import { qualifyConfiguration } from "./configuration.mjs";
 import { readFile } from "node:fs/promises";
@@ -133,6 +134,9 @@ qualifyStreams(mod, variant, streamCases, streamOracle);
 const incrementalCases = JSON.parse(await readFile(new URL("incremental-cases.json", import.meta.url), "utf8"));
 const incrementalOracle = JSON.parse(await readFile(resolve(directory, "../incremental-oracle.json"), "utf8"));
 qualifyIncremental(mod, variant, incrementalCases, incrementalOracle);
+const batchCases = JSON.parse(await readFile(new URL("batch-cases.json", import.meta.url), "utf8"));
+const batchOracle = JSON.parse(await readFile(resolve(directory, "../batch-oracle.json"), "utf8"));
+qualifyBatch(mod, variant, batchCases, batchOracle);
 const remediationCases = JSON.parse(await readFile(new URL("remediation-cases.json", import.meta.url), "utf8"));
 const configurationOracle = JSON.parse(await readFile(resolve(directory, "../configuration-oracle.json"), "utf8"));
 qualifyRemediation(mod, variant, remediationCases, configurationOracle);

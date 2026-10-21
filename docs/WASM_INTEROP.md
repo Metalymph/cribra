@@ -180,6 +180,38 @@ It does not qualify a new release or browser execution. See the
 [WASM README](../crates/cribra-wasm/README.md#incremental-documents) for usage and
 the complete ownership and limits contract.
 
+### P0.6C sequential batch contract
+
+Both Core and Flow source builds expose the additive
+`ScanEngine.scanBatch(sources: ScanBatchSource[])` method. Each input has an
+explicit opaque `id` and a UTF-8 `source`. The adapter copies both fields once at
+the boundary, calls Core `Scanner::scan()` exactly once for the complete ordered
+batch, and then releases the input text. There is no per-source adapter scanning
+loop, no duplicate aggregation implementation and no parallel execution.
+
+`ScanBatchResult` owns one `ScanBatchEntry` per input and one Core-derived
+`ScanSummaryView`. `entryAt(index)` returns a fresh independently owned entry;
+`entry.result` returns a fresh existing `ScanResult` projection; `summary()`
+returns a fresh owned view of Core's `ScanResults::summary()`. Every public Core
+summary counter, the candidate and clean/critical predicates, and
+`bySeverity(FindingSeverity)` are exposed. Input order, empty/Unicode/duplicate
+IDs, UTF-8 byte lengths, finding/candidate semantics and report ordering are
+preserved exactly.
+
+Batches, entries, reports and summaries retain no source text and no borrow of
+the creating engine. They can outlive the batch and engine and are freed
+independently. Missing/non-string fields and non-object elements fail before a
+batch is created; out-of-range entry and report indexes fail closed. The input
+interface is type-only, and all output types use generated `free()` ownership.
+
+The same generated Core/Flow runtime qualification now compares eight batch
+fixtures and 20 ordered entries per variant/runtime with an independent
+direct-Core oracle, including every summary field, single-source `scan()` parity,
+invalid inputs and lifecycle independence. Node/Bun evidence is recorded in
+[Compatibility](COMPATIBILITY.md). This addition is semantic and ergonomic; it
+does not retroactively change the historical v0.4 performance finding that
+repeated 64 KiB scans showed no material per-source amortization.
+
 ### Artifact size after capability parity
 
 Release artifacts produced with `wasm-bindgen --target web` after completing
@@ -200,8 +232,9 @@ comparison below.
 Rust validation remains independently testable on native targets. JavaScript
 error construction occurs only at the exported WASM boundary.
 
-Scan results and incremental snapshots retain metadata without source text or
-transformation keys. Incremental documents retain source exclusively inside
+Scan results, batch entries, summaries and incremental snapshots retain metadata
+without source text or transformation keys. Batch results retain caller-supplied
+IDs and Core reports only. Incremental documents retain source exclusively inside
 their Core session. Transform operations require the source to be supplied
 explicitly for each call. Ambiguous candidates remain review-only and are
 never promoted to transform authority.
@@ -266,7 +299,8 @@ but every exposed capability delegates to the same Rust core semantics.
 | template / custom template options | yes | yes | semantic parity verified where exposed |
 | keyed pseudonymization | yes | yes | semantic parity verified |
 | keyed deterministic synthesis | yes | yes | semantic parity verified |
-| generic ordered multi-source `ScanResults<K>` | yes | no | consumer performs repeated single-source scans |
+| generic ordered multi-source `ScanResults<K>` | yes | `scanBatch()` in both variants | local generated-runtime direct-Core parity verified |
+| aggregate `ScanSummary` counters and predicates | yes | `ScanSummaryView` | local generated-runtime direct-Core parity verified |
 | Rayon parallel scan | optional native feature | no | not a WebAssembly contract |
 | Serde transport | optional | not used by adapter transport | typed projections retained |
 | raw WASM memory / allocator API | n/a | no | intentionally not exposed |
@@ -509,7 +543,9 @@ The v0.4 browser benchmark establishes the following policy:
   reference run.
 - Repeated 64 KiB scans show no meaningful per-source amortization between
   one, eight, and thirty-two serial sources. A WASM `scanBatch()` API is
-  therefore not justified for performance in v0.4.
+  therefore not justified for performance in v0.4. (The semantic/ergonomic
+  `scanBatch()` contract was added independently in P0.6C; it makes no
+  throughput claim.)
 - Cribra does not expose raw WASM memory, allocator handles, or alternate
   byte-input APIs solely to avoid measured copies. Such an API requires
   evidence from real workloads that the existing safe boundary is a product

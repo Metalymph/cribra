@@ -463,7 +463,8 @@ Node.js 26.9.0, Bun 1.4.2, and Deno 2.9.7. These versions record the validated
 example environment rather than define a compatibility range.
 
 Rust/WASM parity gates cover findings, spans, metadata, candidates,
-explanations, transformations, and the opt-in financial built-ins.
+explanations, transformations, the opt-in financial built-ins, and sequential
+batch entries and aggregate summaries.
 
 Runnable browser and JavaScript-runtime consumers are available under
 `examples/wasm-browser/` and `examples/wasm-runtime/`.

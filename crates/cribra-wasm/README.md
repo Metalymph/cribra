@@ -20,6 +20,7 @@ The adapter provides:
 - explanations and remediation metadata;
 - Core-owned byte streaming for admitted rulesets, with optional resource budgets;
 - Core-owned incremental UTF-8 documents, revisioned edits and owned snapshots;
+- sequential multi-source scanning through one Core batch invocation;
 - redaction and templating;
 - keyed pseudonymization and deterministic synthesis.
 
@@ -37,7 +38,7 @@ The WASM adapter supports two configurations:
 
 | Configuration | Features | API |
 | --- | --- | --- |
-| Core | `--no-default-features` | Scanner, built-ins, custom rules, findings, candidates, explanations, reporting, admitted byte streams and incremental documents |
+| Core | `--no-default-features` | Scanner, built-ins, custom rules, findings, candidates, explanations, reporting, admitted byte streams, incremental documents and sequential batches |
 | Flow | `transform` (enabled by default) | Core plus all existing transformation APIs |
 
 Flow is the default and the official published configuration. Its JavaScript
@@ -62,7 +63,8 @@ with `wasm-bindgen` for JavaScript consumption.
 
 Rust core Fuse adds `parallel` and `serde` to Flow. These features are not
 part of the supported browser WASM API; the adapter has no Fuse configuration.
-Streaming and incremental sessions are available in both configurations.
+Streaming, incremental sessions and sequential batches are available in both
+configurations.
 
 ## Custom rule remediation
 
@@ -328,6 +330,121 @@ not free results already obtained from it. Free sessions, snapshots and every
 returned result separately; do not use any object after its generated `free()`.
 Calls remain synchronous with no additional runtime dependencies or parallelism.
 
+## Sequential batch scanning
+
+`ScanEngine.scanBatch(sources: ScanBatchSource[])` scans several explicitly
+identified UTF-8 sources in one synchronous call. The adapter copies the input
+IDs and source strings once, then delegates the complete ordered batch to exactly
+one Core `Scanner::scan()` invocation. It does not loop over `scan()`, duplicate
+Core aggregation, or run sources in parallel.
+
+The generated TypeScript API is:
+
+```ts
+export interface ScanBatchSource {
+    readonly id: string;
+    readonly source: string;
+}
+
+scanBatch(sources: ScanBatchSource[]): ScanBatchResult;
+
+export class ScanBatchResult {
+    readonly length: number;
+    isEmpty(): boolean;
+    entryAt(index: number): ScanBatchEntry;
+    summary(): ScanSummaryView;
+    free(): void;
+}
+
+export class ScanBatchEntry {
+    readonly id: string;
+    readonly sourceBytes: number;
+    readonly result: ScanResult;
+    free(): void;
+}
+
+export class ScanSummaryView {
+    readonly scannedSources: number;
+    readonly scannedBytes: number;
+    readonly reportsWithFindings: number;
+    readonly reportsWithoutFindings: number;
+    readonly totalFindings: number;
+    readonly totalCandidates: number;
+    readonly reportsWithCandidates: number;
+    readonly hasCandidates: boolean;
+    readonly critical: number;
+    readonly high: number;
+    readonly medium: number;
+    readonly low: number;
+    readonly info: number;
+    readonly isClean: boolean;
+    readonly hasCritical: boolean;
+    bySeverity(severity: FindingSeverity): number;
+    free(): void;
+}
+```
+
+`ScanBatchSource` is a type-only interface with no JavaScript constructor.
+`ScanBatchResult`, `ScanBatchEntry` and `ScanSummaryView` are owned
+wasm-bindgen objects, each with generated `free()` and `[Symbol.dispose]()`
+methods. Empty, Unicode and duplicate IDs are preserved exactly; IDs are opaque
+to Core. An empty array is a valid empty batch. Missing or non-string `id` or
+`source` properties, and non-object elements, throw a native JavaScript `Error`
+before any batch is created. Inputs are UTF-8 strings as projected by
+`wasm-bindgen`; `sourceBytes`, finding offsets and summary byte totals always use
+UTF-8 byte lengths.
+
+```js
+const engine = new ScanEngine();
+const batch = engine.scanBatch([
+  { id: "checkout", source: "card_number=1234567890123452" },
+  { id: "review", source: "ABCD-EFGH-IJKL-MNOP" },
+  { id: "", source: "" },
+]);
+try {
+  console.log(batch.length, batch.isEmpty());
+  for (let index = 0; index < batch.length; index += 1) {
+    const entry = batch.entryAt(index);
+    const result = entry.result; // fresh owned ScanResult per access
+    try {
+      console.log(entry.id, entry.sourceBytes, result.findingCount(),
+        result.candidateCount());
+      // findingAt, candidateAt, explanations and Flow transforms are unchanged.
+    } finally {
+      result.free();
+      entry.free();
+    }
+  }
+  const summary = batch.summary(); // fresh owned view per call
+  try {
+    console.log(summary.scannedSources, summary.scannedBytes,
+      summary.totalFindings, summary.totalCandidates, summary.isClean);
+  } finally {
+    summary.free();
+  }
+} finally {
+  batch.free();
+}
+engine.free();
+```
+
+Ordering and ownership are explicit:
+
+- entries and summaries preserve input order; `entryAt(index)` reports
+  `Error` for an out-of-range index;
+- the batch owns its internal entries, but every `entryAt()` result and every
+  `entry.result` access is a fresh independently owned projection;
+- each `summary()` call returns a fresh owned `ScanSummaryView` derived once
+  from Core's `ScanResults::summary()`; all public Core summary fields and
+  `bySeverity()` are exposed;
+- batches, entries, reports and summaries never retain source text. Only the
+  caller-supplied IDs and Core reports are retained;
+- batches, entries, results and summaries outlive the creating `ScanEngine` and
+  the batch they came from. Free every object exactly once and never use an
+  object after `free()`;
+- reusing a `ScanResult` with `ScanEngine.explainFinding()` still requires a
+  compatible engine, as with every existing result.
+
 ## Runtime and release qualification
 
 Run the generated JavaScript/TypeScript API contract and runtime smoke checks
@@ -371,6 +488,18 @@ candidates, metadata and explanations. Flow compares all six transformation
 methods, including equivalent overlap rejections. Native tests check every Core
 error mapping; impractical revision/document/resource overflows and invariant
 failures are mapping checks, not induced WASM runtime failures.
+
+A third direct-Core oracle generates complete ordered batch results and
+Core-derived summaries for eight fixtures, including an empty batch, empty and
+Unicode sources, duplicate/empty/Unicode IDs, built-ins, opt-in catalogs and all
+custom rule families. Both generated variants compare entry order, IDs, UTF-8
+byte lengths, findings, candidates, explanations and every public summary field
+for 20 entries per variant. Runtime checks also compare every batched source
+with `scan()`, exercise repeated batches, invalid structural inputs and
+out-of-range indexes, then free the engine and batch before reusing independently
+owned entries, reports and summaries. Flow additionally compares all six
+transforms. The adapter remains synchronous and adds no runtime dependency or
+parallel execution.
 
 The custom-remediation oracle qualifies all four families and seven concrete
 actions plus every no-remediation form: 44 configurations and 132 complete

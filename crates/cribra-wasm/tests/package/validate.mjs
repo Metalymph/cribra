@@ -36,13 +36,20 @@ const requiredPublicDeclarations = [
   "export class FindingView",
   "export enum RemediationKind",
   "ReviewPasswordVerifier",
+  "export class ScanBatchEntry",
+  "export class ScanBatchResult",
+  "export interface ScanBatchSource",
   "export class ScanEngine",
   "export class ScanEngineBuilder",
   "export class ScanResult",
+  "export class ScanSummaryView",
 ];
 
 const requiredMethods = [
   "scan(source: string): ScanResult",
+  "scanBatch(sources: ScanBatchSource[]): ScanBatchResult",
+  "entryAt(index: number): ScanBatchEntry",
+  "summary(): ScanSummaryView",
   "explainFinding(result: ScanResult, index: number): ExplanationView",
   "findingAt(index: number): FindingView",
   "candidateAt(index: number): CandidateView",
