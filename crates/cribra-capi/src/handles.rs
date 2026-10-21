@@ -26,6 +26,36 @@ impl CribraScanner {
     }
 }
 
+/// Opaque, exclusively accessed Core-owned editable UTF-8 document.
+///
+/// No adapter source buffer, revision counter or report cache is retained.
+/// Ordinary Core terminal errors preserve the committed snapshot; a contained
+/// panic permanently removes the Core session. Free with cribra_incremental_free.
+pub struct CribraIncremental {
+    pub(crate) inner: Option<cribra::IncrementalSession>,
+}
+
+impl CribraIncremental {
+    pub(crate) fn new(inner: cribra::IncrementalSession) -> Self {
+        Self { inner: Some(inner) }
+    }
+
+    pub(crate) fn with_core<T>(
+        &mut self,
+        operation: impl FnOnce(&mut cribra::IncrementalSession) -> T,
+    ) -> Result<T, crate::CribraStatus> {
+        let mut core = self
+            .inner
+            .take()
+            .ok_or(crate::CRIBRA_INCREMENTAL_SESSION_INVALIDATED)?;
+        // Restore on every normal return, including ordinary Core errors.
+        // Unwinding drops Core and leaves None, forbidding panic recovery.
+        let result = operation(&mut core);
+        self.inner = Some(core);
+        Ok(result)
+    }
+}
+
 /// Opaque, exclusively accessed byte-oriented Core streaming session.
 ///
 /// Owns no adapter source buffer. The handle remains valid after finish or a

@@ -158,8 +158,154 @@ cleanup:
     return failure == NULL ? EXIT_SUCCESS : fail(failure);
 }
 
+/* C11 incremental consumer: Core owns the document; snapshots own their reports. */
+static int incremental_smoke(void) {
+    CribraBuilder *builder = NULL;
+    CribraScanner *scanner = NULL;
+    CribraIncremental *document = NULL;
+    CribraIncremental *limited = NULL;
+    CribraReport *whole = NULL;
+    CribraError *error = NULL;
+    CribraIncrementalSnapshot initial = {0};
+    CribraIncrementalSnapshot edited = {0};
+    CribraIncrementalSnapshot terminal = {0};
+    CribraIncrementalLimits limits = {0};
+    CribraFindingView finding = {0};
+    CribraFindingView expected = {0};
+    CribraExplanationView explanation = {0};
+    CribraStatus status;
+    uint64_t revision = UINT64_MAX;
+    uint32_t active = 0;
+    size_t count = 0;
+    const char *failure = NULL;
+    static const uint8_t source[] =
+        "\xc3\xa9\xf0\x9f\x99\x82 SECRET\nABCD-EFGH-IJKL-MNOP";
+    static const uint8_t secret[] = "SECRET";
+    static const uint8_t malformed[] = {0xff};
+    const CribraRuleConfig rule = {
+        .kind = CRIBRA_RULE_KIND_LITERAL,
+        .id = {(const uint8_t *)"literal", 7},
+        .value = {secret, sizeof(secret) - 1},
+        .severity = CRIBRA_SEVERITY_HIGH,
+        .remediation = CRIBRA_REMEDIATION_REMOVE_SENSITIVE_VALUE
+    };
+#define INCR_CHECK(condition, message) \
+    do { if (!(condition)) { failure = (message); goto cleanup; } } while (0)
+
+    INCR_CHECK(cribra_builder_new(&builder) == CRIBRA_OK, "incremental builder failed");
+    INCR_CHECK(cribra_builder_add_rule(builder, &rule, &error) == CRIBRA_OK && error == NULL,
+               "incremental rule failed");
+    status = cribra_builder_build(builder, &scanner, &error);
+    builder = NULL;
+    INCR_CHECK(status == CRIBRA_OK && scanner != NULL && error == NULL, "incremental scanner failed");
+    limits.max_candidates_enabled = 1;
+    status = cribra_scanner_incremental_new_with_limits(scanner, secret, sizeof(secret) - 1,
+                                                       &limits, &limited, &error);
+    INCR_CHECK(status == CRIBRA_INCREMENTAL_CANDIDATE_LIMIT_EXCEEDED && limited == NULL && error != NULL,
+               "incremental zero construction budget was ignored");
+    cribra_error_free(error);
+    error = NULL;
+    limits.max_candidates_enabled = 0;
+    limits.max_materialized_results_enabled = 1;
+    limits.max_materialized_results = 1;
+    INCR_CHECK(cribra_scanner_incremental_new_with_limits(scanner, secret, sizeof(secret) - 1,
+                                                        &limits, &limited, &error) == CRIBRA_OK,
+               "incremental limited construction failed");
+    status = cribra_incremental_apply_edit(limited, 0, 0, 0, secret, sizeof(secret) - 1, &revision, &error);
+    INCR_CHECK(status == CRIBRA_INCREMENTAL_RESULT_LIMIT_EXCEEDED && revision == 0 && error != NULL,
+               "incremental edit result budget was ignored");
+    cribra_error_free(error);
+    error = NULL;
+    INCR_CHECK(cribra_incremental_is_active(limited, &active, &error) == CRIBRA_OK && active == 0,
+               "incremental resource failure remained active");
+    INCR_CHECK(cribra_incremental_snapshot(limited, &terminal, &error) == CRIBRA_OK &&
+               terminal.revision == 0 && terminal.source_bytes == sizeof(secret) - 1 && terminal.report != NULL,
+               "incremental terminal snapshot was lost");
+    INCR_CHECK(cribra_report_finding_count(terminal.report, &count) == CRIBRA_OK && count == 1,
+               "incremental terminal snapshot changed");
+    INCR_CHECK(cribra_incremental_apply_edit(limited, UINT64_MAX, 99, 0, NULL, 0, &revision, &error)
+               == CRIBRA_INCREMENTAL_NOT_ACTIVE, "terminal incremental session recovered");
+    cribra_error_free(error);
+    error = NULL;
+
+    INCR_CHECK(cribra_scanner_incremental_new(scanner, source, sizeof(source) - 1, &document, &error) == CRIBRA_OK,
+               "incremental construction failed");
+    INCR_CHECK(cribra_incremental_snapshot(document, &initial, &error) == CRIBRA_OK &&
+               initial.revision == 0 && initial.source_bytes == sizeof(source) - 1 && initial.report != NULL,
+               "incremental initial revision/length mismatch");
+    INCR_CHECK(cribra_scanner_scan(scanner, source, sizeof(source) - 1, &whole, &error) == CRIBRA_OK,
+               "incremental whole-source oracle failed");
+    INCR_CHECK(cribra_scanner_explain_finding(scanner, initial.report, 0, &explanation, &error) == CRIBRA_OK &&
+               explanation.kind == CRIBRA_EXPLANATION_CLASSIFIED &&
+               explanation.detection_mode == CRIBRA_DETECTION_MODE_MATCHER_ONLY,
+               "incremental finding explanation mismatch");
+    cribra_scanner_free(scanner);
+    scanner = NULL; /* The document must outlive the scanner. */
+    INCR_CHECK(cribra_incremental_apply_edit(document, 0, 1, 1, NULL, 0, &revision, &error)
+               == CRIBRA_INCREMENTAL_INVALID_UTF8_BOUNDARY && revision == 0,
+               "incremental accepted a split UTF-8 scalar");
+    cribra_error_free(error);
+    error = NULL;
+    INCR_CHECK(cribra_incremental_apply_edit(document, UINT64_MAX, 99, 0, malformed, sizeof(malformed), &revision, &error)
+               == CRIBRA_INVALID_UTF8, "incremental replacement UTF-8 was not checked first");
+    cribra_error_free(error);
+    error = NULL;
+    INCR_CHECK(cribra_incremental_apply_edit(document, 1, 0, 0, NULL, 0, &revision, &error)
+               == CRIBRA_INCREMENTAL_STALE_REVISION, "incremental stale revision was accepted");
+    cribra_error_free(error);
+    error = NULL;
+    INCR_CHECK(cribra_incremental_apply_edit(document, 0, 99, 0, NULL, 0, &revision, &error)
+               == CRIBRA_INCREMENTAL_INVALID_RANGE, "incremental reversed range was accepted");
+    cribra_error_free(error);
+    error = NULL;
+    INCR_CHECK(cribra_incremental_is_active(document, &active, &error) == CRIBRA_OK && active == 1,
+               "recoverable incremental errors poisoned the session");
+    INCR_CHECK(cribra_incremental_apply_edit(document, 0, 0, 0, (const uint8_t *)"Z", 1, &revision, &error)
+               == CRIBRA_OK && revision == 1, "incremental insertion failed");
+    INCR_CHECK(cribra_incremental_apply_edit(document, 1, 0, 1, (const uint8_t *)"Y", 1, &revision, &error)
+               == CRIBRA_OK && revision == 2, "incremental replacement failed");
+    INCR_CHECK(cribra_incremental_apply_edit(document, 2, 0, 1, NULL, 0, &revision, &error)
+               == CRIBRA_OK && revision == 3, "incremental deletion failed");
+    INCR_CHECK(cribra_incremental_apply_edit(document, 3, 0, 0, NULL, 0, &revision, &error)
+               == CRIBRA_OK && revision == 4, "incremental no-op did not advance revision");
+    INCR_CHECK(cribra_incremental_snapshot(document, &edited, &error) == CRIBRA_OK &&
+               edited.revision == 4 && edited.source_bytes == sizeof(source) - 1 &&
+               edited.report != NULL && edited.report != initial.report,
+               "incremental snapshot revision/ownership mismatch");
+    cribra_incremental_free(document);
+    document = NULL;
+    INCR_CHECK(cribra_report_finding_at(edited.report, 0, &finding) == CRIBRA_OK &&
+               cribra_report_finding_at(whole, 0, &expected) == CRIBRA_OK,
+               "incremental report traversal failed");
+    INCR_CHECK(view_equals(finding.rule_id, "literal") && finding.start == expected.start &&
+               finding.end == expected.end && finding.line == expected.line && finding.column == expected.column &&
+               finding.severity == expected.severity && finding.confidence == expected.confidence &&
+               finding.remediation == expected.remediation && finding.start == 7 && finding.column == 4,
+               "incremental finding/UTF-8 parity mismatch");
+    INCR_CHECK(cribra_report_finding_count(initial.report, &count) == CRIBRA_OK && count == 1,
+               "earlier incremental snapshot lost independence");
+    INCR_CHECK(cribra_report_candidate_count(edited.report, &count) == CRIBRA_OK && count == 1 &&
+               cribra_report_explain_candidate(edited.report, 0, &explanation) == CRIBRA_OK &&
+               explanation.kind == CRIBRA_EXPLANATION_AMBIGUOUS &&
+               explanation.candidate_evidence == CRIBRA_CANDIDATE_EVIDENCE_STRUCTURAL,
+               "incremental review-only candidate parity mismatch");
+
+cleanup:
+    cribra_error_free(error);
+    cribra_report_free(whole);
+    cribra_report_free(initial.report);
+    cribra_report_free(edited.report);
+    cribra_report_free(terminal.report);
+    cribra_incremental_free(document);
+    cribra_incremental_free(limited);
+    cribra_scanner_free(scanner);
+    cribra_builder_free(builder);
+#undef INCR_CHECK
+    return failure == NULL ? EXIT_SUCCESS : fail(failure);
+}
+
 int main(void) {
-    if (cribra_abi_version_major() != 0 || cribra_abi_version_minor() != 2 || cribra_abi_version_patch() != 0) {
+    if (cribra_abi_version_major() != 0 || cribra_abi_version_minor() != 3 || cribra_abi_version_patch() != 0) {
         return fail("unexpected ABI major version");
     }
 
@@ -277,6 +423,10 @@ int main(void) {
         return EXIT_FAILURE;
     }
     cribra_scanner_free(scanner);
+
+    if (incremental_smoke() != EXIT_SUCCESS) {
+        return EXIT_FAILURE;
+    }
 
     puts("cribra-capi smoke: ok");
     return EXIT_SUCCESS;

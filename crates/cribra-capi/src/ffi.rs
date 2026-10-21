@@ -48,7 +48,7 @@ use crate::{
 /// Experimental native ABI major version.
 pub const ABI_VERSION_MAJOR: u32 = 0;
 /// Experimental native ABI minor version.
-pub const ABI_VERSION_MINOR: u32 = 2;
+pub const ABI_VERSION_MINOR: u32 = 3;
 /// Experimental native ABI patch version.
 pub const ABI_VERSION_PATCH: u32 = 0;
 
@@ -69,7 +69,7 @@ pub(crate) unsafe fn clear_out<T>(out: *mut *mut T) -> Result<(), CribraStatus> 
     Ok(())
 }
 
-unsafe fn clear_value<T: Default>(out: *mut T) -> Result<(), CribraStatus> {
+pub(crate) unsafe fn clear_value<T: Default>(out: *mut T) -> Result<(), CribraStatus> {
     if out.is_null() {
         return Err(CRIBRA_INVALID_ARGUMENT);
     }
@@ -1890,7 +1890,7 @@ mod tests {
                 cribra_abi_version_minor(),
                 cribra_abi_version_patch(),
             ),
-            (0, 2, 0)
+            (0, 3, 0)
         );
     }
 

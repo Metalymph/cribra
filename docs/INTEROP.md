@@ -135,7 +135,8 @@ not become independent detection authorities.
 
 Native ownership is explicit.
 
-Rust-owned objects include scanner, stream, report, batch-result, transformed-output,
+Rust-owned objects include scanner, stream, incremental-document, report, batch-result,
+transformed-output,
 and error handles where applicable. Every owned allocation has one documented
 destruction path.
 
@@ -253,6 +254,75 @@ error ownership rules above and must be freed before reuse.
 Streams require exclusive access: callers must serialize push, finish and free;
 there is no adapter mutex or concurrent use guarantee. Caller buffers and output
 slots must not alias the stream. Existing immutable scanner rules remain unchanged.
+
+### Incremental documents and snapshots (ABI 0.3.0)
+
+`cribra_scanner_incremental_new` creates an unlimited Core-owned UTF-8 document;
+`cribra_scanner_incremental_new_with_limits` also accepts `CribraIncrementalLimits`.
+Construction validates UTF-8 and copies the initial bytes once into Core-owned
+storage. Core exclusively owns the editable source, caches, revision and report.
+There is no adapter source copy, matching logic or edit engine. Complete built-in
+scanners are supported by Core incremental scanning; streaming admission rules do
+not restrict incremental documents. See [Core incremental semantics](incremental.md).
+
+The initial revision is zero. `cribra_incremental_apply_edit` accepts an
+`expected_revision`, a half-open UTF-8 **byte** range `[start, end)`, and replacement
+UTF-8 bytes. Successful insertion, replacement, deletion and no-op edits each
+increment the revision once. Endpoints must fall on scalar boundaries. Core alone
+validates revisions, ranges, boundaries and transactions after ABI input validation.
+Replacement bytes are validated before Core is invoked; malformed UTF-8 returns
+the existing `CRIBRA_INVALID_UTF8` status without changing the session. Null plus
+zero length means empty input; embedded NUL is allowed. Nonempty buffers must be
+readable and at most `PTRDIFF_MAX` bytes. Invalid buffer/output arguments leave
+the document unchanged. The required edit revision output is zero on failure.
+
+Each current Core error has a distinct `CRIBRA_INCREMENTAL_*` status. Stale revision,
+invalid range, invalid UTF-8 boundary, revision overflow and document-length overflow
+are recoverable. Core resource/accounting/invariant failures terminate further edits,
+which then return `CRIBRA_INCREMENTAL_NOT_ACTIVE`, but preserve the last committed
+snapshot. Core defines error precedence for valid UTF-8 requests, including inactive
+before stale revision or bad range. A future unrecognized Core error maps to
+`CRIBRA_INCREMENTAL_UNKNOWN_ERROR` while preserving Core's actual state. Error
+messages are fixed privacy-safe text and never contain document, replacement,
+matcher text, or panic payloads.
+
+`CribraIncrementalLimits` carries four pairs of `uint32_t` enabled flags and `size_t`
+values. Each flag must be 0 (unlimited; ignore the value) or 1 (use the value).
+Enabled zero is a real budget; there are no sentinel values. Zero-initialization
+means unlimited budgets. Core charges newly emitted raw candidates per operation,
+simultaneously owned old/staged cache records, materialized finding/structural
+records per operation, and conservative peak logical transaction bytes. Rejected
+and hidden cache records count; suppression refunds no result tickets. Logical
+storage excludes allocator capacity/overhead, shared configuration, opaque
+regex/validator workspace, FFI input conversion and caller-owned report clones;
+it is not a total heap or allocation-failure guarantee.
+
+`cribra_incremental_snapshot` fills one `CribraIncrementalSnapshot` with matching
+revision, UTF-8 source byte count and an independently owned complete `CribraReport`.
+It remains available after ordinary Core terminal failures. The cloned report
+supports all existing report/candidate/explainability/transform APIs, with unchanged
+Core ordering, UTF-8 coordinates and review-only semantics. It remains valid through
+later edits and after freeing the document or scanner. There is no source getter.
+The caller must call `cribra_report_free(snapshot.report)` exactly once, including
+before reusing the same output record; copying the C record does not clone ownership.
+Snapshot failure clears all fields to zero/null and transfers no partial report.
+
+Every handle operation requires exclusive access, including snapshot and activity
+queries. Callers must serialize calls; there is no adapter mutex. Coherence covers
+one complete snapshot call, not separate calls made across intervening edits.
+Inputs, output slots and handles must not alias. The document may outlive its
+scanner. `cribra_incremental_free` releases active, terminal or panic-invalidated
+handles; null is a no-op. Snapshot reports remain independently owned.
+
+An unwinding panic during guarded Core/report operations is contained as
+`CRIBRA_INTERNAL_ERROR` and permanently removes the adapter's Core session. Later
+edits/snapshots return `CRIBRA_INCREMENTAL_SESSION_INVALIDATED`; panic recovery is
+not supported and no potentially invalid committed snapshot is exposed.
+`cribra_incremental_is_active` succeeds with a `uint32_t` 1 for active documents,
+or 0 after either an ordinary terminal failure or panic invalidation. Previously
+returned reports remain valid. Allocation aborts and invalid-memory caller-contract
+violations are outside panic containment. Optional error-output slots follow the
+same ownership and clearing conventions as other C ABI functions.
 
 ## 7. Native input contract
 
@@ -479,8 +549,9 @@ potentially stale header.
 ## 17. ABI versioning
 
 Cribra exposes an explicit native ABI version independently from Rust crate
-SemVer. The current native protocol is **0.2.0**, adding byte-oriented streaming
-without changing existing entry-point signatures or status assignments.
+SemVer. The current native protocol is **0.3.0**, adding Core-owned incremental
+documents and coherent snapshots alongside 0.2.0 streaming. Existing entry-point
+signatures and numeric statuses remain unchanged.
 
 Crate version and ABI protocol version answer different questions:
 

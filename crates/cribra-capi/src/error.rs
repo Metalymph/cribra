@@ -92,6 +92,40 @@ impl CribraError {
                 "stream execution invariant violated"
             }
             crate::status::CRIBRA_STREAM_UNKNOWN_ERROR => "unknown Core streaming failure",
+            crate::status::CRIBRA_INCREMENTAL_NOT_ACTIVE => "incremental session is not active",
+            crate::status::CRIBRA_INCREMENTAL_STALE_REVISION => {
+                "incremental edit revision is stale"
+            }
+            crate::status::CRIBRA_INCREMENTAL_INVALID_RANGE => "incremental edit range is invalid",
+            crate::status::CRIBRA_INCREMENTAL_INVALID_UTF8_BOUNDARY => {
+                "incremental edit divides a UTF-8 scalar"
+            }
+            crate::status::CRIBRA_INCREMENTAL_REVISION_OVERFLOW => "incremental revision overflow",
+            crate::status::CRIBRA_INCREMENTAL_DOCUMENT_LENGTH_OVERFLOW => {
+                "incremental document length overflow"
+            }
+            crate::status::CRIBRA_INCREMENTAL_CANDIDATE_LIMIT_EXCEEDED => {
+                "incremental candidate limit exceeded"
+            }
+            crate::status::CRIBRA_INCREMENTAL_CACHE_LIMIT_EXCEEDED => {
+                "incremental cache record limit exceeded"
+            }
+            crate::status::CRIBRA_INCREMENTAL_RESULT_LIMIT_EXCEEDED => {
+                "incremental result materialization limit exceeded"
+            }
+            crate::status::CRIBRA_INCREMENTAL_TRANSACTION_STORAGE_LIMIT_EXCEEDED => {
+                "incremental logical transaction storage limit exceeded"
+            }
+            crate::status::CRIBRA_INCREMENTAL_RESOURCE_ACCOUNTING_OVERFLOW => {
+                "incremental resource accounting overflow"
+            }
+            crate::status::CRIBRA_INCREMENTAL_EXECUTION_INVARIANT_VIOLATED => {
+                "incremental execution invariant violated"
+            }
+            crate::status::CRIBRA_INCREMENTAL_UNKNOWN_ERROR => "unknown Core incremental failure",
+            crate::status::CRIBRA_INCREMENTAL_SESSION_INVALIDATED => {
+                "incremental session invalidated by a contained panic"
+            }
             crate::status::CRIBRA_INTERNAL_ERROR => "internal Cribra native adapter failure",
             _ => "Cribra native operation failed",
         };

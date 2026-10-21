@@ -2,6 +2,50 @@
 
 use std::ptr;
 
+/// Optional per-operation budgets for one Core incremental document.
+///
+/// Each enabled flag must be 0 (unlimited; ignore the value) or 1 (use the
+/// value). Enabled zero is a real zero budget, with no sentinel values.
+/// Zero-initialization leaves all four budgets unlimited. Old and staged data
+/// may coexist; these are Core logical payload limits, not total heap caps.
+#[repr(C)]
+#[derive(Debug, Copy, Clone, Default)]
+pub struct CribraIncrementalLimits {
+    /// Enables the per-operation raw rule candidate limit, including rejections.
+    pub max_candidates_enabled: u32,
+    /// Maximum newly emitted raw rule candidates per construction or edit.
+    pub max_candidates: usize,
+    /// Enables the simultaneous old and staged cache record limit.
+    pub max_retained_cache_records_enabled: u32,
+    /// Maximum rule/structural cache records, including hidden and rejected ones.
+    pub max_retained_cache_records: usize,
+    /// Enables the per-operation finding/structural result materialization limit.
+    pub max_materialized_results_enabled: u32,
+    /// Maximum materialized result records; suppression refunds no tickets.
+    pub max_materialized_results: usize,
+    /// Enables the conservative logical transaction payload limit.
+    pub max_transaction_storage_bytes_enabled: u32,
+    /// Maximum logical transaction bytes, including the old snapshot.
+    pub max_transaction_storage_bytes: usize,
+}
+
+/// One coherent, independently owned view of a committed incremental document.
+///
+/// The record exposes no source text. On success, the caller owns `report` and
+/// must free it exactly once with cribra_report_free. Copying this C record does
+/// not duplicate ownership. Release an earlier report before reusing its output
+/// slot. Failure clears the entire output to zeros/null and transfers no report.
+#[repr(C)]
+#[derive(Debug, Default)]
+pub struct CribraIncrementalSnapshot {
+    /// Revision of this exact source length and complete report, initially zero.
+    pub revision: u64,
+    /// Length of the committed source in UTF-8 bytes.
+    pub source_bytes: usize,
+    /// Owned complete report, independent of future edits and the session lifetime.
+    pub report: *mut crate::CribraReport,
+}
+
 /// Optional budgets for one Core streaming source.
 ///
 /// Every enabled flag must be exactly 0 (unlimited) or 1 (use the corresponding

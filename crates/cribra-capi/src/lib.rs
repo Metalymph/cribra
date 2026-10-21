@@ -13,12 +13,15 @@
 mod error;
 mod ffi;
 mod handles;
+mod incremental;
 mod status;
 mod stream;
 mod types;
 
 #[cfg(test)]
 mod hardening_tests;
+#[cfg(test)]
+mod incremental_tests;
 #[cfg(test)]
 mod stream_tests;
 
@@ -40,18 +43,30 @@ pub use ffi::{
     cribra_transform_synthesize, cribra_transform_template, cribra_transform_template_with,
 };
 pub use handles::{
-    CribraBatchResults, CribraBuilder, CribraOutput, CribraReport, CribraScanner,
-    CribraShareBundle, CribraStream,
+    CribraBatchResults, CribraBuilder, CribraIncremental, CribraOutput, CribraReport,
+    CribraScanner, CribraShareBundle, CribraStream,
+};
+pub use incremental::{
+    cribra_incremental_apply_edit, cribra_incremental_free, cribra_incremental_is_active,
+    cribra_incremental_snapshot, cribra_scanner_incremental_new,
+    cribra_scanner_incremental_new_with_limits,
 };
 pub use status::{
-    CRIBRA_BUILD_ERROR, CRIBRA_INTERNAL_ERROR, CRIBRA_INVALID_ARGUMENT, CRIBRA_INVALID_UTF8,
-    CRIBRA_OK, CRIBRA_OUT_OF_RANGE, CRIBRA_RULE_ERROR, CRIBRA_STREAM_CANDIDATE_LIMIT_EXCEEDED,
-    CRIBRA_STREAM_COORDINATE_OVERFLOW, CRIBRA_STREAM_EXECUTION_INVARIANT_VIOLATED,
-    CRIBRA_STREAM_INCOMPLETE_UTF8, CRIBRA_STREAM_INVALID_UTF8, CRIBRA_STREAM_NOT_ACTIVE,
-    CRIBRA_STREAM_RESULT_LIMIT_EXCEEDED, CRIBRA_STREAM_SOURCE_OFFSET_OVERFLOW,
-    CRIBRA_STREAM_STORAGE_LIMIT_EXCEEDED, CRIBRA_STREAM_STORAGE_REQUIREMENT_OVERFLOW,
-    CRIBRA_STREAM_UNKNOWN_ERROR, CRIBRA_STREAM_UNSUPPORTED_RULE_SET, CRIBRA_TRANSFORM_ERROR,
-    CribraStatus,
+    CRIBRA_BUILD_ERROR, CRIBRA_INCREMENTAL_CACHE_LIMIT_EXCEEDED,
+    CRIBRA_INCREMENTAL_CANDIDATE_LIMIT_EXCEEDED, CRIBRA_INCREMENTAL_DOCUMENT_LENGTH_OVERFLOW,
+    CRIBRA_INCREMENTAL_EXECUTION_INVARIANT_VIOLATED, CRIBRA_INCREMENTAL_INVALID_RANGE,
+    CRIBRA_INCREMENTAL_INVALID_UTF8_BOUNDARY, CRIBRA_INCREMENTAL_NOT_ACTIVE,
+    CRIBRA_INCREMENTAL_RESOURCE_ACCOUNTING_OVERFLOW, CRIBRA_INCREMENTAL_RESULT_LIMIT_EXCEEDED,
+    CRIBRA_INCREMENTAL_REVISION_OVERFLOW, CRIBRA_INCREMENTAL_SESSION_INVALIDATED,
+    CRIBRA_INCREMENTAL_STALE_REVISION, CRIBRA_INCREMENTAL_TRANSACTION_STORAGE_LIMIT_EXCEEDED,
+    CRIBRA_INCREMENTAL_UNKNOWN_ERROR, CRIBRA_INTERNAL_ERROR, CRIBRA_INVALID_ARGUMENT,
+    CRIBRA_INVALID_UTF8, CRIBRA_OK, CRIBRA_OUT_OF_RANGE, CRIBRA_RULE_ERROR,
+    CRIBRA_STREAM_CANDIDATE_LIMIT_EXCEEDED, CRIBRA_STREAM_COORDINATE_OVERFLOW,
+    CRIBRA_STREAM_EXECUTION_INVARIANT_VIOLATED, CRIBRA_STREAM_INCOMPLETE_UTF8,
+    CRIBRA_STREAM_INVALID_UTF8, CRIBRA_STREAM_NOT_ACTIVE, CRIBRA_STREAM_RESULT_LIMIT_EXCEEDED,
+    CRIBRA_STREAM_SOURCE_OFFSET_OVERFLOW, CRIBRA_STREAM_STORAGE_LIMIT_EXCEEDED,
+    CRIBRA_STREAM_STORAGE_REQUIREMENT_OVERFLOW, CRIBRA_STREAM_UNKNOWN_ERROR,
+    CRIBRA_STREAM_UNSUPPORTED_RULE_SET, CRIBRA_TRANSFORM_ERROR, CribraStatus,
 };
 pub use stream::{
     cribra_scanner_stream_new, cribra_scanner_stream_new_with_limits, cribra_stream_finish,
@@ -77,8 +92,8 @@ pub use types::{
     CribraBatchEntryView, CribraBatchExecution, CribraBatchInput, CribraBatchSummary,
     CribraCandidateEvidence, CribraCandidateKind, CribraCandidateView, CribraConfidence,
     CribraDetectionMode, CribraExplanationKind, CribraExplanationView, CribraFindingView,
-    CribraPseudonymizeConfig, CribraRemediation, CribraRuleConfig, CribraRuleKind,
-    CribraScanSummaryView, CribraSeverity, CribraShareBundleConfig, CribraShareEntryView,
-    CribraShareManifestView, CribraShareMode, CribraStreamLimits, CribraStringView,
-    CribraSynthesizeConfig, CribraTemplateConfig,
+    CribraIncrementalLimits, CribraIncrementalSnapshot, CribraPseudonymizeConfig,
+    CribraRemediation, CribraRuleConfig, CribraRuleKind, CribraScanSummaryView, CribraSeverity,
+    CribraShareBundleConfig, CribraShareEntryView, CribraShareManifestView, CribraShareMode,
+    CribraStreamLimits, CribraStringView, CribraSynthesizeConfig, CribraTemplateConfig,
 };
