@@ -1207,6 +1207,7 @@ fn keyed_commands_usage_and_source_failures_preserve_exit_codes() {
     fs::remove_file(key_file).unwrap();
 }
 
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
 #[test]
 fn bundle_execution_is_unavailable_without_filesystem_side_effects() {
     use cribra_cli::{Command as CliCommand, ExecuteError, execute, parse};
@@ -1238,9 +1239,14 @@ fn bundle_execution_is_unavailable_without_filesystem_side_effects() {
         let error = execute(&parsed).unwrap_err();
         assert!(matches!(
             error,
-            ExecuteError::UnsupportedOperation("bundle execution is not implemented")
+            ExecuteError::UnsupportedOperation(
+                "bundle export is supported only on macOS and Linux"
+            )
         ));
-        assert_eq!(error.to_string(), "bundle execution is not implemented");
+        assert_eq!(
+            error.to_string(),
+            "bundle export is supported only on macOS and Linux"
+        );
         let process = Command::new(cribra_bin())
             .args(args.into_iter().skip(1))
             .output()
@@ -1249,7 +1255,7 @@ fn bundle_execution_is_unavailable_without_filesystem_side_effects() {
         assert!(process.stdout.is_empty());
         assert_eq!(
             process.stderr,
-            b"cribra: bundle execution is not implemented\n"
+            b"cribra: bundle export is supported only on macOS and Linux\n"
         );
         assert!(!root.exists());
     }

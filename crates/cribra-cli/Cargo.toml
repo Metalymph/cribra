@@ -18,3 +18,6 @@ path = "src/main.rs"
 
 [dependencies]
 cribra = { version = "^0.7", path = "../.." }
+
+[target.'cfg(any(target_os = "macos", target_os = "linux"))'.dependencies]
+rustix = { version = "1.1.5", features = ["fs"] }

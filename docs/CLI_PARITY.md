@@ -74,13 +74,13 @@ cribra
 ├── pseudonymize <FILE|-> --key-file <PATH>
 ├── synthesize <FILE|-> --key-file <PATH>
 └── bundle --mode <MODE> [--key-file <KEY>] --output <DIR> <FILE>...
-    (parsing only; execution NOT IMPLEMENTED)
+    (export on macOS and Linux)
 ```
 
 The five executable source commands accept exactly one explicit UTF-8
 filesystem path or standard input. Keyed commands also require an explicit key
-file. `bundle` accepts multiple explicit file paths for parsing only; its
-execution is **NOT IMPLEMENTED** and it rejects stdin sources.
+file. `bundle` exports multiple explicit file paths on macOS and Linux and
+rejects stdin sources.
 
 Input acquisition preserves valid UTF-8 text without newline normalization,
 BOM stripping, lossy decoding, or encoding auto-detection. Invalid UTF-8 is
@@ -124,8 +124,8 @@ The CLI must not independently implement detector or validator behavior.
 
 | Core capability | CLI state | Current projection |
 | --- | --- | --- |
-| Default scanner | EXPOSED | all five executable source commands use `Scanner::default()` |
-| Explicit UTF-8 file input | EXPOSED | one explicit file per executable source command |
+| Default scanner | EXPOSED | source commands and bundles use `Scanner::default()` |
+| Explicit UTF-8 file input | EXPOSED | one file per single-source command; explicit ordered files for bundles |
 | Standard input | EXPOSED | `-` source input for the five executable commands; not accepted by `bundle` |
 | Findings | EXPOSED | human and JSON output |
 | Rule identity | EXPOSED | rule ID |
@@ -149,7 +149,7 @@ The CLI must not independently implement detector or validator behavior.
 | Rule-ID filter | EXPOSED | `--rule-id` delegates to `query.rule_id()` |
 | Critical/high-priority/high-confidence query helpers | EXPOSED | equivalent constraints: `--severity critical`, `--min-severity high`, `--confidence high` |
 | `ScanSort` | EXPOSED | `--sort` delegates to `query.sort()` for rule ID, severity, confidence, or location, in either direction |
-| Aggregate `ScanSummary` | GAP | current CLI scans exactly one source |
+| Aggregate `ScanSummary` | EXPOSED | original batch counters in bundle manifest v1 |
 | Finding explanation | EXPOSED | `--explain` resolves rendered findings through `finding.explanation(&scanner)` |
 | Detection mode | EXPOSED | opt-in human `detection=` and JSON `detection_mode` from the public `Explanation` API |
 | Candidate explanation | EXPOSED | existing candidate evidence projects `Explanation::Ambiguous` facts |
@@ -157,10 +157,10 @@ The CLI must not independently implement detector or validator behavior.
 | Template transformation | EXPOSED | `cribra template` delegates to `cribra::transform::template()` |
 | Pseudonymization | EXPOSED | `cribra pseudonymize` with mandatory `--key-file`, using Core defaults |
 | Synthesis | EXPOSED | `cribra synthesize` with mandatory `--key-file`, using Core defaults |
-| Share bundle | GAP | parsing and internal preparation only; CLI execution NOT IMPLEMENTED |
+| Share bundle | EXPOSED | private, atomic no-overwrite directory export on macOS and Linux |
 | Custom `Rule` construction | LIBRARY-ONLY | programmable Rust API |
 | Custom `ScannerBuilder` construction | LIBRARY-ONLY | programmable Rust API |
-| Parallel scanning | LIBRARY-ONLY | current CLI accepts one source |
+| Parallel scanning | LIBRARY-ONLY | bundle scanning uses Core defaults |
 | Directory traversal | OUT OF SCOPE | explicitly excluded from current CLI input contract |
 | Repository walking | OUT OF SCOPE | explicitly excluded from current CLI input contract |
 | Glob expansion | OUT OF SCOPE | explicitly excluded from current CLI input contract |
@@ -357,10 +357,10 @@ length errors, source input failures, and Core transformation failures return
 Successful execution returns `0`. Existing scan, redaction, and template output
 contracts are unchanged.
 
-## Proposed bundle syntax: parsing only
+## Share bundle export
 
-**Bundle execution is NOT IMPLEMENTED.** The public `BundleCommand` and
-`BundleMode` model and CLI parser accept these proposed forms:
+On macOS and Linux, the public `BundleCommand` and `BundleMode` model and CLI
+parser support:
 
 ```text
 cribra bundle --mode <MODE> --output <DIR> <FILE>...
@@ -382,24 +382,63 @@ use an explicit relative path for a filename beginning with `-`.
 
 Parsing performs no filesystem access, canonicalization, key-byte reading or
 validation, recursive discovery, glob expansion, or implicit input selection.
-Non-UTF-8 filesystem paths are retained where supported. `--output` is only a
-recorded proposed directory path: this syntax does not promise any export
-layout, manifest, output naming, or overwrite behavior.
+Non-UTF-8 filesystem paths are retained where supported. Publicly constructed
+`BundleCommand` values receive the same path, source-uniqueness, and mode/key
+validation before keys or sources are read. Invalid public models return an
+execution error; parser usage failures return `2`.
 
-Every parsed bundle request returns
-`ExecuteError::UnsupportedOperation("bundle execution is not implemented")`.
-The process exits `1` with empty
-stdout and the safe diagnostic `bundle execution is not implemented`. It does
-not read sources or keys, scan, call `ShareBundle`, create directories, or write
-files. Usage errors return `2`. ShareBundle parity remains **GAP** until an
-actual execution contract is implemented and validated.
+The output parent must already exist. Successful execution returns `0` with
+empty stdout and creates:
 
-### Internal preparation and proposed CLI manifest v1
+```text
+<DIR>/
+  manifest.json
+  sources/
+    0001.txt
+    0002.txt
+    ...
+```
 
-NB-5.6b.1 adds an internal, in-memory preparation layer for reuse by a later
-execution phase. It is not called by public `execute()` and does not make bundle
-export available. Public bundle execution remains **NOT IMPLEMENTED** and
-ShareBundle CLI parity remains **GAP**.
+The destination must not exist, including as a file, directory, or dangling
+symlink. Publication never replaces or follows an existing destination.
+Concurrent exports to the same destination have at most one winner; losing
+invocations fail without changing the winner's bundle.
+
+The exporter creates a unique adjacent staging directory exclusively, with
+source-independent temporary names. Staging and `sources` directories request
+`0700` at creation; manifest and source files request `0600`. A restrictive umask
+may further restrict these modes. Files use descriptor-relative exclusive
+creation (`O_CREAT | O_EXCL`, the semantics of `create_new(true)`) and
+`O_NOFOLLOW`; directory handles anchor output writes and cleanup. Permissions
+are never widened after creation.
+
+After all files are written and synced, publication uses atomic no-replace
+rename: Linux `renameat2(RENAME_NOREPLACE)` or macOS
+`renameatx_np(RENAME_EXCL)`, through safe Rustix wrappers. No ordinary-rename
+fallback exists. Staging resides in the destination's parent, so publication
+stays on one filesystem. A kernel or filesystem without this operation fails
+with an execution error and cleanup. Atomic visibility does not guarantee
+power-loss durability. The output parent should be trusted against hostile
+concurrent modification; normal parent symlinks follow filesystem semantics
+before the directory handle is acquired.
+
+A scoped guard removes only recorded staging entries with matching filesystem
+identity before publication. Colliding staging names are never reused or
+removed; unexpected entries are preserved. Ordinary preparation, write, and
+publication failures leave no published bundle, and cleanup is attempted on
+failure. Cleanup failures are reported as execution failures and may leave a
+private staging directory. Process termination or power loss can also leave
+staging behind. After the atomic commit, cleanup is disarmed and cannot delete
+the published bundle.
+
+Input, key, transformation, staging, write, and publication failures return `1`
+with empty stdout. Filesystem export diagnostics report only error kinds,
+without source contents, transformed contents, key material, or filenames.
+Windows and other unsupported platforms return
+`UnsupportedOperation("bundle export is supported only on macOS and Linux")`
+with exit `1` and empty stdout before acquiring sources or keys.
+
+### Preparation and CLI manifest v1
 
 Preparation accepts `BundleCommand`. Keyed modes first read and validate the key
 with the same bounded, exactly-32-raw-byte key helper used by the single-source
@@ -416,9 +455,8 @@ paths, and manifest JSON. Paths are numbered independently of input filenames:
 `sources/9999.txt` is followed by `sources/10000.txt`, without truncation. All
 inputs have an entry, including empty, clean, and candidate-only inputs.
 
-Manifest v1 is an internal proposed contract, not an available exported file.
-Its field order is fixed as below. Production rendering uses compact JSON with
-one trailing newline; this example represents two empty sources:
+The exported manifest v1 has fixed field order as below. Rendering uses compact
+JSON with one trailing newline; this example represents two empty sources:
 
 ```json
 {
@@ -465,7 +503,7 @@ The current process exit contract is:
 | Code | Meaning |
 | ---: | --- |
 | `0` | successful execution, including clean, review-only, and finding-bearing scans |
-| `1` | key, input, transformation, unavailable bundle execution, or other execution failure |
+| `1` | key, input, transformation, bundle validation/export, unsupported platform, or other execution failure |
 | `2` | command-line usage or parse failure |
 
 Finding presence is deliberately not an execution failure.
@@ -486,7 +524,8 @@ review-only candidates, JSON output, and invalid UTF-8 diagnostics.
 All four transformation commands emit transformed source as their primary
 result. Core replaces classified findings; candidates and undetected material
 may remain in that source. Errors emit no source text or partial transformed
-stdout.
+stdout. Bundles write transformed contents to private output files, with empty
+stdout. Candidate and undetected values may remain in those files as well.
 
 ## Semantic projection and drift
 
@@ -513,14 +552,11 @@ or build compatibility.
 
 ## Confirmed parity gaps
 
-### Share bundles and CI exit policy
+### CI exit policy
 
-Core share bundles remain a separate CLI parity gap: `bundle` has a parsing and
-public model surface, but execution is NOT IMPLEMENTED. The executable keyed
-commands accept one source and do not add bundle orchestration or manifests. A
-CI-oriented failure-on-findings policy also remains separate from the existing
-execution exit codes. Future commands must preserve Core authority and the
-transformation privacy model.
+An explicit CI-oriented failure-on-findings policy remains a gap. Bundle export
+and single-source transformations preserve the existing execution exit codes;
+finding presence alone does not cause failure.
 
 ## Deliberate non-parity
 
@@ -531,18 +567,16 @@ currently treated as library responsibilities. They are suitable for embedded
 consumers that require programmatic scanner construction and are not considered
 CLI parity defects.
 
-Likewise, parallel execution is not independently useful while executable source
-commands each accept exactly one source.
-
-These classifications may be revisited if the command model itself expands.
+Parallel scanning remains a library-level configuration; bundle export uses
+Core defaults. These classifications may be revisited independently.
 
 ## Input orchestration is separate from semantic parity
 
 Multi-source orchestration, directory discovery, repository walking, and glob
 expansion must not be conflated.
 
-A future CLI could support multiple explicit sources or a core `ShareBundle`
-operation without assuming responsibility for recursive filesystem discovery.
+`bundle` supports multiple explicit sources through Core `ShareBundle` without
+recursive filesystem discovery. Single-source commands retain their input contract.
 
 Conversely, adding filesystem traversal would be a command-product decision,
 not a requirement imposed merely by the existence of batch-oriented core APIs.
@@ -553,7 +587,7 @@ The current audit suggests the following implementation order if the gaps are
 accepted for future CLI work:
 
 1. complete small metadata projection gaps;
-2. evaluate multi-source and share-bundle command semantics separately;
+2. evaluate further input orchestration separately from bundle semantics;
 3. evaluate explicit CI failure policy without changing existing exit semantics.
 
 This ordering is advisory. Each capability should be implemented as an

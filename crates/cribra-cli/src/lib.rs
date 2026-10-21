@@ -8,13 +8,9 @@
 //! Detection, validation, findings, remediation, and transformations remain
 //! authoritative in the `cribra` core crate.
 
-// Preparation is compiled and unit-tested, but public execution remains disabled
-// until NB-5.6b.2. Keep this allowance scoped to the unconnected internal layer.
-#[cfg_attr(
-    not(test),
-    allow(dead_code, reason = "bundle preparation awaits NB-5.6b.2")
-)]
+#[cfg(any(target_os = "macos", target_os = "linux", test))]
 mod bundle;
+mod bundle_export;
 mod command;
 mod execute;
 mod input;
@@ -420,7 +416,7 @@ Commands:
   template <FILE|-> Replace all findings with <CRIBRA:rule-id>
   pseudonymize      Transform findings to stable keyed pseudonyms
   synthesize        Transform findings to keyed synthetic values
-  bundle            Parse a bundle request (execution NOT IMPLEMENTED)
+  bundle            Export a bundle on macOS/Linux without overwriting
 
 Transformations emit only transformed text, without an added newline.
 Candidates and undetected sensitive data may remain.
@@ -428,12 +424,15 @@ Redact and template accept no options. Keyed commands require --key-file PATH
 before or after the source: exactly 32 raw binary bytes in a regular file.
 Keys are never read from stdin, inline arguments, or environment variables.
 
-Bundle syntax (execution NOT IMPLEMENTED):
+Bundle options (macOS and Linux only):
   --mode MODE        redact|template|pseudonymize|synthesize (required once)
-  --output DIR       Proposed output directory (required once)
+  --output DIR       New output directory (required once; must not exist)
   --key-file KEY     Required only for pseudonymize/synthesize
   One or more explicit source files; stdin and duplicate source paths rejected.
-  Options may occur before, between, or after files. No files are read or written.
+  Options may occur before, between, or after files.
+  Creates manifest.json (v1) and sources/0001.txt, ... with private permissions.
+  Publication is atomic and no-replace; unsupported filesystems fail safely.
+  Success emits no stdout. Candidates and undetected sensitive data may remain.
 
 Scan options:
   --format FORMAT         Output format: human or json
@@ -776,8 +775,8 @@ mod tests {
     }
 
     #[test]
-    fn bundle_help_marks_execution_unimplemented() {
-        assert!(help_text().contains("Bundle syntax (execution NOT IMPLEMENTED)"));
+    fn bundle_help_describes_supported_export() {
+        assert!(help_text().contains("Bundle options (macOS and Linux only)"));
         assert!(help_text().contains("redact|template|pseudonymize|synthesize"));
     }
 

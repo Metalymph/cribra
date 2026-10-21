@@ -62,6 +62,13 @@ pub enum ExecuteError {
 
     /// The requested operation is unavailable, with a presentation-safe reason.
     UnsupportedOperation(&'static str),
+
+    /// A publicly constructed bundle request violates the command contract.
+    InvalidBundleCommand(&'static str),
+
+    /// Bundle staging, publication, or cleanup failed.
+    /// Display intentionally omits paths and OS error message payloads.
+    BundleExport(std::io::Error),
 }
 
 impl From<input::InputError> for ExecuteError {
@@ -84,6 +91,12 @@ impl fmt::Display for ExecuteError {
                 formatter.write_str("key file must contain exactly 32 raw bytes")
             }
             Self::UnsupportedOperation(reason) => formatter.write_str(reason),
+            Self::InvalidBundleCommand(reason) => {
+                write!(formatter, "invalid bundle request: {reason}")
+            }
+            Self::BundleExport(error) => {
+                write!(formatter, "bundle export failed: {:?}", error.kind())
+            }
         }
     }
 }
@@ -247,9 +260,10 @@ pub fn execute(command: &Command) -> Result<CommandOutput, ExecuteError> {
             Ok(CommandOutput::new(transformed))
         }
 
-        Command::Bundle(_) => Err(ExecuteError::UnsupportedOperation(
-            "bundle execution is not implemented",
-        )),
+        Command::Bundle(command) => {
+            crate::bundle_export::export(command)?;
+            Ok(CommandOutput::new(String::new()))
+        }
 
         Command::Help => Ok(CommandOutput::new(crate::help_text().to_owned())),
 

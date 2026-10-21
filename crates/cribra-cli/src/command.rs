@@ -20,7 +20,7 @@ pub enum Command {
     /// Synthesize all findings using an explicit binary key file.
     Synthesize(KeyedTransformCommand),
 
-    /// Parse a proposed bundle request; execution is not implemented.
+    /// Export a bundle on macOS or Linux using atomic no-replace publication.
     Bundle(BundleCommand),
 
     /// Render command-line help.
@@ -30,13 +30,13 @@ pub enum Command {
     Version,
 }
 
-/// A parsed bundle request. Bundle execution is not implemented.
+/// A bundle export request, supported on macOS and Linux.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct BundleCommand {
     /// Requested transformation mode.
     pub mode: BundleMode,
 
-    /// Proposed output directory; parsing does not access or create it.
+    /// Output directory, which must not already exist; parsing does not access it.
     pub output_dir: PathBuf,
 
     /// Explicit source file paths in argument order, without filesystem lookup.
@@ -47,7 +47,7 @@ pub struct BundleCommand {
     pub key_file: Option<PathBuf>,
 }
 
-/// Transformation mode requested by the proposed bundle command.
+/// Transformation mode requested by the bundle command.
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum BundleMode {
     /// Redaction; does not accept a key file.
@@ -61,7 +61,7 @@ pub enum BundleMode {
 }
 
 impl BundleMode {
-    /// Parses a supported bundle mode name without enabling bundle execution.
+    /// Parses a supported bundle mode name.
     pub fn parse(value: &str) -> Option<Self> {
         match value {
             "redact" => Some(Self::Redact),
