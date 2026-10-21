@@ -2,24 +2,41 @@ use std::{
     fs,
     io::Write,
     process::{Command, Stdio},
+    sync::atomic::{AtomicU64, Ordering},
     time::{SystemTime, UNIX_EPOCH},
 };
+
+static NEXT_TEMP_FILE: AtomicU64 = AtomicU64::new(0);
 
 fn cribra_bin() -> &'static str {
     env!("CARGO_BIN_EXE_cribra")
 }
 
 fn temp_file(name: &str, contents: &[u8]) -> std::path::PathBuf {
-    let unique = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("system clock should be after Unix epoch")
-        .as_nanos();
-
-    let path =
-        std::env::temp_dir().join(format!("cribra-cli-{name}-{}-{unique}", std::process::id()));
-
-    fs::write(&path, contents).expect("temporary fixture should be written");
-    path
+    for _ in 0..128 {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system clock should be after Unix epoch")
+            .as_nanos();
+        let sequence = NEXT_TEMP_FILE.fetch_add(1, Ordering::Relaxed);
+        let path = std::env::temp_dir().join(format!(
+            "cribra-cli-{name}-{}-{nonce:x}-{sequence:x}",
+            std::process::id()
+        ));
+        let mut file = match fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&path)
+        {
+            Ok(file) => file,
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(error) => panic!("temporary fixture should be created: {error}"),
+        };
+        file.write_all(contents)
+            .expect("temporary fixture should be written");
+        return path;
+    }
+    panic!("temporary fixture path should be available");
 }
 
 #[test]
@@ -32,13 +49,21 @@ fn file_input_human_output_is_stable() {
         .output()
         .expect("cribra should execute");
 
-    fs::remove_file(path).unwrap();
+    fs::remove_file(&path).unwrap();
 
     assert!(output.status.success());
 
     let stdout = String::from_utf8(output.stdout).unwrap();
     let stderr = String::from_utf8(output.stderr).unwrap();
 
+    assert_eq!(
+        stdout,
+        format!(
+            "source: {}\nstatus: findings\nfindings: 1\ncandidates: 0\n\
+finding: github.classic-pat 1:14 bytes=13..50 severity=critical confidence=high remediation=revoke-and-rotate-credential\n",
+            path.display()
+        )
+    );
     assert!(stdout.contains("status: findings"));
     assert!(stdout.contains("github.classic-pat"));
     assert!(stdout.contains("severity=critical"));
@@ -60,15 +85,21 @@ fn file_input_json_output_is_stable() {
         .output()
         .expect("cribra should execute");
 
-    fs::remove_file(path).unwrap();
+    fs::remove_file(&path).unwrap();
 
     assert!(output.status.success());
 
     let stdout = String::from_utf8(output.stdout).unwrap();
     let stderr = String::from_utf8(output.stderr).unwrap();
 
-    assert!(stdout.starts_with('{'));
-    assert!(stdout.ends_with("}\n"));
+    assert_eq!(
+        stdout,
+        format!(
+            "{{\"source\":\"{}\",\"status\":\"findings\",\"findings_count\":1,\"candidates_count\":0,\"findings\":[\
+{{\"rule_id\":\"github.classic-pat\",\"start\":13,\"end\":50,\"line\":1,\"column\":14,\"severity\":\"critical\",\"confidence\":\"high\",\"remediation\":\"revoke-and-rotate-credential\"}}],\"candidates\":[]}}\n",
+            path.display().to_string().replace('\\', "\\\\")
+        )
+    );
     assert!(stdout.contains("\"status\":\"findings\""));
     assert!(stdout.contains("\"rule_id\":\"github.classic-pat\""));
     assert!(!stdout.contains(secret));
@@ -140,6 +171,8 @@ fn candidate_only_exit_is_success() {
     assert!(stdout.contains("status: review"));
     assert!(stdout.contains("findings: 0"));
     assert!(stdout.contains("candidates: 1"));
+    assert!(stdout.contains("kind=recovery-like-code evidence=structural"));
+    assert!(!stdout.contains("ABCD-EFGH-IJKL-MNOP"));
 }
 
 #[test]
@@ -177,9 +210,8 @@ fn usage_error_returns_exit_code_two() {
 
 #[test]
 fn missing_file_returns_exit_code_one() {
-    let path = std::env::temp_dir().join(format!("cribra-cli-missing-{}", std::process::id()));
-
-    let _ = fs::remove_file(&path);
+    let path = temp_file("missing-input", b"");
+    fs::remove_file(&path).unwrap();
 
     let output = Command::new(cribra_bin())
         .args(["scan", path.to_str().unwrap()])
@@ -210,4 +242,1087 @@ fn invalid_utf8_returns_exit_code_one_without_source_leakage() {
 
     assert_eq!(stderr, "cribra: invalid UTF-8\n");
     assert!(!stderr.contains("\\xf0"));
+}
+
+const QUERY_SOURCE: &str = "\
+GITHUB_TOKEN=ghp_AbCdEf0123456789_AbCdEf0123456789
+password=CorrectHorseBatteryStaple!
+password_hash=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+API_KEY=AbCdEfGhIjKlMnOpQrStUvWx
+ABCD-EFGH-IJKL-MNOP
+";
+const QUERY_RULES: [&str; 4] = [
+    "github.classic-pat",
+    "generic.password-field",
+    "generic.sensitive-hash",
+    "generic.api-key",
+];
+
+fn scan_output(source: &str, options: &[&str], format: &str, stdin: bool) -> String {
+    let mut command = Command::new(cribra_bin());
+    command.arg("scan");
+    let path = if stdin {
+        command.arg("-").stdin(Stdio::piped());
+        None
+    } else {
+        let path = temp_file("query.env", source.as_bytes());
+        command.arg(&path);
+        Some(path)
+    };
+    command
+        .args(["--format", format])
+        .args(options)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    let mut child = command.spawn().expect("scan should start");
+    if stdin {
+        child
+            .stdin
+            .take()
+            .unwrap()
+            .write_all(source.as_bytes())
+            .unwrap();
+    }
+    let output = child.wait_with_output().unwrap();
+    if let Some(path) = path {
+        fs::remove_file(path).unwrap();
+    }
+    assert_eq!(output.status.code(), Some(0));
+    assert!(output.stderr.is_empty());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    // Check every fixture value, including candidate material, in both formats.
+    for line in source.lines() {
+        let value = line.split_once('=').map_or(line, |(_, value)| value);
+        if !value.is_empty() {
+            assert!(!stdout.contains(value), "source value must not be rendered");
+        }
+    }
+    stdout
+}
+
+fn rendered_rule_ids<'a>(output: &'a str, format: &str) -> Vec<&'a str> {
+    if format == "json" {
+        output
+            .split("\"rule_id\":\"")
+            .skip(1)
+            .map(|tail| tail.split('"').next().unwrap())
+            .collect()
+    } else {
+        output
+            .lines()
+            .filter_map(|line| line.strip_prefix("finding: "))
+            .map(|tail| tail.split(' ').next().unwrap())
+            .collect()
+    }
+}
+
+fn assert_selection(output: &str, format: &str, expected: &[&str]) {
+    let rendered = rendered_rule_ids(output, format);
+    assert_eq!(rendered, expected);
+    if format == "json" {
+        assert!(
+            output.contains("\"status\":\"findings\",\"findings_count\":4,\"candidates_count\":1,")
+        );
+        assert!(output.contains(&format!(
+            "\"selection\":{{\"active\":true,\"findings_count\":{}}}",
+            rendered.len()
+        )));
+        assert!(output.ends_with(
+            "\"candidates\":[{\"start\":199,\"end\":218,\"line\":5,\"column\":1,\"kind\":\"recovery-like-code\",\"evidence\":\"structural\"}]}\n"
+        ));
+    } else {
+        assert!(output.contains(&format!(
+            "status: findings\nfindings: 4\ncandidates: 1\nselected findings: {}\n",
+            rendered.len()
+        )));
+        assert!(output.ends_with(
+            "candidate: 5:1 bytes=199..218 kind=recovery-like-code evidence=structural\n"
+        ));
+    }
+}
+
+#[test]
+fn finding_filters_select_metadata_in_core_order() {
+    let cases: &[(&[&str], &[&str])] = &[
+        (&["--severity", "high"], &[QUERY_RULES[1], QUERY_RULES[3]]),
+        (
+            &["--min-severity", "high"],
+            &[QUERY_RULES[0], QUERY_RULES[1], QUERY_RULES[3]],
+        ),
+        (&["--confidence", "medium"], &QUERY_RULES[1..]),
+        (&["--min-confidence", "medium"], &QUERY_RULES),
+        (&["--confidence", "high"], &QUERY_RULES[..1]),
+        (&["--min-confidence", "high"], &QUERY_RULES[..1]),
+        (&["--rule-id", "generic.api-key"], &QUERY_RULES[3..]),
+        (
+            &["--min-severity", "high", "--confidence", "medium"],
+            &[QUERY_RULES[1], QUERY_RULES[3]],
+        ),
+        (
+            &[
+                "--severity",
+                "high",
+                "--min-confidence",
+                "medium",
+                "--rule-id",
+                "generic.api-key",
+            ],
+            &QUERY_RULES[3..],
+        ),
+    ];
+    for format in ["human", "json"] {
+        for &(options, expected) in cases {
+            let output = scan_output(QUERY_SOURCE, options, format, false);
+            assert_selection(&output, format, expected);
+        }
+    }
+}
+
+#[test]
+fn finding_sorts_match_core_in_both_directions_without_filters() {
+    let scanner = cribra::Scanner::default();
+    let results = scanner.scan([("fixture", QUERY_SOURCE)]);
+    for (option, sort) in [
+        ("rule-id", cribra::ScanSort::RuleId),
+        ("rule-id-desc", cribra::ScanSort::RuleIdDescending),
+        ("severity", cribra::ScanSort::Severity),
+        ("severity-desc", cribra::ScanSort::SeverityDescending),
+        ("confidence", cribra::ScanSort::Confidence),
+        ("confidence-desc", cribra::ScanSort::ConfidenceDescending),
+        ("location", cribra::ScanSort::Location),
+        ("location-desc", cribra::ScanSort::LocationDescending),
+    ] {
+        let sorted = results.query().sort(sort);
+        let expected: Vec<_> = sorted
+            .iter()
+            .map(|(_, finding)| finding.rule_id().as_str())
+            .collect();
+        for format in ["human", "json"] {
+            let output = scan_output(QUERY_SOURCE, &["--sort", option], format, false);
+            assert_selection(&output, format, &expected);
+        }
+    }
+}
+
+#[test]
+fn combined_filter_and_sort_agree_for_file_and_stdin() {
+    for format in ["human", "json"] {
+        for stdin in [false, true] {
+            let output = scan_output(
+                QUERY_SOURCE,
+                &[
+                    "--min-severity",
+                    "high",
+                    "--confidence",
+                    "medium",
+                    "--sort",
+                    "rule-id",
+                ],
+                format,
+                stdin,
+            );
+            assert_selection(&output, format, &[QUERY_RULES[3], QUERY_RULES[1]]);
+        }
+    }
+}
+
+#[test]
+fn empty_selection_preserves_original_findings_and_candidates() {
+    for options in [
+        &["--severity", "info"][..],
+        &["--confidence", "low"][..],
+        &["--rule-id", "unknown.rule"][..],
+        &["--severity", "medium", "--rule-id", "github.classic-pat"][..],
+    ] {
+        for format in ["human", "json"] {
+            let output = scan_output(QUERY_SOURCE, options, format, true);
+            assert_selection(&output, format, &[]);
+        }
+    }
+}
+
+#[test]
+fn candidate_only_and_clean_selections_preserve_original_state() {
+    for (source, status, candidates) in [("ABCD-EFGH-IJKL-MNOP\n", "review", 1), ("", "clean", 0)] {
+        for format in ["human", "json"] {
+            let baseline = scan_output(source, &[], format, true);
+            if format == "json" {
+                let candidate_json = if candidates == 1 {
+                    "{\"start\":0,\"end\":19,\"line\":1,\"column\":1,\"kind\":\"recovery-like-code\",\"evidence\":\"structural\"}"
+                } else {
+                    ""
+                };
+                assert_eq!(
+                    baseline,
+                    format!(
+                        "{{\"source\":\"<stdin>\",\"status\":\"{status}\",\"findings_count\":0,\"candidates_count\":{candidates},\"findings\":[],\"candidates\":[{candidate_json}]}}\n"
+                    )
+                );
+            } else {
+                let candidate_line = if candidates == 1 {
+                    "candidate: 1:1 bytes=0..19 kind=recovery-like-code evidence=structural\n"
+                } else {
+                    ""
+                };
+                assert_eq!(
+                    baseline,
+                    format!(
+                        "source: <stdin>\nstatus: {status}\nfindings: 0\ncandidates: {candidates}\n{candidate_line}"
+                    )
+                );
+            }
+            for options in [
+                &["--rule-id", "github.classic-pat"][..],
+                &["--sort", "severity-desc"][..],
+            ] {
+                let selected = scan_output(source, options, format, true);
+                assert!(rendered_rule_ids(&selected, format).is_empty());
+                if format == "json" {
+                    assert!(selected.contains(&format!(
+                        "\"status\":\"{status}\",\"findings_count\":0,\"candidates_count\":{candidates},"
+                    )));
+                    assert_eq!(
+                        selected
+                            .replace("\"selection\":{\"active\":true,\"findings_count\":0},", ""),
+                        baseline
+                    );
+                } else {
+                    assert!(selected.contains(&format!(
+                        "status: {status}\nfindings: 0\ncandidates: {candidates}\n"
+                    )));
+                    assert_eq!(selected.replace("selected findings: 0\n", ""), baseline);
+                }
+            }
+        }
+    }
+}
+
+fn without_detection(output: &str, format: &str) -> String {
+    let mut baseline = output.to_owned();
+    for mode in ["matcher-only", "deterministic", "contextual"] {
+        let field = if format == "json" {
+            format!(",\"detection_mode\":\"{mode}\"")
+        } else {
+            format!(" detection={mode}")
+        };
+        baseline = baseline.replace(&field, "");
+    }
+    baseline
+}
+
+#[test]
+fn explain_projects_all_default_detection_modes_without_activating_selection() {
+    let source = format!(
+        "{QUERY_SOURCE}-----BEGIN PRIVATE KEY-----\nSyntheticPrivateKeyMaterial123456\n-----END PRIVATE KEY-----\n"
+    );
+    for format in ["human", "json"] {
+        let baseline = scan_output(&source, &[], format, true);
+        let explained = scan_output(&source, &["--explain"], format, true);
+        let modes: Vec<_> = if format == "json" {
+            assert!(!explained.contains("\"selection\":"));
+            explained
+                .split("\"detection_mode\":\"")
+                .skip(1)
+                .map(|tail| tail.split('"').next().unwrap())
+                .collect()
+        } else {
+            assert!(!explained.contains("selected findings:"));
+            explained
+                .lines()
+                .filter_map(|line| line.split_once(" detection=").map(|(_, mode)| mode))
+                .collect()
+        };
+        assert_eq!(
+            modes,
+            [
+                "deterministic",
+                "contextual",
+                "contextual",
+                "contextual",
+                "matcher-only"
+            ]
+        );
+        assert_eq!(without_detection(&explained, format), baseline);
+    }
+}
+
+#[test]
+fn explain_composes_with_every_filter_and_sort() {
+    let options: &[&[&str]] = &[
+        &["--severity", "high"],
+        &["--min-severity", "high"],
+        &["--confidence", "medium"],
+        &["--min-confidence", "medium"],
+        &["--rule-id", "generic.api-key"],
+        &["--sort", "rule-id"],
+        &["--sort", "rule-id-desc"],
+        &["--sort", "severity"],
+        &["--sort", "severity-desc"],
+        &["--sort", "confidence"],
+        &["--sort", "confidence-desc"],
+        &["--sort", "location"],
+        &["--sort", "location-desc"],
+        &[
+            "--severity",
+            "high",
+            "--min-confidence",
+            "medium",
+            "--rule-id",
+            "generic.api-key",
+            "--sort",
+            "location-desc",
+        ],
+        &["--rule-id", "missing.rule"],
+    ];
+    for format in ["human", "json"] {
+        for &options in options {
+            let baseline = scan_output(QUERY_SOURCE, options, format, true);
+            let with_explain: Vec<_> = options.iter().copied().chain(["--explain"]).collect();
+            let explained = scan_output(QUERY_SOURCE, &with_explain, format, true);
+            assert_eq!(without_detection(&explained, format), baseline);
+            let detection_field = if format == "json" {
+                "\"detection_mode\":"
+            } else {
+                " detection="
+            };
+            assert_eq!(
+                explained.matches(detection_field).count(),
+                rendered_rule_ids(&explained, format).len()
+            );
+        }
+    }
+}
+
+#[test]
+fn explain_with_selection_preserves_file_and_stdin_semantics() {
+    for format in ["human", "json"] {
+        for stdin in [false, true] {
+            let output = scan_output(
+                QUERY_SOURCE,
+                &[
+                    "--explain",
+                    "--min-severity",
+                    "high",
+                    "--confidence",
+                    "medium",
+                    "--sort",
+                    "rule-id",
+                ],
+                format,
+                stdin,
+            );
+            assert_selection(&output, format, &[QUERY_RULES[3], QUERY_RULES[1]]);
+            let detection_field = if format == "json" {
+                "\"detection_mode\":\"contextual\""
+            } else {
+                " detection=contextual"
+            };
+            assert_eq!(output.matches(detection_field).count(), 2);
+            assert!(!output.contains("deterministic"));
+        }
+    }
+}
+
+#[test]
+fn explain_preserves_candidate_only_and_clean_output() {
+    for source in ["ABCD-EFGH-IJKL-MNOP\n", ""] {
+        for format in ["human", "json"] {
+            let baseline = scan_output(source, &[], format, true);
+            assert_eq!(scan_output(source, &["--explain"], format, true), baseline);
+        }
+    }
+}
+
+#[test]
+fn explain_preserves_input_and_usage_error_exit_codes() {
+    let path = temp_file("explain-invalid.bin", &[0xff]);
+    let output = Command::new(cribra_bin())
+        .arg("scan")
+        .arg(&path)
+        .arg("--explain")
+        .output()
+        .unwrap();
+    fs::remove_file(&path).unwrap();
+    assert_eq!(output.status.code(), Some(1));
+    assert!(output.stdout.is_empty());
+    assert_eq!(output.stderr, b"cribra: invalid UTF-8\n");
+
+    let missing = Command::new(cribra_bin())
+        .arg("scan")
+        .arg(&path)
+        .arg("--explain")
+        .output()
+        .unwrap();
+    assert_eq!(missing.status.code(), Some(1));
+    assert!(missing.stdout.is_empty());
+
+    let duplicate = Command::new(cribra_bin())
+        .args(["scan", "-", "--explain", "--explain"])
+        .output()
+        .unwrap();
+    assert_eq!(duplicate.status.code(), Some(2));
+    assert!(duplicate.stdout.is_empty());
+}
+
+fn transform_output(command: &str, source: &[u8], stdin: bool) -> std::process::Output {
+    let mut process = Command::new(cribra_bin());
+    process
+        .arg(command)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    let path = if stdin {
+        process.arg("-").stdin(Stdio::piped());
+        None
+    } else {
+        let path = temp_file("transform.txt", source);
+        process.arg(&path);
+        Some(path)
+    };
+    let mut child = process.spawn().unwrap();
+    if stdin {
+        child.stdin.take().unwrap().write_all(source).unwrap();
+    }
+    let output = child.wait_with_output().unwrap();
+    if let Some(path) = path {
+        assert_eq!(
+            fs::read(&path).unwrap(),
+            source,
+            "input file must not be modified"
+        );
+        fs::remove_file(path).unwrap();
+    }
+    output
+}
+
+#[test]
+fn transformations_emit_exact_core_bytes_for_file_and_stdin() {
+    let source = "\u{feff}π 😀 café\r\n\
+GITHUB_TOKEN=ghp_AbCdEf0123456789_AbCdEf0123456789\r\n\
+password=CorrectHorseBatteryStaple!\r\n\
+repeat=ghp_AbCdEf0123456789_AbCdEf0123456789\r\n\
+ABCD-EFGH-IJKL-MNOP";
+    let scanner = cribra::Scanner::default();
+    let results = scanner.scan([("fixture", source)]);
+    let report = results.single_report().unwrap();
+    assert_eq!(report.len(), 3);
+    assert_eq!(report.candidate_len(), 1);
+    for (command, expected, core) in [
+        (
+            "redact",
+            "\u{feff}π 😀 café\r\nGITHUB_TOKEN=[REDACTED]\r\npassword=[REDACTED]\r\nrepeat=[REDACTED]\r\nABCD-EFGH-IJKL-MNOP",
+            cribra::transform::redact(source, report).unwrap(),
+        ),
+        (
+            "template",
+            "\u{feff}π 😀 café\r\nGITHUB_TOKEN=<CRIBRA:github.classic-pat>\r\npassword=<CRIBRA:generic.password-field>\r\nrepeat=<CRIBRA:github.classic-pat>\r\nABCD-EFGH-IJKL-MNOP",
+            cribra::transform::template(source, report).unwrap(),
+        ),
+    ] {
+        assert_eq!(core, expected);
+        for stdin in [false, true] {
+            let output = transform_output(command, source.as_bytes(), stdin);
+            assert_eq!(output.status.code(), Some(0));
+            assert!(output.stderr.is_empty());
+            assert_eq!(output.stdout, expected.as_bytes());
+            let stdout = String::from_utf8(output.stdout).unwrap();
+            for finding in report.findings() {
+                let location = finding.location();
+                assert!(!stdout.contains(&source[location.start()..location.end()]));
+            }
+        }
+    }
+}
+
+#[test]
+fn transformations_preserve_empty_clean_and_candidate_only_sources() {
+    for source in [
+        "",
+        "\u{feff}π 😀 café\r\nordinary text",
+        "ABCD-EFGH-IJKL-MNOP\r\n",
+    ] {
+        for command in ["redact", "template"] {
+            for stdin in [false, true] {
+                let output = transform_output(command, source.as_bytes(), stdin);
+                assert_eq!(output.status.code(), Some(0));
+                assert!(output.stderr.is_empty());
+                assert_eq!(output.stdout, source.as_bytes());
+            }
+        }
+    }
+}
+
+#[test]
+fn overlapping_findings_redact_as_a_union_and_template_fails_without_stdout() {
+    use cribra::transform::TransformError;
+    use cribra_cli::{Command as CliCommand, ExecuteError, ScanInput, execute};
+
+    let source = "-----BEGIN PRIVATE KEY-----\nghp_AbCdEf0123456789_AbCdEf0123456789\n-----END PRIVATE KEY-----";
+    let scanner = cribra::Scanner::default();
+    let results = scanner.scan([("fixture", source)]);
+    let report = results.single_report().unwrap();
+    assert_eq!(report.len(), 2);
+    assert_eq!(
+        cribra::transform::redact(source, report).unwrap(),
+        "[REDACTED]"
+    );
+    let core_error = cribra::transform::template(source, report).unwrap_err();
+    assert!(matches!(
+        core_error,
+        TransformError::OverlappingSpans { .. }
+    ));
+
+    for stdin in [false, true] {
+        let redacted = transform_output("redact", source.as_bytes(), stdin);
+        assert_eq!(redacted.status.code(), Some(0));
+        assert!(redacted.stderr.is_empty());
+        assert_eq!(redacted.stdout, b"[REDACTED]");
+
+        let failed = transform_output("template", source.as_bytes(), stdin);
+        assert_eq!(failed.status.code(), Some(1));
+        assert!(failed.stdout.is_empty());
+        assert_eq!(failed.stderr, format!("cribra: {core_error}\n").as_bytes());
+    }
+
+    let path = temp_file("reusable-transform.txt", source.as_bytes());
+    let error = execute(&CliCommand::Template(ScanInput::File(path.clone()))).unwrap_err();
+    assert!(matches!(error, ExecuteError::Transform(ref inner) if inner == &core_error));
+    let output = execute(&CliCommand::Redact(ScanInput::File(path.clone()))).unwrap();
+    assert_eq!(output.into_stdout(), "[REDACTED]");
+    fs::remove_file(path).unwrap();
+}
+
+#[test]
+fn transformation_input_failures_have_exit_code_one_and_no_stdout() {
+    for command in ["redact", "template"] {
+        for stdin in [false, true] {
+            let output = transform_output(command, &[0xff, 0xfe], stdin);
+            assert_eq!(output.status.code(), Some(1));
+            assert!(output.stdout.is_empty());
+            assert_eq!(output.stderr, b"cribra: invalid UTF-8\n");
+        }
+        let path = temp_file("missing-transform.txt", b"");
+        fs::remove_file(&path).unwrap();
+        let output = Command::new(cribra_bin())
+            .arg(command)
+            .arg(path)
+            .output()
+            .unwrap();
+        assert_eq!(output.status.code(), Some(1));
+        assert!(output.stdout.is_empty());
+        assert!(
+            String::from_utf8(output.stderr)
+                .unwrap()
+                .starts_with("cribra: ")
+        );
+    }
+}
+
+#[test]
+fn transformation_usage_failures_have_exit_code_two_and_no_stdout() {
+    for command in ["redact", "template"] {
+        for extra in [
+            &[][..],
+            &["one.env", "two.env"][..],
+            &["--explain"][..],
+            &["-", "--format", "json"][..],
+            &["-", "--sort", "severity"][..],
+            &["-", "--output", "result.txt"][..],
+        ] {
+            let output = Command::new(cribra_bin())
+                .arg(command)
+                .args(extra)
+                .output()
+                .unwrap();
+            assert_eq!(output.status.code(), Some(2));
+            assert!(output.stdout.is_empty());
+            assert!(
+                String::from_utf8(output.stderr)
+                    .unwrap()
+                    .contains("Try 'cribra --help' for usage.")
+            );
+        }
+    }
+}
+
+fn keyed_output(
+    command: &str,
+    source: &[u8],
+    key_file: &std::path::Path,
+    stdin: bool,
+    key_first: bool,
+) -> std::process::Output {
+    let mut process = Command::new(cribra_bin());
+    process
+        .arg(command)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    if key_first {
+        process.arg("--key-file").arg(key_file);
+    }
+    let path = if stdin {
+        process.arg("-").stdin(Stdio::piped());
+        None
+    } else {
+        let path = temp_file("keyed-source.txt", source);
+        process.arg(&path);
+        Some(path)
+    };
+    if !key_first {
+        process.arg("--key-file").arg(key_file);
+    }
+    let mut child = process.spawn().unwrap();
+    if stdin {
+        child.stdin.take().unwrap().write_all(source).unwrap();
+    }
+    let output = child.wait_with_output().unwrap();
+    if let Some(path) = path {
+        assert_eq!(fs::read(&path).unwrap(), source);
+        fs::remove_file(path).unwrap();
+    }
+    output
+}
+
+fn assert_key_absent(output: &std::process::Output, key: &[u8]) {
+    assert!(!key.is_empty());
+    assert!(!output.stdout.windows(key.len()).any(|window| window == key));
+    assert!(!output.stderr.windows(key.len()).any(|window| window == key));
+}
+
+#[test]
+fn keyed_commands_match_core_preserve_bytes_and_are_deterministic() {
+    use cribra::transform::{PseudonymizationOptions, SynthesisOptions, pseudonymize, synthesize};
+    let source = "\u{feff}π 😀 café\r\n\
+GITHUB_TOKEN=ghp_AbCdEf0123456789_AbCdEf0123456789\r\n\
+repeat=ghp_AbCdEf0123456789_AbCdEf0123456789\r\n\
+password=CorrectHorseBatteryStaple!\r\n\
+ABCD-EFGH-IJKL-MNOP";
+    let scanner = cribra::Scanner::default();
+    let results = scanner.scan([("fixture", source)]);
+    let report = results.single_report().unwrap();
+    assert_eq!(report.len(), 3);
+    assert_eq!(report.candidate_len(), 1);
+    // Includes NUL, LF, CR, and invalid UTF-8: the key is raw binary, not text.
+    let mut key: [u8; 32] = std::array::from_fn(|index| index as u8);
+    key[31] = 0xff;
+    let key_file = temp_file("binary-key.bin", &key);
+    let different_key = [0xa7; 32];
+    let other_file = temp_file("different-key.bin", &different_key);
+    for (name, expected, different) in [
+        (
+            "pseudonymize",
+            pseudonymize(source, report, &PseudonymizationOptions::new(key)).unwrap(),
+            pseudonymize(source, report, &PseudonymizationOptions::new(different_key)).unwrap(),
+        ),
+        (
+            "synthesize",
+            synthesize(source, report, &SynthesisOptions::new(key)).unwrap(),
+            synthesize(source, report, &SynthesisOptions::new(different_key)).unwrap(),
+        ),
+    ] {
+        assert_ne!(expected, different);
+        for stdin in [false, true] {
+            for key_first in [false, true] {
+                let output = keyed_output(name, source.as_bytes(), &key_file, stdin, key_first);
+                assert_eq!(output.status.code(), Some(0));
+                assert!(output.stderr.is_empty());
+                assert_key_absent(&output, &key);
+                assert_eq!(output.stdout, expected.as_bytes());
+            }
+        }
+        let output = keyed_output(name, source.as_bytes(), &other_file, true, false);
+        assert_eq!(output.status.code(), Some(0));
+        assert!(output.stderr.is_empty());
+        assert_key_absent(&output, &different_key);
+        assert_eq!(output.stdout, different.as_bytes());
+        for finding in report.findings() {
+            let location = finding.location();
+            assert!(!expected.contains(&source[location.start()..location.end()]));
+        }
+        assert!(expected.starts_with("\u{feff}π 😀 café\r\nGITHUB_TOKEN="));
+        assert!(expected.ends_with("\r\nABCD-EFGH-IJKL-MNOP"));
+        assert_eq!(expected.matches("\r\n").count(), 4);
+        let first = expected.lines().nth(1).unwrap().split_once('=').unwrap().1;
+        let repeated = expected.lines().nth(2).unwrap().split_once('=').unwrap().1;
+        if name == "pseudonymize" {
+            assert_eq!(first, repeated);
+            assert!(first.starts_with("cribra_pseudo_"));
+        } else {
+            assert_ne!(first, repeated);
+            assert!(first.starts_with("ghp_!"));
+            assert!(repeated.starts_with("ghp_!"));
+            assert_eq!(first.len(), 37);
+            assert_eq!(repeated.len(), 37);
+            assert!(expected.contains("cribra_synthetic"));
+        }
+    }
+    assert!(fs::read(&key_file).unwrap() == key);
+    assert!(fs::read(&other_file).unwrap() == different_key);
+    fs::remove_file(key_file).unwrap();
+    fs::remove_file(other_file).unwrap();
+}
+
+#[test]
+fn keyed_commands_preserve_empty_clean_and_candidate_only_sources() {
+    let key = b"0123456789ABCDEFfedcba9876543210";
+    let key_file = temp_file("unchanged-key.bin", key);
+    for source in [
+        "",
+        "\u{feff}π 😀 café\r\nordinary text\r\n",
+        "ABCD-EFGH-IJKL-MNOP\r\n",
+    ] {
+        for command in ["pseudonymize", "synthesize"] {
+            for stdin in [false, true] {
+                let output = keyed_output(command, source.as_bytes(), &key_file, stdin, false);
+                assert_eq!(output.status.code(), Some(0));
+                assert!(output.stderr.is_empty());
+                assert_key_absent(&output, key);
+                assert_eq!(output.stdout, source.as_bytes());
+            }
+        }
+    }
+    // Identical bytes independently present in unchanged source are preserved.
+    let source = "note=0123456789ABCDEFfedcba9876543210";
+    for command in ["pseudonymize", "synthesize"] {
+        let output = keyed_output(command, source.as_bytes(), &key_file, true, false);
+        assert_eq!(output.status.code(), Some(0));
+        assert_eq!(output.stdout, source.as_bytes());
+        assert!(output.stderr.is_empty());
+    }
+    fs::remove_file(key_file).unwrap();
+}
+
+#[test]
+fn keyed_commands_reject_overlaps_without_partial_stdout() {
+    use cribra::transform::{PseudonymizationOptions, SynthesisOptions, pseudonymize, synthesize};
+    use cribra_cli::{
+        Command as CliCommand, ExecuteError, KeyedTransformCommand, ScanInput, execute,
+    };
+    let source = "-----BEGIN PRIVATE KEY-----\nghp_AbCdEf0123456789_AbCdEf0123456789\n-----END PRIVATE KEY-----";
+    let key = *b"0123456789ABCDEFfedcba9876543210";
+    let key_file = temp_file("overlap-key.bin", &key);
+    let results = cribra::Scanner::default().scan([("fixture", source)]);
+    let report = results.single_report().unwrap();
+    for (name, error) in [
+        (
+            "pseudonymize",
+            pseudonymize(source, report, &PseudonymizationOptions::new(key)).unwrap_err(),
+        ),
+        (
+            "synthesize",
+            synthesize(source, report, &SynthesisOptions::new(key)).unwrap_err(),
+        ),
+    ] {
+        for stdin in [false, true] {
+            let output = keyed_output(name, source.as_bytes(), &key_file, stdin, false);
+            assert_eq!(output.status.code(), Some(1));
+            assert!(output.stdout.is_empty());
+            assert_key_absent(&output, &key);
+            assert_eq!(output.stderr, format!("cribra: {error}\n").as_bytes());
+        }
+    }
+    let source_file = temp_file("keyed-reusable.txt", source.as_bytes());
+    let options = KeyedTransformCommand {
+        input: ScanInput::File(source_file.clone()),
+        key_file: key_file.clone(),
+    };
+    assert!(matches!(
+        execute(&CliCommand::Pseudonymize(options.clone())),
+        Err(ExecuteError::Transform(_))
+    ));
+    assert!(matches!(
+        execute(&CliCommand::Synthesize(options)),
+        Err(ExecuteError::Transform(_))
+    ));
+    fs::remove_file(source_file).unwrap();
+    fs::remove_file(key_file).unwrap();
+}
+
+// Keep stdin open and unwritten: key errors must finish before trying to read it.
+fn key_failure_before_stdin(command: &str, key_file: &std::path::Path) -> std::process::Output {
+    use std::time::{Duration, Instant};
+    let mut child = Command::new(cribra_bin())
+        .args([command, "-", "--key-file"])
+        .arg(key_file)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let stdin = child.stdin.take().unwrap();
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while child.try_wait().unwrap().is_none() {
+        if Instant::now() >= deadline {
+            child.kill().unwrap();
+            child.wait().unwrap();
+            panic!("key failure must not wait for source stdin");
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    drop(stdin);
+    let output = child.wait_with_output().unwrap();
+    assert_eq!(output.status.code(), Some(1));
+    assert!(output.stdout.is_empty());
+    output
+}
+
+#[test]
+fn keyed_commands_validate_key_length_and_existence_before_stdin() {
+    use cribra_cli::{
+        Command as CliCommand, ExecuteError, KeyedTransformCommand, ScanInput, execute,
+    };
+    for bytes in [
+        vec![],
+        vec![b'Q'; 31],
+        vec![b'Q'; 33],
+        vec![b'Q'; 1024 * 1024],
+        vec![b'0'; 64],
+    ] {
+        let path = temp_file("invalid-key.bin", &bytes);
+        for name in ["pseudonymize", "synthesize"] {
+            let output = key_failure_before_stdin(name, &path);
+            assert_eq!(
+                output.stderr,
+                b"cribra: key file must contain exactly 32 raw bytes\n"
+            );
+            if bytes.len() >= 31 {
+                assert_key_absent(&output, &bytes[..31]);
+            }
+        }
+        let command = CliCommand::Pseudonymize(KeyedTransformCommand {
+            input: ScanInput::Stdin,
+            key_file: path.clone(),
+        });
+        assert!(matches!(
+            execute(&command),
+            Err(ExecuteError::InvalidKeyLength)
+        ));
+        assert!(fs::read(&path).unwrap() == bytes);
+        fs::remove_file(path).unwrap();
+    }
+    let missing = temp_file("missing-key.bin", b"");
+    fs::remove_file(&missing).unwrap();
+    for name in ["pseudonymize", "synthesize"] {
+        let output = key_failure_before_stdin(name, &missing);
+        assert!(
+            String::from_utf8(output.stderr)
+                .unwrap()
+                .starts_with("cribra: could not read key file:")
+        );
+    }
+    let command = CliCommand::Synthesize(KeyedTransformCommand {
+        input: ScanInput::Stdin,
+        key_file: missing,
+    });
+    assert!(matches!(execute(&command), Err(ExecuteError::KeyRead(_))));
+}
+
+#[test]
+fn keyed_commands_reject_directories_before_stdin() {
+    for name in ["pseudonymize", "synthesize"] {
+        let output = key_failure_before_stdin(name, &std::env::temp_dir());
+        assert_eq!(
+            output.stderr,
+            b"cribra: could not read key file: key file must be a regular file\n"
+        );
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn keyed_commands_accept_regular_symlinks_and_reject_special_or_unreadable_files() {
+    use std::os::unix::{
+        fs::{PermissionsExt, symlink},
+        net::UnixListener,
+    };
+    let key = b"0123456789ABCDEFfedcba9876543210";
+    let path = temp_file("symlink-key.bin", key);
+    let link = path.with_extension("link");
+    symlink(&path, &link).unwrap();
+    let socket_path = std::path::Path::new("/tmp")
+        .join(path.file_name().unwrap())
+        .with_extension("socket");
+    let socket = UnixListener::bind(&socket_path).unwrap();
+    for name in ["pseudonymize", "synthesize"] {
+        let output = keyed_output(name, b"", &link, true, false);
+        assert_eq!(output.status.code(), Some(0));
+        assert!(output.stdout.is_empty());
+        assert!(output.stderr.is_empty());
+        assert_key_absent(&output, key);
+        let failed = key_failure_before_stdin(name, &socket_path);
+        assert_eq!(
+            failed.stderr,
+            b"cribra: could not read key file: key file must be a regular file\n"
+        );
+        let device = key_failure_before_stdin(name, std::path::Path::new("/dev/null"));
+        assert_eq!(device.stderr, failed.stderr);
+    }
+    fs::set_permissions(&path, fs::Permissions::from_mode(0o000)).unwrap();
+    // Some privileged test environments can read mode-000 files; test the real
+    // permission failure when the host enforces it for the current user.
+    if fs::File::open(&path).is_err() {
+        for name in ["pseudonymize", "synthesize"] {
+            let output = key_failure_before_stdin(name, &path);
+            assert!(
+                String::from_utf8(output.stderr)
+                    .unwrap()
+                    .starts_with("cribra: could not read key file:")
+            );
+        }
+    }
+    fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).unwrap();
+    assert!(fs::read(&path).unwrap() == key);
+    drop(socket);
+    fs::remove_file(socket_path).unwrap();
+    fs::remove_file(link).unwrap();
+    fs::remove_file(path).unwrap();
+}
+
+#[test]
+fn keyed_commands_usage_and_source_failures_preserve_exit_codes() {
+    for name in ["pseudonymize", "synthesize"] {
+        for args in [
+            &[][..],
+            &["-"][..],
+            &["-", "--key-file"][..],
+            &["-", "--key-file", "-"][..],
+            &["-", "--key-file", "key.bin", "--key-file", "other.bin"][..],
+            &["-", "--key-file", "key.bin", "extra.env"][..],
+            &["-", "--key-file", "key.bin", "--explain"][..],
+        ] {
+            let output = Command::new(cribra_bin())
+                .arg(name)
+                .args(args)
+                .output()
+                .unwrap();
+            assert_eq!(output.status.code(), Some(2));
+            assert!(output.stdout.is_empty());
+        }
+    }
+    let key = b"0123456789ABCDEFfedcba9876543210";
+    let key_file = temp_file("source-error-key.bin", key);
+    for name in ["pseudonymize", "synthesize"] {
+        for stdin in [false, true] {
+            let output = keyed_output(name, &[0xff], &key_file, stdin, false);
+            assert_eq!(output.status.code(), Some(1));
+            assert!(output.stdout.is_empty());
+            assert_eq!(output.stderr, b"cribra: invalid UTF-8\n");
+            assert_key_absent(&output, key);
+        }
+        let missing = key_file.with_extension("missing");
+        let output = Command::new(cribra_bin())
+            .arg(name)
+            .arg(missing)
+            .arg("--key-file")
+            .arg(&key_file)
+            .output()
+            .unwrap();
+        assert_eq!(output.status.code(), Some(1));
+        assert!(output.stdout.is_empty());
+        assert_key_absent(&output, key);
+    }
+    fs::remove_file(key_file).unwrap();
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+#[test]
+fn bundle_execution_is_unavailable_without_filesystem_side_effects() {
+    use cribra_cli::{Command as CliCommand, ExecuteError, execute, parse};
+    let root = temp_file("bundle-unavailable", b"");
+    fs::remove_file(&root).unwrap();
+    let output_dir = root.join("export");
+    let key = root.join("key.bin");
+    let source = root.join("source.env");
+    for (mode, keyed) in [
+        ("redact", false),
+        ("template", false),
+        ("pseudonymize", true),
+        ("synthesize", true),
+    ] {
+        let mut args = vec![
+            std::ffi::OsString::from("cribra"),
+            "bundle".into(),
+            "--mode".into(),
+            mode.into(),
+            "--output".into(),
+            output_dir.clone().into_os_string(),
+            source.clone().into_os_string(),
+        ];
+        if keyed {
+            args.extend(["--key-file".into(), key.clone().into_os_string()]);
+        }
+        let parsed = parse(args.clone()).unwrap();
+        assert!(matches!(parsed, CliCommand::Bundle(_)));
+        let error = execute(&parsed).unwrap_err();
+        assert!(matches!(
+            error,
+            ExecuteError::UnsupportedOperation(
+                "bundle export is supported only on macOS and Linux"
+            )
+        ));
+        assert_eq!(
+            error.to_string(),
+            "bundle export is supported only on macOS and Linux"
+        );
+        let process = Command::new(cribra_bin())
+            .args(args.into_iter().skip(1))
+            .output()
+            .unwrap();
+        assert_eq!(process.status.code(), Some(1));
+        assert!(process.stdout.is_empty());
+        assert_eq!(
+            process.stderr,
+            b"cribra: bundle export is supported only on macOS and Linux\n"
+        );
+        assert!(!root.exists());
+    }
+}
+
+#[test]
+fn bundle_usage_errors_have_exit_code_two_and_no_stdout() {
+    for args in [
+        &[][..],
+        &["--mode", "redact", "--output", "export"][..],
+        &["--mode", "redact", "--output", "export", "-"][..],
+        &["--mode", "redact", "--output", "export", "a.env", "a.env"][..],
+        &["--mode", "synthesize", "--output", "export", "a.env"][..],
+        &[
+            "--mode",
+            "redact",
+            "--output",
+            "export",
+            "a.env",
+            "--key-file",
+            "key.bin",
+        ][..],
+        &[
+            "--mode",
+            "redact",
+            "--output",
+            "export",
+            "a.env",
+            "--explain",
+        ][..],
+        &[
+            "--mode",
+            "redact",
+            "--output",
+            "export",
+            "a.env",
+            "--output",
+            "elsewhere",
+        ][..],
+    ] {
+        let output = Command::new(cribra_bin())
+            .arg("bundle")
+            .args(args)
+            .output()
+            .unwrap();
+        assert_eq!(output.status.code(), Some(2));
+        assert!(output.stdout.is_empty());
+        assert!(
+            String::from_utf8(output.stderr)
+                .unwrap()
+                .contains("Try 'cribra --help' for usage.")
+        );
+    }
 }
