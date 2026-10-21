@@ -2,6 +2,30 @@
 
 use std::ptr;
 
+/// Optional budgets for one Core streaming source.
+///
+/// Every enabled flag must be exactly 0 (unlimited) or 1 (use the corresponding
+/// value). Disabled values are ignored. Enabled zero is a real zero budget;
+/// no numeric value is a sentinel. A zero-initialized configuration is unlimited.
+/// Storage is Core's logical executor payload, excluding allocator overhead,
+/// spare capacity, compiled rules, validator workspace and output records.
+#[repr(C)]
+#[derive(Debug, Copy, Clone, Default)]
+pub struct CribraStreamLimits {
+    /// Enables the cumulative raw rule candidate limit, including rejections.
+    pub max_candidates_enabled: u32,
+    /// Maximum raw rule candidates; structural reviews use the result budget.
+    pub max_candidates: usize,
+    /// Enables Core's checked logical storage admission limit.
+    pub max_stream_storage_bytes_enabled: u32,
+    /// Maximum logical executor storage in bytes, checked before allocation.
+    pub max_stream_storage_bytes: usize,
+    /// Enables the retained finding plus structural review result limit.
+    pub max_retained_results_enabled: u32,
+    /// Maximum accepted records before normalization/suppression; no refunds.
+    pub max_retained_results: usize,
+}
+
 /// Borrowed UTF-8 string view.
 ///
 /// The pointed-to bytes are not NUL-terminated. The view does not own memory

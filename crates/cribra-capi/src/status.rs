@@ -19,5 +19,29 @@ pub const CRIBRA_BUILD_ERROR: CribraStatus = 4;
 pub const CRIBRA_TRANSFORM_ERROR: CribraStatus = 5;
 /// An index was outside the bounds of the requested report collection.
 pub const CRIBRA_OUT_OF_RANGE: CribraStatus = 6;
+/// Core rejected a ruleset that cannot be streamed exactly.
+pub const CRIBRA_STREAM_UNSUPPORTED_RULE_SET: CribraStatus = 7;
+/// The stream has finished or a terminal failure discarded its session.
+pub const CRIBRA_STREAM_NOT_ACTIVE: CribraStatus = 8;
+/// A streaming chunk contains malformed UTF-8; the session is terminal.
+pub const CRIBRA_STREAM_INVALID_UTF8: CribraStatus = 9;
+/// Streaming EOF occurred inside an incomplete UTF-8 scalar.
+pub const CRIBRA_STREAM_INCOMPLETE_UTF8: CribraStatus = 10;
+/// Core's cumulative raw rule candidate limit was exceeded.
+pub const CRIBRA_STREAM_CANDIDATE_LIMIT_EXCEEDED: CribraStatus = 11;
+/// Core's retained finding/review result limit was exceeded.
+pub const CRIBRA_STREAM_RESULT_LIMIT_EXCEEDED: CribraStatus = 12;
+/// Core's logical streaming storage admission limit was exceeded.
+pub const CRIBRA_STREAM_STORAGE_LIMIT_EXCEEDED: CribraStatus = 13;
+/// Core's streaming storage requirement arithmetic overflowed.
+pub const CRIBRA_STREAM_STORAGE_REQUIREMENT_OVERFLOW: CribraStatus = 14;
+/// Core or adapter source-byte accounting overflowed.
+pub const CRIBRA_STREAM_SOURCE_OFFSET_OVERFLOW: CribraStatus = 15;
+/// Core's source line or Unicode-scalar column arithmetic overflowed.
+pub const CRIBRA_STREAM_COORDINATE_OVERFLOW: CribraStatus = 16;
+/// Core's streaming execution invariant failed.
+pub const CRIBRA_STREAM_EXECUTION_INVARIANT_VIOLATED: CribraStatus = 17;
+/// A future Core streaming failure is not understood by this adapter.
+pub const CRIBRA_STREAM_UNKNOWN_ERROR: CribraStatus = 18;
 /// An unexpected panic was contained inside the native adapter.
 pub const CRIBRA_INTERNAL_ERROR: CribraStatus = 255;

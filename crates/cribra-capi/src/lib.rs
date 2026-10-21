@@ -14,10 +14,13 @@ mod error;
 mod ffi;
 mod handles;
 mod status;
+mod stream;
 mod types;
 
 #[cfg(test)]
 mod hardening_tests;
+#[cfg(test)]
+mod stream_tests;
 
 pub use error::{CribraError, cribra_error_free, cribra_error_message, cribra_error_status};
 pub use ffi::{
@@ -37,11 +40,22 @@ pub use ffi::{
     cribra_transform_synthesize, cribra_transform_template, cribra_transform_template_with,
 };
 pub use handles::{
-    CribraBatchResults, CribraBuilder, CribraOutput, CribraReport, CribraScanner, CribraShareBundle,
+    CribraBatchResults, CribraBuilder, CribraOutput, CribraReport, CribraScanner,
+    CribraShareBundle, CribraStream,
 };
 pub use status::{
     CRIBRA_BUILD_ERROR, CRIBRA_INTERNAL_ERROR, CRIBRA_INVALID_ARGUMENT, CRIBRA_INVALID_UTF8,
-    CRIBRA_OK, CRIBRA_OUT_OF_RANGE, CRIBRA_RULE_ERROR, CRIBRA_TRANSFORM_ERROR, CribraStatus,
+    CRIBRA_OK, CRIBRA_OUT_OF_RANGE, CRIBRA_RULE_ERROR, CRIBRA_STREAM_CANDIDATE_LIMIT_EXCEEDED,
+    CRIBRA_STREAM_COORDINATE_OVERFLOW, CRIBRA_STREAM_EXECUTION_INVARIANT_VIOLATED,
+    CRIBRA_STREAM_INCOMPLETE_UTF8, CRIBRA_STREAM_INVALID_UTF8, CRIBRA_STREAM_NOT_ACTIVE,
+    CRIBRA_STREAM_RESULT_LIMIT_EXCEEDED, CRIBRA_STREAM_SOURCE_OFFSET_OVERFLOW,
+    CRIBRA_STREAM_STORAGE_LIMIT_EXCEEDED, CRIBRA_STREAM_STORAGE_REQUIREMENT_OVERFLOW,
+    CRIBRA_STREAM_UNKNOWN_ERROR, CRIBRA_STREAM_UNSUPPORTED_RULE_SET, CRIBRA_TRANSFORM_ERROR,
+    CribraStatus,
+};
+pub use stream::{
+    cribra_scanner_stream_new, cribra_scanner_stream_new_with_limits, cribra_stream_finish,
+    cribra_stream_free, cribra_stream_push,
 };
 pub use types::{
     CRIBRA_BATCH_EXECUTION_AUTO, CRIBRA_BATCH_EXECUTION_SERIAL, CRIBRA_CANDIDATE_EVIDENCE_NONE,
@@ -65,6 +79,6 @@ pub use types::{
     CribraDetectionMode, CribraExplanationKind, CribraExplanationView, CribraFindingView,
     CribraPseudonymizeConfig, CribraRemediation, CribraRuleConfig, CribraRuleKind,
     CribraScanSummaryView, CribraSeverity, CribraShareBundleConfig, CribraShareEntryView,
-    CribraShareManifestView, CribraShareMode, CribraStringView, CribraSynthesizeConfig,
-    CribraTemplateConfig,
+    CribraShareManifestView, CribraShareMode, CribraStreamLimits, CribraStringView,
+    CribraSynthesizeConfig, CribraTemplateConfig,
 };

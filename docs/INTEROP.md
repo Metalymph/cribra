@@ -135,7 +135,7 @@ not become independent detection authorities.
 
 Native ownership is explicit.
 
-Rust-owned objects include scanner, report, batch-result, transformed-output,
+Rust-owned objects include scanner, stream, report, batch-result, transformed-output,
 and error handles where applicable. Every owned allocation has one documented
 destruction path.
 
@@ -198,6 +198,61 @@ Once the builder has been consumed, the caller MUST NOT reuse or free it
 independently.
 
 This consuming ownership rule is part of the public ABI contract.
+
+### Streaming lifecycle and budgets (ABI 0.2.0)
+
+`cribra_scanner_stream_new` opens an unlimited Core stream;
+`cribra_scanner_stream_new_with_limits` copies a `CribraStreamLimits` configuration.
+Complete built-in portfolios and unsupported custom patterns fail admission with
+`CRIBRA_STREAM_UNSUPPORTED_RULE_SET`. There is no whole-source fallback or adapter
+source buffer. Streaming eligibility is exactly Core's; see
+[streaming](streaming.md) and its [compatibility inventory](streaming-compatibility.md).
+
+`cribra_stream_push` accepts caller-owned bytes in source order, including partial
+UTF-8 scalars across chunks. No caller borrow survives the call. Null plus zero
+length is an empty chunk; embedded NUL is a source byte. Definite malformed UTF-8
+fails during push with `CRIBRA_STREAM_INVALID_UTF8`; EOF inside a scalar fails with
+`CRIBRA_STREAM_INCOMPLETE_UTF8`. These are distinct from the existing whole-source
+`CRIBRA_INVALID_UTF8` status, whose assignment and meaning remain unchanged.
+
+`cribra_stream_finish` signals genuine EOF and consumes the Core session, returning
+an ordinary independently owned `CribraReport` only on success. Existing report,
+explanation and transformation APIs apply unchanged, including UTF-8 byte offsets,
+Core finding/candidate order, review-only semantics and source-length validation.
+The stream handle remains valid until `cribra_stream_free`, even after finish or
+failure. Repeated finish and every later push (including empty chunks) return
+`CRIBRA_STREAM_NOT_ACTIVE`. A failed operation never transfers a partial report.
+Freeing an active stream cancels it; freeing null is a no-op. A stream may outlive
+its scanner, and a report may outlive both.
+
+`CribraStreamLimits` exposes the three Core limits with separate `uint32_t` enabled
+flags and `size_t` values. Each flag must be 0 (unlimited, ignore the value) or 1
+(use the value). Enabled zero is a real zero budget; no value is a sentinel.
+Zero-initialization makes all budgets unlimited. The limits cover cumulative raw
+rule candidates, logical executor storage at admission, and retained finding plus
+structural review records before normalization/suppression. Normalization does
+not refund slots. Logical storage excludes allocator overhead, spare capacity,
+compiled rules, validator workspace and result records; it is not an RSS cap.
+
+Each current Core streaming error has a distinct `CRIBRA_STREAM_*` status,
+including resource limits, arithmetic overflows and execution invariant failure.
+Future unrecognized Core errors return `CRIBRA_STREAM_UNKNOWN_ERROR`. All Core
+execution failures discard the session. Adapter source-byte accounting is checked
+and advances only after a successful push; overflow also makes the stream terminal.
+Diagnostics are fixed privacy-safe text, with no source, rule text or panic payload.
+Unwinding execution panics are contained as `CRIBRA_INTERNAL_ERROR` and leave the
+session inactive; process aborts and invalid-memory caller violations cannot be
+contained by this ABI.
+
+Null required pointers, invalid enabled flags and invalid buffer descriptors return
+`CRIBRA_INVALID_ARGUMENT`; they are not Core execution errors. Invalid buffer
+arguments and a null `out_report` do not consume an active stream. A valid report
+output slot is cleared before validation. Optional diagnostic slots obey the
+error ownership rules above and must be freed before reuse.
+
+Streams require exclusive access: callers must serialize push, finish and free;
+there is no adapter mutex or concurrent use guarantee. Caller buffers and output
+slots must not alias the stream. Existing immutable scanner rules remain unchanged.
 
 ## 7. Native input contract
 
@@ -424,7 +479,8 @@ potentially stale header.
 ## 17. ABI versioning
 
 Cribra exposes an explicit native ABI version independently from Rust crate
-SemVer.
+SemVer. The current native protocol is **0.2.0**, adding byte-oriented streaming
+without changing existing entry-point signatures or status assignments.
 
 Crate version and ABI protocol version answer different questions:
 

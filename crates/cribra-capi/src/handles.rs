@@ -26,6 +26,41 @@ impl CribraScanner {
     }
 }
 
+/// Opaque, exclusively accessed byte-oriented Core streaming session.
+///
+/// Owns no adapter source buffer. The handle remains valid after finish or a
+/// terminal failure until freed with [`crate::cribra_stream_free`].
+pub struct CribraStream {
+    pub(crate) inner: Option<cribra::StreamSession>,
+    pub(crate) source_bytes: usize,
+}
+
+impl CribraStream {
+    pub(crate) fn new(inner: cribra::StreamSession) -> Self {
+        Self {
+            inner: Some(inner),
+            source_bytes: 0,
+        }
+    }
+
+    pub(crate) fn push(&mut self, chunk: &[u8]) -> Result<(), cribra::StreamError> {
+        // Taking ownership first also leaves the handle inactive if Core panics.
+        let mut inner = self.inner.take().ok_or(cribra::StreamError::NotActive)?;
+        inner.push(chunk)?;
+        self.source_bytes = self
+            .source_bytes
+            .checked_add(chunk.len())
+            .ok_or(cribra::StreamError::SourceOffsetOverflow)?;
+        self.inner = Some(inner);
+        Ok(())
+    }
+
+    pub(crate) fn finish(&mut self) -> Result<CribraReport, cribra::StreamError> {
+        let inner = self.inner.take().ok_or(cribra::StreamError::NotActive)?;
+        Ok(CribraReport::new(inner.finish()?, self.source_bytes))
+    }
+}
+
 /// Opaque immutable report handle.
 ///
 /// v0.3.3 deliberately establishes report ownership only. The report read

@@ -48,7 +48,7 @@ use crate::{
 /// Experimental native ABI major version.
 pub const ABI_VERSION_MAJOR: u32 = 0;
 /// Experimental native ABI minor version.
-pub const ABI_VERSION_MINOR: u32 = 1;
+pub const ABI_VERSION_MINOR: u32 = 2;
 /// Experimental native ABI patch version.
 pub const ABI_VERSION_PATCH: u32 = 0;
 
@@ -56,11 +56,11 @@ fn contain_status(operation: impl FnOnce() -> CribraStatus) -> CribraStatus {
     catch_unwind(AssertUnwindSafe(operation)).unwrap_or(CRIBRA_INTERNAL_ERROR)
 }
 
-fn contain_drop(operation: impl FnOnce()) {
+pub(crate) fn contain_drop(operation: impl FnOnce()) {
     let _ = catch_unwind(AssertUnwindSafe(operation));
 }
 
-unsafe fn clear_out<T>(out: *mut *mut T) -> Result<(), CribraStatus> {
+pub(crate) unsafe fn clear_out<T>(out: *mut *mut T) -> Result<(), CribraStatus> {
     if out.is_null() {
         return Err(CRIBRA_INVALID_ARGUMENT);
     }
@@ -1890,7 +1890,7 @@ mod tests {
                 cribra_abi_version_minor(),
                 cribra_abi_version_patch(),
             ),
-            (0, 1, 0)
+            (0, 2, 0)
         );
     }
 

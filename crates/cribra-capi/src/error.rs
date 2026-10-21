@@ -66,6 +66,32 @@ impl CribraError {
                 "source transformation could not be applied safely"
             }
             crate::status::CRIBRA_OUT_OF_RANGE => "index is out of range",
+            crate::status::CRIBRA_STREAM_UNSUPPORTED_RULE_SET => {
+                "ruleset does not support exact streaming"
+            }
+            crate::status::CRIBRA_STREAM_NOT_ACTIVE => "stream session is not active",
+            crate::status::CRIBRA_STREAM_INVALID_UTF8 => "stream contains malformed UTF-8",
+            crate::status::CRIBRA_STREAM_INCOMPLETE_UTF8 => "stream ends with incomplete UTF-8",
+            crate::status::CRIBRA_STREAM_CANDIDATE_LIMIT_EXCEEDED => {
+                "stream candidate limit exceeded"
+            }
+            crate::status::CRIBRA_STREAM_RESULT_LIMIT_EXCEEDED => {
+                "stream retained result limit exceeded"
+            }
+            crate::status::CRIBRA_STREAM_STORAGE_LIMIT_EXCEEDED => {
+                "stream logical storage limit exceeded"
+            }
+            crate::status::CRIBRA_STREAM_STORAGE_REQUIREMENT_OVERFLOW => {
+                "stream storage requirement overflow"
+            }
+            crate::status::CRIBRA_STREAM_SOURCE_OFFSET_OVERFLOW => {
+                "stream source byte offset overflow"
+            }
+            crate::status::CRIBRA_STREAM_COORDINATE_OVERFLOW => "stream source coordinate overflow",
+            crate::status::CRIBRA_STREAM_EXECUTION_INVARIANT_VIOLATED => {
+                "stream execution invariant violated"
+            }
+            crate::status::CRIBRA_STREAM_UNKNOWN_ERROR => "unknown Core streaming failure",
             crate::status::CRIBRA_INTERNAL_ERROR => "internal Cribra native adapter failure",
             _ => "Cribra native operation failed",
         };

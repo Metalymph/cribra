@@ -28,7 +28,7 @@
 /**
  * Experimental native ABI minor version.
  */
-#define ABI_VERSION_MINOR 1
+#define ABI_VERSION_MINOR 2
 
 /**
  * Experimental native ABI patch version.
@@ -84,6 +84,14 @@ typedef struct CribraScanner CribraScanner;
  * share-safe manifest metadata. It never retains original source text.
  */
 typedef struct CribraShareBundle CribraShareBundle;
+
+/**
+ * Opaque, exclusively accessed byte-oriented Core streaming session.
+ *
+ * Owns no adapter source buffer. The handle remains valid after finish or a
+ * terminal failure until freed with [`crate::cribra_stream_free`].
+ */
+typedef struct CribraStream CribraStream;
 
 /**
  * Native ABI status representation.
@@ -347,6 +355,42 @@ typedef struct CribraBatchInput {
  * Stable ABI batch-execution policy.
  */
 typedef uint32_t CribraBatchExecution;
+
+/**
+ * Optional budgets for one Core streaming source.
+ *
+ * Every enabled flag must be exactly 0 (unlimited) or 1 (use the corresponding
+ * value). Disabled values are ignored. Enabled zero is a real zero budget;
+ * no numeric value is a sentinel. A zero-initialized configuration is unlimited.
+ * Storage is Core's logical executor payload, excluding allocator overhead,
+ * spare capacity, compiled rules, validator workspace and output records.
+ */
+typedef struct CribraStreamLimits {
+    /**
+     * Enables the cumulative raw rule candidate limit, including rejections.
+     */
+    uint32_t max_candidates_enabled;
+    /**
+     * Maximum raw rule candidates; structural reviews use the result budget.
+     */
+    size_t max_candidates;
+    /**
+     * Enables Core's checked logical storage admission limit.
+     */
+    uint32_t max_stream_storage_bytes_enabled;
+    /**
+     * Maximum logical executor storage in bytes, checked before allocation.
+     */
+    size_t max_stream_storage_bytes;
+    /**
+     * Enables the retained finding plus structural review result limit.
+     */
+    uint32_t max_retained_results_enabled;
+    /**
+     * Maximum accepted records before normalization/suppression; no refunds.
+     */
+    size_t max_retained_results;
+} CribraStreamLimits;
 
 /**
  * Stable ABI share-bundle transformation mode.
@@ -792,6 +836,66 @@ typedef struct CribraTemplateConfig {
 #define CRIBRA_SHARE_MODE_UNKNOWN 4294967295
 
 /**
+ * Core's cumulative raw rule candidate limit was exceeded.
+ */
+#define CRIBRA_STREAM_CANDIDATE_LIMIT_EXCEEDED 11
+
+/**
+ * Core's source line or Unicode-scalar column arithmetic overflowed.
+ */
+#define CRIBRA_STREAM_COORDINATE_OVERFLOW 16
+
+/**
+ * Core's streaming execution invariant failed.
+ */
+#define CRIBRA_STREAM_EXECUTION_INVARIANT_VIOLATED 17
+
+/**
+ * Streaming EOF occurred inside an incomplete UTF-8 scalar.
+ */
+#define CRIBRA_STREAM_INCOMPLETE_UTF8 10
+
+/**
+ * A streaming chunk contains malformed UTF-8; the session is terminal.
+ */
+#define CRIBRA_STREAM_INVALID_UTF8 9
+
+/**
+ * The stream has finished or a terminal failure discarded its session.
+ */
+#define CRIBRA_STREAM_NOT_ACTIVE 8
+
+/**
+ * Core's retained finding/review result limit was exceeded.
+ */
+#define CRIBRA_STREAM_RESULT_LIMIT_EXCEEDED 12
+
+/**
+ * Core or adapter source-byte accounting overflowed.
+ */
+#define CRIBRA_STREAM_SOURCE_OFFSET_OVERFLOW 15
+
+/**
+ * Core's logical streaming storage admission limit was exceeded.
+ */
+#define CRIBRA_STREAM_STORAGE_LIMIT_EXCEEDED 13
+
+/**
+ * Core's streaming storage requirement arithmetic overflowed.
+ */
+#define CRIBRA_STREAM_STORAGE_REQUIREMENT_OVERFLOW 14
+
+/**
+ * A future Core streaming failure is not understood by this adapter.
+ */
+#define CRIBRA_STREAM_UNKNOWN_ERROR 18
+
+/**
+ * Core rejected a ruleset that cannot be streamed exactly.
+ */
+#define CRIBRA_STREAM_UNSUPPORTED_RULE_SET 7
+
+/**
  * A source transformation could not be applied safely.
  */
 #define CRIBRA_TRANSFORM_ERROR 5
@@ -1219,6 +1323,45 @@ CribraStatus cribra_scanner_scan_batch(const struct CribraScanner *scanner,
                                        struct CribraError **out_error);
 
 /**
+ * Opens one byte-oriented Core stream with unlimited optional budgets.
+ *
+ * Unsupported rulesets (including complete built-in portfolios) fail admission
+ * with CRIBRA_STREAM_UNSUPPORTED_RULE_SET. No whole-source fallback is used.
+ * The stream owns its execution independently of the scanner's lifetime.
+ * Only successful finish returns a complete existing CribraReport.
+ *
+ * # Safety
+ *
+ * `scanner` must be a live immutable scanner handle. `out_stream` must reference
+ * writable memory for one stream pointer; it is cleared on failure. A non-null
+ * `out_error` must reference a writable error slot, freed before reuse.
+ */
+CribraStatus cribra_scanner_stream_new(const struct CribraScanner *scanner,
+                                       struct CribraStream **out_stream,
+                                       struct CribraError **out_error);
+
+/**
+ * Opens one Core stream with explicit optional budgets.
+ *
+ * Flags must be 0 or 1. An enabled zero is a zero budget; disabled values are
+ * ignored. Limits are copied for admission and execution. Core defines error
+ * precedence, admission, logical resource accounting and terminal failures.
+ * Null output or invalid arguments do not create a stream. Errors never return
+ * a partially constructed handle. Diagnostics contain no source or rule text.
+ *
+ * # Safety
+ *
+ * `scanner` must be live and immutable, `limits` must reference a readable
+ * CribraStreamLimits, and `out_stream` must reference writable memory for one
+ * stream pointer. Optional `out_error` must be a writable error slot, freed
+ * before reuse. Inputs and output slots must not alias.
+ */
+CribraStatus cribra_scanner_stream_new_with_limits(const struct CribraScanner *scanner,
+                                                   const struct CribraStreamLimits *limits,
+                                                   struct CribraStream **out_stream,
+                                                   struct CribraError **out_error);
+
+/**
  * Builds a share-safe transformed batch from ordered scan results.
  *
  * `sources` must contain the same logical UTF-8 sources, in the same order,
@@ -1293,6 +1436,63 @@ void cribra_share_bundle_free(struct CribraShareBundle *bundle);
  */
 CribraStatus cribra_share_bundle_manifest(const struct CribraShareBundle *bundle,
                                           struct CribraShareManifestView *out_manifest);
+
+/**
+ * Signals genuine EOF and transfers a complete existing CribraReport once.
+ *
+ * Consumes the Core session while the C handle stays valid until stream_free.
+ * Success, execution failure and a contained execution panic all leave it
+ * inactive; subsequent push/finish returns CRIBRA_STREAM_NOT_ACTIVE. A null
+ * out_report returns CRIBRA_INVALID_ARGUMENT without consuming an active session.
+ * Any failure with a valid output slot clears it to null, never a partial report.
+ * The returned report is independently owned and uses existing report accessors,
+ * explanation and transformation APIs, and cribra_report_free.
+ *
+ * # Safety
+ *
+ * `stream` must be live with exclusive access. `out_report` must reference a
+ * writable report-pointer slot. Optional `out_error` must reference a writable
+ * error slot, freed before reuse. Output slots and the handle must not alias.
+ */
+CribraStatus cribra_stream_finish(struct CribraStream *stream,
+                                  struct CribraReport **out_report,
+                                  struct CribraError **out_error);
+
+/**
+ * Frees one streaming handle, active, failed or finished. Null is a no-op.
+ *
+ * # Safety
+ *
+ * A non-null stream must be live and exclusively owned, created by a stream
+ * constructor and not previously freed. No concurrent operation is permitted.
+ */
+void cribra_stream_free(struct CribraStream *stream);
+
+/**
+ * Feeds arbitrary byte chunks in source order without retaining caller memory.
+ *
+ * UTF-8 scalars may span calls. Null plus zero length is an empty chunk; empty
+ * chunks on active streams are no-ops. Malformed UTF-8 and all Core execution
+ * failures discard the session and return distinct CRIBRA_STREAM_* statuses.
+ * A contained execution panic also discards the session and returns
+ * CRIBRA_INTERNAL_ERROR. Subsequent push/finish returns CRIBRA_STREAM_NOT_ACTIVE,
+ * including an empty push. No partial report is ever returned.
+ * Invalid buffer arguments return CRIBRA_INVALID_ARGUMENT without consuming an
+ * active session. Source-byte counts increase only after successful Core pushes
+ * and checked adapter accounting. No adapter UTF-8 decoding or source buffer.
+ *
+ * # Safety
+ *
+ * `stream` must be live, with exclusive access for this call (no concurrent
+ * push, finish or free). For non-empty input, `chunk` must reference `chunk_len`
+ * readable bytes, with length no greater than PTRDIFF_MAX. Input and output
+ * slots must not alias the handle. Optional `out_error` must reference a writable
+ * error slot, freed before reuse. No caller buffer borrow survives this call.
+ */
+CribraStatus cribra_stream_push(struct CribraStream *stream,
+                                const uint8_t *chunk,
+                                size_t chunk_len,
+                                struct CribraError **out_error);
 
 /**
  * Pseudonymizes findings with a mandatory caller-provided 32-byte key.
