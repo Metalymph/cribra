@@ -99,7 +99,9 @@
       "explainFinding(result: ScanResult, index: number): ExplanationView",
       "constructor()",
       "rulesCount(): number",
-      "scan(source: string): ScanResult"
+      "scan(source: string): ScanResult",
+      "stream(): StreamSession",
+      "streamWithLimits(limits: StreamLimits): StreamSession"
     ]
   },
   "ScanEngineBuilder": {
@@ -133,6 +135,46 @@
       "template(source: string): string",
       "templateWith(source: string, namespace: string, numbered: boolean): string",
       "readonly sourceBytes: number"
+    ]
+  },
+  "StreamError": {
+    "kind": "class",
+    "members": [
+      "readonly code: StreamErrorCode",
+      "readonly message: string"
+    ]
+  },
+  "StreamErrorCode": {
+    "kind": "enum",
+    "members": [
+      "UnsupportedRuleSet = 0",
+      "NotActive = 1",
+      "InvalidUtf8 = 2",
+      "IncompleteUtf8 = 3",
+      "CandidateLimitExceeded = 4",
+      "ResultLimitExceeded = 5",
+      "StorageLimitExceeded = 6",
+      "StorageRequirementOverflow = 7",
+      "SourceOffsetOverflow = 8",
+      "CoordinateOverflow = 9",
+      "ExecutionInvariantViolated = 10",
+      "UnknownCoreError = 11",
+      "InvalidLimit = 12"
+    ]
+  },
+  "StreamLimits": {
+    "kind": "interface",
+    "members": [
+      "readonly maxCandidates?: number",
+      "readonly maxStreamStorageBytes?: number",
+      "readonly maxRetainedResults?: number"
+    ]
+  },
+  "StreamSession": {
+    "kind": "class",
+    "members": [
+      "finish(): ScanResult",
+      "push(chunk: Uint8Array): void"
     ]
   }
 }

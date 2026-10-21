@@ -1,6 +1,7 @@
 # Compatibility and distribution status
 
-Evidence reviewed on 2026-10-20. This is a snapshot of distinct contracts:
+Evidence reviewed on 2026-10-20; P0.4 WASM source streaming locally checked on
+2026-10-21. This is a snapshot of distinct contracts:
 **implemented** means an API/build path exists; **locally qualified** means a
 consumer ran on the recorded host; **CI-qualified** means the named remote job
 completed successfully. Neither a successful build nor an uploaded artifact is
@@ -32,7 +33,7 @@ artifacts have retention limits and are not permanent release downloads.
 | --- | --- | --- | --- |
 | Rust | Scan/report, built-ins/custom rules, stream and incremental | Default `transform`: Core plus four transforms and Share Bundles | Flow plus `serde` and `parallel` |
 | UniFFI → Swift/Python/Kotlin | `core`: Scanner/configuration, batch, stream, incremental/atomic snapshot | `flow`: Core plus Redact, Template, Pseudonymize, Synthesize and Share Bundles | `fuse`: Flow plus Core-owned parallel scanning |
-| WASM | `--no-default-features`: scanning/reporting | Default `transform`: transformations; published distribution profile | Not supported |
+| WASM | `--no-default-features`: scanning/reporting and admitted byte streaming | Default `transform`: transformations; published distribution profile | Not supported |
 
 Rust Core/Flow/Fuse are feature combinations, not Cargo features named `core`,
 `flow` and `fuse`; those names are explicit UniFFI features. The C ABI 0.3.0
@@ -40,7 +41,10 @@ adds Core-owned incremental documents, UTF-8 byte edits, four optional budgets
 and coherent revision/byte-count/report snapshots. Ordinary Core terminal failures
 preserve the committed snapshot; contained panics invalidate the adapter session.
 The 0.2.0 Core-backed byte streaming API and its admission rules remain unchanged.
-The CLI retains its own surface, and streaming/incremental parity is not implied in WASM. See
+WASM source now exposes Core-owned byte streaming in both Core and Flow, with
+three independently optional budgets and typed terminal errors. Incremental
+WASM sessions remain unavailable. These source additions do not establish a
+published streaming artifact. The CLI retains its own surface. See
 [CLI parity](CLI_PARITY.md), [C ABI](INTEROP.md),
 [WASM](../crates/cribra-wasm/README.md) and [UniFFI](../crates/cribra-uniffi/README.md).
 
@@ -59,7 +63,7 @@ consumer guides retain the detailed fixture, ownership, error and parity scope.
 | Surface | Local evidence | Completed CI evidence / limits |
 | --- | --- | --- |
 | Rust / C | Existing release qualification and native examples | [Engine CI](https://github.com/Metalymph/cribra/actions/runs/39411373054): Linux full gate, native Linux ARM64, RISC-V64 under QEMU, macOS/Windows tests; native C ABI gates on Ubuntu/macOS/Windows. This does not qualify every language binding on those platforms |
-| WASM | Production browser and Node 26.9.0 / Bun 1.4.2 / Deno 2.9.7 consumers | [WASM CI](https://github.com/Metalymph/cribra/actions/runs/39411373136): wasm32 gate, Core/Flow JS/TypeScript contracts. No WASM sessions/Fuse; browser lifecycle, Workers and CSP remain caller concerns |
+| WASM | Existing production browser and Node 26.9.0 / Bun 1.4.2 / Deno 2.9.7 consumers. P0.4 source streaming: local macOS ARM64, Node 26.12.0 / Bun 1.4.3, generated Core/Flow runtime contracts and direct-Core oracles | [WASM CI](https://github.com/Metalymph/cribra/actions/runs/39411373136): earlier wasm32 gate and Core/Flow JS/TypeScript contracts; predates P0.4 streaming. No incremental/Fuse; streaming browser execution is not qualified by this local run. Browser lifecycle, Workers and CSP remain caller concerns |
 | Swift | macOS ARM64, Swift 6.4; external macOS consumer runs; real ARM64 device and Simulator archives built | [Swift Apple integration](https://github.com/Metalymph/cribra/actions/runs/39411373180) passed all three packages/external consumers. iOS Simulator compile/link only; no simulator launch or device execution claim. Declared macOS 13/iOS 16 deployment minimums are not runtime tests on every OS. Intel slices are absent |
 | Python | macOS 27.0.1 ARM64; installed Fuse wheel on CPython 3.11.17/3.12.15/3.13.7/3.14.8; source consumers Core 25, Flow 40, Fuse 43 tests | Linux x86_64 and repaired `manylinux_2_28_x86_64` installed-wheel gates passed in [engine CI](https://github.com/Metalymph/cribra/actions/runs/39411373054); native Windows x86_64 CPython 3.11–3.14 passed in [engine CI](https://github.com/Metalymph/cribra/actions/runs/39411373054). No musl, ARM64 Linux/Windows, Intel macOS or older macOS runtime qualification |
 | Kotlin/JVM | macOS ARM64 fixture/oracle smokes and isolated bundle consumers | [NB-3.6A CI](https://github.com/Metalymph/cribra/actions/runs/39411373200), commit `0c7ac77f4e3eb959929977f3ecadbb9263824dcf`: macOS ARM64 (`macos-15`), Linux x86_64 (`ubuntu-24.04`), Windows x86_64 (`windows-2022`); Rust 1.97.0, Kotlin 2.4.21, JDK 17 |

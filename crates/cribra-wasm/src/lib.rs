@@ -11,6 +11,9 @@
 //! transformation. Scan results retain metadata only; they never retain the
 //! scanned source text or matched sensitive values.
 
+mod streaming;
+pub use streaming::{StreamError, StreamErrorCode, StreamLimits, StreamSession};
+
 use cribra::{
     CandidateEvidence, Confidence, DetectionMode, Explanation, Finding, Remediation, Rule,
     ScanReport, Scanner, SensitiveCandidate, SensitiveCandidateKind, Severity,

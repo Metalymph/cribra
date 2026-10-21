@@ -41,6 +41,14 @@ if (installed.status !== 0 || installed.stdout.trim() !== `wasm-bindgen ${versio
 }
 run("wasm-bindgen", ["--version"]);
 
+// Use Core directly for the streaming oracle, independently of adapter DTOs.
+const shared = resolve(metadata.target_directory, "wasm-qualification");
+await mkdir(shared, { recursive: true });
+const streamOracle = run("cargo", ["run", "--locked", "-p", "cribra-wasm", "--no-default-features", "--example", "stream_oracle"], {
+  stdio: ["ignore", "pipe", "inherit"], encoding: "utf8",
+});
+await writeFile(resolve(shared, "stream-oracle.json"), streamOracle);
+
 for (const variant of variants.length ? variants : ["core", "flow"]) {
   run("cargo", [
     "build", "-p", "cribra-wasm", "--locked", "--release",

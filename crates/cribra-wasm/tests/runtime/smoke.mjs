@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { qualifyStreams } from "./stream.mjs";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -13,10 +14,12 @@ const contract = JSON.parse(await readFile(new URL("api-contract.json", import.m
 const declarations = (await readFile(resolve(directory, "cribra.d.ts"), "utf8"))
   .replace(/\/\*[\s\S]*?\*\//g, "");
 const actual = {};
-for (const [, kind, name, body] of declarations.matchAll(/export (class|enum) (\w+) \{([^}]+)\}/g)) {
+for (const [, kind, name, body] of declarations.matchAll(/export (class|enum|interface) (\w+) \{([^}]+)\}/g)) {
+  // Keep wasm-bindgen's low-level initialization ABI outside the adapter DTO inventory.
+  if (kind === "interface" && name === "InitOutput") continue;
   actual[name] = {
     kind,
-    members: body.split(kind === "class" ? ";" : ",")
+    members: body.split(kind === "enum" ? "," : ";")
       .map((member) => member.trim().replace(/\s+/g, " "))
       .filter((member) => member && !/^(private constructor|free\(|\[Symbol.dispose\])/.test(member)),
   };
@@ -34,6 +37,10 @@ await mod.default({ module_or_path: await readFile(resolve(directory, "cribra_bg
 
 // Check the actual JS exports and prototypes as well as the TypeScript text.
 for (const [name, { kind, members }] of Object.entries(expected)) {
+  if (kind === "interface") {
+    assert.equal(name in mod, false, `${name} must remain a type-only interface`);
+    continue;
+  }
   assert(mod[name], `Missing JS export: ${name}`);
   if (kind === "enum") {
     for (const member of members) {
@@ -42,6 +49,8 @@ for (const [name, { kind, members }] of Object.entries(expected)) {
     }
     continue;
   }
+  assert.equal(typeof mod[name].prototype.free, "function", `${name}.free`);
+  assert.equal(mod[name].prototype.free.length, 0, `${name}.free arity`);
   for (const member of members) {
     if (member.startsWith("readonly ")) {
       const key = member.slice("readonly ".length).split(":")[0];
@@ -114,4 +123,7 @@ if (variant === "flow") {
 for (const owned of [finding, explanation, detected, candidate, evidence, review, result, engine, builtin]) {
   owned.free();
 }
+const streamCases = JSON.parse(await readFile(new URL("stream-cases.json", import.meta.url), "utf8"));
+const streamOracle = JSON.parse(await readFile(resolve(directory, "../stream-oracle.json"), "utf8"));
+qualifyStreams(mod, variant, streamCases, streamOracle);
 console.log(`${variant}: generated JS/TypeScript contract and WASM runtime smoke passed`);

@@ -1,0 +1,32 @@
+[
+  {
+    "name": "custom-families",
+    "rules": [
+      {"kind": "literal", "id": "custom/clé-🔑", "value": "秘密🔑", "severity": "High"},
+      {"kind": "prefix", "id": "prefix", "value": "pre_", "severity": "Critical"},
+      {"kind": "suffix", "id": "suffix", "value": "_END", "severity": "Medium"},
+      {"kind": "pattern", "id": "pattern", "value": "code[0-9]{2}", "severity": "Low"}
+    ],
+    "sources": [
+      "前\r\né🙂é 秘密🔑 pre_ABC-12 token_END code42\nABCD-EFGH-IJKL-MNOP\nQRST-UVWX-YZ12-3456",
+      "",
+      "ordinary text: é🙂\u0000"
+    ]
+  },
+  {
+    "name": "reviews",
+    "rules": [],
+    "sources": ["ABCD-EFGH-IJKL-MNOP", "é🙂 ABCD-EFGH-IJKL-MNOP\nQRST-UVWX-YZ12-3456", ""]
+  },
+  {
+    "name": "builtins",
+    "builtins": true,
+    "rules": [],
+    "sources": ["password=CorrectHorseBatteryStaple\nGITHUB_TOKEN=ghp_AbCdEf0123456789_AbCdEf0123456789\nABCD-EFGH-IJKL-MNOP"]
+  },
+  {
+    "name": "unbounded-pattern",
+    "rules": [{"kind": "pattern", "id": "DO_NOT_EXPOSE", "value": "a+", "severity": "High"}],
+    "sources": ["aaa"]
+  }
+]

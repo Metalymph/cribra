@@ -100,6 +100,39 @@ generic payloads, and keyed transformations use `Uint8Array`.
 
 Typed projection is therefore the retained public boundary.
 
+### P0.4 source streaming contract
+
+Both Core and Flow source builds expose `ScanEngine.stream()` and
+`streamWithLimits(limits: StreamLimits)`. The exported `StreamSession` accepts
+`push(Uint8Array)` and `finish()`, and has the generated `free()` method.
+It wraps an optional Core `StreamSession`; Core exclusively owns admission,
+UTF-8 decoding, matching, limits and report ordering. No whole-source fallback,
+source buffer, second scanner, threads or runtime dependencies are added.
+The current built-in scanner fails streaming admission. Admitted custom rules
+produce the existing complete `ScanResult` projection.
+
+The typed options interface exposes `maxCandidates`, `maxStreamStorageBytes`
+and `maxRetainedResults`. Missing/undefined properties are unlimited; zero is
+meaningful. The adapter reads raw JavaScript property values solely to validate
+numbers before Core conversion: negative, fractional, non-finite, unsafe or
+WASM32-unrepresentable integers and non-number values fail with `InvalidLimit`.
+These input checks do not change the typed scan/result transport.
+
+`StreamError` is an owned wasm-bindgen object with stable `StreamErrorCode`
+and source-free `message` getters. Each Core error has a distinct code, with
+`UnknownCoreError` reserved for future variants. Callers must free caught
+`StreamError` objects as well as sessions and results. Terminal push failures
+discard Core state; finish consumes it on either outcome. Subsequent operations
+throw `NotActive`, and failures expose no partial report. A stream can outlive
+its engine, and a completed result can outlive both.
+
+The existing Core/Flow qualification runner now exercises generated bindings
+against a direct-Core oracle, byte partitions, limit validation and terminal
+ownership behavior. This qualifies the local runtime execution recorded in
+[Compatibility](COMPATIBILITY.md), not a published package or a new browser
+qualification. See the [WASM README](../crates/cribra-wasm/README.md#byte-streaming)
+for the complete limits, ownership and error-handling contract.
+
 ### Artifact size after capability parity
 
 Release artifacts produced with `wasm-bindgen --target web` after completing
