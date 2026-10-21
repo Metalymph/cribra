@@ -64,6 +64,46 @@ Rust core Fuse adds `parallel` and `serde` to Flow. These features are not
 part of the supported browser WASM API; the adapter has no Fuse configuration.
 Streaming and incremental sessions are available in both configurations.
 
+## Custom rule remediation
+
+Both variants preserve `addLiteral`, `addPrefix`, `addSuffix` and `addPattern`
+with their existing three-argument signatures and no-remediation default. The
+following additive builder methods accept optional Core remediation:
+
+```ts
+addLiteralWithRemediation(id: string, value: string, severity: FindingSeverity,
+  remediation?: RemediationKind | null): void;
+addPrefixWithRemediation(id: string, value: string, severity: FindingSeverity,
+  remediation?: RemediationKind | null): void;
+addSuffixWithRemediation(id: string, value: string, severity: FindingSeverity,
+  remediation?: RemediationKind | null): void;
+addPatternWithRemediation(id: string, pattern: string, severity: FindingSeverity,
+  remediation?: RemediationKind | null): void;
+```
+
+Omitted, `undefined`, `null` and `RemediationKind.None` all retain no remediation.
+The seven concrete `RemediationKind` values map directly to Core `Remediation`
+and `Rule.with_remediation`; no validation or matching policy is attached.
+`Unknown` is output-only and throws a JavaScript error without staging a rule.
+Invalid patterns are rejected first by Core's constructor, and empty/duplicate
+IDs and empty literal/prefix/suffix matchers retain Core's build-time validation.
+Configuration diagnostics may mention configuration inputs; no scanned source
+is passed to construction diagnostics. All existing enum values are preserved.
+
+```js
+const builder = new ScanEngineBuilder(false);
+builder.addLiteralWithRemediation("app.secret", "SECRET", FindingSeverity.High,
+  RemediationKind.RemoveSensitiveValue);
+const engine = builder.build();
+// Findings expose Core's remediation through the existing result projection.
+engine.free();
+```
+
+Custom remediation is retained by scan, stream and incremental results and by
+existing explanations and Flow transforms. It changes metadata only. Catalog
+composition remains available through `new ScanEngineBuilder(include_builtins)`,
+`addFinancialBuiltins()` and `addPersonalBuiltins()`, delegating to Core.
+
 ## Byte streaming
 
 `ScanEngine.stream()` opens an unlimited stream;
@@ -273,6 +313,13 @@ candidates, metadata and explanations. Flow compares all six transformation
 methods, including equivalent overlap rejections. Native tests check every Core
 error mapping; impractical revision/document/resource overflows and invariant
 failures are mapping checks, not induced WASM runtime failures.
+
+The custom-remediation oracle qualifies all four families and seven concrete
+actions plus every no-remediation form: 44 configurations and 132 complete
+scan/stream/incremental reports per variant/runtime. Generated TypeScript pins
+the additive signatures, and runtime tests preserve the old methods, check
+unstaged invalid patterns/Unknown, and exercise empty IDs/matchers, duplicates
+and collisions with each catalog. No runtime dependency is added.
 
 To exercise the same generated artifacts under an available Bun installation:
 

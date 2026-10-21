@@ -1,7 +1,8 @@
 # Compatibility and distribution status
 
 Evidence reviewed on 2026-10-20; P0.4/P0.5 WASM source streaming and incremental
-scanning locally checked on 2026-10-21. This is a snapshot of distinct contracts:
+scanning and P0.6A adapter configuration locally checked on 2026-10-21.
+This is a snapshot of distinct contracts:
 **implemented** means an API/build path exists; **locally qualified** means a
 consumer ran on the recorded host; **CI-qualified** means the named remote job
 completed successfully. Neither a successful build nor an uploaded artifact is
@@ -49,6 +50,21 @@ Core errors. These source additions do not establish published session APIs.
 The CLI retains its own surface. See
 [CLI parity](CLI_PARITY.md), [C ABI](INTEROP.md),
 [WASM](../crates/cribra-wasm/README.md) and [UniFFI](../crates/cribra-uniffi/README.md).
+
+P0.6A source configuration adds independently selected current/financial/personal
+catalogs to UniFFI Core/Flow/Fuse and optional Core remediation to all four WASM
+custom-rule families in Core/Flow. Legacy configuration variants, builder methods
+and WASM enum values remain present. UniFFI's appended `ScannerConfig.Catalogs`
+case requires regenerated matching bindings/library and a new branch in exhaustive
+consumer switches. Core exclusively owns composition, ordering, collisions and
+rule validation. No default catalog selection changes.
+
+Local configuration qualification uses generated Swift 6.4, Python 3.13.7 and
+Kotlin 2.4.21/JDK 17 consumers for each UniFFI profile (21 successful configurations,
+19 Core errors per profile/language). WASM Core/Flow run on Node 26.12.0 and Bun
+1.4.3, comparing 132 scan/stream/incremental reports across 44 remediation
+configurations per variant/runtime against Core. These are macOS ARM64 source
+checks, not new CI, browser, platform or published-package qualifications.
 
 Use one matching generated binding/native library/profile set per process.
 Kotlin additionally requires one profile JAR per classpath; Swift requires one

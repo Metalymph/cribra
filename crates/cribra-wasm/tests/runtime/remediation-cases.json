@@ -1,0 +1,610 @@
+[
+  {
+    "name": "literal-legacy",
+    "rules": [
+      {
+        "id": "custom/clé-🔑",
+        "kind": "literal",
+        "value": "SECRET",
+        "severity": "High",
+        "newMethod": false
+      }
+    ],
+    "source": "é🙂 SECRET pre_ABC token_END code42\nABCD-EFGH-IJKL-MNOP"
+  },
+  {
+    "name": "literal-undefined",
+    "rules": [
+      {
+        "id": "custom/clé-🔑",
+        "kind": "literal",
+        "value": "SECRET",
+        "severity": "High",
+        "newMethod": true
+      }
+    ],
+    "source": "é🙂 SECRET pre_ABC token_END code42\nABCD-EFGH-IJKL-MNOP"
+  },
+  {
+    "name": "literal-None",
+    "rules": [
+      {
+        "id": "custom/clé-🔑",
+        "kind": "literal",
+        "value": "SECRET",
+        "severity": "High",
+        "newMethod": true,
+        "remediation": null
+      }
+    ],
+    "source": "é🙂 SECRET pre_ABC token_END code42\nABCD-EFGH-IJKL-MNOP"
+  },
+  {
+    "name": "literal-None",
+    "rules": [
+      {
+        "id": "custom/clé-🔑",
+        "kind": "literal",
+        "value": "SECRET",
+        "severity": "High",
+        "newMethod": true,
+        "remediation": "None"
+      }
+    ],
+    "source": "é🙂 SECRET pre_ABC token_END code42\nABCD-EFGH-IJKL-MNOP"
+  },
+  {
+    "name": "literal-RevokeAndRotateCredential",
+    "rules": [
+      {
+        "id": "custom/clé-🔑",
+        "kind": "literal",
+        "value": "SECRET",
+        "severity": "High",
+        "newMethod": true,
+        "remediation": "RevokeAndRotateCredential"
+      }
+    ],
+    "source": "é🙂 SECRET pre_ABC token_END code42\nABCD-EFGH-IJKL-MNOP"
+  },
+  {
+    "name": "literal-RotateCredential",
+    "rules": [
+      {
+        "id": "custom/clé-🔑",
+        "kind": "literal",
+        "value": "SECRET",
+        "severity": "High",
+        "newMethod": true,
+        "remediation": "RotateCredential"
+      }
+    ],
+    "source": "é🙂 SECRET pre_ABC token_END code42\nABCD-EFGH-IJKL-MNOP"
+  },
+  {
+    "name": "literal-RotatePassword",
+    "rules": [
+      {
+        "id": "custom/clé-🔑",
+        "kind": "literal",
+        "value": "SECRET",
+        "severity": "High",
+        "newMethod": true,
+        "remediation": "RotatePassword"
+      }
+    ],
+    "source": "é🙂 SECRET pre_ABC token_END code42\nABCD-EFGH-IJKL-MNOP"
+  },
+  {
+    "name": "literal-ReplacePrivateKey",
+    "rules": [
+      {
+        "id": "custom/clé-🔑",
+        "kind": "literal",
+        "value": "SECRET",
+        "severity": "High",
+        "newMethod": true,
+        "remediation": "ReplacePrivateKey"
+      }
+    ],
+    "source": "é🙂 SECRET pre_ABC token_END code42\nABCD-EFGH-IJKL-MNOP"
+  },
+  {
+    "name": "literal-RemoveSensitiveValue",
+    "rules": [
+      {
+        "id": "custom/clé-🔑",
+        "kind": "literal",
+        "value": "SECRET",
+        "severity": "High",
+        "newMethod": true,
+        "remediation": "RemoveSensitiveValue"
+      }
+    ],
+    "source": "é🙂 SECRET pre_ABC token_END code42\nABCD-EFGH-IJKL-MNOP"
+  },
+  {
+    "name": "literal-ReviewSensitiveHash",
+    "rules": [
+      {
+        "id": "custom/clé-🔑",
+        "kind": "literal",
+        "value": "SECRET",
+        "severity": "High",
+        "newMethod": true,
+        "remediation": "ReviewSensitiveHash"
+      }
+    ],
+    "source": "é🙂 SECRET pre_ABC token_END code42\nABCD-EFGH-IJKL-MNOP"
+  },
+  {
+    "name": "literal-ReviewPasswordVerifier",
+    "rules": [
+      {
+        "id": "custom/clé-🔑",
+        "kind": "literal",
+        "value": "SECRET",
+        "severity": "High",
+        "newMethod": true,
+        "remediation": "ReviewPasswordVerifier"
+      }
+    ],
+    "source": "é🙂 SECRET pre_ABC token_END code42\nABCD-EFGH-IJKL-MNOP"
+  },
+  {
+    "name": "prefix-legacy",
+    "rules": [
+      {
+        "id": "custom/clé-🔑",
+        "kind": "prefix",
+        "value": "pre_",
+        "severity": "High",
+        "newMethod": false
+      }
+    ],
+    "source": "é🙂 SECRET pre_ABC token_END code42\nABCD-EFGH-IJKL-MNOP"
+  },
+  {
+    "name": "prefix-undefined",
+    "rules": [
+      {
+        "id": "custom/clé-🔑",
+        "kind": "prefix",
+        "value": "pre_",
+        "severity": "High",
+        "newMethod": true
+      }
+    ],
+    "source": "é🙂 SECRET pre_ABC token_END code42\nABCD-EFGH-IJKL-MNOP"
+  },
+  {
+    "name": "prefix-None",
+    "rules": [
+      {
+        "id": "custom/clé-🔑",
+        "kind": "prefix",
+        "value": "pre_",
+        "severity": "High",
+        "newMethod": true,
+        "remediation": null
+      }
+    ],
+    "source": "é🙂 SECRET pre_ABC token_END code42\nABCD-EFGH-IJKL-MNOP"
+  },
+  {
+    "name": "prefix-None",
+    "rules": [
+      {
+        "id": "custom/clé-🔑",
+        "kind": "prefix",
+        "value": "pre_",
+        "severity": "High",
+        "newMethod": true,
+        "remediation": "None"
+      }
+    ],
+    "source": "é🙂 SECRET pre_ABC token_END code42\nABCD-EFGH-IJKL-MNOP"
+  },
+  {
+    "name": "prefix-RevokeAndRotateCredential",
+    "rules": [
+      {
+        "id": "custom/clé-🔑",
+        "kind": "prefix",
+        "value": "pre_",
+        "severity": "High",
+        "newMethod": true,
+        "remediation": "RevokeAndRotateCredential"
+      }
+    ],
+    "source": "é🙂 SECRET pre_ABC token_END code42\nABCD-EFGH-IJKL-MNOP"
+  },
+  {
+    "name": "prefix-RotateCredential",
+    "rules": [
+      {
+        "id": "custom/clé-🔑",
+        "kind": "prefix",
+        "value": "pre_",
+        "severity": "High",
+        "newMethod": true,
+        "remediation": "RotateCredential"
+      }
+    ],
+    "source": "é🙂 SECRET pre_ABC token_END code42\nABCD-EFGH-IJKL-MNOP"
+  },
+  {
+    "name": "prefix-RotatePassword",
+    "rules": [
+      {
+        "id": "custom/clé-🔑",
+        "kind": "prefix",
+        "value": "pre_",
+        "severity": "High",
+        "newMethod": true,
+        "remediation": "RotatePassword"
+      }
+    ],
+    "source": "é🙂 SECRET pre_ABC token_END code42\nABCD-EFGH-IJKL-MNOP"
+  },
+  {
+    "name": "prefix-ReplacePrivateKey",
+    "rules": [
+      {
+        "id": "custom/clé-🔑",
+        "kind": "prefix",
+        "value": "pre_",
+        "severity": "High",
+        "newMethod": true,
+        "remediation": "ReplacePrivateKey"
+      }
+    ],
+    "source": "é🙂 SECRET pre_ABC token_END code42\nABCD-EFGH-IJKL-MNOP"
+  },
+  {
+    "name": "prefix-RemoveSensitiveValue",
+    "rules": [
+      {
+        "id": "custom/clé-🔑",
+        "kind": "prefix",
+        "value": "pre_",
+        "severity": "High",
+        "newMethod": true,
+        "remediation": "RemoveSensitiveValue"
+      }
+    ],
+    "source": "é🙂 SECRET pre_ABC token_END code42\nABCD-EFGH-IJKL-MNOP"
+  },
+  {
+    "name": "prefix-ReviewSensitiveHash",
+    "rules": [
+      {
+        "id": "custom/clé-🔑",
+        "kind": "prefix",
+        "value": "pre_",
+        "severity": "High",
+        "newMethod": true,
+        "remediation": "ReviewSensitiveHash"
+      }
+    ],
+    "source": "é🙂 SECRET pre_ABC token_END code42\nABCD-EFGH-IJKL-MNOP"
+  },
+  {
+    "name": "prefix-ReviewPasswordVerifier",
+    "rules": [
+      {
+        "id": "custom/clé-🔑",
+        "kind": "prefix",
+        "value": "pre_",
+        "severity": "High",
+        "newMethod": true,
+        "remediation": "ReviewPasswordVerifier"
+      }
+    ],
+    "source": "é🙂 SECRET pre_ABC token_END code42\nABCD-EFGH-IJKL-MNOP"
+  },
+  {
+    "name": "suffix-legacy",
+    "rules": [
+      {
+        "id": "custom/clé-🔑",
+        "kind": "suffix",
+        "value": "_END",
+        "severity": "High",
+        "newMethod": false
+      }
+    ],
+    "source": "é🙂 SECRET pre_ABC token_END code42\nABCD-EFGH-IJKL-MNOP"
+  },
+  {
+    "name": "suffix-undefined",
+    "rules": [
+      {
+        "id": "custom/clé-🔑",
+        "kind": "suffix",
+        "value": "_END",
+        "severity": "High",
+        "newMethod": true
+      }
+    ],
+    "source": "é🙂 SECRET pre_ABC token_END code42\nABCD-EFGH-IJKL-MNOP"
+  },
+  {
+    "name": "suffix-None",
+    "rules": [
+      {
+        "id": "custom/clé-🔑",
+        "kind": "suffix",
+        "value": "_END",
+        "severity": "High",
+        "newMethod": true,
+        "remediation": null
+      }
+    ],
+    "source": "é🙂 SECRET pre_ABC token_END code42\nABCD-EFGH-IJKL-MNOP"
+  },
+  {
+    "name": "suffix-None",
+    "rules": [
+      {
+        "id": "custom/clé-🔑",
+        "kind": "suffix",
+        "value": "_END",
+        "severity": "High",
+        "newMethod": true,
+        "remediation": "None"
+      }
+    ],
+    "source": "é🙂 SECRET pre_ABC token_END code42\nABCD-EFGH-IJKL-MNOP"
+  },
+  {
+    "name": "suffix-RevokeAndRotateCredential",
+    "rules": [
+      {
+        "id": "custom/clé-🔑",
+        "kind": "suffix",
+        "value": "_END",
+        "severity": "High",
+        "newMethod": true,
+        "remediation": "RevokeAndRotateCredential"
+      }
+    ],
+    "source": "é🙂 SECRET pre_ABC token_END code42\nABCD-EFGH-IJKL-MNOP"
+  },
+  {
+    "name": "suffix-RotateCredential",
+    "rules": [
+      {
+        "id": "custom/clé-🔑",
+        "kind": "suffix",
+        "value": "_END",
+        "severity": "High",
+        "newMethod": true,
+        "remediation": "RotateCredential"
+      }
+    ],
+    "source": "é🙂 SECRET pre_ABC token_END code42\nABCD-EFGH-IJKL-MNOP"
+  },
+  {
+    "name": "suffix-RotatePassword",
+    "rules": [
+      {
+        "id": "custom/clé-🔑",
+        "kind": "suffix",
+        "value": "_END",
+        "severity": "High",
+        "newMethod": true,
+        "remediation": "RotatePassword"
+      }
+    ],
+    "source": "é🙂 SECRET pre_ABC token_END code42\nABCD-EFGH-IJKL-MNOP"
+  },
+  {
+    "name": "suffix-ReplacePrivateKey",
+    "rules": [
+      {
+        "id": "custom/clé-🔑",
+        "kind": "suffix",
+        "value": "_END",
+        "severity": "High",
+        "newMethod": true,
+        "remediation": "ReplacePrivateKey"
+      }
+    ],
+    "source": "é🙂 SECRET pre_ABC token_END code42\nABCD-EFGH-IJKL-MNOP"
+  },
+  {
+    "name": "suffix-RemoveSensitiveValue",
+    "rules": [
+      {
+        "id": "custom/clé-🔑",
+        "kind": "suffix",
+        "value": "_END",
+        "severity": "High",
+        "newMethod": true,
+        "remediation": "RemoveSensitiveValue"
+      }
+    ],
+    "source": "é🙂 SECRET pre_ABC token_END code42\nABCD-EFGH-IJKL-MNOP"
+  },
+  {
+    "name": "suffix-ReviewSensitiveHash",
+    "rules": [
+      {
+        "id": "custom/clé-🔑",
+        "kind": "suffix",
+        "value": "_END",
+        "severity": "High",
+        "newMethod": true,
+        "remediation": "ReviewSensitiveHash"
+      }
+    ],
+    "source": "é🙂 SECRET pre_ABC token_END code42\nABCD-EFGH-IJKL-MNOP"
+  },
+  {
+    "name": "suffix-ReviewPasswordVerifier",
+    "rules": [
+      {
+        "id": "custom/clé-🔑",
+        "kind": "suffix",
+        "value": "_END",
+        "severity": "High",
+        "newMethod": true,
+        "remediation": "ReviewPasswordVerifier"
+      }
+    ],
+    "source": "é🙂 SECRET pre_ABC token_END code42\nABCD-EFGH-IJKL-MNOP"
+  },
+  {
+    "name": "pattern-legacy",
+    "rules": [
+      {
+        "id": "custom/clé-🔑",
+        "kind": "pattern",
+        "value": "code[0-9]{2}",
+        "severity": "High",
+        "newMethod": false
+      }
+    ],
+    "source": "é🙂 SECRET pre_ABC token_END code42\nABCD-EFGH-IJKL-MNOP"
+  },
+  {
+    "name": "pattern-undefined",
+    "rules": [
+      {
+        "id": "custom/clé-🔑",
+        "kind": "pattern",
+        "value": "code[0-9]{2}",
+        "severity": "High",
+        "newMethod": true
+      }
+    ],
+    "source": "é🙂 SECRET pre_ABC token_END code42\nABCD-EFGH-IJKL-MNOP"
+  },
+  {
+    "name": "pattern-None",
+    "rules": [
+      {
+        "id": "custom/clé-🔑",
+        "kind": "pattern",
+        "value": "code[0-9]{2}",
+        "severity": "High",
+        "newMethod": true,
+        "remediation": null
+      }
+    ],
+    "source": "é🙂 SECRET pre_ABC token_END code42\nABCD-EFGH-IJKL-MNOP"
+  },
+  {
+    "name": "pattern-None",
+    "rules": [
+      {
+        "id": "custom/clé-🔑",
+        "kind": "pattern",
+        "value": "code[0-9]{2}",
+        "severity": "High",
+        "newMethod": true,
+        "remediation": "None"
+      }
+    ],
+    "source": "é🙂 SECRET pre_ABC token_END code42\nABCD-EFGH-IJKL-MNOP"
+  },
+  {
+    "name": "pattern-RevokeAndRotateCredential",
+    "rules": [
+      {
+        "id": "custom/clé-🔑",
+        "kind": "pattern",
+        "value": "code[0-9]{2}",
+        "severity": "High",
+        "newMethod": true,
+        "remediation": "RevokeAndRotateCredential"
+      }
+    ],
+    "source": "é🙂 SECRET pre_ABC token_END code42\nABCD-EFGH-IJKL-MNOP"
+  },
+  {
+    "name": "pattern-RotateCredential",
+    "rules": [
+      {
+        "id": "custom/clé-🔑",
+        "kind": "pattern",
+        "value": "code[0-9]{2}",
+        "severity": "High",
+        "newMethod": true,
+        "remediation": "RotateCredential"
+      }
+    ],
+    "source": "é🙂 SECRET pre_ABC token_END code42\nABCD-EFGH-IJKL-MNOP"
+  },
+  {
+    "name": "pattern-RotatePassword",
+    "rules": [
+      {
+        "id": "custom/clé-🔑",
+        "kind": "pattern",
+        "value": "code[0-9]{2}",
+        "severity": "High",
+        "newMethod": true,
+        "remediation": "RotatePassword"
+      }
+    ],
+    "source": "é🙂 SECRET pre_ABC token_END code42\nABCD-EFGH-IJKL-MNOP"
+  },
+  {
+    "name": "pattern-ReplacePrivateKey",
+    "rules": [
+      {
+        "id": "custom/clé-🔑",
+        "kind": "pattern",
+        "value": "code[0-9]{2}",
+        "severity": "High",
+        "newMethod": true,
+        "remediation": "ReplacePrivateKey"
+      }
+    ],
+    "source": "é🙂 SECRET pre_ABC token_END code42\nABCD-EFGH-IJKL-MNOP"
+  },
+  {
+    "name": "pattern-RemoveSensitiveValue",
+    "rules": [
+      {
+        "id": "custom/clé-🔑",
+        "kind": "pattern",
+        "value": "code[0-9]{2}",
+        "severity": "High",
+        "newMethod": true,
+        "remediation": "RemoveSensitiveValue"
+      }
+    ],
+    "source": "é🙂 SECRET pre_ABC token_END code42\nABCD-EFGH-IJKL-MNOP"
+  },
+  {
+    "name": "pattern-ReviewSensitiveHash",
+    "rules": [
+      {
+        "id": "custom/clé-🔑",
+        "kind": "pattern",
+        "value": "code[0-9]{2}",
+        "severity": "High",
+        "newMethod": true,
+        "remediation": "ReviewSensitiveHash"
+      }
+    ],
+    "source": "é🙂 SECRET pre_ABC token_END code42\nABCD-EFGH-IJKL-MNOP"
+  },
+  {
+    "name": "pattern-ReviewPasswordVerifier",
+    "rules": [
+      {
+        "id": "custom/clé-🔑",
+        "kind": "pattern",
+        "value": "code[0-9]{2}",
+        "severity": "High",
+        "newMethod": true,
+        "remediation": "ReviewPasswordVerifier"
+      }
+    ],
+    "source": "é🙂 SECRET pre_ABC token_END code42\nABCD-EFGH-IJKL-MNOP"
+  }
+]

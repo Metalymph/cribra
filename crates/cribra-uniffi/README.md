@@ -131,6 +131,28 @@ silently be ignored by a separate mode flag:
 | `BuiltInOnly` / `.builtInOnly` | Complete Core `builtins::CURRENT` catalog |
 | `CustomOnly { rules }` / `.customOnly(rules:)` | Exactly the supplied rules, including zero rules |
 | `BuiltInAndCustom { rules }` / `.builtInAndCustom(rules:)` | Supplied custom rules plus the complete built-in catalog |
+| `Catalogs { current, financial, personal, rules }` / `.catalogs(current:financial:personal:rules:)` | Independently selected Core default, financial and personal catalogs plus custom rules |
+
+`Catalogs` is available in Core, Flow and Fuse. Each boolean independently adds
+the corresponding Core catalog; all false with no custom rules creates an empty
+scanner. Financial and personal catalogs remain opt-in and are not added to
+`Scanner()`, `BuiltInOnly`, `CustomOnly` or `BuiltInAndCustom`. Catalogs are
+submitted to Core in current/financial/personal order. Core places caller-order
+custom rules first, preserves each catalog's rule order, and owns all composition,
+duplicate-ID detection and validation. The adapter does not merge, deduplicate,
+sort or maintain a separate rule inventory.
+
+```swift
+let scanner = try cribra_uniffi.Scanner.configured(config: .catalogs(
+    current: false, financial: true, personal: true, rules: []
+))
+```
+
+The three legacy variants retain their fields and order; `Catalogs` is appended.
+Regenerate bindings together with their matching native library, as usual for
+UniFFI contract changes. Exhaustive consumer switches over `ScannerConfig` must
+handle the new case. `ScannerBuildError.Rejected` and its structured fields and
+Core diagnostics are unchanged, including collisions with either opt-in catalog.
 
 `RuleSpec` is an owned FFI record (`id: RuleId`, `kind: RuleKind`, `value: String`,
 `severity: Severity`, `remediation: Remediation?`). It is not Core's static
@@ -185,8 +207,10 @@ Regex diagnostics can include configuration payloads, never scanned source text.
 | `MissingCaptureGroup` | Internal Core rule error mapped; conversion tested, unreachable through public custom patterns |
 | `AutomatonBuild` | Core automaton error mapped; resource failure not forced in tests |
 
-The shared configuration fixture has five successful cases and fourteen failure
-cases. Rust and the real Swift executable compare outcomes against direct Core
+The shared configuration fixture has 21 successful cases and 19 failure
+cases. It covers all eight catalog selections with/without custom rules, legacy
+selection, empty rules, catalog collisions and Core error precedence. Rust and
+the real Swift, Python and Kotlin consumers compare outcomes against direct Core
 construction, including error precedence and exact current diagnostic detail.
 Successful cases compare scan results, summary and every exposed metadata field
 in order. Rust additionally verifies prefix/suffix boundaries, oversized suffix
@@ -194,10 +218,20 @@ tokens and full-match behavior with named regex groups.
 
 Reproduce all paths with the same `cargo +1.97.0 test -p cribra-uniffi` and
 `just uniffi-swift-smoke` commands in the macOS instructions below. Generated bindings and the expanded
-Core oracle remain under ignored `target/`. This configuration API offers the
-complete current catalog or custom rules; selection of individual built-ins,
+Core oracle remain under ignored `target/`. This configuration API offers
+complete catalogs and custom rules; selection of individual built-ins,
 internal validators/capture projection and custom confidence settings are not
 exposed. It adds no dependency or parallel validation implementation.
+
+P0.6A local qualification runs these configuration cases through freshly
+generated Core/Flow/Fuse Swift, Python and Kotlin bindings on macOS ARM64.
+Swift's checked-in API contract pins the appended case and preserves existing
+members. Python's existing consumer runner includes the expanded fixture:
+`python3.13 bindings/python/smoke.py core` (also `flow` and `fuse`). The standalone
+Kotlin consumer is `tests/kotlin/ConfigurationSmoke.kt`; compile it alongside the
+profile's generated binding with the existing JNA/Gson test dependencies, then
+run `ConfigurationSmokeKt <configurations.json> <scanner-oracle.json> <profile>`.
+These are local source qualifications, not new package/platform release evidence.
 
 ## NB-1B.4A: byte streaming with terminal completion
 

@@ -153,6 +153,9 @@ class ConsumerTests(unittest.TestCase):
             "builtInOnly": lambda: cribra.ScannerConfig.BUILT_IN_ONLY(),
             "customOnly": lambda: cribra.ScannerConfig.CUSTOM_ONLY(rules=rules),
             "builtInAndCustom": lambda: cribra.ScannerConfig.BUILT_IN_AND_CUSTOM(rules=rules),
+            "catalogs": lambda: cribra.ScannerConfig.CATALOGS(
+                current=case["current"], financial=case["financial"],
+                personal=case["personal"], rules=rules),
         }[case["mode"]]()
 
     def configured(self, name):

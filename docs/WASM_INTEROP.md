@@ -250,7 +250,9 @@ but every exposed capability delegates to the same Rust core semantics.
 | --- | --- | --- | --- |
 | current default built-ins | yes | yes | semantic parity verified |
 | opt-in financial built-ins | yes | yes | semantic parity verified |
+| opt-in personal built-ins | yes | yes | semantic parity verified |
 | literal/prefix/suffix/pattern custom rules | yes | yes | semantic parity verified |
+| optional custom remediation, all four rule families | yes | yes, additive methods | generated Core/Flow contract and direct-Core parity verified |
 | finding count/order/rule ID | yes | yes | semantic parity verified |
 | byte spans and Unicode coordinates | yes | yes | semantic parity verified |
 | severity/confidence/remediation | yes | yes | semantic parity verified |
@@ -269,8 +271,12 @@ but every exposed capability delegates to the same Rust core semantics.
 
 The opt-in financial catalog is exposed through
 `ScanEngineBuilder.addFinancialBuiltins()` and delegates to
-`builtins::financial::CURRENT` in the Rust core. The adapter does not maintain
-its own financial rule catalog or validation logic.
+`builtins::financial::CURRENT` in the Rust core. `addPersonalBuiltins()` similarly
+delegates to `builtins::personal::CURRENT`. The adapter maintains no catalog or
+validation logic of its own. The four `add…WithRemediation` methods project the
+existing `RemediationKind` values directly to Core, preserving the old builder
+methods and defaults. See [custom remediation](../crates/cribra-wasm/README.md#custom-rule-remediation)
+for optional-value and failure behavior.
 
 Representation differences are allowed. Semantic differences in exposed
 capabilities are not.

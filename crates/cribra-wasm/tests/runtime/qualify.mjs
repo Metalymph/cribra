@@ -52,6 +52,10 @@ const incrementalOracle = run("cargo", ["run", "--locked", "-p", "cribra-wasm", 
   stdio: ["ignore", "pipe", "inherit"], encoding: "utf8",
 });
 await writeFile(resolve(shared, "incremental-oracle.json"), incrementalOracle);
+const configurationOracle = run("cargo", ["run", "--locked", "-p", "cribra-wasm", "--no-default-features", "--example", "configuration_oracle"], {
+  stdio: ["ignore", "pipe", "inherit"], encoding: "utf8",
+});
+await writeFile(resolve(shared, "configuration-oracle.json"), configurationOracle);
 
 for (const variant of variants.length ? variants : ["core", "flow"]) {
   run("cargo", [

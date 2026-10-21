@@ -14,6 +14,8 @@
 
 mod incremental;
 mod numeric;
+#[cfg(test)]
+mod remediation_tests;
 mod streaming;
 pub use incremental::{
     IncrementalError, IncrementalErrorCode, IncrementalLimits, IncrementalSession,
@@ -183,6 +185,60 @@ impl ScanEngineBuilder {
             .map_err(|error| JsError::new(&error))
     }
 
+    /// Adds a literal with optional Core remediation. Missing/null/None preserves
+    /// the default. Unknown is an output-only value and is rejected before staging.
+    #[wasm_bindgen(js_name = addLiteralWithRemediation)]
+    pub fn add_literal_with_remediation(
+        &mut self,
+        id: &str,
+        value: &str,
+        severity: FindingSeverity,
+        remediation: Option<RemediationKind>,
+    ) -> Result<(), JsError> {
+        self.push_remediated_rule(Rule::literal(id, value, severity.into()), remediation)
+            .map_err(|error| JsError::new(&error))
+    }
+
+    /// Adds a token-prefix rule with optional Core remediation; matching is unchanged.
+    #[wasm_bindgen(js_name = addPrefixWithRemediation)]
+    pub fn add_prefix_with_remediation(
+        &mut self,
+        id: &str,
+        value: &str,
+        severity: FindingSeverity,
+        remediation: Option<RemediationKind>,
+    ) -> Result<(), JsError> {
+        self.push_remediated_rule(Rule::prefix(id, value, severity.into()), remediation)
+            .map_err(|error| JsError::new(&error))
+    }
+
+    /// Adds a token-suffix rule with optional Core remediation; matching is unchanged.
+    #[wasm_bindgen(js_name = addSuffixWithRemediation)]
+    pub fn add_suffix_with_remediation(
+        &mut self,
+        id: &str,
+        value: &str,
+        severity: FindingSeverity,
+        remediation: Option<RemediationKind>,
+    ) -> Result<(), JsError> {
+        self.push_remediated_rule(Rule::suffix(id, value, severity.into()), remediation)
+            .map_err(|error| JsError::new(&error))
+    }
+
+    /// Adds a Core pattern with optional remediation. Core rejects invalid or
+    /// nullable patterns before staging; remediation changes no matching semantics.
+    #[wasm_bindgen(js_name = addPatternWithRemediation)]
+    pub fn add_pattern_with_remediation(
+        &mut self,
+        id: &str,
+        pattern: &str,
+        severity: FindingSeverity,
+        remediation: Option<RemediationKind>,
+    ) -> Result<(), JsError> {
+        self.add_pattern_with_remediation_core(id, pattern, severity, remediation)
+            .map_err(|error| JsError::new(&error))
+    }
+
     /// Returns the number of custom rules staged in this builder.
     #[wasm_bindgen(js_name = customRuleCount)]
     pub fn custom_rule_count(&self) -> usize {
@@ -203,8 +259,30 @@ impl ScanEngineBuilder {
         pattern: &str,
         severity: FindingSeverity,
     ) -> Result<(), String> {
+        self.add_pattern_with_remediation_core(id, pattern, severity, None)
+    }
+
+    fn add_pattern_with_remediation_core(
+        &mut self,
+        id: &str,
+        pattern: &str,
+        severity: FindingSeverity,
+        remediation: Option<RemediationKind>,
+    ) -> Result<(), String> {
         let rule = Rule::pattern(id, pattern, Severity::from(severity))
             .map_err(|error| error.to_string())?;
+        self.push_remediated_rule(rule, remediation)
+    }
+
+    fn push_remediated_rule(
+        &mut self,
+        rule: Rule,
+        remediation: Option<RemediationKind>,
+    ) -> Result<(), String> {
+        let rule = match remediation_core(remediation)? {
+            Some(remediation) => rule.with_remediation(remediation),
+            None => rule,
+        };
         self.rules.push(rule);
         Ok(())
     }
@@ -299,6 +377,24 @@ pub enum RemediationKind {
     ReviewSensitiveHash,
     ReviewPasswordVerifier,
     Unknown,
+}
+
+fn remediation_core(value: Option<RemediationKind>) -> Result<Option<Remediation>, String> {
+    Ok(match value {
+        None | Some(RemediationKind::None) => None,
+        Some(RemediationKind::RevokeAndRotateCredential) => {
+            Some(Remediation::RevokeAndRotateCredential)
+        }
+        Some(RemediationKind::RotateCredential) => Some(Remediation::RotateCredential),
+        Some(RemediationKind::RotatePassword) => Some(Remediation::RotatePassword),
+        Some(RemediationKind::ReplacePrivateKey) => Some(Remediation::ReplacePrivateKey),
+        Some(RemediationKind::RemoveSensitiveValue) => Some(Remediation::RemoveSensitiveValue),
+        Some(RemediationKind::ReviewSensitiveHash) => Some(Remediation::ReviewSensitiveHash),
+        Some(RemediationKind::ReviewPasswordVerifier) => Some(Remediation::ReviewPasswordVerifier),
+        Some(RemediationKind::Unknown) => {
+            return Err("unknown remediation cannot configure a Core rule".to_owned());
+        }
+    })
 }
 
 impl From<Option<Remediation>> for RemediationKind {

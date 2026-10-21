@@ -1,5 +1,5 @@
 //! Direct-Core fixture configuration and metadata projection, without adapter DTOs.
-use cribra::{Explanation, Rule, Scanner, Severity};
+use cribra::{Explanation, Remediation, Rule, Scanner, Severity};
 use serde_json::{Value, json};
 
 fn explanation(value: Explanation) -> Value {
@@ -55,7 +55,21 @@ pub fn scanner(case: &Value) -> Scanner {
             "pattern" => Rule::pattern(id, value, severity).unwrap(),
             _ => panic!("unknown rule kind"),
         };
-        builder = builder.rule(rule);
+        let remediation = match spec["remediation"].as_str() {
+            None | Some("None") => None,
+            Some("RevokeAndRotateCredential") => Some(Remediation::RevokeAndRotateCredential),
+            Some("RotateCredential") => Some(Remediation::RotateCredential),
+            Some("RotatePassword") => Some(Remediation::RotatePassword),
+            Some("ReplacePrivateKey") => Some(Remediation::ReplacePrivateKey),
+            Some("RemoveSensitiveValue") => Some(Remediation::RemoveSensitiveValue),
+            Some("ReviewSensitiveHash") => Some(Remediation::ReviewSensitiveHash),
+            Some("ReviewPasswordVerifier") => Some(Remediation::ReviewPasswordVerifier),
+            _ => panic!("unknown fixture remediation"),
+        };
+        builder = builder.rule(match remediation {
+            Some(r) => rule.with_remediation(r),
+            None => rule,
+        });
     }
     builder.build().unwrap()
 }

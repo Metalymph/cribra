@@ -6,7 +6,12 @@ export function makeEngine(mod, spec) {
   const builder = new mod.ScanEngineBuilder(spec.builtins ?? false);
   for (const rule of spec.rules) {
     const method = { literal: "addLiteral", prefix: "addPrefix", suffix: "addSuffix", pattern: "addPattern" }[rule.kind];
-    builder[method](rule.id, rule.value, mod.FindingSeverity[rule.severity]);
+    if (rule.newMethod) {
+      const remediation = rule.remediation == null ? rule.remediation : mod.RemediationKind[rule.remediation];
+      builder[`${method}WithRemediation`](rule.id, rule.value, mod.FindingSeverity[rule.severity], remediation);
+    } else {
+      builder[method](rule.id, rule.value, mod.FindingSeverity[rule.severity]);
+    }
   }
   return builder.build(); // build consumes the builder
 }

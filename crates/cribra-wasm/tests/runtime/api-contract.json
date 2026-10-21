@@ -164,10 +164,14 @@
     "members": [
       "addFinancialBuiltins(): void",
       "addLiteral(id: string, value: string, severity: FindingSeverity): void",
+      "addLiteralWithRemediation(id: string, value: string, severity: FindingSeverity, remediation?: RemediationKind | null): void",
       "addPattern(id: string, pattern: string, severity: FindingSeverity): void",
+      "addPatternWithRemediation(id: string, pattern: string, severity: FindingSeverity, remediation?: RemediationKind | null): void",
       "addPersonalBuiltins(): void",
       "addPrefix(id: string, value: string, severity: FindingSeverity): void",
+      "addPrefixWithRemediation(id: string, value: string, severity: FindingSeverity, remediation?: RemediationKind | null): void",
       "addSuffix(id: string, value: string, severity: FindingSeverity): void",
+      "addSuffixWithRemediation(id: string, value: string, severity: FindingSeverity, remediation?: RemediationKind | null): void",
       "build(): ScanEngine",
       "customRuleCount(): number",
       "constructor(include_builtins: boolean)"

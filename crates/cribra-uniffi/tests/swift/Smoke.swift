@@ -201,6 +201,7 @@ struct Smoke {
             case "builtInOnly": config = .builtInOnly
             case "customOnly": config = .customOnly(rules: rules)
             case "builtInAndCustom": config = .builtInAndCustom(rules: rules)
+            case "catalogs": config = .catalogs(current: input["current"] as! Bool, financial: input["financial"] as! Bool, personal: input["personal"] as! Bool, rules: rules)
             default: fatalError("unknown fixture mode")
             }
             do {
@@ -229,11 +230,11 @@ struct Smoke {
                 failures += 1
             }
         }
-        precondition(successes == 5 && failures == 14, "configuration coverage changed")
+        precondition(successes == 21 && failures == 19, "configuration coverage changed")
         let defaults = cribra_uniffi.Scanner()
         let builtins = try cribra_uniffi.Scanner.configured(config: .builtInOnly)
         precondition(metadataSnapshot(defaults.activeRules()).isEqual(metadataSnapshot(builtins.activeRules())), "Scanner() behavior changed")
-        print("PASS: configurable Scanner; 5 successful configurations, 14 Core errors, active metadata/order and Rust/Swift parity")
+        print("PASS: configurable Scanner; 21 successful configurations, 19 Core errors, active metadata/order and Rust/Swift parity")
     }
 
     static func checkStreamingParity(scanner: cribra_uniffi.Scanner, source: ScanSource) throws {

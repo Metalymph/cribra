@@ -19,6 +19,19 @@ pub enum ScannerConfig {
         /// Custom rules in caller order; Core places these before built-ins.
         rules: Vec<RuleSpec>,
     },
+    /// Independently selected Core catalogs plus custom rules. All flags false
+    /// and no rules is an empty scanner. Catalogs are submitted in current,
+    /// financial, personal order; Core composes and validates the final rules.
+    Catalogs {
+        /// Include Core's current default catalog.
+        current: bool,
+        /// Include Core's opt-in financial catalog.
+        financial: bool,
+        /// Include Core's opt-in personal-data catalog.
+        personal: bool,
+        /// Custom rules in caller order; Core places these before catalogs.
+        rules: Vec<RuleSpec>,
+    },
 }
 
 /// Core matching families; matcher interpretation belongs exclusively to Core.
@@ -125,14 +138,26 @@ impl Error for ScannerBuildError {}
 
 impl ScannerConfig {
     pub(crate) fn build_core(self) -> Result<cribra::Scanner, ScannerBuildError> {
-        let (include_builtins, rules) = match self {
-            Self::BuiltInOnly => (true, Vec::new()),
-            Self::CustomOnly { rules } => (false, rules),
-            Self::BuiltInAndCustom { rules } => (true, rules),
+        let (current, financial, personal, rules) = match self {
+            Self::BuiltInOnly => (true, false, false, Vec::new()),
+            Self::CustomOnly { rules } => (false, false, false, rules),
+            Self::BuiltInAndCustom { rules } => (true, false, false, rules),
+            Self::Catalogs {
+                current,
+                financial,
+                personal,
+                rules,
+            } => (current, financial, personal, rules),
         };
         let mut builder = cribra::Scanner::builder();
-        if include_builtins {
+        if current {
             builder = builder.builtins(cribra::builtins::CURRENT);
+        }
+        if financial {
+            builder = builder.builtins(cribra::builtins::financial::CURRENT);
+        }
+        if personal {
+            builder = builder.builtins(cribra::builtins::personal::CURRENT);
         }
         for rule in rules {
             builder = builder.rule(rule.into_core()?);
