@@ -13,16 +13,8 @@ mod support;
 use cribra_uniffi::{ScanSource, SourceId};
 use serde_json::{Value, json};
 
-fn report_snapshot(source_id: &str, source_bytes: usize, report: &cribra::ScanReport) -> Value {
-    let findings: Vec<Value> = report.findings().iter().map(|finding| {
-        let location = finding.location();
-        json!({"ruleId":finding.rule_id().as_str(),"start":location.start(),"end":location.end(),
-            "line":location.line(),"column":location.column(),"severity":finding.severity().to_string(),
-            "confidence":finding.confidence().to_string()})
-    }).collect();
-    json!({"sourceId":source_id,"sourceBytes":source_bytes,"findings":findings,
-        "candidateCount":report.candidate_len(),"needsReview":report.needs_review()})
-}
+#[path = "../tests/support/metadata.rs"]
+mod metadata;
 
 fn scan_snapshot(scanner: &cribra::Scanner, sources: &[ScanSource]) -> Value {
     let results = scanner.scan(
@@ -32,7 +24,7 @@ fn scan_snapshot(scanner: &cribra::Scanner, sources: &[ScanSource]) -> Value {
     );
     let reports: Vec<Value> = results
         .iter()
-        .map(|entry| report_snapshot(entry.key(), entry.source_bytes(), entry.report()))
+        .map(|entry| metadata::report(scanner, entry.key(), entry.source_bytes(), entry.report()))
         .collect();
     let summary = results.summary();
     json!({

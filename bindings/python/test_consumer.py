@@ -10,6 +10,16 @@ import weakref
 import cribra_uniffi as cribra
 
 
+def explanation_snapshot(value):
+    if value is None:
+        return None
+    if isinstance(value, cribra.Explanation.CLASSIFIED):
+        return {"classified": core_name(value.mode)}
+    if isinstance(value, cribra.Explanation.AMBIGUOUS):
+        return {"ambiguous": core_name(value.evidence)}
+    raise AssertionError("unknown explanation")
+
+
 def report_snapshot(report):
     """Project only the fields compared by the existing direct-Core oracle."""
     return {
@@ -17,6 +27,13 @@ def report_snapshot(report):
         "sourceBytes": report.source_bytes,
         "candidateCount": report.candidate_count,
         "needsReview": report.needs_review,
+        "candidates": [
+            {"kind": core_name(candidate.kind), "evidence": core_name(candidate.evidence),
+             "start": candidate.location.start, "end": candidate.location.end,
+             "line": candidate.location.line, "column": candidate.location.column,
+             "explanation": explanation_snapshot(candidate.explanation)}
+            for candidate in report.candidates
+        ],
         "findings": [
             {
                 "ruleId": finding.rule_id.value,
@@ -26,6 +43,8 @@ def report_snapshot(report):
                 "column": finding.location.column,
                 "severity": finding.severity.name.lower(),
                 "confidence": finding.confidence.name.lower(),
+                "remediation": None if finding.remediation is None else core_name(finding.remediation),
+                "explanation": explanation_snapshot(finding.explanation),
             }
             for finding in report.findings
         ],

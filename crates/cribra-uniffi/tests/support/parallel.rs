@@ -95,14 +95,19 @@ pub fn batches() -> Vec<(String, Vec<ScanSource>)> {
     ));
     batches
 }
-pub fn snapshot(results: &cribra::ScanResults<&SourceId>) -> Value {
-    // Serialize only Core's summary. Report projection is independent of adapter conversions.
-    let reports: Vec<_> = results.iter().map(|e|json!({
-        "sourceId":e.key().value,"sourceBytes":e.source_bytes(),"candidateCount":e.report().candidate_len(),"needsReview":e.report().needs_review(),
-        "findings":e.report().findings().iter().map(|f|json!({"ruleId":f.rule_id().as_str(),
-            "start":f.location().start(),"end":f.location().end(),"line":f.location().line(),"column":f.location().column(),
-            "severity":f.severity().to_string(),"confidence":f.confidence().to_string()
-        })).collect::<Vec<_>>()
-    })).collect();
+#[path = "metadata.rs"]
+mod metadata;
+pub fn snapshot(scanner: &cribra::Scanner, results: &cribra::ScanResults<&SourceId>) -> Value {
+    let reports: Vec<_> = results
+        .iter()
+        .map(|entry| {
+            metadata::report(
+                scanner,
+                &entry.key().value,
+                entry.source_bytes(),
+                entry.report(),
+            )
+        })
+        .collect();
     json!({"reports":reports,"summary":results.summary()})
 }

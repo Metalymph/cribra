@@ -39,7 +39,38 @@ needed by the runtime library. No async runtime or FFI tracing is enabled.
 Redact, Template, Pseudonymize, Synthesize and Share Bundles are exposed from Flow. No logging,
 networking or persistence is introduced.
 Detection, validation, and transformations remain
-owned by Core. Remediation and explanations are outside this basic DTO model.
+owned by Core. Finding remediation and typed explanations are projected from Core.
+
+## P0 metadata parity
+
+With the Core profile alone (no Core Serde or Flow), `Finding.remediation` carries
+Core's optional typed action. `Finding.explanation` carries optional
+`Explanation::Classified { mode: DetectionMode }` facts. Ordinary scanner, smoke,
+streaming, incremental and Fuse reports resolve the original Core finding through
+`finding.explanation(&scanner)` before copying it. Core validates rule identity,
+severity and remediation; incompatible authority returns `None`. No finding is
+reconstructed and no adapter classification or validation rule is used.
+
+Streaming and incremental sessions retain an immutable, source-free Core scanner
+clone (shared compiled rules) for this resolution, independent of the foreign
+Scanner lifetime. Ordering, UTF-8 coordinates, candidate counts, source privacy,
+streaming admission/limits and incremental transaction semantics remain Core-owned.
+The legacy Rust `From<&cribra::Finding>` and scanner-free report conversion leave
+explanations unresolved; `Finding::from_core` accepts an original Core finding and
+scanner for validated resolution. Foreign records are plain editable data, not
+proof of scanner authority; no DTO-based finding explanation resolver is exposed.
+
+`SensitiveCandidate` contains kind, location, evidence and an optional explanation
+projected directly from Core. A future unsupported Core explanation fails closed
+to `None`. Share's existing candidate types and bundle construction are unchanged;
+`scan_for_share` uses the same Core-authorized finding projection as ordinary scans.
+
+These record additions change the UniFFI wire contract: regenerate all bindings
+and rebuild consumers with the matching native library. Optional finding fields
+default to `None` in generated constructors; the added report candidate list defaults
+to empty for manually constructed records. Rust struct literals must supply the
+new fields. Counts remain Core-derived for scanner-produced reports; consumer-created
+records do not validate or reconcile their fields.
 
 ## NB-1B.2: reusable Scanner
 
@@ -56,7 +87,7 @@ handle registry, explicit close method or retained source text is used.
 
 `ScanSource { id: SourceId { value: String }, text: String }` owns input data.
 `ScanReport` returns `source_id`, `source_bytes`, the existing `Finding` DTOs,
-`candidate_count` and Core's `needs_review` value. `ScanResults` contains an
+`candidate_count`, ordered `candidates` and Core's `needs_review` value. `ScanResults` contains an
 ordered `reports` vector and `ScanSummary`. The summary copies all twelve Core
 counters, including candidate totals and each severity count. Both methods call
 Core directly; neither uses the temporary `smoke_scan_text()` function.
@@ -70,8 +101,9 @@ Calls do not accumulate state. Reports remain valid after the Scanner is release
 This is an owned projection of Core, not its entire Rust API: source keys are
 UTF-8 strings rather than generic Rust keys, and counts/coordinates are `u64`
 rather than `usize`. Original source text and matched values are never returned.
-Candidate details, remediation and explanations are not exposed. Candidates are
-still counted and affect `needs_review`, exactly as in Core: a report with no
+Candidates expose `SensitiveCandidateKind`, UTF-8 `Location`, `CandidateEvidence`
+and typed `Explanation::Ambiguous` facts. They have no finding severity, confidence
+or remediation. Candidates are counted and affect `needs_review`, exactly as in Core: a report with no
 findings is not necessarily clean. No detection, ordering or counting semantics
 are changed. NB-1B.3 adds explicit custom-rule configuration and NB-1B.4A adds
 streaming below. NB-1B.4B adds incremental documents, NB-1B.5A adds Redact/Template;
@@ -402,7 +434,7 @@ with an empty candidate list, then calls only `redact`/`redact_with` or
 `template_with`. This in-memory metadata bridge is why Flow forwards
 `cribra/serde` and uses optional `serde_json`; it performs no I/O and serializes
 no source text. Coordinates, rule IDs, severity and confidence are transferred;
-remediation is absent from the existing DTO and is not used by these transforms.
+remediation and explanation fields are not used by these transforms.
 Core remains the sole span validator and transformation implementation.
 
 Ranges are zero-based, half-open UTF-8 byte offsets. Input order is preserved for
@@ -669,12 +701,12 @@ let sequential = scanner.scanMany(sources: sources)
 ```
 
 The existing owned `ScanSource`, `ScanResults`, `ScanReport` and `ScanSummary`
-DTOs are reused without changes. Source/report association is positional; input
+DTOs include the P0 metadata additions above. Source/report association is positional; input
 order and exact UTF-8 source-ID bytes are preserved, including Unicode, empty
 and duplicate IDs. Findings preserve Core order, rule IDs, severity, confidence,
 UTF-8 half-open byte ranges and one-based scalar line/column coordinates.
-Candidate-only reports retain `candidateCount` and `needsReview`; candidate
-details remain outside these DTOs. All twelve summary counters come from Core,
+Candidate-only reports retain `candidateCount` and `needsReview`, alongside the
+ordered review-only candidate metadata. All twelve summary counters come from Core,
 including candidates and per-severity counts. Outputs retain no source text
 and remain valid after releasing the Scanner. Existing Scanner and Flow APIs
 keep their signatures and behavior.

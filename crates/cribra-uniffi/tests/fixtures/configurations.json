@@ -1,5 +1,5 @@
 [
-  {"name":"builtins", "mode":"builtInOnly", "rules":[], "source":"GITHUB_TOKEN=ghp_AbCdEf0123456789_AbCdEf0123456789 LIT_é"},
+  {"name":"builtins", "mode":"builtInOnly", "rules":[], "source":"GITHUB_TOKEN=ghp_AbCdEf0123456789_AbCdEf0123456789 LIT_é\npassword=CorrectHorseBatteryStaple\né🙂 ABCD-EFGH-IJKL-MNOP"},
   {"name":"custom", "mode":"customOnly", "rules":[
     {"id":"custom/literal-é", "kind":"literal", "value":"LIT_é", "severity":"high", "remediation":"removeSensitiveValue"},
     {"id":"custom/prefix", "kind":"prefix", "value":"pre_", "severity":"critical"},

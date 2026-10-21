@@ -171,13 +171,19 @@ impl Inner {
 /// returns no report; `finish` consumes the inner Core session exactly once.
 #[derive(uniffi::Object)]
 pub struct StreamSession {
+    scanner: cribra::Scanner,
     source_id: SourceId,
     inner: Mutex<Inner>,
 }
 
 impl StreamSession {
-    pub(crate) fn from_core(session: cribra::StreamSession, source_id: SourceId) -> Arc<Self> {
+    pub(crate) fn from_core(
+        session: cribra::StreamSession,
+        source_id: SourceId,
+        scanner: cribra::Scanner,
+    ) -> Arc<Self> {
         Arc::new(Self {
+            scanner,
             source_id,
             inner: Mutex::new(Inner {
                 session: Some(session),
@@ -242,7 +248,12 @@ impl StreamSession {
         let session = inner.session.take().ok_or(cribra::StreamError::NotActive)?;
         inner.state = StreamState::Failed;
         let core_report = session.finish()?;
-        let report = ScanReport::from_parts(&self.source_id, inner.source_bytes, &core_report);
+        let report = ScanReport::from_parts(
+            &self.source_id,
+            inner.source_bytes,
+            &core_report,
+            Some(&self.scanner),
+        );
         inner.state = StreamState::Finished;
         Ok(report)
     }
@@ -260,6 +271,7 @@ mod tests {
             SourceId {
                 value: "poison-test".into(),
             },
+            scanner.clone(),
         );
         let other = Arc::clone(&session);
         let panic = std::thread::spawn(move || {

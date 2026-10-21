@@ -107,7 +107,7 @@ fn unicode_edits_noops_and_recoverable_errors_match_core_and_whole_source() {
             core.report()
                 .findings()
                 .iter()
-                .map(Finding::from)
+                .map(|finding| Finding::from_core(finding, &core_scanner))
                 .collect::<Vec<_>>()
         );
         assert_eq!(report.candidate_count, core.report().candidate_len() as u64);

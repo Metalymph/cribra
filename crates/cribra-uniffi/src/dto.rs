@@ -55,8 +55,8 @@ pub struct RuleId {
 
 /// Basic finding metadata, without matched text or source ownership.
 ///
-/// This deliberately contains only identity, coordinates, severity and
-/// confidence. Remediation and explanation metadata are outside this foundation.
+/// Explanations in scanner reports are resolved by Core against the producing
+/// scanner before projection. Plain consumer records carry no scanner authority.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct Finding {
     /// Stable identifier of the matching rule.
@@ -67,6 +67,12 @@ pub struct Finding {
     pub severity: Severity,
     /// Reliability assigned to the match.
     pub confidence: Confidence,
+    /// Recommended Core action, when known.
+    #[uniffi(default = None)]
+    pub remediation: Option<Remediation>,
+    /// Core-validated facts, or None when no compatible scanner authority is available.
+    #[uniffi(default = None)]
+    pub explanation: Option<Explanation>,
 }
 
 /// Caller-supplied source identity, preserved verbatim without normalization.
@@ -97,10 +103,13 @@ pub struct ScanReport {
     pub source_bytes: u64,
     /// Classified findings in deterministic Core order.
     pub findings: Vec<Finding>,
-    /// Number of ambiguous candidates; candidate details are not yet exposed.
+    /// Number of ambiguous candidates, equal to candidates.len().
     pub candidate_count: u64,
     /// Core review status: true for findings or ambiguous candidates.
     pub needs_review: bool,
+    /// Review-only candidates in deterministic Core order, without matched text.
+    #[uniffi(default = [])]
+    pub candidates: Vec<SensitiveCandidate>,
 }
 
 /// Aggregate counters copied from Core, including ambiguous candidate totals.
@@ -142,4 +151,77 @@ pub struct ScanResults {
     pub reports: Vec<ScanReport>,
     /// Aggregate counters for this batch only.
     pub summary: ScanSummary,
+}
+
+/// Public Core remediation choices available for custom rules.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum Remediation {
+    /// Revoke and rotate a credential.
+    RevokeAndRotateCredential,
+    /// Rotate a credential.
+    RotateCredential,
+    /// Rotate a password.
+    RotatePassword,
+    /// Replace a private key.
+    ReplacePrivateKey,
+    /// Remove a sensitive value.
+    RemoveSensitiveValue,
+    /// Review a sensitive hash.
+    ReviewSensitiveHash,
+    /// Review an exposed password verifier.
+    ReviewPasswordVerifier,
+}
+
+/// How Core decides whether a rule match becomes a finding.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum DetectionMode {
+    /// The custom matcher is authoritative.
+    MatcherOnly,
+    /// Built-in validation depends on the matched value's structure.
+    Deterministic,
+    /// Built-in validation also depends on surrounding source context.
+    Contextual,
+}
+
+/// Evidence behind a review-only candidate; never finding confidence.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum CandidateEvidence {
+    /// Sensitive-looking structure with insufficient classification context.
+    Structural,
+}
+
+/// Family of a structurally plausible review-only value.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum SensitiveCandidateKind {
+    /// Recovery or backup code shape.
+    RecoveryLikeCode,
+}
+
+/// Typed Core facts without source text or presentation copy.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum Explanation {
+    /// A rule-backed finding validated against scanner authority.
+    Classified {
+        /// Core detection authority.
+        mode: DetectionMode,
+    },
+    /// A review-only candidate; no severity, confidence or remediation.
+    Ambiguous {
+        /// Core candidate evidence.
+        evidence: CandidateEvidence,
+    },
+}
+
+/// Review-only metadata, never a classified finding or a matched value.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct SensitiveCandidate {
+    /// Structural family requiring review.
+    pub kind: SensitiveCandidateKind,
+    /// Exact half-open UTF-8 location in the original source.
+    pub location: Location,
+    /// Evidence distinct from finding confidence.
+    pub evidence: CandidateEvidence,
+    /// Facts projected directly from Core's candidate explanation.
+    #[uniffi(default = None)]
+    pub explanation: Option<Explanation>,
 }

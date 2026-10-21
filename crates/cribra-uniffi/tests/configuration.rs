@@ -40,7 +40,7 @@ fn configuration_outcomes_match_core_including_error_precedence() {
                         .unwrap()
                         .findings()
                         .iter()
-                        .map(Finding::from)
+                        .map(|finding| Finding::from_core(finding, &core))
                         .collect::<Vec<_>>(),
                     "{}",
                     case.name
@@ -144,7 +144,7 @@ fn token_boundaries_suffix_limit_and_full_regex_spans_remain_core_owned() {
             expected
                 .findings()
                 .iter()
-                .map(Finding::from)
+                .map(|finding| Finding::from_core(finding, &core))
                 .collect::<Vec<_>>()
         );
         assert_eq!(

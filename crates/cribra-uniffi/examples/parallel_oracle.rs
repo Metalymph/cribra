@@ -12,7 +12,9 @@ fn main() {
             let sequential = scanner.scan(inputs());
             let parallel = scanner.parallel_scan(inputs());
             assert_eq!(parallel, sequential);
-            outcomes.push(json!({"mode":mode,"batch":name,"outcome":support::snapshot(&parallel)}));
+            outcomes.push(
+                json!({"mode":mode,"batch":name,"outcome":support::snapshot(&scanner, &parallel)}),
+            );
         }
     }
     println!("{}", json!(outcomes));

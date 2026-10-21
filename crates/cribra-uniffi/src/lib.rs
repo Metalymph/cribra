@@ -28,13 +28,14 @@ mod stream;
 
 #[cfg(feature = "core")]
 pub use configuration::{
-    BuildErrorCode, DetectionMode, Remediation, RemediationMetadata, RuleKind, RuleMetadata,
-    RuleSpec, ScannerBuildError, ScannerConfig,
+    BuildErrorCode, RemediationMetadata, RuleKind, RuleMetadata, RuleSpec, ScannerBuildError,
+    ScannerConfig,
 };
 
 pub use dto::{
-    Confidence, Finding, Location, RuleId, ScanReport, ScanResults, ScanSource, ScanSummary,
-    Severity, SourceId,
+    CandidateEvidence, Confidence, DetectionMode, Explanation, Finding, Location, Remediation,
+    RuleId, ScanReport, ScanResults, ScanSource, ScanSummary, SensitiveCandidate,
+    SensitiveCandidateKind, Severity, SourceId,
 };
 #[cfg(feature = "flow")]
 pub use flow::{
@@ -72,7 +73,7 @@ pub fn smoke_scan_text(source: String) -> Vec<Finding> {
         .expect("one input produces one report")
         .findings()
         .iter()
-        .map(Finding::from)
+        .map(|finding| Finding::from_core(finding, &scanner))
         .collect()
 }
 

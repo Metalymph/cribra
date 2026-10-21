@@ -2,14 +2,20 @@
   "groups": {
     "common": {
       "types": [
+        "CandidateEvidence",
         "Confidence",
+        "DetectionMode",
+        "Explanation",
         "Finding",
         "Location",
+        "Remediation",
         "RuleId",
         "ScanReport",
         "ScanResults",
         "ScanSource",
         "ScanSummary",
+        "SensitiveCandidate",
+        "SensitiveCandidateKind",
         "Severity",
         "SourceId"
       ],
@@ -22,7 +28,6 @@
     "core": {
       "types": [
         "BuildErrorCode",
-        "DetectionMode",
         "IncrementalError",
         "IncrementalErrorCode",
         "IncrementalLimits",
@@ -30,7 +35,6 @@
         "IncrementalSessionProtocol",
         "IncrementalSnapshot",
         "IncrementalState",
-        "Remediation",
         "RemediationMetadata",
         "RuleKind",
         "RuleMetadata",
@@ -126,7 +130,9 @@
       "ruleId: RuleId",
       "location: Location",
       "severity: Severity",
-      "confidence: Confidence"
+      "confidence: Confidence",
+      "remediation: Remediation?",
+      "explanation: Explanation?"
     ],
     "IncrementalLimits": [
       "maxCandidates: UInt64?",
@@ -174,7 +180,8 @@
       "sourceBytes: UInt64",
       "findings: [Finding]",
       "candidateCount: UInt64",
-      "needsReview: Bool"
+      "needsReview: Bool",
+      "candidates: [SensitiveCandidate]"
     ],
     "ScanResults": [
       "reports: [ScanReport]",
@@ -251,6 +258,12 @@
     "IncrementalSnapshot": [
       "revision: UInt64",
       "report: ScanReport"
+    ],
+    "SensitiveCandidate": [
+      "kind: SensitiveCandidateKind",
+      "location: Location",
+      "evidence: CandidateEvidence",
+      "explanation: Explanation?"
     ]
   },
   "enumCases": {
@@ -391,6 +404,16 @@
       "inputConversion",
       "unknownCoreError",
       "invalidKeyLength"
+    ],
+    "CandidateEvidence": [
+      "structural"
+    ],
+    "SensitiveCandidateKind": [
+      "recoveryLikeCode"
+    ],
+    "Explanation": [
+      "classified(mode: DetectionMode)",
+      "ambiguous(evidence: CandidateEvidence)"
     ]
   }
 }
