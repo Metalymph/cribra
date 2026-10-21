@@ -104,6 +104,64 @@ existing explanations and Flow transforms. It changes metadata only. Catalog
 composition remains available through `new ScanEngineBuilder(include_builtins)`,
 `addFinancialBuiltins()` and `addPersonalBuiltins()`, delegating to Core.
 
+## Active rule metadata and structured build errors
+
+`ScanEngine.activeRules(): RuleMetadataView[]` copies Core's active metadata in
+Core order, without sorting or retaining another rule inventory. Each view has
+five readonly properties: `ruleId: string`, `kind: RuleKind`,
+`detectionMode: DetectionModeKind`, `severity: FindingSeverity` and
+`remediation: RemediationKind` (`None` when absent). The new `RuleKind` enum has
+`Literal = 0`, `Prefix = 1`, `Suffix = 2` and `Pattern = 3`; the other enums are
+unchanged. No matcher payloads, patterns, validators or scanned source are exposed.
+
+Each call returns a new JavaScript array of independently owned wasm-bindgen
+views. They outlive scans, reports and the engine. Free every view separately;
+the array and strings returned by getters are ordinary garbage-collected JS values:
+
+```js
+const rules = engine.activeRules();
+try {
+  for (const rule of rules) console.log(rule.ruleId, rule.kind, rule.remediation);
+} finally {
+  for (const rule of rules) rule.free();
+}
+```
+
+All existing builder signatures remain unchanged, including `addPattern()` and
+consuming `build()`. Their failures remain native JavaScript `Error` objects with
+the same Core diagnostic messages. Construction failures are now enriched with
+`code: ScannerBuildErrorCode` and `ruleId: string | undefined`. The type-only
+`ScannerBuildError extends Error` interface describes these properties; it has
+no JS constructor, and caught build errors need no `free()`. Streaming and
+incremental error ownership rules remain as documented in their sections.
+
+```ts
+try {
+  builder.build(); // consumes builder on failure too
+} catch (error) {
+  if (!(error instanceof Error) || !("code" in error)) throw error;
+  const failure = error as ScannerBuildError;
+  if (failure.code === ScannerBuildErrorCode.DuplicateRuleId) {
+    console.error("duplicate rule ID", failure.ruleId);
+  }
+}
+```
+
+Stable categories derived from Core are `InvalidPattern`, `PatternMatchesEmpty`,
+`MissingCaptureGroup`, `EmptyRuleId`, `DuplicateRuleId`, `EmptyMatcher`,
+`TooManyRules` and `AutomatonBuild` (values 0 through 7 respectively).
+`InvalidRemediation = 8` represents the existing rejection of the output-only
+`RemediationKind.Unknown`. Categories are selected from typed Rust variants,
+never parsed from messages. IDs come from Core or the known pattern-constructor
+context; failures without an identity use `undefined`.
+
+Pattern failures do not stage a rule or consume the builder. Empty matchers and
+IDs, duplicate IDs and catalog collisions retain Core's build-time validation
+and precedence. Diagnostics contain no scanned source. Core regex diagnostics
+may contain the caller's configuration pattern; they remain human-readable text,
+not machine codes. Metadata/errors are available in Core and Flow with no new
+runtime dependency or WASM parallelism.
+
 ## Byte streaming
 
 `ScanEngine.stream()` opens an unlimited stream;
@@ -320,6 +378,13 @@ scan/stream/incremental reports per variant/runtime. Generated TypeScript pins
 the additive signatures, and runtime tests preserve the old methods, check
 unstaged invalid patterns/Unknown, and exercise empty IDs/matchers, duplicates
 and collisions with each catalog. No runtime dependency is added.
+
+The metadata/construction oracle also compares 16 empty/default/custom/catalog
+configurations and 14 Core construction failures per variant/runtime. It pins
+all five metadata fields and order, verifies UTF-8 IDs and ownership after engine
+free, and checks native `Error` compatibility, exact existing messages, symbolic
+categories and optional IDs. Native tests cover rare capture/capacity conversions;
+automaton failure remains mapped without forcing resource exhaustion.
 
 To exercise the same generated artifacts under an available Bun installation:
 

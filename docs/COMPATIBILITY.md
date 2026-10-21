@@ -1,7 +1,7 @@
 # Compatibility and distribution status
 
 Evidence reviewed on 2026-10-20; P0.4/P0.5 WASM source streaming and incremental
-scanning and P0.6A adapter configuration locally checked on 2026-10-21.
+scanning and P0.6A/P0.6B adapter configuration/metadata locally checked on 2026-10-21.
 This is a snapshot of distinct contracts:
 **implemented** means an API/build path exists; **locally qualified** means a
 consumer ran on the recorded host; **CI-qualified** means the named remote job
@@ -65,6 +65,20 @@ Kotlin 2.4.21/JDK 17 consumers for each UniFFI profile (21 successful configurat
 1.4.3, comparing 132 scan/stream/incremental reports across 44 remediation
 configurations per variant/runtime against Core. These are macOS ARM64 source
 checks, not new CI, browser, platform or published-package qualifications.
+
+P0.6B source adds native C scanner metadata count/index views and a structured
+construction-error view on the existing opaque error handle. Protocol 0.3.0,
+prior symbols, status numbers, existing layouts and messages are retained; the
+known remediation code `ReviewPasswordVerifier = 7` now replaces the prior
+`Unknown` projection for that Core value. New C views borrow their scanner/error
+owner. WASM Core/Flow add owned `activeRules()` views and Core-derived `code` /
+optional `ruleId` properties on the existing garbage-collected JS build Errors;
+legacy signatures, messages and enum values remain. Regenerate bindings/header
+from matching source. No Core, UniFFI or runtime dependency changes are involved.
+P0.6B local checks cover C11 plus C/C++ examples, header compatibility/determinism
+and symbol parity; Node/Bun exercise 16 metadata configurations and 14 structured
+construction failures per WASM variant/runtime, alongside existing regressions.
+These macOS ARM64 checks do not qualify Linux/Windows or browser sessions.
 
 Use one matching generated binding/native library/profile set per process.
 Kotlin additionally requires one profile JAR per classpath; Swift requires one

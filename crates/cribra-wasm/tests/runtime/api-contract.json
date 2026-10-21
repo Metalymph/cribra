@@ -146,9 +146,29 @@
       "Unknown = 8"
     ]
   },
+  "RuleKind": {
+    "kind": "enum",
+    "members": [
+      "Literal = 0",
+      "Prefix = 1",
+      "Suffix = 2",
+      "Pattern = 3"
+    ]
+  },
+  "RuleMetadataView": {
+    "kind": "class",
+    "members": [
+      "readonly detectionMode: DetectionModeKind",
+      "readonly kind: RuleKind",
+      "readonly remediation: RemediationKind",
+      "readonly ruleId: string",
+      "readonly severity: FindingSeverity"
+    ]
+  },
   "ScanEngine": {
     "kind": "class",
     "members": [
+      "activeRules(): RuleMetadataView[]",
       "explainFinding(result: ScanResult, index: number): ExplanationView",
       "incremental(source: string): IncrementalSession",
       "incrementalWithLimits(source: string, limits: IncrementalLimits): IncrementalSession",
@@ -194,6 +214,28 @@
       "template(source: string): string",
       "templateWith(source: string, namespace: string, numbered: boolean): string",
       "readonly sourceBytes: number"
+    ]
+  },
+  "ScannerBuildError": {
+    "kind": "interface",
+    "extends": "Error",
+    "members": [
+      "readonly code: ScannerBuildErrorCode",
+      "readonly ruleId: string | undefined"
+    ]
+  },
+  "ScannerBuildErrorCode": {
+    "kind": "enum",
+    "members": [
+      "InvalidPattern = 0",
+      "PatternMatchesEmpty = 1",
+      "MissingCaptureGroup = 2",
+      "EmptyRuleId = 3",
+      "DuplicateRuleId = 4",
+      "EmptyMatcher = 5",
+      "TooManyRules = 6",
+      "AutomatonBuild = 7",
+      "InvalidRemediation = 8"
     ]
   },
   "StreamError": {

@@ -12,15 +12,22 @@
 //! document. Results and snapshots retain metadata only; they never retain the
 //! scanned source text or matched sensitive values.
 
+mod build_error;
+#[cfg(test)]
+mod configuration_tests;
 mod incremental;
+mod metadata;
 mod numeric;
 #[cfg(test)]
 mod remediation_tests;
 mod streaming;
+use build_error::BuildFailure;
+pub use build_error::ScannerBuildErrorCode;
 pub use incremental::{
     IncrementalError, IncrementalErrorCode, IncrementalLimits, IncrementalSession,
     IncrementalSnapshot,
 };
+pub use metadata::{RuleKind, RuleMetadataView};
 pub use streaming::{StreamError, StreamErrorCode, StreamLimits, StreamSession};
 
 use cribra::{
@@ -181,8 +188,8 @@ impl ScanEngineBuilder {
         pattern: &str,
         severity: FindingSeverity,
     ) -> Result<(), JsError> {
-        self.add_pattern_core(id, pattern, severity)
-            .map_err(|error| JsError::new(&error))
+        self.add_pattern_structured(id, pattern, severity, None)
+            .map_err(BuildFailure::into_js)
     }
 
     /// Adds a literal with optional Core remediation. Missing/null/None preserves
@@ -195,8 +202,8 @@ impl ScanEngineBuilder {
         severity: FindingSeverity,
         remediation: Option<RemediationKind>,
     ) -> Result<(), JsError> {
-        self.push_remediated_rule(Rule::literal(id, value, severity.into()), remediation)
-            .map_err(|error| JsError::new(&error))
+        self.push_remediated_rule_structured(Rule::literal(id, value, severity.into()), remediation)
+            .map_err(BuildFailure::into_js)
     }
 
     /// Adds a token-prefix rule with optional Core remediation; matching is unchanged.
@@ -208,8 +215,8 @@ impl ScanEngineBuilder {
         severity: FindingSeverity,
         remediation: Option<RemediationKind>,
     ) -> Result<(), JsError> {
-        self.push_remediated_rule(Rule::prefix(id, value, severity.into()), remediation)
-            .map_err(|error| JsError::new(&error))
+        self.push_remediated_rule_structured(Rule::prefix(id, value, severity.into()), remediation)
+            .map_err(BuildFailure::into_js)
     }
 
     /// Adds a token-suffix rule with optional Core remediation; matching is unchanged.
@@ -221,8 +228,8 @@ impl ScanEngineBuilder {
         severity: FindingSeverity,
         remediation: Option<RemediationKind>,
     ) -> Result<(), JsError> {
-        self.push_remediated_rule(Rule::suffix(id, value, severity.into()), remediation)
-            .map_err(|error| JsError::new(&error))
+        self.push_remediated_rule_structured(Rule::suffix(id, value, severity.into()), remediation)
+            .map_err(BuildFailure::into_js)
     }
 
     /// Adds a Core pattern with optional remediation. Core rejects invalid or
@@ -235,8 +242,8 @@ impl ScanEngineBuilder {
         severity: FindingSeverity,
         remediation: Option<RemediationKind>,
     ) -> Result<(), JsError> {
-        self.add_pattern_with_remediation_core(id, pattern, severity, remediation)
-            .map_err(|error| JsError::new(&error))
+        self.add_pattern_structured(id, pattern, severity, remediation)
+            .map_err(BuildFailure::into_js)
     }
 
     /// Returns the number of custom rules staged in this builder.
@@ -247,12 +254,13 @@ impl ScanEngineBuilder {
 
     /// Validates and compiles this configuration into an immutable engine.
     pub fn build(self) -> Result<ScanEngine, JsError> {
-        self.build_core().map_err(|error| JsError::new(&error))
+        self.build_structured().map_err(BuildFailure::into_js)
     }
 }
 
 impl ScanEngineBuilder {
     /// Native-safe validation path used by both the WASM export and Rust tests.
+    #[cfg(test)]
     fn add_pattern_core(
         &mut self,
         id: &str,
@@ -262,6 +270,7 @@ impl ScanEngineBuilder {
         self.add_pattern_with_remediation_core(id, pattern, severity, None)
     }
 
+    #[cfg(test)]
     fn add_pattern_with_remediation_core(
         &mut self,
         id: &str,
@@ -269,17 +278,43 @@ impl ScanEngineBuilder {
         severity: FindingSeverity,
         remediation: Option<RemediationKind>,
     ) -> Result<(), String> {
-        let rule = Rule::pattern(id, pattern, Severity::from(severity))
-            .map_err(|error| error.to_string())?;
-        self.push_remediated_rule(rule, remediation)
+        self.add_pattern_structured(id, pattern, severity, remediation)
+            .map_err(|error| error.message)
     }
 
+    fn add_pattern_structured(
+        &mut self,
+        id: &str,
+        pattern: &str,
+        severity: FindingSeverity,
+        remediation: Option<RemediationKind>,
+    ) -> Result<(), BuildFailure> {
+        let rule = Rule::pattern(id, pattern, severity.into())
+            .map_err(|error| BuildFailure::rule(error, Some(id.to_owned())))?;
+        self.push_remediated_rule_structured(rule, remediation)
+    }
+
+    #[cfg(test)]
     fn push_remediated_rule(
         &mut self,
         rule: Rule,
         remediation: Option<RemediationKind>,
     ) -> Result<(), String> {
-        let rule = match remediation_core(remediation)? {
+        self.push_remediated_rule_structured(rule, remediation)
+            .map_err(|error| error.message)
+    }
+
+    fn push_remediated_rule_structured(
+        &mut self,
+        rule: Rule,
+        remediation: Option<RemediationKind>,
+    ) -> Result<(), BuildFailure> {
+        let remediation = remediation_core(remediation).map_err(|message| BuildFailure {
+            code: ScannerBuildErrorCode::InvalidRemediation,
+            rule_id: Some(rule.id().to_string()),
+            message,
+        })?;
+        let rule = match remediation {
             Some(remediation) => rule.with_remediation(remediation),
             None => rule,
         };
@@ -289,7 +324,12 @@ impl ScanEngineBuilder {
 
     /// Native-safe scanner compilation path used by both the WASM export and
     /// Rust tests. JavaScript error construction stays at the exported edge.
+    #[cfg(test)]
     fn build_core(self) -> Result<ScanEngine, String> {
+        self.build_structured().map_err(|error| error.message)
+    }
+
+    fn build_structured(self) -> Result<ScanEngine, BuildFailure> {
         let mut builder = Scanner::builder();
 
         if self.include_builtins {
@@ -307,7 +347,7 @@ impl ScanEngineBuilder {
         let scanner = builder
             .rules(self.rules)
             .build()
-            .map_err(|error| error.to_string())?;
+            .map_err(BuildFailure::scanner)?;
 
         Ok(ScanEngine { scanner })
     }

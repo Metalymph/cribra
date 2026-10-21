@@ -56,10 +56,29 @@ int main(void) {
     builder = NULL;
 
     if (status != CRIBRA_OK || scanner == NULL || error != NULL) {
+        if (error != NULL) {
+            CribraBuildErrorView info = {0};
+            if (cribra_error_build_info(error, &info) == CRIBRA_OK) {
+                fprintf(stderr, "scanner construction category=%u\n", (unsigned)info.code);
+            }
+        }
         cribra_error_free(error);
         cribra_scanner_free(scanner);
         return fail("could not build scanner");
     }
+
+    /* Metadata IDs borrow the immutable scanner; copy them for longer storage. */
+    size_t rule_count = 0;
+    CribraRuleMetadataView rule = {0};
+    if (cribra_scanner_rule_count(scanner, &rule_count) != CRIBRA_OK ||
+        cribra_scanner_rule_at(scanner, 0, &rule) != CRIBRA_OK) {
+        cribra_scanner_free(scanner);
+        return fail("could not read active rule metadata");
+    }
+    printf("active rules=%zu; first rule=", rule_count);
+    print_view(rule.rule_id);
+    printf(" kind=%u mode=%u severity=%u remediation=%u\n", (unsigned)rule.kind,
+           (unsigned)rule.detection_mode, (unsigned)rule.severity, (unsigned)rule.remediation);
 
     status = cribra_scanner_scan(
         scanner,

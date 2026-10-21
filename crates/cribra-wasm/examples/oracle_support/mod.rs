@@ -33,9 +33,19 @@ pub fn report(scanner: &Scanner, report: &cribra::ScanReport, source_bytes: usiz
 }
 
 pub fn scanner(case: &Value) -> Scanner {
+    scanner_result(case).unwrap()
+}
+
+pub fn scanner_result(case: &Value) -> Result<Scanner, Value> {
     let mut builder = Scanner::builder();
     if case["builtins"].as_bool().unwrap_or(false) {
         builder = builder.builtins(cribra::builtins::CURRENT);
+    }
+    if case["financial"].as_bool().unwrap_or(false) {
+        builder = builder.builtins(cribra::builtins::financial::CURRENT);
+    }
+    if case["personal"].as_bool().unwrap_or(false) {
+        builder = builder.builtins(cribra::builtins::personal::CURRENT);
     }
     for spec in case["rules"].as_array().unwrap() {
         let id = spec["id"].as_str().unwrap();
@@ -52,7 +62,7 @@ pub fn scanner(case: &Value) -> Scanner {
             "literal" => Rule::literal(id, value, severity),
             "prefix" => Rule::prefix(id, value, severity),
             "suffix" => Rule::suffix(id, value, severity),
-            "pattern" => Rule::pattern(id, value, severity).unwrap(),
+            "pattern" => Rule::pattern(id, value, severity).map_err(|e| rule_error(e, Some(id)))?,
             _ => panic!("unknown rule kind"),
         };
         let remediation = match spec["remediation"].as_str() {
@@ -71,5 +81,29 @@ pub fn scanner(case: &Value) -> Scanner {
             None => rule,
         });
     }
-    builder.build().unwrap()
+    builder.build().map_err(|error| {
+        use cribra::ScannerBuildError as Core;
+        let (code, id) = match &error {
+            Core::Rule(e) => {
+                return json!({"code":rule_code(e),"ruleId":null,"message":error.to_string()});
+            }
+            Core::EmptyRuleId => ("EmptyRuleId", None),
+            Core::DuplicateRuleId { rule_id } => ("DuplicateRuleId", Some(rule_id.as_str())),
+            Core::EmptyMatcher { rule_id } => ("EmptyMatcher", Some(rule_id.as_str())),
+            Core::TooManyRules => ("TooManyRules", None),
+            Core::AutomatonBuild(_) => ("AutomatonBuild", None),
+        };
+        json!({"code":code,"ruleId":id,"message":error.to_string()})
+    })
+}
+
+fn rule_code(error: &cribra::RuleError) -> &'static str {
+    match error {
+        cribra::RuleError::InvalidPattern(_) => "InvalidPattern",
+        cribra::RuleError::PatternMatchesEmpty => "PatternMatchesEmpty",
+        cribra::RuleError::MissingCaptureGroup { .. } => "MissingCaptureGroup",
+    }
+}
+fn rule_error(error: cribra::RuleError, id: Option<&str>) -> Value {
+    json!({"code":rule_code(&error),"ruleId":id,"message":error.to_string()})
 }

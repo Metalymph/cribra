@@ -2,16 +2,23 @@
 import assert from "node:assert/strict";
 
 export function makeEngine(mod, spec) {
-  if (spec.builtins && spec.rules.length === 0) return new mod.ScanEngine();
+  if (spec.builtins && !spec.financial && !spec.personal && spec.rules.length === 0) return new mod.ScanEngine();
   const builder = new mod.ScanEngineBuilder(spec.builtins ?? false);
-  for (const rule of spec.rules) {
-    const method = { literal: "addLiteral", prefix: "addPrefix", suffix: "addSuffix", pattern: "addPattern" }[rule.kind];
-    if (rule.newMethod) {
-      const remediation = rule.remediation == null ? rule.remediation : mod.RemediationKind[rule.remediation];
-      builder[`${method}WithRemediation`](rule.id, rule.value, mod.FindingSeverity[rule.severity], remediation);
-    } else {
-      builder[method](rule.id, rule.value, mod.FindingSeverity[rule.severity]);
+  if (spec.financial) builder.addFinancialBuiltins();
+  if (spec.personal) builder.addPersonalBuiltins();
+  try {
+    for (const rule of spec.rules) {
+      const method = { literal: "addLiteral", prefix: "addPrefix", suffix: "addSuffix", pattern: "addPattern" }[rule.kind];
+      if (rule.newMethod) {
+        const remediation = rule.remediation == null ? rule.remediation : mod.RemediationKind[rule.remediation];
+        builder[`${method}WithRemediation`](rule.id, rule.value, mod.FindingSeverity[rule.severity], remediation);
+      } else {
+        builder[method](rule.id, rule.value, mod.FindingSeverity[rule.severity]);
+      }
     }
+  } catch (error) {
+    builder.free(); // Pattern construction failed; build has not consumed it.
+    throw error;
   }
   return builder.build(); // build consumes the builder
 }

@@ -308,6 +308,29 @@ typedef struct CribraRuleConfig {
 } CribraRuleConfig;
 
 /**
+ * Stable scanner-construction category, separate from coarse CribraStatus.
+ */
+typedef uint32_t CribraBuildErrorCode;
+
+/**
+ * Borrowed structured information for one owned error, without diagnostic parsing.
+ *
+ * Non-construction errors have code NONE and a null rule_id. A non-null rule_id
+ * borrows error-owned UTF-8 bytes until cribra_error_free; do not free the view.
+ * EmptyRuleId and failures without a Core/constructor identity have no rule ID.
+ */
+typedef struct CribraBuildErrorView {
+    /**
+     * Stable Core-derived category, independent of human-readable messages.
+     */
+    CribraBuildErrorCode code;
+    /**
+     * Optional rule identity; null means absent, including on non-build errors.
+     */
+    struct CribraStringView rule_id;
+} CribraBuildErrorView;
+
+/**
  * One coherent, independently owned view of a committed incremental document.
  *
  * The record exposes no source text. On success, the caller owns `report` and
@@ -407,6 +430,36 @@ typedef struct CribraIncrementalLimits {
      */
     size_t max_transaction_storage_bytes;
 } CribraIncrementalLimits;
+
+/**
+ * Scanner-owned presentation metadata, in Core rule order.
+ *
+ * `rule_id` borrows immutable scanner storage until cribra_scanner_free. Copy
+ * its bytes before freeing the scanner if they are needed longer. Do not free
+ * the view. No matcher, regex, validator or scanned source is exposed.
+ */
+typedef struct CribraRuleMetadataView {
+    /**
+     * Stable UTF-8 rule identifier, not NUL-terminated.
+     */
+    struct CribraStringView rule_id;
+    /**
+     * Core matching family using existing CRIBRA_RULE_KIND_* values.
+     */
+    CribraRuleKind kind;
+    /**
+     * Core scanner authority using existing CRIBRA_DETECTION_MODE_* values.
+     */
+    CribraDetectionMode detection_mode;
+    /**
+     * Default severity assigned by Core.
+     */
+    CribraSeverity severity;
+    /**
+     * Core remediation or CRIBRA_REMEDIATION_NONE.
+     */
+    CribraRemediation remediation;
+} CribraRuleMetadataView;
 
 /**
  * One borrowed native batch input descriptor.
@@ -676,6 +729,51 @@ typedef struct CribraTemplateConfig {
 #define CRIBRA_BATCH_EXECUTION_SERIAL 1
 
 /**
+ * Core could not compile the shared automaton.
+ */
+#define CRIBRA_BUILD_CODE_AUTOMATON_BUILD 8
+
+/**
+ * Core rejected duplicate rule identities, including catalog collisions.
+ */
+#define CRIBRA_BUILD_CODE_DUPLICATE_RULE_ID 5
+
+/**
+ * Core rejected an empty literal, prefix or suffix matcher.
+ */
+#define CRIBRA_BUILD_CODE_EMPTY_MATCHER 6
+
+/**
+ * Core rejected an empty rule identity.
+ */
+#define CRIBRA_BUILD_CODE_EMPTY_RULE_ID 4
+
+/**
+ * Core rejected regex syntax or regex compilation resources.
+ */
+#define CRIBRA_BUILD_CODE_INVALID_PATTERN 1
+
+/**
+ * A Core capture-aware rule names an absent capture group.
+ */
+#define CRIBRA_BUILD_CODE_MISSING_CAPTURE_GROUP 3
+
+/**
+ * The error is not a Core rule/scanner-construction failure.
+ */
+#define CRIBRA_BUILD_CODE_NONE 0
+
+/**
+ * Core rejected a pattern capable of matching empty input.
+ */
+#define CRIBRA_BUILD_CODE_PATTERN_MATCHES_EMPTY 2
+
+/**
+ * Core's rule-index capacity was exceeded.
+ */
+#define CRIBRA_BUILD_CODE_TOO_MANY_RULES 7
+
+/**
  * Scanner construction failed.
  */
 #define CRIBRA_BUILD_ERROR 4
@@ -879,6 +977,11 @@ typedef struct CribraTemplateConfig {
  * Replace the exposed private key.
  */
 #define CRIBRA_REMEDIATION_REPLACE_PRIVATE_KEY 4
+
+/**
+ * Review a password verifier for offline-cracking exposure.
+ */
+#define CRIBRA_REMEDIATION_REVIEW_PASSWORD_VERIFIER 7
 
 /**
  * Review whether the hash is appropriate to expose.
@@ -1239,6 +1342,19 @@ void cribra_builder_free(struct CribraBuilder *builder);
 CribraStatus cribra_builder_new(struct CribraBuilder **out_builder);
 
 /**
+ * Reads Core-derived construction information without parsing the message.
+ *
+ * The view is cleared on invalid arguments. Successful non-construction errors
+ * return code NONE and no rule ID. Rule-ID bytes remain valid until error free.
+ *
+ * # Safety
+ * `error` must be a live immutable error handle. `out_info` must point to writable
+ * memory for one CribraBuildErrorView, without aliasing the error handle.
+ */
+CribraStatus cribra_error_build_info(const struct CribraError *error,
+                                     struct CribraBuildErrorView *out_info);
+
+/**
  * Releases an owned native error object.
  *
  * Passing null is a no-op.
@@ -1538,6 +1654,30 @@ CribraStatus cribra_scanner_incremental_new_with_limits(const struct CribraScann
  * returned handle must eventually be released with [`cribra_scanner_free`].
  */
 CribraStatus cribra_scanner_new_current(struct CribraScanner **out_scanner);
+
+/**
+ * Returns one scanner-owned metadata view by zero-based Core rule index.
+ *
+ * The ID is borrowed until cribra_scanner_free, survives scans and report frees,
+ * and must not be freed separately. Failure clears the view. Metadata contains
+ * no matcher payloads, regexes, validators or scanned source.
+ *
+ * # Safety
+ * `scanner` must be a live immutable scanner; `out_rule` must be writable for
+ * one CribraRuleMetadataView and must not alias the handle.
+ */
+CribraStatus cribra_scanner_rule_at(const struct CribraScanner *scanner,
+                                    size_t index,
+                                    struct CribraRuleMetadataView *out_rule);
+
+/**
+ * Returns the number of active Core rules in scanner metadata order.
+ *
+ * # Safety
+ * `scanner` must be a live immutable scanner; `out_count` must be writable for
+ * one size_t and must not alias the handle. Null arguments fail and clear output.
+ */
+CribraStatus cribra_scanner_rule_count(const struct CribraScanner *scanner, size_t *out_count);
 
 /**
  * Scans one caller-owned UTF-8 source and returns an owned report.

@@ -14,6 +14,7 @@ mod error;
 mod ffi;
 mod handles;
 mod incremental;
+mod metadata;
 mod status;
 mod stream;
 mod types;
@@ -23,8 +24,11 @@ mod hardening_tests;
 #[cfg(test)]
 mod incremental_tests;
 #[cfg(test)]
+mod metadata_tests;
+#[cfg(test)]
 mod stream_tests;
 
+pub use error::cribra_error_build_info;
 pub use error::{CribraError, cribra_error_free, cribra_error_message, cribra_error_status};
 pub use ffi::{
     ABI_VERSION_MAJOR, ABI_VERSION_MINOR, ABI_VERSION_PATCH, cribra_abi_version_major,
@@ -51,6 +55,7 @@ pub use incremental::{
     cribra_incremental_snapshot, cribra_scanner_incremental_new,
     cribra_scanner_incremental_new_with_limits,
 };
+pub use metadata::{cribra_scanner_rule_at, cribra_scanner_rule_count};
 pub use status::{
     CRIBRA_BUILD_ERROR, CRIBRA_INCREMENTAL_CACHE_LIMIT_EXCEEDED,
     CRIBRA_INCREMENTAL_CANDIDATE_LIMIT_EXCEEDED, CRIBRA_INCREMENTAL_DOCUMENT_LENGTH_OVERFLOW,
@@ -96,4 +101,12 @@ pub use types::{
     CribraRemediation, CribraRuleConfig, CribraRuleKind, CribraScanSummaryView, CribraSeverity,
     CribraShareBundleConfig, CribraShareEntryView, CribraShareManifestView, CribraShareMode,
     CribraStreamLimits, CribraStringView, CribraSynthesizeConfig, CribraTemplateConfig,
+};
+pub use types::{
+    CRIBRA_BUILD_CODE_AUTOMATON_BUILD, CRIBRA_BUILD_CODE_DUPLICATE_RULE_ID,
+    CRIBRA_BUILD_CODE_EMPTY_MATCHER, CRIBRA_BUILD_CODE_EMPTY_RULE_ID,
+    CRIBRA_BUILD_CODE_INVALID_PATTERN, CRIBRA_BUILD_CODE_MISSING_CAPTURE_GROUP,
+    CRIBRA_BUILD_CODE_NONE, CRIBRA_BUILD_CODE_PATTERN_MATCHES_EMPTY,
+    CRIBRA_BUILD_CODE_TOO_MANY_RULES, CRIBRA_REMEDIATION_REVIEW_PASSWORD_VERIFIER,
+    CribraBuildErrorCode, CribraBuildErrorView, CribraRuleMetadataView,
 };

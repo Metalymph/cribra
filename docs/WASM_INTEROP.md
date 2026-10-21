@@ -253,6 +253,8 @@ but every exposed capability delegates to the same Rust core semantics.
 | opt-in personal built-ins | yes | yes | semantic parity verified |
 | literal/prefix/suffix/pattern custom rules | yes | yes | semantic parity verified |
 | optional custom remediation, all four rule families | yes | yes, additive methods | generated Core/Flow contract and direct-Core parity verified |
+| owned active rule metadata in Core order | yes | `activeRules()` | generated Core/Flow contract and direct-Core parity verified |
+| structured scanner construction categories | yes | enriched existing JS Errors | Core-derived codes; legacy signatures/messages retained |
 | finding count/order/rule ID | yes | yes | semantic parity verified |
 | byte spans and Unicode coordinates | yes | yes | semantic parity verified |
 | severity/confidence/remediation | yes | yes | semantic parity verified |
@@ -277,6 +279,16 @@ validation logic of its own. The four `add…WithRemediation` methods project th
 existing `RemediationKind` values directly to Core, preserving the old builder
 methods and defaults. See [custom remediation](../crates/cribra-wasm/README.md#custom-rule-remediation)
 for optional-value and failure behavior.
+
+`ScanEngine.activeRules()` projects all five public Core metadata fields into
+owned `RuleMetadataView` objects. Free each view independently; no regex, matcher,
+validator or scanned source is exposed. Existing builder failures remain native
+JS `Error` instances enriched with `ScannerBuildErrorCode` and optional `ruleId`.
+The type-only `ScannerBuildError extends Error` interface requires no manual
+error free. Categories derive from Core enums, while human-readable Core regex
+diagnostics may include configuration patterns. See the
+[metadata/error contract](../crates/cribra-wasm/README.md#active-rule-metadata-and-structured-build-errors)
+for lifetime, compatibility, category and privacy details.
 
 Representation differences are allowed. Semantic differences in exposed
 capabilities are not.

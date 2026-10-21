@@ -304,7 +304,86 @@ cleanup:
     return failure == NULL ? EXIT_SUCCESS : fail(failure);
 }
 
+/* Scanner/error borrowed views keep their documented independent owners. */
+static int configuration_smoke(void) {
+    CribraBuilder *builder = NULL;
+    CribraScanner *scanner = NULL;
+    CribraError *error = NULL;
+    const char *failure = NULL;
+    static const uint8_t id[] = "custom/cl\xc3\xa9-\xf0\x9f\x94\x91";
+    const CribraRuleConfig rules[] = {
+        {CRIBRA_RULE_KIND_LITERAL, {id, sizeof(id)-1}, {(const uint8_t *)"SECRET",6}, CRIBRA_SEVERITY_HIGH, CRIBRA_REMEDIATION_NONE},
+        {CRIBRA_RULE_KIND_PREFIX, {(const uint8_t *)"prefix",6}, {(const uint8_t *)"pre_",4}, CRIBRA_SEVERITY_LOW, CRIBRA_REMEDIATION_ROTATE_PASSWORD},
+        {CRIBRA_RULE_KIND_SUFFIX, {(const uint8_t *)"suffix",6}, {(const uint8_t *)"_END",4}, CRIBRA_SEVERITY_MEDIUM, CRIBRA_REMEDIATION_NONE},
+        {CRIBRA_RULE_KIND_PATTERN, {(const uint8_t *)"pattern",7}, {(const uint8_t *)"code[0-9]{2}",12}, CRIBRA_SEVERITY_CRITICAL, CRIBRA_REMEDIATION_REVIEW_PASSWORD_VERIFIER}
+    };
+    size_t count = 0;
+    CribraRuleMetadataView metadata = {0};
+    CribraBuildErrorView info = {0};
+#define CONFIG_CHECK(condition, message) \
+    do { if (!(condition)) { failure = (message); goto cleanup; } } while (0)
+    CONFIG_CHECK(cribra_builder_new(&builder) == CRIBRA_OK, "metadata builder failed");
+    CONFIG_CHECK(cribra_builder_add_current_builtins(builder) == CRIBRA_OK, "current catalog failed");
+    CONFIG_CHECK(cribra_builder_add_financial_builtins(builder) == CRIBRA_OK, "financial catalog failed");
+    CONFIG_CHECK(cribra_builder_add_personal_builtins(builder) == CRIBRA_OK, "personal catalog failed");
+    for (size_t i = 0; i < 4; ++i) {
+        CONFIG_CHECK(cribra_builder_add_rule(builder, &rules[i], &error) == CRIBRA_OK && error == NULL,
+                     "metadata custom rule failed");
+    }
+    CribraStatus status = cribra_builder_build(builder, &scanner, &error);
+    builder = NULL;
+    CONFIG_CHECK(status == CRIBRA_OK && error == NULL, "metadata scanner build failed");
+    CONFIG_CHECK(cribra_scanner_rule_count(scanner, &count) == CRIBRA_OK && count > 4,
+                 "metadata count lost catalogs");
+    for (size_t i = 0; i < 4; ++i) {
+        CONFIG_CHECK(cribra_scanner_rule_at(scanner, i, &metadata) == CRIBRA_OK,
+                     "metadata index failed");
+        CONFIG_CHECK(metadata.kind == rules[i].kind && metadata.severity == rules[i].severity &&
+                     metadata.remediation == rules[i].remediation && metadata.detection_mode == CRIBRA_DETECTION_MODE_MATCHER_ONLY,
+                     "metadata fields/order changed");
+    }
+    CONFIG_CHECK(cribra_scanner_rule_at(scanner, 0, &metadata) == CRIBRA_OK &&
+                 metadata.rule_id.len == sizeof(id)-1 && memcmp(metadata.rule_id.ptr, id, sizeof(id)-1) == 0,
+                 "UTF-8 metadata ID changed");
+    CONFIG_CHECK(cribra_scanner_rule_at(scanner, count, &metadata) == CRIBRA_OUT_OF_RANGE && metadata.rule_id.ptr == NULL,
+                 "metadata invalid index not cleared");
+    CONFIG_CHECK(cribra_scanner_rule_at(scanner, 0, NULL) == CRIBRA_INVALID_ARGUMENT,
+                 "metadata null output accepted");
+    cribra_scanner_free(scanner); scanner = NULL;
+
+    CONFIG_CHECK(cribra_builder_new(&builder) == CRIBRA_OK, "error builder failed");
+    CribraRuleConfig invalid = {CRIBRA_RULE_KIND_PATTERN, {(const uint8_t *)"invalid",7},
+                               {(const uint8_t *)"[",1}, CRIBRA_SEVERITY_HIGH, CRIBRA_REMEDIATION_NONE};
+    CONFIG_CHECK(cribra_builder_add_rule(builder, &invalid, &error) == CRIBRA_RULE_ERROR && error != NULL,
+                 "pattern coarse status changed");
+    CONFIG_CHECK(cribra_error_build_info(error, &info) == CRIBRA_OK &&
+                 info.code == CRIBRA_BUILD_CODE_INVALID_PATTERN && view_equals(info.rule_id, "invalid"),
+                 "structured pattern category missing");
+    cribra_builder_free(builder); builder = NULL;
+    CONFIG_CHECK(view_equals(info.rule_id, "invalid"), "error did not own rule ID");
+    cribra_error_free(error); error = NULL;
+    CONFIG_CHECK(cribra_error_build_info(NULL, &info) == CRIBRA_INVALID_ARGUMENT &&
+                 info.code == CRIBRA_BUILD_CODE_NONE && info.rule_id.ptr == NULL,
+                 "null error view not cleared");
+    CONFIG_CHECK(cribra_builder_new(&builder) == CRIBRA_OK, "empty matcher builder failed");
+    invalid.kind = CRIBRA_RULE_KIND_LITERAL;
+    invalid.id = (CribraStringView){(const uint8_t *)"empty",5};
+    invalid.value = (CribraStringView){NULL,0};
+    CONFIG_CHECK(cribra_builder_add_rule(builder, &invalid, NULL) == CRIBRA_OK,
+                 "empty matcher validation moved before Core build");
+    status = cribra_builder_build(builder, &scanner, &error); builder = NULL;
+    CONFIG_CHECK(status == CRIBRA_BUILD_ERROR && scanner == NULL, "build failure status changed");
+    CONFIG_CHECK(cribra_error_build_info(error, &info) == CRIBRA_OK &&
+                 info.code == CRIBRA_BUILD_CODE_EMPTY_MATCHER && view_equals(info.rule_id, "empty"),
+                 "structured empty matcher category missing");
+cleanup:
+    cribra_error_free(error); cribra_scanner_free(scanner); cribra_builder_free(builder);
+#undef CONFIG_CHECK
+    return failure == NULL ? EXIT_SUCCESS : fail(failure);
+}
+
 int main(void) {
+    if (configuration_smoke() != EXIT_SUCCESS) return EXIT_FAILURE;
     if (cribra_abi_version_major() != 0 || cribra_abi_version_minor() != 3 || cribra_abi_version_patch() != 0) {
         return fail("unexpected ABI major version");
     }

@@ -394,6 +394,85 @@ Rule-ID uniqueness and scanner-wide validation remain core authority.
 
 Once successfully constructed, a scanner is immutable and reusable.
 
+### Scanner rule metadata (P0.6B)
+
+The public native header is `include/cribra.h`, generated from `cribra-capi`
+with its existing cbindgen configuration. `cribra_scanner_rule_count` and
+`cribra_scanner_rule_at` enumerate Core's active rule metadata directly. Indexes
+follow `Scanner::rule_metadata()` exactly: caller-order custom rules precede
+the catalogs in Core builder order. The adapter keeps no second rule inventory.
+
+`CribraRuleMetadataView` has exactly five fields: `rule_id`, `kind`,
+`detection_mode`, `severity` and `remediation`. It uses existing ABI enum types;
+`CRIBRA_REMEDIATION_NONE` represents absent remediation. The newly assigned
+`CRIBRA_REMEDIATION_REVIEW_PASSWORD_VERIFIER = 7` projects Core's existing action
+through metadata and report views and is accepted in rule configuration.
+Previously this action projected as `CRIBRA_REMEDIATION_UNKNOWN`; all existing
+numeric assignments remain unchanged.
+
+`rule_id` is a borrowed, non-NUL-terminated UTF-8 view into immutable scanner
+storage. It survives scans and report destruction and expires at scanner free.
+Do not free it. Copy the bytes before freeing the scanner if needed longer.
+No field exposes matcher payloads, regexes, validators or scanned source.
+Null inputs/outputs return `CRIBRA_INVALID_ARGUMENT`; invalid indexes return
+`CRIBRA_OUT_OF_RANGE`. Writable outputs are cleared before handle/index checks.
+Pointer validity, non-aliasing and live-owner obligations follow the existing ABI.
+
+### Structured construction diagnostics (P0.6B)
+
+The existing owned `CribraError` remains opaque. `cribra_error_status`,
+`cribra_error_message`, optional error-output slots and `cribra_error_free`
+keep their existing behavior. Construction still returns coarse
+`CRIBRA_RULE_ERROR` or `CRIBRA_BUILD_ERROR`; fixed sanitized messages are unchanged.
+No new general status codes or changes to public struct layouts are introduced.
+
+`cribra_error_build_info(error, out_info)` fills a new `CribraBuildErrorView`:
+`code` is a stable Core-derived category and `rule_id` is an optional borrowed
+identity copied into the error at failure. A null ID pointer means absent;
+otherwise its UTF-8 bytes remain valid until error free, independently of the
+builder/scanner lifetime. Empty IDs may be present in constructor context;
+Core's `EmptyRuleId` build error itself has no supplied identity. Neither view
+owns memory. Non-construction errors return code `CRIBRA_BUILD_CODE_NONE` and
+no ID. Null arguments fail and clear writable output just like other accessors.
+
+| Category suffix (`CRIBRA_BUILD_CODE_*`) | Value | Core origin |
+| --- | ---: | --- |
+| `NONE` | 0 | Non-construction status/error |
+| `INVALID_PATTERN` | 1 | `RuleError::InvalidPattern` |
+| `PATTERN_MATCHES_EMPTY` | 2 | `RuleError::PatternMatchesEmpty` |
+| `MISSING_CAPTURE_GROUP` | 3 | `RuleError::MissingCaptureGroup` |
+| `EMPTY_RULE_ID` | 4 | `ScannerBuildError::EmptyRuleId` |
+| `DUPLICATE_RULE_ID` | 5 | `ScannerBuildError::DuplicateRuleId` |
+| `EMPTY_MATCHER` | 6 | `ScannerBuildError::EmptyMatcher` |
+| `TOO_MANY_RULES` | 7 | `ScannerBuildError::TooManyRules` |
+| `AUTOMATON_BUILD` | 8 | `ScannerBuildError::AutomatonBuild` |
+
+Categories come from Rust enum matches, never diagnostic parsing. Core still
+owns pattern construction, catalog composition, ordering and validation error
+precedence. Invalid patterns leave the builder usable; a validated build attempt
+consumes it on success or failure, as before. C diagnostics remain fixed and
+source-free. WASM retains Core's human-readable regex diagnostics, which may
+contain caller-supplied configuration patterns; those are not scanned source.
+
+The native regression suite compares all catalog selections and four custom
+families against Core, checks borrowed ownership/UTF-8 IDs, optional remediation,
+structured categories and null/index handling. Header contract fixtures pin
+172 prior declarations and 16 additions (types, fields, codes and signatures).
+The C11 smoke exercises the new views and errors; C/C++ examples compile and run.
+Rare capacity/capture errors are conversion checks; automaton resource failure
+is mapped but not forced. The ABI protocol remains 0.3.0 with additive symbols.
+
+Regenerate with `just capi-header` and check `just capi-header-check`. If Cargo's
+unfiltered metadata discovery needs uncached dependencies for another platform,
+the equivalent host-filtered generation is:
+
+```sh
+cbindgen --only-target-dependencies --config crates/cribra-capi/cbindgen.toml --crate cribra-capi --output include/cribra.h
+```
+
+Repeat that command with a temporary output and compare bytes for determinism.
+Filtering dependency discovery does not change the C ABI source/configuration.
+
 ## 10. Scanning
 
 The native API supports single-source scanning and batch-oriented operations

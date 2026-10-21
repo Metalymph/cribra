@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { qualifyStreams } from "./stream.mjs";
 import { qualifyIncremental } from "./incremental.mjs";
 import { qualifyRemediation } from "./remediation.mjs";
+import { qualifyConfiguration } from "./configuration.mjs";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -16,11 +17,12 @@ const contract = JSON.parse(await readFile(new URL("api-contract.json", import.m
 const declarations = (await readFile(resolve(directory, "cribra.d.ts"), "utf8"))
   .replace(/\/\*[\s\S]*?\*\//g, "");
 const actual = {};
-for (const [, kind, name, body] of declarations.matchAll(/export (class|enum|interface) (\w+) \{([^}]+)\}/g)) {
+for (const [, kind, name, base, body] of declarations.matchAll(/export (class|enum|interface) (\w+)(?: extends (\w+))? \{([^}]+)\}/g)) {
   // Keep wasm-bindgen's low-level initialization ABI outside the adapter DTO inventory.
   if (kind === "interface" && name === "InitOutput") continue;
   actual[name] = {
     kind,
+    ...(base ? { extends: base } : {}),
     members: body.split(kind === "enum" ? "," : ";")
       .map((member) => member.trim().replace(/\s+/g, " "))
       .filter((member) => member && !/^(private constructor|free\(|\[Symbol.dispose\])/.test(member)),
@@ -134,4 +136,7 @@ qualifyIncremental(mod, variant, incrementalCases, incrementalOracle);
 const remediationCases = JSON.parse(await readFile(new URL("remediation-cases.json", import.meta.url), "utf8"));
 const configurationOracle = JSON.parse(await readFile(resolve(directory, "../configuration-oracle.json"), "utf8"));
 qualifyRemediation(mod, variant, remediationCases, configurationOracle);
+const configurationCases = JSON.parse(await readFile(new URL("configuration-cases.json", import.meta.url), "utf8"));
+const metadataOracle = JSON.parse(await readFile(resolve(directory, "../metadata-oracle.json"), "utf8"));
+qualifyConfiguration(mod, variant, configurationCases, metadataOracle);
 console.log(`${variant}: generated JS/TypeScript contract and WASM runtime smoke passed`);
