@@ -125,30 +125,17 @@ extern "C" {
     fn max_retained_results(this: &StreamLimits) -> JsValue;
 }
 
+#[cfg(test)]
 fn numeric_limit(value: f64) -> Result<usize, StreamError> {
-    const MAX_SAFE_INTEGER: f64 = 9_007_199_254_740_991.0;
-    if !value.is_finite()
-        || value < 0.0
-        || value.fract() != 0.0
-        || value > MAX_SAFE_INTEGER
-        || value > usize::MAX as f64
-    {
-        return Err(StreamError {
-            code: StreamErrorCode::InvalidLimit,
-        });
-    }
-    // Conversion occurs only after both JS-safe-integer and target-width checks.
-    Ok(value as usize)
+    crate::numeric::checked_usize(value).ok_or(StreamError {
+        code: StreamErrorCode::InvalidLimit,
+    })
 }
 
 fn js_limit(value: JsValue) -> Result<Option<usize>, StreamError> {
-    if value.is_undefined() {
-        return Ok(None);
-    }
-    let number = value.as_f64().ok_or(StreamError {
+    crate::numeric::js_limit(value).map_err(|()| StreamError {
         code: StreamErrorCode::InvalidLimit,
-    })?;
-    numeric_limit(number).map(Some)
+    })
 }
 
 #[wasm_bindgen]

@@ -133,6 +133,53 @@ ownership behavior. This qualifies the local runtime execution recorded in
 qualification. See the [WASM README](../crates/cribra-wasm/README.md#byte-streaming)
 for the complete limits, ownership and error-handling contract.
 
+### P0.5 source incremental contract
+
+Core and Flow source builds also expose `ScanEngine.incremental(source)` and
+`incrementalWithLimits(source, limits: IncrementalLimits)`. Core exclusively owns
+the editable UTF-8 document, revision, cached matching state and transaction.
+The adapter retains no duplicate source, scanner or edit engine. Existing built-in
+and custom configurations use Core's incremental behavior directly.
+
+`IncrementalSession.applyEdit(expectedRevision: bigint, start: number,
+end: number, replacement: string): bigint` uses half-open UTF-8 byte ranges.
+Initial revision is `0n`, and successful no-ops increment it. Revisions are exact
+u64/bigint values; invalid/out-of-u64 revisions fail with `InvalidRevision`
+instead of wrapping. Offsets are validated before Core as nonnegative JS safe
+integers representable on WASM32; invalid inputs report `OffsetOutOfRange`.
+
+Four independently optional budgets preserve Core accounting: `maxCandidates`,
+`maxRetainedCacheRecords`, `maxMaterializedResults` and
+`maxTransactionStorageBytes`. Missing/undefined means unlimited; explicit zero
+is meaningful. They reuse streaming's strict JS number validation and report
+`InvalidLimit` before construction. Logical transaction storage includes the old
+snapshot and excludes unaccounted allocator/regex/validator overhead and caller
+report clones; it is not a total memory guarantee.
+
+`isActive()` delegates to Core. Recoverable Core input errors leave edits active;
+resource/invariant failures block future edits but preserve `snapshot()`.
+`IncrementalError` has stable `code`, source-free `message` and a `terminal`
+flag read from Core activity after edit failure. Construction errors create no
+session and report `terminal: false`. Every Core variant has a distinct code,
+with `UnknownCoreError` for future variants. Numeric validation precedes Core
+and never changes the committed snapshot.
+
+`snapshot()` owns one committed `revision: bigint` and metadata projection.
+Each access to its readonly `result` returns a fresh owned existing `ScanResult`.
+Snapshot and result lifetimes are independent of edits and session destruction;
+free each session, snapshot, returned result and caught error separately.
+Neither sessions nor snapshots expose document text or matched sensitive values.
+Flow transforms continue to require caller-supplied source and retain existing
+fail-closed overlap behavior.
+
+The existing generated Core/Flow runtime qualification includes an independent
+Core incremental oracle, deterministic edits, terminal snapshot preservation,
+bigint/numeric validation, ownership, metadata/explanation and transform parity.
+Node/Bun local qualification is recorded in [Compatibility](COMPATIBILITY.md).
+It does not qualify a new release or browser execution. See the
+[WASM README](../crates/cribra-wasm/README.md#incremental-documents) for usage and
+the complete ownership and limits contract.
+
 ### Artifact size after capability parity
 
 Release artifacts produced with `wasm-bindgen --target web` after completing
@@ -153,8 +200,9 @@ comparison below.
 Rust validation remains independently testable on native targets. JavaScript
 error construction occurs only at the exported WASM boundary.
 
-The adapter retains scan metadata but does not retain source text or
-transformation keys. Transform operations require the source to be supplied
+Scan results and incremental snapshots retain metadata without source text or
+transformation keys. Incremental documents retain source exclusively inside
+their Core session. Transform operations require the source to be supplied
 explicitly for each call. Ambiguous candidates remain review-only and are
 never promoted to transform authority.
 
@@ -208,6 +256,8 @@ but every exposed capability delegates to the same Rust core semantics.
 | severity/confidence/remediation | yes | yes | semantic parity verified |
 | ambiguous candidate count/order/kind/evidence | yes | yes | semantic parity verified |
 | typed finding/candidate explanations | yes | yes | semantic parity verified |
+| admitted byte streaming and three budgets | yes | yes, both variants | local generated-runtime parity verified |
+| incremental UTF-8 edits, four budgets and committed snapshots | yes | yes, both variants | local generated-runtime parity verified |
 | redact / custom redaction | yes | yes | semantic parity verified where exposed |
 | template / custom template options | yes | yes | semantic parity verified where exposed |
 | keyed pseudonymization | yes | yes | semantic parity verified |

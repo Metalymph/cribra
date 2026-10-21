@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { qualifyStreams } from "./stream.mjs";
+import { qualifyIncremental } from "./incremental.mjs";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -126,4 +127,7 @@ for (const owned of [finding, explanation, detected, candidate, evidence, review
 const streamCases = JSON.parse(await readFile(new URL("stream-cases.json", import.meta.url), "utf8"));
 const streamOracle = JSON.parse(await readFile(resolve(directory, "../stream-oracle.json"), "utf8"));
 qualifyStreams(mod, variant, streamCases, streamOracle);
+const incrementalCases = JSON.parse(await readFile(new URL("incremental-cases.json", import.meta.url), "utf8"));
+const incrementalOracle = JSON.parse(await readFile(resolve(directory, "../incremental-oracle.json"), "utf8"));
+qualifyIncremental(mod, variant, incrementalCases, incrementalOracle);
 console.log(`${variant}: generated JS/TypeScript contract and WASM runtime smoke passed`);

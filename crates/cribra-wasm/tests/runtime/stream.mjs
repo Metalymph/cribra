@@ -1,37 +1,18 @@
-// Streaming qualification shared by actual generated Core and Flow bindings.
+// Shared scanner/report helpers and generated Core/Flow streaming qualification.
 import assert from "node:assert/strict";
 
-export function qualifyStreams(mod, variant, cases, oracle) {
-  const bytes = (text) => new TextEncoder().encode(text);
+export function makeEngine(mod, spec) {
+  if (spec.builtins && spec.rules.length === 0) return new mod.ScanEngine();
+  const builder = new mod.ScanEngineBuilder(spec.builtins ?? false);
+  for (const rule of spec.rules) {
+    const method = { literal: "addLiteral", prefix: "addPrefix", suffix: "addSuffix", pattern: "addPattern" }[rule.kind];
+    builder[method](rule.id, rule.value, mod.FindingSeverity[rule.severity]);
+  }
+  return builder.build(); // build consumes the builder
+}
+
+export function projectReport(mod, engine, result) {
   const name = (table, value) => table[value];
-  const make = (spec) => {
-    if (spec.builtins) return new mod.ScanEngine();
-    const builder = new mod.ScanEngineBuilder(false);
-    for (const rule of spec.rules) {
-      const method = { literal: "addLiteral", prefix: "addPrefix", suffix: "addSuffix", pattern: "addPattern" }[rule.kind];
-      builder[method](rule.id, rule.value, mod.FindingSeverity[rule.severity]);
-    }
-    return builder.build(); // build consumes the builder
-  };
-  const literal = (value = "SECRET") => make({ rules: [{ id: "literal", kind: "literal", value, severity: "High" }] });
-  const error = (operation, expected) => {
-    let caught;
-    try { operation(); } catch (value) { caught = value; }
-    assert(caught instanceof mod.StreamError, `Expected typed StreamError (${expected})`);
-    try {
-      assert.equal(caught.code, mod.StreamErrorCode[expected]);
-      assert.equal(typeof caught.message, "string");
-      assert(caught.message.length > 0);
-      for (const source of ["SECRET", "DO_NOT_EXPOSE", "ABCD-EFGH-IJKL-MNOP"]) {
-        assert(!caught.message.includes(source));
-      }
-    } finally { caught.free(); }
-  };
-  const inactive = (session) => {
-    error(() => session.push(new Uint8Array()), "NotActive");
-    error(() => session.push(bytes("x")), "NotActive");
-    error(() => session.finish(), "NotActive");
-  };
   const explanation = (view) => {
     try {
       if (view.kind === mod.ExplanationKind.Classified) {
@@ -41,7 +22,7 @@ export function qualifyStreams(mod, variant, cases, oracle) {
       return { kind: "Ambiguous", candidateEvidence: name(mod.CandidateEvidenceKind, view.candidateEvidence) };
     } finally { view.free(); }
   };
-  const project = (engine, result) => ({
+  return {
     sourceBytes: result.sourceBytes, findingCount: result.findingCount(), candidateCount: result.candidateCount(),
     needsReview: result.needsReview(), hasCritical: result.hasCritical(),
     findings: Array.from({ length: result.findingCount() }, (_, i) => {
@@ -61,7 +42,32 @@ export function qualifyStreams(mod, variant, cases, oracle) {
           explanation: explanation(result.candidateExplanationAt(i)) };
       } finally { c.free(); }
     }),
-  });
+  };
+}
+
+export function qualifyStreams(mod, variant, cases, oracle) {
+  const bytes = (text) => new TextEncoder().encode(text);
+  const make = (spec) => makeEngine(mod, spec);
+  const literal = (value = "SECRET") => make({ rules: [{ id: "literal", kind: "literal", value, severity: "High" }] });
+  const error = (operation, expected) => {
+    let caught;
+    try { operation(); } catch (value) { caught = value; }
+    assert(caught instanceof mod.StreamError, `Expected typed StreamError (${expected})`);
+    try {
+      assert.equal(caught.code, mod.StreamErrorCode[expected]);
+      assert.equal(typeof caught.message, "string");
+      assert(caught.message.length > 0);
+      for (const source of ["SECRET", "DO_NOT_EXPOSE", "ABCD-EFGH-IJKL-MNOP"]) {
+        assert(!caught.message.includes(source));
+      }
+    } finally { caught.free(); }
+  };
+  const inactive = (session) => {
+    error(() => session.push(new Uint8Array()), "NotActive");
+    error(() => session.push(bytes("x")), "NotActive");
+    error(() => session.finish(), "NotActive");
+  };
+  const project = (engine, result) => projectReport(mod, engine, result);
 
   let index = 0;
   let reports = 0;

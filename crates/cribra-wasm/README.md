@@ -19,13 +19,15 @@ The adapter provides:
 - typed findings and review candidates;
 - explanations and remediation metadata;
 - Core-owned byte streaming for admitted rulesets, with optional resource budgets;
+- Core-owned incremental UTF-8 documents, revisioned edits and owned snapshots;
 - redaction and templating;
 - keyed pseudonymization and deterministic synthesis.
 
 The adapter does not route through Cribra's native C ABI and does not use JSON
 serialization as its transport boundary.
 
-Source text and transformation keys remain caller-owned. Browser lifecycle,
+Whole-source inputs and transformation keys remain caller-owned. Incremental
+sessions give Core exclusive ownership of an editable document. Browser lifecycle,
 Workers, service workers, storage, caching, CSP, and UI policy remain the
 responsibility of the integrating application.
 
@@ -35,7 +37,7 @@ The WASM adapter supports two configurations:
 
 | Configuration | Features | API |
 | --- | --- | --- |
-| Core | `--no-default-features` | Scanner, built-ins, custom rules, findings, candidates, explanations, reporting and admitted byte streams |
+| Core | `--no-default-features` | Scanner, built-ins, custom rules, findings, candidates, explanations, reporting, admitted byte streams and incremental documents |
 | Flow | `transform` (enabled by default) | Core plus all existing transformation APIs |
 
 Flow is the default and the official published configuration. Its JavaScript
@@ -60,8 +62,7 @@ with `wasm-bindgen` for JavaScript consumption.
 
 Rust core Fuse adds `parallel` and `serde` to Flow. These features are not
 part of the supported browser WASM API; the adapter has no Fuse configuration.
-Streaming is available in both configurations. Incremental sessions are not
-exposed by this WASM adapter.
+Streaming and incremental sessions are available in both configurations.
 
 ## Byte streaming
 
@@ -137,6 +138,98 @@ their properties, and call their generated `free()` exactly once. Sessions,
 results and engines also require their own `free()` calls. As with existing
 wasm-bindgen objects, do not use an object after freeing it.
 
+## Incremental documents
+
+`ScanEngine.incremental(source: string)` opens an unlimited Core document;
+`incrementalWithLimits(source: string, limits: IncrementalLimits)` adds four
+independent optional budgets. Incremental scanning supports the existing built-in
+and custom scanner configurations; streaming admission restrictions do not apply.
+Core exclusively owns source, revision, matching and transaction state. The
+adapter has no source cache or independent edit engine.
+
+```js
+const engine = new ScanEngine();
+let session, snapshot, result;
+try {
+  session = engine.incremental("");
+  const revision = session.applyEdit(0n, 0, 0, "password=CorrectHorseBatteryStaple");
+  snapshot = session.snapshot();
+  result = snapshot.result;
+  console.log(revision === snapshot.revision, result.sourceBytes);
+} catch (error) {
+  if (!(error instanceof IncrementalError)) throw error;
+  try {
+    console.error(error.code, error.terminal, error.message);
+  } finally {
+    error.free();
+  }
+} finally {
+  result?.free();
+  snapshot?.free();
+  session?.free();
+  engine.free();
+}
+```
+
+`IncrementalSession.applyEdit(expectedRevision: bigint, start: number,
+end: number, replacement: string): bigint` replaces the half-open UTF-8 byte
+range `[start, end)`. The initial revision is `0n`; every successful edit,
+including an unchanged replacement or empty no-op, increments it once.
+Revisions remain exact u64/bigint values. The adapter rejects non-bigint,
+negative or greater-than-u64 revision inputs with `InvalidRevision`, without
+coercion or wrapping. Offsets use the same lossless JS number validation as
+stream limits: invalid numeric/non-number inputs throw `OffsetOutOfRange`
+before invoking Core. Valid WASM32 offsets range from zero to `4294967295`;
+Core then validates document range, revision and UTF-8 scalar boundaries with
+its existing error precedence.
+
+`IncrementalLimits` is a type-only TypeScript interface:
+
+| Property | Core accounting |
+| --- | --- |
+| `maxCandidates` | Newly emitted raw rule candidates per construction/edit; rejected and duplicate emissions count |
+| `maxRetainedCacheRecords` | Simultaneously owned old and staged cache records, including rejected and hidden records |
+| `maxMaterializedResults` | Constructed findings and structural result copies per operation; suppression refunds no tickets |
+| `maxTransactionStorageBytes` | Conservative peak logical transaction payload including the old committed snapshot |
+
+Missing/undefined means unlimited; zero (including `-0`) is meaningful. Values
+use the same strict number and WASM32 width checks as streaming; invalid inputs
+throw `InvalidLimit` before Core construction. Transaction storage is not a total
+heap limit: capacity, allocator overhead, shared configuration, opaque regex and
+validator workspace, and caller-owned report clones are outside Core accounting.
+See [Core incremental scanning](../../docs/incremental.md) for the exact budget
+and matching contract.
+
+`StaleRevision`, `InvalidRange`, `InvalidUtf8Boundary`, `RevisionOverflow` and
+`DocumentLengthOverflow` preserve an active Core session. Resource/invariant
+failures make edits terminal while preserving the last committed snapshot.
+The adapter keeps the Core session after these failures. `isActive()` delegates
+to Core; subsequent valid edits report `NotActive`, and `snapshot()` remains
+available. Invalid JS arguments are rejected before Core even on inactive
+sessions, without changing their state.
+
+`IncrementalError` is an owned wasm-bindgen object with readonly `code`,
+`terminal` and source-free `message`. Each Core variant has a distinct stable
+`IncrementalErrorCode`, plus `UnknownCoreError`, `InvalidLimit`,
+`OffsetOutOfRange` and `InvalidRevision`. For edit errors, `terminal` reads
+`!Core.is_active()` after the failure, including adapter input errors.
+Construction errors create no session and set `terminal` to false. These thrown
+objects are not native JavaScript `Error` instances; free each caught object.
+
+`snapshot()` atomically captures one committed revision, source byte count and
+complete report into an owned `IncrementalSnapshot`. Its readonly `revision`
+is a bigint. **Each access to `snapshot.result` clones a fresh owned `ScanResult`**;
+save it and free it independently of the snapshot. The existing finding,
+candidate, explanation and Flow transformation APIs apply to that result.
+Transformations still require callers to supply the matching source explicitly.
+No document/source getter or matched sensitive value is exposed.
+
+Sessions outlive their creating engine. Snapshots and their results outlive
+later edits, terminal failures and session destruction. Freeing a snapshot does
+not free results already obtained from it. Free sessions, snapshots and every
+returned result separately; do not use any object after its generated `free()`.
+Calls remain synchronous with no additional runtime dependencies or parallelism.
+
 ## Runtime and release qualification
 
 Run the generated JavaScript/TypeScript API contract and runtime smoke checks
@@ -159,7 +252,7 @@ cover built-in and custom scanning, findings, candidates, explanations, UTF-8
 report coordinates and error handling. Flow executes all six transformation
 methods; Core must omit them from both JS and TypeScript. A checked-in API
 contract verifies exported classes, enums, member names and TypeScript
-signatures (including the input-only `StreamLimits` interface), with runtime
+signatures (including the input-only limit interfaces), with runtime
 checks for JS methods, arity, getters and generated `free()` methods.
 
 The runner also generates a direct-Core oracle from the shared synthetic
@@ -171,6 +264,22 @@ incomplete UTF-8, terminal operations, result ownership, metadata, explanation
 authority and Flow transform compatibility. Arithmetic/invariant errors that
 cannot be induced practically are covered by native error-mapping tests;
 adapter byte-counter overflow uses a test-only injected counter.
+
+A second direct-Core oracle exercises deterministic incremental edit sequences,
+UTF-8 boundaries, exact bigint inputs/outputs, recoverable errors, all four
+budgets including zero, construction and terminal failures, committed snapshot
+preservation and independent ownership. Both variants compare full findings,
+candidates, metadata and explanations. Flow compares all six transformation
+methods, including equivalent overlap rejections. Native tests check every Core
+error mapping; impractical revision/document/resource overflows and invariant
+failures are mapping checks, not induced WASM runtime failures.
+
+To exercise the same generated artifacts under an available Bun installation:
+
+```sh
+bun crates/cribra-wasm/tests/runtime/smoke.mjs core target/wasm-qualification/core
+bun crates/cribra-wasm/tests/runtime/smoke.mjs flow target/wasm-qualification/flow
+```
 
 The WASM workflow qualifies both variants. The release workflow qualifies
 Flow explicitly and rejects a manifest whose defaults omit `transform`,

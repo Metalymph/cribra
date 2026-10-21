@@ -79,6 +79,59 @@
       "readonly start: number"
     ]
   },
+  "IncrementalError": {
+    "kind": "class",
+    "members": [
+      "readonly code: IncrementalErrorCode",
+      "readonly message: string",
+      "readonly terminal: boolean"
+    ]
+  },
+  "IncrementalErrorCode": {
+    "kind": "enum",
+    "members": [
+      "NotActive = 0",
+      "StaleRevision = 1",
+      "InvalidRange = 2",
+      "InvalidUtf8Boundary = 3",
+      "RevisionOverflow = 4",
+      "DocumentLengthOverflow = 5",
+      "CandidateLimitExceeded = 6",
+      "CacheLimitExceeded = 7",
+      "ResultLimitExceeded = 8",
+      "TransactionStorageLimitExceeded = 9",
+      "ResourceAccountingOverflow = 10",
+      "ExecutionInvariantViolated = 11",
+      "UnknownCoreError = 12",
+      "InvalidLimit = 13",
+      "OffsetOutOfRange = 14",
+      "InvalidRevision = 15"
+    ]
+  },
+  "IncrementalLimits": {
+    "kind": "interface",
+    "members": [
+      "readonly maxCandidates?: number",
+      "readonly maxRetainedCacheRecords?: number",
+      "readonly maxMaterializedResults?: number",
+      "readonly maxTransactionStorageBytes?: number"
+    ]
+  },
+  "IncrementalSession": {
+    "kind": "class",
+    "members": [
+      "applyEdit(expectedRevision: bigint, start: number, end: number, replacement: string): bigint",
+      "isActive(): boolean",
+      "snapshot(): IncrementalSnapshot"
+    ]
+  },
+  "IncrementalSnapshot": {
+    "kind": "class",
+    "members": [
+      "readonly result: ScanResult",
+      "readonly revision: bigint"
+    ]
+  },
   "RemediationKind": {
     "kind": "enum",
     "members": [
@@ -97,6 +150,8 @@
     "kind": "class",
     "members": [
       "explainFinding(result: ScanResult, index: number): ExplanationView",
+      "incremental(source: string): IncrementalSession",
+      "incrementalWithLimits(source: string, limits: IncrementalLimits): IncrementalSession",
       "constructor()",
       "rulesCount(): number",
       "scan(source: string): ScanResult",

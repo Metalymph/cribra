@@ -48,6 +48,10 @@ const streamOracle = run("cargo", ["run", "--locked", "-p", "cribra-wasm", "--no
   stdio: ["ignore", "pipe", "inherit"], encoding: "utf8",
 });
 await writeFile(resolve(shared, "stream-oracle.json"), streamOracle);
+const incrementalOracle = run("cargo", ["run", "--locked", "-p", "cribra-wasm", "--no-default-features", "--example", "incremental_oracle"], {
+  stdio: ["ignore", "pipe", "inherit"], encoding: "utf8",
+});
+await writeFile(resolve(shared, "incremental-oracle.json"), incrementalOracle);
 
 for (const variant of variants.length ? variants : ["core", "flow"]) {
   run("cargo", [

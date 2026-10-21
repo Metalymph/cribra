@@ -4,14 +4,21 @@
 //!
 //! This crate projects the authoritative Rust-native `cribra` core into a
 //! JavaScript-friendly WebAssembly API. It contains no DOM, Worker, networking,
-//! storage, or application-specific policy logic.
+//! external storage, or application-specific policy logic.
 //!
 //! Browser consumers own source lifecycle and isolation. Source text crosses
 //! the WASM boundary only for explicit operations such as scanning or
-//! transformation. Scan results retain metadata only; they never retain the
+//! transformation. Incremental sessions let Core exclusively own an editable
+//! document. Results and snapshots retain metadata only; they never retain the
 //! scanned source text or matched sensitive values.
 
+mod incremental;
+mod numeric;
 mod streaming;
+pub use incremental::{
+    IncrementalError, IncrementalErrorCode, IncrementalLimits, IncrementalSession,
+    IncrementalSnapshot,
+};
 pub use streaming::{StreamError, StreamErrorCode, StreamLimits, StreamSession};
 
 use cribra::{
