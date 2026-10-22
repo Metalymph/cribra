@@ -258,9 +258,11 @@ impl ShareBundle {
 
     /// Returns a fresh independently owned entry at the preserved input index.
     #[wasm_bindgen(js_name = entryAt)]
-    pub fn entry_at(&self, index: usize) -> Result<ShareBundleEntry, JsError> {
-        self.entry_at_core(index)
-            .ok_or_else(|| JsError::new("share bundle entry index out of range"))
+    pub fn entry_at_js(
+        &self,
+        #[wasm_bindgen(unchecked_param_type = "number")] index: JsValue,
+    ) -> Result<ShareBundleEntry, JsError> {
+        self.entry_at(crate::numeric::js_index(&index)?)
     }
 
     /// Returns a fresh projection of Core's manifest metadata.
@@ -275,6 +277,12 @@ impl ShareBundle {
 }
 
 impl ShareBundle {
+    /// Returns a fresh independently owned entry at a Rust index.
+    pub fn entry_at(&self, index: usize) -> Result<ShareBundleEntry, JsError> {
+        self.entry_at_core(index)
+            .ok_or_else(|| JsError::new("share bundle entry index out of range"))
+    }
+
     fn entry_at_core(&self, index: usize) -> Option<ShareBundleEntry> {
         self.entries.get(index).cloned()
     }

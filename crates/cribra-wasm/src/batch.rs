@@ -139,17 +139,27 @@ impl ScanBatchResult {
 
     /// Returns a fresh independently owned entry at the preserved input index.
     #[wasm_bindgen(js_name = entryAt)]
-    pub fn entry_at(&self, index: usize) -> Result<ScanBatchEntry, JsError> {
-        self.entries
-            .get(index)
-            .cloned()
-            .ok_or_else(|| JsError::new("batch entry index out of range"))
+    pub fn entry_at_js(
+        &self,
+        #[wasm_bindgen(unchecked_param_type = "number")] index: JsValue,
+    ) -> Result<ScanBatchEntry, JsError> {
+        self.entry_at(crate::numeric::js_index(&index)?)
     }
 
     /// Returns a fresh independently owned projection of Core's aggregate
     /// summary. It contains counters only and never retains source text.
     pub fn summary(&self) -> ScanSummaryView {
         ScanSummaryView::from(self.summary)
+    }
+}
+
+impl ScanBatchResult {
+    /// Returns a fresh independently owned entry at a Rust index.
+    pub fn entry_at(&self, index: usize) -> Result<ScanBatchEntry, JsError> {
+        self.entries
+            .get(index)
+            .cloned()
+            .ok_or_else(|| JsError::new("batch entry index out of range"))
     }
 }
 

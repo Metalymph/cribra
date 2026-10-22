@@ -107,6 +107,33 @@ existing explanations and Flow transforms. It changes metadata only. Catalog
 composition remains available through `new ScanEngineBuilder(include_builtins)`,
 `addFinancialBuiltins()` and `addPersonalBuiltins()`, delegating to Core.
 
+## Collection indices
+
+`ScanResult.findingAt(index)`, `candidateAt(index)`,
+`candidateExplanationAt(index)`, `ScanEngine.explainFinding(result, index)`,
+`ScanBatchResult.entryAt(index)` and Flow's `ShareBundle.entryAt(index)` validate
+the original JavaScript value before conversion to a Rust index. Their generated
+TypeScript arguments remain `index: number` and their return types are unchanged.
+
+An index must be a finite, nonnegative safe integer representable as WASM32
+`usize` (`0` through `4294967295`). Negative and fractional values, `NaN`, either
+infinity, unsafe integers, target-width overflow and non-number values throw a
+source-free native JavaScript `Error`, without coercion, truncation or wrapping.
+JavaScript negative zero is accepted as zero. Representable integers outside the
+collection still throw the existing collection-specific out-of-range error.
+Errors need no `free()` and failed lookups do not consume or mutate their owner.
+Successful lookups retain their existing independent ownership and `free()` rules.
+
+The Core/Flow generated-runtime qualification tests every accessor against 16
+invalid numeric values and 10 non-number values, valid zero/negative-zero/one
+indices, collection bounds and the maximum WASM32 index. It also checks privacy,
+continued usability after errors and returned views after parent/sibling frees.
+
+This validation is specific to collection indices. Streaming/incremental limits
+and edit offsets retain their existing strict validation. Flow pseudonymization
+digest-length parameters retain their existing wasm-bindgen numeric conversion
+and Core clamping; they are not collection indices.
+
 ## Active rule metadata and structured build errors
 
 `ScanEngine.activeRules(): RuleMetadataView[]` copies Core's active metadata in

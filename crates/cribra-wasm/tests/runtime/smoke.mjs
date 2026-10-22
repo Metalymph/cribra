@@ -5,6 +5,7 @@ import { qualifyBatch } from "./batch.mjs";
 import { assertShareAbsent, qualifyShareBundles, shareExports } from "./share_bundle.mjs";
 import { qualifyRemediation } from "./remediation.mjs";
 import { qualifyConfiguration } from "./configuration.mjs";
+import { qualifyIndices } from "./indices.mjs";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -74,6 +75,7 @@ for (const method of transformations) {
   assert.equal(method in mod.ScanResult.prototype, variant === "flow", `${variant}: ${method}`);
 }
 if (variant === "core") assertShareAbsent(mod);
+qualifyIndices(mod, variant);
 
 const builder = new mod.ScanEngineBuilder(false);
 builder.addLiteral("custom.secret", "SECRET", mod.FindingSeverity.High);

@@ -106,6 +106,17 @@ impl ScanEngine {
     /// Resolution fails closed when the result cannot be mapped back to this
     /// scanner's rule authority.
     #[wasm_bindgen(js_name = explainFinding)]
+    pub fn explain_finding_js(
+        &self,
+        result: &ScanResult,
+        #[wasm_bindgen(unchecked_param_type = "number")] index: JsValue,
+    ) -> Result<ExplanationView, JsError> {
+        self.explain_finding(result, numeric::js_index(&index)?)
+    }
+}
+
+impl ScanEngine {
+    /// Resolves a finding against Core's scanner authority at a Rust index.
     pub fn explain_finding(
         &self,
         result: &ScanResult,
@@ -746,13 +757,13 @@ impl ScanResult {
         self.report.has_critical()
     }
 
+    /// Returns an owned finding view after lossless JavaScript index validation.
     #[wasm_bindgen(js_name = findingAt)]
-    pub fn finding_at(&self, index: usize) -> Result<FindingView, JsError> {
-        self.report
-            .findings()
-            .get(index)
-            .map(FindingView::from)
-            .ok_or_else(|| JsError::new("finding index out of range"))
+    pub fn finding_at_js(
+        &self,
+        #[wasm_bindgen(unchecked_param_type = "number")] index: JsValue,
+    ) -> Result<FindingView, JsError> {
+        self.finding_at(numeric::js_index(&index)?)
     }
 
     /// Applies Cribra's conservative default redaction to classified findings.
@@ -826,7 +837,39 @@ impl ScanResult {
         synthesize(source, &self.report, &options).map_err(transform_error)
     }
 
+    /// Returns an owned candidate view after lossless JavaScript index validation.
     #[wasm_bindgen(js_name = candidateAt)]
+    pub fn candidate_at_js(
+        &self,
+        #[wasm_bindgen(unchecked_param_type = "number")] index: JsValue,
+    ) -> Result<CandidateView, JsError> {
+        self.candidate_at(numeric::js_index(&index)?)
+    }
+
+    /// Returns typed explanation facts for one ambiguous candidate.
+    ///
+    /// Candidate explanation derives directly from the candidate's existing
+    /// evidence and never acquires finding semantics.
+    #[wasm_bindgen(js_name = candidateExplanationAt)]
+    pub fn candidate_explanation_at_js(
+        &self,
+        #[wasm_bindgen(unchecked_param_type = "number")] index: JsValue,
+    ) -> Result<ExplanationView, JsError> {
+        self.candidate_explanation_at(numeric::js_index(&index)?)
+    }
+}
+
+impl ScanResult {
+    /// Returns an independently owned finding view at a Rust index.
+    pub fn finding_at(&self, index: usize) -> Result<FindingView, JsError> {
+        self.report
+            .findings()
+            .get(index)
+            .map(FindingView::from)
+            .ok_or_else(|| JsError::new("finding index out of range"))
+    }
+
+    /// Returns an independently owned candidate view at a Rust index.
     pub fn candidate_at(&self, index: usize) -> Result<CandidateView, JsError> {
         self.report
             .candidates()
@@ -835,11 +878,7 @@ impl ScanResult {
             .ok_or_else(|| JsError::new("candidate index out of range"))
     }
 
-    /// Returns typed explanation facts for one ambiguous candidate.
-    ///
-    /// Candidate explanation derives directly from the candidate's existing
-    /// evidence and never acquires finding semantics.
-    #[wasm_bindgen(js_name = candidateExplanationAt)]
+    /// Returns Core's candidate explanation at a Rust index.
     pub fn candidate_explanation_at(&self, index: usize) -> Result<ExplanationView, JsError> {
         self.report
             .candidates()
