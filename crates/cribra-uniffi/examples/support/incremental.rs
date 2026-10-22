@@ -88,7 +88,9 @@ pub fn data() -> Value {
             .unwrap_err();
         let error = support::core_error(error, !session.is_active());
         let after = view(&scanner, &session, id);
-        let later = session.apply_edit(u64::MAX, 999..0, "").unwrap_err();
+        let later = session
+            .apply_edit(u64::MAX, std::ops::Range { start: 999, end: 0 }, "")
+            .unwrap_err();
         resources.push(
             json!({"name":name,"before":before,"after":after,"error":error,
             "laterError":support::core_error(later,!session.is_active())}),

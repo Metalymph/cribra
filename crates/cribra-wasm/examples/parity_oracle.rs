@@ -296,6 +296,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         )?);
     }
 
+    cases.push(case_oracle(
+        "custom-remediation-overrides".to_owned(),
+        ScannerKind::CanonicalCustom,
+        &canonical_scanner,
+        "demo_api_A1B2C3D4\ndemo-pass-horse-battery-42\nDEMO_PRIVATE_KEY_MATERIAL\nDEMO_SECRET_ALPHA\n"
+            .to_owned(),
+    )?);
+
     let oracle = Oracle { schema: 1, cases };
     let output_dir = repo_root.join("target/wasm-parity");
     fs::create_dir_all(&output_dir)?;
@@ -308,29 +316,31 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 fn canonical_equivalent_scanner() -> Result<Scanner, cribra::ScannerBuildError> {
     Scanner::builder()
-        .rule(Rule::prefix(
-            "demo.api-key",
-            "demo_api_",
-            Severity::Critical,
-        ))
+        .rule(
+            Rule::prefix("demo.api-key", "demo_api_", Severity::Critical)
+                .with_remediation(Remediation::RotateCredential),
+        )
         .rule(
             Rule::pattern(
                 "demo.password",
                 r"demo-pass-[A-Za-z0-9_\-\p{L}]+",
                 Severity::High,
             )
-            .expect("canonical parity password pattern must compile"),
+            .expect("canonical parity password pattern must compile")
+            .with_remediation(Remediation::RotatePassword),
         )
-        .rule(Rule::literal(
-            "demo.private-key",
-            "DEMO_PRIVATE_KEY_MATERIAL",
-            Severity::Critical,
-        ))
-        .rule(Rule::literal(
-            "demo.secret",
-            "DEMO_SECRET_ALPHA",
-            Severity::High,
-        ))
+        .rule(
+            Rule::literal(
+                "demo.private-key",
+                "DEMO_PRIVATE_KEY_MATERIAL",
+                Severity::Critical,
+            )
+            .with_remediation(Remediation::ReplacePrivateKey),
+        )
+        .rule(
+            Rule::literal("demo.secret", "DEMO_SECRET_ALPHA", Severity::High)
+                .with_remediation(Remediation::RemoveSensitiveValue),
+        )
         .build()
 }
 

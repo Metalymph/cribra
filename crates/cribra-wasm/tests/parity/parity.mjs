@@ -43,28 +43,32 @@ const assertDeepEqual = (actual, expected, context) => {
 function buildCanonicalScanner() {
   const builder = new mod.ScanEngineBuilder(false);
 
-  builder.addPrefix(
+  builder.addPrefixWithRemediation(
     "demo.api-key",
     "demo_api_",
     mod.FindingSeverity.Critical,
+    mod.RemediationKind.RotateCredential,
   );
 
-  builder.addPattern(
+  builder.addPatternWithRemediation(
     "demo.password",
     "demo-pass-[A-Za-z0-9_\\-\\p{L}]+",
     mod.FindingSeverity.High,
+    mod.RemediationKind.RotatePassword,
   );
 
-  builder.addLiteral(
+  builder.addLiteralWithRemediation(
     "demo.private-key",
     "DEMO_PRIVATE_KEY_MATERIAL",
     mod.FindingSeverity.Critical,
+    mod.RemediationKind.ReplacePrivateKey,
   );
 
-  builder.addLiteral(
+  builder.addLiteralWithRemediation(
     "demo.secret",
     "DEMO_SECRET_ALPHA",
     mod.FindingSeverity.High,
+    mod.RemediationKind.RemoveSensitiveValue,
   );
 
   return builder.build();
