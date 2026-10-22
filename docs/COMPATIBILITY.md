@@ -153,6 +153,16 @@ This supersedes the historical macOS-only/mocked-Windows status. It does not
 qualify Android, Kotlin Multiplatform, other architectures/JDK versions or
 external Gradle application integration.
 
+P0.7B.2 adds checked-in Kotlin configuration and session conformance to the three
+Just smoke recipes and bundle-builder Gradle gate, using existing direct-Core
+oracles. Each profile executes 21 successful configurations / 19 Core errors,
+224 streaming report comparisons and 12 incremental trace snapshots across
+seven accepted / four rejected edits, plus five explicit CRLF edits and all
+session budgets/lifecycle checks. Generated interface signatures, DTO fields,
+enum cases and profile gating are checked without public API changes. Local
+macOS ARM64 execution is distinct from the historical CI receipts above; new
+Linux/Windows CI execution and published-package qualification are not asserted.
+
 For Python, the raw `linux_x86_64` wheel is distinct from the repaired manylinux
 wheel; do not generalize it to all Linux distributions. macOS wheel metadata
 names macOS 13 as the deployment minimum, but runtime was qualified on macOS 27.

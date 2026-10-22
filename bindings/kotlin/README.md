@@ -34,12 +34,14 @@ bindings/kotlin/
   verify/ClasspathCheck.java     # single-profile classpath verifier
 ```
 
-One module, three source sets: `main` (Core), `flow` (Flow/Share) and `fuse`
-(Fuse). Each source set compiles against exactly one generated binding because all
+One module, three production source sets: `main` (Core), `flow` (Flow/Share) and `fuse`
+(Fuse), plus isolated `coreConformance`, `flowConformance` and `fuseConformance`
+test source sets. Each source set compiles against exactly one generated binding because all
 three bindings declare the `uniffi.cribra_uniffi` package and must never share a
 classpath. JNA is the only runtime dependency of the generated bindings; the
-`flow` and `fuse` smokes additionally use Gson to read the shared JSON fixtures
-and oracle files, but Gson is not part of any profile JAR.
+`flow` and `fuse` smokes and the conformance test source sets additionally use
+the existing Gson dependency to read shared JSON fixtures and oracle files.
+Gson and conformance classes are not part of any profile JAR or ZIP payload.
 
 The generated bindings, oracle outputs, profile JARs and native library are
 **build outputs** under the repository's ignored `target/` and
@@ -88,21 +90,72 @@ just uniffi-kotlin-bundles      # build + verify the three host distribution bun
 
 `uniffi-kotlin-smoke` builds the Core native library, generates the Core binding
 into `target/uniffi-kotlin-smoke/generated` (`--features bindgen,core`) and runs
-`bindings/kotlin/gradlew -p bindings/kotlin run`.
+`bindings/kotlin/gradlew -p bindings/kotlin run runCoreConformance`.
 
 `uniffi-kotlin-flow-smoke` builds the Flow library, generates the Flow binding
 into `target/uniffi-kotlin-flow-smoke/generated` (`--features bindgen,flow`),
 writes the `flow_oracle` and `share_oracle` example outputs into
 `target/uniffi-kotlin-flow-smoke/`, and runs `bindings/kotlin/gradlew -p
-bindings/kotlin runFlow`. The Rust oracle examples are the same ones the
+bindings/kotlin runFlow runFlowConformance`. The Rust oracle examples are the same ones the
 qualified Swift consumer uses; Kotlin does not reimplement Core semantics.
 
 `uniffi-kotlin-fuse-smoke` builds the Fuse library, generates the Fuse binding
 into `target/uniffi-kotlin-fuse-smoke/generated` (`--features bindgen,fuse`),
 writes the `parallel_oracle` example output into
 `target/uniffi-kotlin-fuse-smoke/`, and runs `bindings/kotlin/gradlew -p
-bindings/kotlin runFuse`. It exercises Core-owned parallel scanning without
+bindings/kotlin runFuse runFuseConformance`. It exercises Core-owned parallel scanning without
 reimplementing scheduling or scanning in Kotlin.
+
+### Configuration, stream and incremental conformance (P0.7B.2)
+
+All three smoke recipes also regenerate `scanner_oracle` into their profile's
+`scanner-oracle.json`. Their Gradle conformance tasks compile and execute the
+shared Kotlin tests under `crates/cribra-uniffi/tests/kotlin/` in a fresh JVM.
+`build_bundle.py` runs the same three tasks against its isolated, staged profile
+libraries before assembling local ZIPs. The existing native CI matrix therefore
+requires these consumers to execute successfully; generation or compilation alone
+does not print their PASS markers.
+
+The tests reuse `configurations.json`, `incremental.json`, `api-contract.json`
+and the same direct-Core `scanner_oracle` used by Swift/Python:
+
+- Configuration: 21 successful configurations and 19 Core errors per profile,
+  including independent catalogs, all custom matcher families, metadata order,
+  remediation, candidates and typed explanations.
+- Streaming: 224 complete direct-Core report comparisons per profile, every
+  two-chunk byte split and chunk sizes 1/2/3/7/31, Unicode scalars, empty pushes
+  and source, caller-buffer mutation, all three budgets including enabled zero,
+  exact storage admission, malformed/incomplete UTF-8, EOF failures and terminal
+  repeated operations.
+- Incremental: 12 direct-Core trace snapshots, seven successful and four rejected
+  edits, including no-ops, stale revisions, invalid ranges/scalar boundaries,
+  Unicode/CRLF geometry and complete finding/candidate metadata. Five additional
+  explicit CRLF edits are compared with Core-backed whole-source scans. All four
+  construction/transaction budgets preserve the oracle's errors, terminal state
+  and last committed snapshot. Failed edits never update test input bookkeeping.
+  An active stale-revision error also round-trips `ULong.MAX_VALUE` exactly.
+- Ownership: sessions and complete streaming reports outlive closed scanner wrappers;
+  streaming reports outlive closed sessions; snapshots outlive edits
+  and closed sessions; mutating a returned DTO cannot modify Core. Repeated
+  `close()` is safe and calling a closed Object is rejected by generated code.
+- API compatibility: compiled generated interfaces plus runtime checks for exact
+  method sets, critical JVM signatures, DTO fields, enum cases and Core/Flow/Fuse
+  gating. No public UniFFI API is extended for testing.
+
+To run against already prepared profile outputs, use Gradle
+`runCoreConformance`, `runFlowConformance`, or `runFuseConformance`. Overrides are
+`-Pcribra.kotlin.core.smoke-dir=...` (and `flow`/`fuse` equivalents),
+`-Pcribra.kotlin.generated=...` for Core generated bindings, and
+`-Pcribra.kotlin.<profile>.native=...` for that profile's native directory.
+Each smoke directory must contain its matching generated binding and oracle;
+Flow/Fuse bindings use the existing smoke-directory conventions. Every consumer
+verifies JNA's actual loaded library belongs to the selected profile directory.
+
+Local qualification is macOS ARM64, Kotlin 2.4.21 and JDK 17. Remote execution of
+these new tests on Linux/Windows is not established by wiring the CI workflow.
+Android/KMP, Kotlin concurrent snapshot/race stress, injected panic/poison and rare
+overflow paths are not qualified by these consumer tests. Existing Rust tests
+cover the adapter paths separately; they are not Kotlin runtime evidence.
 
 `uniffi-kotlin-parallel-gating` regenerates the Core, Flow and Fuse bindings and
 asserts that Core-owned parallel scanning (`parallelScan` / `parallel_scan`) is
@@ -406,9 +459,15 @@ The JVM still receives its classpath as one argument directly through
 `java`/`java.exe`, without shell parsing. The workflow runs the standard-library
 `test_bundle_consumer.py` regression checks before building bundles.
 
+The bundle build now also executes all three P0.7B.2 conformance tasks before
+the unchanged isolated ZIP consumers. These new consumers use source fixtures
+and generated bindings; the isolated ZIP consumers remain their separate focused
+distribution checks.
+
 The workflow uploads `cribra-kotlin-<platform>` diagnostic artifacts even when a
 job fails: available distribution ZIPs, the successful qualification JSON, and
-`build.log`/`consumer.log` under `target/uniffi-kotlin-bundle-consumer/`. A build
+`build.log`/`consumer.log` under `target/uniffi-kotlin-bundle-consumer/`, plus the
+per-profile direct-Core `scanner-oracle.json` files. A build
 failure prevents consumer execution; a failed qualification may have a log but
 no JSON report. It does not publish a release or package.
 
