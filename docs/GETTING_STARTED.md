@@ -82,7 +82,8 @@ node crates/cribra-wasm/tests/runtime/qualify.mjs --install-bindgen
 
 See the [WASM adapter guide](../crates/cribra-wasm/README.md) for feature selection.
 There is no WASM Fuse profile; Core/Flow expose sequential batch scanning,
-admitted byte streaming and incremental document interfaces.
+admitted byte streaming and incremental document interfaces, and Flow adds
+Core-backed in-memory Share Bundles.
 
 ## Swift
 

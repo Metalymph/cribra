@@ -21,6 +21,8 @@ mod metadata;
 mod numeric;
 #[cfg(test)]
 mod remediation_tests;
+#[cfg(feature = "transform")]
+mod share_bundle;
 mod streaming;
 pub use batch::{ScanBatchEntry, ScanBatchResult, ScanSummaryView};
 use build_error::BuildFailure;
@@ -30,6 +32,10 @@ pub use incremental::{
     IncrementalSnapshot,
 };
 pub use metadata::{RuleKind, RuleMetadataView};
+#[cfg(feature = "transform")]
+pub use share_bundle::{
+    ShareBundle, ShareBundleBuilder, ShareBundleEntry, ShareManifestView, ShareModeKind,
+};
 pub use streaming::{StreamError, StreamErrorCode, StreamLimits, StreamSession};
 
 use cribra::{
@@ -47,9 +53,14 @@ use cribra::{
 use wasm_bindgen::{JsError, prelude::*};
 
 #[cfg(feature = "transform")]
-fn key32(key: &[u8]) -> Result<[u8; 32], JsError> {
+fn key32_bytes(key: &[u8]) -> Result<[u8; 32], &'static str> {
     key.try_into()
-        .map_err(|_| JsError::new("transformation key must contain exactly 32 bytes"))
+        .map_err(|_| "transformation key must contain exactly 32 bytes")
+}
+
+#[cfg(feature = "transform")]
+fn key32(key: &[u8]) -> Result<[u8; 32], JsError> {
+    key32_bytes(key).map_err(JsError::new)
 }
 
 #[cfg(feature = "transform")]

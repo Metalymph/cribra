@@ -78,6 +78,7 @@ The typed WebAssembly surface includes:
   candidate-evidence values;
 - typed finding and candidate explanations;
 - redact, template, pseudonymize, and synthesize transformations;
+- Flow-only Core-backed in-memory Share Bundles and manifests;
 - exact 32-byte `Uint8Array` keys for keyed transformations;
 - a generic `ScanEngineBuilder`;
 - literal, prefix, suffix, and pattern custom rules;
@@ -89,14 +90,15 @@ outside `cribra-wasm`.
 
 ### Typed projection decision
 
-The completed adapter does not use `serde_json`, `JsValue`, JSON serialization,
-or deserialization for scan/result transport.
+The completed adapter does not use `serde_json`, JSON serialization or
+deserialization for scan/result transport. `JsValue` appears only where
+wasm-bindgen must inspect typed input-array fields at the boundary.
 
 The only explicit owned-copy behavior observed in the adapter is small boundary
-material such as owned rule identifiers. Rust error values are converted to
-strings only when crossing the JavaScript error boundary. The generated
-TypeScript declarations expose typed classes and enums rather than serialized
-generic payloads, and keyed transformations use `Uint8Array`.
+material such as owned rule and source identifiers. Rust error values are
+converted to strings only when crossing the JavaScript error boundary. The
+generated TypeScript declarations expose typed classes and enums rather than
+serialized generic payloads, and keyed transformations use `Uint8Array`.
 
 Typed projection is therefore the retained public boundary.
 
@@ -212,6 +214,50 @@ invalid inputs and lifecycle independence. Node/Bun evidence is recorded in
 does not retroactively change the historical v0.4 performance finding that
 repeated 64 KiB scans showed no material per-source amortization.
 
+### P0.6D Share Bundle contract
+
+Flow WASM adds `ShareBundleBuilder` and owned `ShareBundle`, `ShareBundleEntry`
+and `ShareManifestView` projections. Core WASM omits all four classes and the
+`ShareModeKind` enum. The builder accepts the existing type-only
+`ScanBatchSource[]` shape and delegates the complete ordered collection to one
+Core `ShareBundleBuilder::scan_and_build_with_generated_at()` call. Scanning,
+transformation, source pairing, ordering, manifest construction and all
+Core policy decisions remain inside Core.
+
+The supported mode subset is Core `ShareMode`: redact, default template,
+keyed pseudonymization and keyed synthesis. Keyed options reuse Core defaults;
+the adapter only copies an exact 32-byte key into Core options. No mode is
+selected implicitly, so a missing mode preserves Core's `MissingShareMode`
+error. Core `ShareMode` has no per-bundle template configuration and the WASM
+adapter does not invent one. Core currently exposes no archive, serialization or
+filesystem operation on `ShareBundle`; those responsibilities remain external.
+
+`wasm32-unknown-unknown` does not implement `SystemTime::now()`. Core therefore
+adds an additive public `scan_and_build_with_generated_at()` method that stores
+a caller-supplied `SystemTime` at the same manifest-construction point used by
+the existing `scan_and_build()`. The existing method and `build()` still obtain
+`SystemTime::now()` after transformations, preserving prior behavior. Flow WASM
+reads `Date.now()` once through `wasm-bindgen` at the invocation boundary,
+converts non-negative safe milliseconds to `SystemTime`, and passes it to Core.
+The manifest exposes exact seconds as bigint and nanoseconds as a number; the
+adapter constructs neither manifest fields nor transformations.
+
+`ShareBundle` owns cloned IDs, Core-transformed content and Core manifest
+metadata. It retains no original source text. `entryAt()` returns a fresh owned
+entry, `manifest()` returns a fresh owned manifest and `summary()` returns a
+fresh existing summary projection. Entries, manifests and summaries outlive the
+builder, engine and bundle. Core failures remain source-free JavaScript
+`Error` objects; structural inputs and indexes fail closed. The adapter adds no
+transport dependency, worker, parallel path or source cache.
+
+The generated Flow runtime qualification uses a direct-Core Share Bundle oracle
+over 11 collections and 18 ordered entries, comparing every transformed content,
+manifest mode and summary field. Timestamps are validated against the
+invocation window. Runtime checks also cover key defaults and clamping, mode
+precedence, missing mode, invalid keys/inputs, repeated construction and
+independent lifetimes; Core WASM asserts the complete absence of the new
+exports. Node/Bun evidence is recorded in [Compatibility](COMPATIBILITY.md).
+
 ### Artifact size after capability parity
 
 Release artifacts produced with `wasm-bindgen --target web` after completing
@@ -227,6 +273,23 @@ the v0.4.2 surface measure:
 The unoptimized v0.4.2 WASM binary is the common input for the Binaryen
 comparison below.
 
+Current P0.6D production package, measured from `just wasm-package-check` with
+the default Flow profile and Binaryen `-Oz`:
+
+| Artifact | P0.6D production |
+| --- | ---: |
+| `cribra.js` | 82,408 bytes |
+| `cribra.d.ts` | 39,662 bytes |
+| `cribra_bg.wasm` | 1,417,134 bytes |
+| `cribra_bg.wasm.d.ts` | 10,648 bytes |
+| `package.json` | 18 bytes |
+| Total | 1,549,870 bytes |
+
+This is a local macOS ARM64 generated-runtime measurement, not a published
+package or new CI artifact. The production package validator checks the typed
+Share Bundle declarations, generated glue, expected files and sizes before these
+figures are recorded.
+
 ### Error and ownership boundary
 
 Rust validation remains independently testable on native targets. JavaScript
@@ -234,10 +297,12 @@ error construction occurs only at the exported WASM boundary.
 
 Scan results, batch entries, summaries and incremental snapshots retain metadata
 without source text or transformation keys. Batch results retain caller-supplied
-IDs and Core reports only. Incremental documents retain source exclusively inside
-their Core session. Transform operations require the source to be supplied
-explicitly for each call. Ambiguous candidates remain review-only and are
-never promoted to transform authority.
+IDs and Core reports only. Share Bundles retain cloned IDs, Core-transformed
+content and Core manifest metadata, never original source text or keys.
+Incremental documents retain source exclusively inside their Core session.
+Transform operations require the source to be supplied explicitly for each call.
+Ambiguous candidates remain review-only and are never promoted to transform
+authority.
 
 ## Initialization, errors, Workers, and browser constraints
 
@@ -299,6 +364,8 @@ but every exposed capability delegates to the same Rust core semantics.
 | template / custom template options | yes | yes | semantic parity verified where exposed |
 | keyed pseudonymization | yes | yes | semantic parity verified |
 | keyed deterministic synthesis | yes | yes | semantic parity verified |
+| in-memory Share Bundles and manifests | yes | `ShareBundleBuilder` in Flow only | local generated-runtime direct-Core parity verified |
+| explicit Share Bundle generation timestamp | yes, additive Core method | host `Date.now()` passed to Core in Flow | Core stores the authoritative manifest timestamp |
 | generic ordered multi-source `ScanResults<K>` | yes | `scanBatch()` in both variants | local generated-runtime direct-Core parity verified |
 | aggregate `ScanSummary` counters and predicates | yes | `ScanSummaryView` | local generated-runtime direct-Core parity verified |
 | Rayon parallel scan | optional native feature | no | not a WebAssembly contract |

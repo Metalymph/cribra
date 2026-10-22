@@ -297,11 +297,49 @@ impl ShareBundleBuilder {
         K: Clone,
         I: IntoIterator<Item = (K, &'a str)>,
     {
+        self.scan_and_build_with_clock(scanner, inputs, SystemTime::now)
+    }
+
+    /// Scans and transforms UTF-8 sources atomically with an explicit
+    /// generation timestamp.
+    ///
+    /// This preserves [`Self::scan_and_build`] semantics while allowing hosts
+    /// whose standard library cannot provide `SystemTime::now()` to supply the
+    /// generation time. The timestamp is stored verbatim in the resulting
+    /// manifest; callers are responsible for providing a trustworthy clock.
+    ///
+    /// # Errors
+    ///
+    /// Returns the same errors as [`Self::scan_and_build`].
+    pub fn scan_and_build_with_generated_at<'a, K, I>(
+        &self,
+        scanner: &Scanner,
+        inputs: I,
+        generated_at: SystemTime,
+    ) -> Result<ShareBundle<K>, TransformError>
+    where
+        K: Clone,
+        I: IntoIterator<Item = (K, &'a str)>,
+    {
+        self.scan_and_build_with_clock(scanner, inputs, || generated_at)
+    }
+
+    fn scan_and_build_with_clock<'a, K, I, F>(
+        &self,
+        scanner: &Scanner,
+        inputs: I,
+        clock: F,
+    ) -> Result<ShareBundle<K>, TransformError>
+    where
+        K: Clone,
+        I: IntoIterator<Item = (K, &'a str)>,
+        F: FnOnce() -> SystemTime,
+    {
         let inputs = inputs.into_iter().collect::<Vec<_>>();
 
         let results = scanner.scan(inputs.iter().map(|(key, source)| (key.clone(), *source)));
 
-        self.build(&results, inputs.iter().map(|(_, source)| *source))
+        self.build_with_clock(&results, inputs.iter().map(|(_, source)| *source), clock)
     }
 
     /// Builds transformed sources from scan results and their original UTF-8 text.
@@ -334,6 +372,20 @@ impl ShareBundleBuilder {
         K: Clone,
         I: IntoIterator<Item = &'a str>,
     {
+        self.build_with_clock(results, sources, SystemTime::now)
+    }
+
+    fn build_with_clock<'a, K, I, F>(
+        &self,
+        results: &ScanResults<K>,
+        sources: I,
+        clock: F,
+    ) -> Result<ShareBundle<K>, TransformError>
+    where
+        K: Clone,
+        I: IntoIterator<Item = &'a str>,
+        F: FnOnce() -> SystemTime,
+    {
         let mode = self.mode.as_ref().ok_or(TransformError::MissingShareMode)?;
         let source_list = sources.into_iter().collect::<Vec<_>>();
 
@@ -359,7 +411,7 @@ impl ShareBundleBuilder {
             transformed.push(TransformedSource::new(entry.key().clone(), content));
         }
 
-        let manifest = ShareManifest::new(mode.kind(), results.summary(), SystemTime::now());
+        let manifest = ShareManifest::new(mode.kind(), results.summary(), clock());
 
         Ok(ShareBundle {
             sources: transformed,
@@ -383,6 +435,8 @@ fn transform_source(
 
 #[cfg(test)]
 mod tests {
+    use std::time::{Duration, UNIX_EPOCH};
+
     use crate::{Rule, Scanner, Severity};
 
     use super::*;
@@ -392,6 +446,23 @@ mod tests {
             .rule(Rule::literal("secret", "SECRET", Severity::Critical))
             .build()
             .expect("share bundle test scanner should build")
+    }
+
+    #[test]
+    fn explicit_generation_timestamp_is_stored_verbatim() {
+        let scanner = scanner();
+        let source = "A=SECRET";
+        let generated_at =
+            UNIX_EPOCH + Duration::from_secs(1_700_000_000) + Duration::from_nanos(123_456_789);
+
+        let bundle = ShareBundle::builder()
+            .mode(ShareMode::Redact)
+            .scan_and_build_with_generated_at(&scanner, [("memory", source)], generated_at)
+            .expect("share bundle with explicit timestamp should build");
+
+        assert_eq!(bundle.sources()[0].content(), "A=[REDACTED]");
+        assert_eq!(bundle.manifest().generated_at(), generated_at);
+        assert_eq!(bundle.summary().total_findings(), 1);
     }
 
     #[test]

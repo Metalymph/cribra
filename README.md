@@ -450,9 +450,9 @@ does not route through the C ABI or maintain an independent detector
 implementation.
 
 Cribra supports two WASM build profiles: Core for scanning/reporting and
-Flow for scanning/reporting plus transformations. Flow is the default and
-official distribution profile. Each selected profile can produce an optimized
-WebAssembly artifact using Binaryen `-Oz`.
+Flow for scanning/reporting plus transformations and in-memory Share Bundles.
+Flow is the default and official distribution profile. Each selected profile can
+produce an optimized WebAssembly artifact using Binaryen `-Oz`.
 
 Browser consumers can use the generated URL/fetch initialization path, while
 server-side JavaScript runtimes can initialize the selected artifact explicitly
@@ -463,8 +463,8 @@ Node.js 26.9.0, Bun 1.4.2, and Deno 2.9.7. These versions record the validated
 example environment rather than define a compatibility range.
 
 Rust/WASM parity gates cover findings, spans, metadata, candidates,
-explanations, transformations, the opt-in financial built-ins, and sequential
-batch entries and aggregate summaries.
+explanations, transformations, the opt-in financial built-ins, sequential batch
+entries and aggregate summaries, and Flow Share Bundle content/manifests.
 
 Runnable browser and JavaScript-runtime consumers are available under
 `examples/wasm-browser/` and `examples/wasm-runtime/`.

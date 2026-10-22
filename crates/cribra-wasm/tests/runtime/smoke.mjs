@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { qualifyStreams } from "./stream.mjs";
 import { qualifyIncremental } from "./incremental.mjs";
 import { qualifyBatch } from "./batch.mjs";
+import { assertShareAbsent, qualifyShareBundles, shareExports } from "./share_bundle.mjs";
 import { qualifyRemediation } from "./remediation.mjs";
 import { qualifyConfiguration } from "./configuration.mjs";
 import { readFile } from "node:fs/promises";
@@ -34,6 +35,7 @@ if (variant === "core") {
   expected.ScanResult.members = expected.ScanResult.members.filter(
     (member) => !transformations.has(member.split("(")[0]),
   );
+  for (const name of shareExports) delete expected[name];
 }
 assert.deepEqual(actual, expected, `${variant}: generated TypeScript contract changed`);
 
@@ -71,6 +73,7 @@ for (const [name, { kind, members }] of Object.entries(expected)) {
 for (const method of transformations) {
   assert.equal(method in mod.ScanResult.prototype, variant === "flow", `${variant}: ${method}`);
 }
+if (variant === "core") assertShareAbsent(mod);
 
 const builder = new mod.ScanEngineBuilder(false);
 builder.addLiteral("custom.secret", "SECRET", mod.FindingSeverity.High);
@@ -137,6 +140,11 @@ qualifyIncremental(mod, variant, incrementalCases, incrementalOracle);
 const batchCases = JSON.parse(await readFile(new URL("batch-cases.json", import.meta.url), "utf8"));
 const batchOracle = JSON.parse(await readFile(resolve(directory, "../batch-oracle.json"), "utf8"));
 qualifyBatch(mod, variant, batchCases, batchOracle);
+if (variant === "flow") {
+  const shareCases = JSON.parse(await readFile(new URL("share-cases.json", import.meta.url), "utf8"));
+  const shareOracle = JSON.parse(await readFile(resolve(directory, "../share-oracle.json"), "utf8"));
+  qualifyShareBundles(mod, shareCases, shareOracle);
+}
 const remediationCases = JSON.parse(await readFile(new URL("remediation-cases.json", import.meta.url), "utf8"));
 const configurationOracle = JSON.parse(await readFile(resolve(directory, "../configuration-oracle.json"), "utf8"));
 qualifyRemediation(mod, variant, remediationCases, configurationOracle);

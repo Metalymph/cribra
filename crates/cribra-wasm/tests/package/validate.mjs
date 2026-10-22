@@ -43,6 +43,11 @@ const requiredPublicDeclarations = [
   "export class ScanEngineBuilder",
   "export class ScanResult",
   "export class ScanSummaryView",
+  "export class ShareBundle",
+  "export class ShareBundleBuilder",
+  "export class ShareBundleEntry",
+  "export class ShareManifestView",
+  "export enum ShareModeKind",
 ];
 
 const requiredMethods = [
@@ -50,6 +55,15 @@ const requiredMethods = [
   "scanBatch(sources: ScanBatchSource[]): ScanBatchResult",
   "entryAt(index: number): ScanBatchEntry",
   "summary(): ScanSummaryView",
+  "scanAndBuild(engine: ScanEngine, sources: ScanBatchSource[]): ShareBundle",
+  "modeRedact(): void",
+  "modeTemplate(): void",
+  "modePseudonymize(",
+  "modeSynthesize(",
+  "manifest(): ShareManifestView",
+  "generatedAtSeconds: bigint",
+  "generatedAtNanoseconds: number",
+  "readonly content: string",
   "explainFinding(result: ScanResult, index: number): ExplanationView",
   "findingAt(index: number): FindingView",
   "candidateAt(index: number): CandidateView",
@@ -238,6 +252,10 @@ async function validateGlue() {
     "export class FindingView",
     "export class CandidateView",
     "export class ExplanationView",
+    "export class ShareBundle",
+    "export class ShareBundleBuilder",
+    "export class ShareBundleEntry",
+    "export class ShareManifestView",
     "new URL('cribra_bg.wasm', import.meta.url)",
     "WebAssembly.instantiate",
   ];

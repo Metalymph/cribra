@@ -64,8 +64,15 @@ const metadataOracle = run("cargo", ["run", "--locked", "-p", "cribra-wasm", "--
   stdio: ["ignore", "pipe", "inherit"], encoding: "utf8",
 });
 await writeFile(resolve(shared, "metadata-oracle.json"), metadataOracle);
+const selected = variants.length ? variants : ["core", "flow"];
+if (selected.includes("flow")) {
+  const shareOracle = run("cargo", ["run", "--locked", "-p", "cribra-wasm", "--no-default-features", "--features", "transform", "--example", "share_bundle_oracle"], {
+    stdio: ["ignore", "pipe", "inherit"], encoding: "utf8",
+  });
+  await writeFile(resolve(shared, "share-oracle.json"), shareOracle);
+}
 
-for (const variant of variants.length ? variants : ["core", "flow"]) {
+for (const variant of selected) {
   run("cargo", [
     "build", "-p", "cribra-wasm", "--locked", "--release",
     "--target", "wasm32-unknown-unknown", "--no-default-features",

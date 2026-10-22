@@ -44,11 +44,7 @@ impl ScanEngine {
         &self,
         #[wasm_bindgen(unchecked_param_type = "ScanBatchSource[]")] sources: Vec<JsValue>,
     ) -> Result<ScanBatchResult, JsError> {
-        let inputs = sources
-            .iter()
-            .enumerate()
-            .map(|(index, value)| batch_source(value, index))
-            .collect::<Result<Vec<_>, _>>()?;
+        let inputs = decode_sources(&sources, "batch source")?;
 
         Ok(self.scan_batch_core(inputs))
     }
@@ -80,22 +76,35 @@ impl ScanEngine {
     }
 }
 
-fn batch_source(value: &JsValue, index: usize) -> Result<(String, String), JsError> {
+pub(crate) fn decode_sources(
+    values: &[JsValue],
+    context: &str,
+) -> Result<Vec<(String, String)>, JsError> {
+    values
+        .iter()
+        .enumerate()
+        .map(|(index, value)| decode_source(value, index, context))
+        .collect()
+}
+
+fn decode_source(
+    value: &JsValue,
+    index: usize,
+    context: &str,
+) -> Result<(String, String), JsError> {
     if !value.is_object() {
         return Err(JsError::new(&format!(
-            "batch source at index {index} must be an object"
+            "{context} at index {index} must be an object"
         )));
     }
 
     let input: &ScanBatchSource = value.unchecked_ref();
     let id = input.id().as_string().ok_or_else(|| {
-        JsError::new(&format!(
-            "batch source at index {index} must have a string id"
-        ))
+        JsError::new(&format!("{context} at index {index} must have a string id"))
     })?;
     let source = input.source().as_string().ok_or_else(|| {
         JsError::new(&format!(
-            "batch source at index {index} must have a string source"
+            "{context} at index {index} must have a string source"
         ))
     })?;
 

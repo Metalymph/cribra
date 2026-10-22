@@ -241,6 +241,53 @@
       "readonly sourceBytes: number"
     ]
   },
+  "ShareBundle": {
+    "kind": "class",
+    "members": [
+      "entryAt(index: number): ShareBundleEntry",
+      "isEmpty(): boolean",
+      "manifest(): ShareManifestView",
+      "summary(): ScanSummaryView",
+      "readonly length: number"
+    ]
+  },
+  "ShareBundleBuilder": {
+    "kind": "class",
+    "members": [
+      "modePseudonymize(key: Uint8Array, prefix?: string | null, digest_bytes?: number | null): void",
+      "modeRedact(): void",
+      "modeSynthesize(key: Uint8Array, marker?: string | null): void",
+      "modeTemplate(): void",
+      "constructor()",
+      "scanAndBuild(engine: ScanEngine, sources: ScanBatchSource[]): ShareBundle"
+    ]
+  },
+  "ShareBundleEntry": {
+    "kind": "class",
+    "members": [
+      "readonly content: string",
+      "readonly id: string"
+    ]
+  },
+  "ShareManifestView": {
+    "kind": "class",
+    "members": [
+      "summary(): ScanSummaryView",
+      "readonly generatedAtNanoseconds: number",
+      "readonly generatedAtSeconds: bigint",
+      "readonly mode: ShareModeKind"
+    ]
+  },
+  "ShareModeKind": {
+    "kind": "enum",
+    "members": [
+      "Redact = 0",
+      "Template = 1",
+      "Pseudonymize = 2",
+      "Synthesize = 3",
+      "Unknown = 4"
+    ]
+  },
   "ScanSummaryView": {
     "kind": "class",
     "members": [

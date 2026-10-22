@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { makeEngine, projectReport } from "./stream.mjs";
 
-function projectSummary(mod, summary) {
+export function projectSummary(mod, summary) {
   try {
     const fields = {
       scannedSources: summary.scannedSources,

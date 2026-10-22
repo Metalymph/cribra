@@ -1,8 +1,8 @@
 # Compatibility and distribution status
 
 Evidence reviewed on 2026-10-20; P0.4/P0.5 WASM source streaming and incremental
-scanning and P0.6A/P0.6B/P0.6C adapter configuration/metadata/batch scanning
-locally checked on 2026-10-21.
+scanning, P0.6A/P0.6B/P0.6C adapter configuration/metadata/batch scanning and
+P0.6D Flow Share Bundles locally checked on 2026-10-22.
 This is a snapshot of distinct contracts:
 **implemented** means an API/build path exists; **locally qualified** means a
 consumer ran on the recorded host; **CI-qualified** means the named remote job
@@ -35,7 +35,7 @@ artifacts have retention limits and are not permanent release downloads.
 | --- | --- | --- | --- |
 | Rust | Scan/report, built-ins/custom rules, stream and incremental | Default `transform`: Core plus four transforms and Share Bundles | Flow plus `serde` and `parallel` |
 | UniFFI → Swift/Python/Kotlin | `core`: Scanner/configuration, batch, stream, incremental/atomic snapshot | `flow`: Core plus Redact, Template, Pseudonymize, Synthesize and Share Bundles | `fuse`: Flow plus Core-owned parallel scanning |
-| WASM | `--no-default-features`: scanning/reporting, sequential multi-source batches, admitted byte streaming and incremental documents/snapshots | Default `transform`: transformations; published distribution profile | Not supported |
+| WASM | `--no-default-features`: scanning/reporting, sequential multi-source batches, admitted byte streaming and incremental documents/snapshots | Default `transform`: transformations plus Core-backed in-memory Share Bundles; published distribution profile | Not supported |
 
 Rust Core/Flow/Fuse are feature combinations, not Cargo features named `core`,
 `flow` and `fuse`; those names are explicit UniFFI features. The C ABI 0.3.0
@@ -97,6 +97,34 @@ candidates, all summary fields, invalid inputs, repeated scans and independent
 lifetimes. These are macOS ARM64 generated-runtime checks, not new CI, browser or
 published-package qualifications.
 
+P0.6D adds Flow-only WASM Share Bundles through an additive `ShareBundleBuilder`
+and owned `ShareBundle`, `ShareBundleEntry` and `ShareManifestView` objects.
+Core WASM omits these classes and `ShareModeKind`. The adapter delegates the
+complete ordered source collection to Core
+`ShareBundleBuilder::scan_and_build_with_generated_at()`, preserving Core modes,
+defaults, validation, source pairing, transformations, summary and manifest
+semantics. Redact, default template, keyed pseudonymization and keyed synthesis
+are exposed; Core has no per-bundle template options or archive/serialization
+operation, so the adapter does not invent them.
+
+`wasm32-unknown-unknown` has no working `SystemTime::now()`. Core adds the
+additive timestamp-injecting entry point while retaining the original
+`scan_and_build()` and `build()` behavior and timing. Flow obtains the host clock
+through `Date.now()` and passes it to Core, which stores it verbatim. No manifest
+or transformation logic is duplicated in the adapter. Bundle outputs own cloned
+IDs, transformed content and metadata, retain no original source text, and
+outlive builders, engines and bundles with explicit `free()` lifetimes.
+
+Local Node/Bun qualification compares 11 Share Bundle collections, 18 ordered
+entries and 11 manifests per Flow runtime against a direct-Core oracle,
+including all modes, keyed defaults/clamping, clean/finding/candidate-only
+sources, Unicode IDs/content, empty and duplicate IDs, missing mode, invalid keys
+and inputs, repeated construction and independent lifetimes. Timestamps are
+checked against the invocation window rather than compared across independent
+runs; Core WASM is checked for export absence. These are macOS ARM64
+generated-runtime checks, not new CI, browser or published-package
+qualifications.
+
 Use one matching generated binding/native library/profile set per process.
 Kotlin additionally requires one profile JAR per classpath; Swift requires one
 package exposing `Cribra`. Runtime checksums and profile guards do not authorize
@@ -112,7 +140,7 @@ consumer guides retain the detailed fixture, ownership, error and parity scope.
 | Surface | Local evidence | Completed CI evidence / limits |
 | --- | --- | --- |
 | Rust / C | Existing release qualification and native examples | [Engine CI](https://github.com/Metalymph/cribra/actions/runs/39411373054): Linux full gate, native Linux ARM64, RISC-V64 under QEMU, macOS/Windows tests; native C ABI gates on Ubuntu/macOS/Windows. This does not qualify every language binding on those platforms |
-| WASM | Existing production browser and Node 26.9.0 / Bun 1.4.2 / Deno 2.9.7 consumers. P0.4/P0.5 source sessions and P0.6C batches: local macOS ARM64, Node 26.12.0 / Bun 1.4.3, generated Core/Flow contracts; 216 streaming reports plus 77 incremental snapshots across 68 edit attempts plus 8 batch cases / 20 ordered entries per variant/runtime against direct-Core oracles | [WASM CI](https://github.com/Metalymph/cribra/actions/runs/39411373136): earlier wasm32 gate and Core/Flow JS/TypeScript contracts; predates P0.4/P0.5 sessions. No Fuse; session browser execution and Deno are not qualified by this local run. Browser lifecycle, Workers and CSP remain caller concerns |
+| WASM | Existing production browser and Node 26.9.0 / Bun 1.4.2 / Deno 2.9.7 consumers. P0.4/P0.5 source sessions, P0.6C batches and P0.6D Flow Share Bundles: local macOS ARM64, Node 26.12.0 / Bun 1.4.3, generated Core/Flow contracts; 216 streaming reports plus 77 incremental snapshots across 68 edit attempts plus 8 batch cases / 20 ordered entries per variant/runtime, plus 11 Share Bundle collections / 18 ordered entries per Flow runtime, against direct-Core oracles | [WASM CI](https://github.com/Metalymph/cribra/actions/runs/39411373136): earlier wasm32 gate and Core/Flow JS/TypeScript contracts; predates P0.4/P0.5 sessions. No Fuse; session browser execution and Deno are not qualified by this local run. Browser lifecycle, Workers and CSP remain caller concerns |
 | Swift | macOS ARM64, Swift 6.4; external macOS consumer runs; real ARM64 device and Simulator archives built | [Swift Apple integration](https://github.com/Metalymph/cribra/actions/runs/39411373180) passed all three packages/external consumers. iOS Simulator compile/link only; no simulator launch or device execution claim. Declared macOS 13/iOS 16 deployment minimums are not runtime tests on every OS. Intel slices are absent |
 | Python | macOS 27.0.1 ARM64; installed Fuse wheel on CPython 3.11.17/3.12.15/3.13.7/3.14.8; source consumers Core 25, Flow 40, Fuse 43 tests | Linux x86_64 and repaired `manylinux_2_28_x86_64` installed-wheel gates passed in [engine CI](https://github.com/Metalymph/cribra/actions/runs/39411373054); native Windows x86_64 CPython 3.11–3.14 passed in [engine CI](https://github.com/Metalymph/cribra/actions/runs/39411373054). No musl, ARM64 Linux/Windows, Intel macOS or older macOS runtime qualification |
 | Kotlin/JVM | macOS ARM64 fixture/oracle smokes and isolated bundle consumers | [NB-3.6A CI](https://github.com/Metalymph/cribra/actions/runs/39411373200), commit `0c7ac77f4e3eb959929977f3ecadbb9263824dcf`: macOS ARM64 (`macos-15`), Linux x86_64 (`ubuntu-24.04`), Windows x86_64 (`windows-2022`); Rust 1.97.0, Kotlin 2.4.21, JDK 17 |

@@ -22,7 +22,8 @@ The adapter provides:
 - Core-owned incremental UTF-8 documents, revisioned edits and owned snapshots;
 - sequential multi-source scanning through one Core batch invocation;
 - redaction and templating;
-- keyed pseudonymization and deterministic synthesis.
+- keyed pseudonymization and deterministic synthesis;
+- Core-backed in-memory Share Bundles in the Flow configuration.
 
 The adapter does not route through Cribra's native C ABI and does not use JSON
 serialization as its transport boundary.
@@ -39,7 +40,7 @@ The WASM adapter supports two configurations:
 | Configuration | Features | API |
 | --- | --- | --- |
 | Core | `--no-default-features` | Scanner, built-ins, custom rules, findings, candidates, explanations, reporting, admitted byte streams, incremental documents and sequential batches |
-| Flow | `transform` (enabled by default) | Core plus all existing transformation APIs |
+| Flow | `transform` (enabled by default) | Core plus all existing transformation APIs and Share Bundles |
 
 Flow is the default and the official published configuration. Its JavaScript
 API and transformation semantics are unchanged. Core omits the `ScanResult`
@@ -64,7 +65,7 @@ with `wasm-bindgen` for JavaScript consumption.
 Rust core Fuse adds `parallel` and `serde` to Flow. These features are not
 part of the supported browser WASM API; the adapter has no Fuse configuration.
 Streaming, incremental sessions and sequential batches are available in both
-configurations.
+configurations. Share Bundles are Flow-only.
 
 ## Custom rule remediation
 
@@ -445,6 +446,144 @@ Ordering and ownership are explicit:
 - reusing a `ScanResult` with `ScanEngine.explainFinding()` still requires a
   compatible engine, as with every existing result.
 
+## Share Bundles
+
+Share Bundles are available **only in the Flow configuration** (`transform`).
+Core WASM exports no Share Bundle classes. Flow exposes the additive typed
+builder and owned result surface below; scanning, transformation, source
+ordering, validation and manifest construction all delegate to Core
+`ShareBundleBuilder::scan_and_build_with_generated_at()`.
+
+```ts
+export class ShareBundleBuilder {
+    constructor();
+    modeRedact(): void;
+    modeTemplate(): void;
+    modePseudonymize(key: Uint8Array, prefix?: string | null,
+        digest_bytes?: number | null): void;
+    modeSynthesize(key: Uint8Array, marker?: string | null): void;
+    scanAndBuild(engine: ScanEngine, sources: ScanBatchSource[]): ShareBundle;
+    free(): void;
+}
+
+export class ShareBundle {
+    readonly length: number;
+    isEmpty(): boolean;
+    entryAt(index: number): ShareBundleEntry;
+    manifest(): ShareManifestView;
+    summary(): ScanSummaryView;
+    free(): void;
+}
+
+export class ShareBundleEntry {
+    readonly id: string;
+    readonly content: string;
+    free(): void;
+}
+
+export class ShareManifestView {
+    readonly mode: ShareModeKind;
+    readonly generatedAtSeconds: bigint;
+    readonly generatedAtNanoseconds: number;
+    summary(): ScanSummaryView;
+    free(): void;
+}
+
+export enum ShareModeKind {
+    Redact = 0,
+    Template = 1,
+    Pseudonymize = 2,
+    Synthesize = 3,
+    Unknown = 4,
+}
+```
+
+`ScanBatchSource` is reused: each input is `{ readonly id: string; readonly
+source: string }`. Empty, duplicate and Unicode IDs are preserved by Core;
+input order, clean sources, finding spans, candidates and UTF-8 byte lengths
+retain Core semantics. Ambiguous candidates remain review-only and are never
+transformed as findings.
+
+```js
+const engine = new ScanEngine();
+const builder = new ShareBundleBuilder();
+builder.modePseudonymize(crypto.getRandomValues(new Uint8Array(32)), "pseudo_", 16);
+const bundle = builder.scanAndBuild(engine, [
+  { id: "prod.env", source: "TOKEN=ghp_..." },
+  { id: "notes.txt", source: "ordinary text" },
+]);
+try {
+  for (let index = 0; index < bundle.length; index += 1) {
+    const entry = bundle.entryAt(index); // fresh owned entry
+    try {
+      console.log(entry.id, entry.content);
+    } finally {
+      entry.free();
+    }
+  }
+  const manifest = bundle.manifest(); // fresh owned manifest
+  const summary = manifest.summary(); // fresh owned summary
+  try {
+    console.log(manifest.mode, manifest.generatedAtSeconds,
+      manifest.generatedAtNanoseconds, summary.totalFindings);
+  } finally {
+    summary.free();
+    manifest.free();
+  }
+} finally {
+  bundle.free();
+  builder.free();
+  engine.free();
+}
+```
+
+Configuration and failure semantics:
+
+- no mode is selected by default, preserving Core `MissingShareMode`;
+- the most recently selected mode wins; invalid key validation fails before a
+  mode is staged and does not change an already selected mode;
+- `modeTemplate()` uses Core's default Share Bundle template policy because the
+  Core `ShareMode` contract exposes no template options for bundles;
+- keyed modes require exactly 32 key bytes. The caller's `Uint8Array` is copied
+  into Core options and is not retained by the adapter;
+- omitted `prefix`, `digest_bytes` and `marker` retain Core defaults. Explicit
+  empty strings are preserved. Core clamps pseudonym digest lengths to its
+  supported range;
+- Core transformation, source-length and missing-mode failures retain their
+  existing source-free diagnostics as native JavaScript `Error` objects;
+- structural `sources` inputs are validated before Core and never echo source
+  text. `entryAt()` fails closed for an out-of-range index.
+
+Timestamp handling is explicit. `wasm32-unknown-unknown` does not implement
+`SystemTime::now()`, so the adapter reads the JavaScript host clock once through
+`Date.now()` at the invocation boundary, converts the non-negative safe-integer
+milliseconds to `SystemTime`, and passes it to Core's additive
+`scan_and_build_with_generated_at()` entry point. Core remains the sole owner of
+manifest mode, summary and timestamp storage; the adapter does not construct
+manifest fields itself. `generatedAtSeconds` is a bigint and
+`generatedAtNanoseconds` is always below one billion. Tests compare
+deterministic manifest fields and validate the timestamp against the invocation
+window rather than expecting independently generated timestamps to match.
+
+Ownership boundaries:
+
+- the builder owns only Core mode configuration, including keyed options;
+- input IDs/sources are borrowed for one `scanAndBuild()` call and original
+  source text is not retained;
+- the bundle owns cloned IDs, Core-transformed content and Core manifest
+  metadata;
+- every `entryAt()`, `manifest()` and `summary()` call returns a fresh owned
+  projection;
+- entries, manifests and summaries remain valid after the builder, engine and
+  bundle are freed. Free each object exactly once and never use it after
+  `free()`.
+
+The WASM surface intentionally exposes only Core's atomic `scan_and_build()`
+workflow. It does not expose precomputed `ScanResults` build, arbitrary
+timestamps from JavaScript, archives, serialization, filesystem output or
+custom bundle template options. No transport, worker, parallel path or new
+runtime dependency is involved.
+
 ## Runtime and release qualification
 
 Run the generated JavaScript/TypeScript API contract and runtime smoke checks
@@ -500,6 +639,18 @@ out-of-range indexes, then free the engine and batch before reusing independentl
 owned entries, reports and summaries. Flow additionally compares all six
 transforms. The adapter remains synchronous and adds no runtime dependency or
 parallel execution.
+
+A fourth direct-Core oracle exercises the Flow-only Share Bundle surface with
+11 source collections: empty, single and multiple sources; clean, finding and
+candidate-only inputs; Unicode IDs/content; empty and duplicate IDs; all four
+modes; keyed defaults and explicit configurations; and Core's missing-mode
+failure. Both originals and transformed content are compared with a direct-Core
+`ShareBundleBuilder` invocation, along with manifest mode and every summary
+field. Timestamps are checked against the invocation window, not compared
+between independent runs. Runtime checks cover repeated construction, mode
+precedence, invalid keys and structural inputs, out-of-range entries, candidate
+review semantics, and lifetimes after freeing the builder, engine and bundle.
+Core WASM is checked for complete absence of the five Share Bundle exports.
 
 The custom-remediation oracle qualifies all four families and seven concrete
 actions plus every no-remediation form: 44 configurations and 132 complete
