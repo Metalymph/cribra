@@ -5,7 +5,7 @@ and safely transforming secrets and sensitive material. The Rust core is the
 semantic authority; adapters project applicable core behavior rather than
 reimplementing detection policy.
 
-**Latest Core GitHub release: [v0.7.1](https://github.com/Metalymph/cribra/releases/tag/v0.7.1).**
+**Latest Core GitHub release: [v0.7.2](https://github.com/Metalymph/cribra/releases/tag/v0.7.2).**
 The registry index independently confirms crates.io publication. Current work
 focuses on independently versioned integrations and developer experience; see
 [Getting started](docs/GETTING_STARTED.md) and [Compatibility](docs/COMPATIBILITY.md).
@@ -37,7 +37,8 @@ focuses on independently versioned integrations and developer experience; see
 | `cribra` **v0.6.0** | **Released — complete** | Exact incremental scanning of mutable documents |
 | `cribra-wasm` **v0.4.7** | **Released — complete** | Compatibility update to core `^0.6`; existing JS/WASM API unchanged |
 | `cribra` **v0.7.0** | Released | Incremental performance, configurable profiles and integration quality |
-| `cribra` **v0.7.1** | Latest Core GitHub release; crates.io verified | htpasswd CRLF detection fix |
+| `cribra` **v0.7.1** | Released | htpasswd CRLF detection fix |
+| `cribra` **v0.7.2** | Latest Core GitHub release; crates.io verified | P0.7 adapter conformance, binding alignment and qualification |
 
 Core release-line numbering does not force synchronized CLI, C, WASM, or
 language-binding versions. Adapter parity applies to each adapter's documented,
@@ -367,6 +368,22 @@ features are not automatically present in any adapter.
 - Homebrew and Debian/Ubuntu APT distribution remain planned independently;
   packaged binaries must preserve canonical CLI semantics and version identity.
 
+### Planned language integrations
+
+These integrations are independent adapter workstreams, not missing Rust Core
+features. Their status is **PLANNED**, not implemented or qualified.
+
+| Target | Planned integration | Status |
+| --- | --- | --- |
+| TypeScript | Higher-level wrapper over existing typed WASM exports | PLANNED |
+| TypeScript / React Native | UniFFI integration and mobile runtime qualification | PLANNED |
+| C# / .NET | Binding over the existing C ABI | PLANNED |
+| Go | Binding over the existing C ABI via cgo | PLANNED |
+| PHP | Binding over the existing C ABI via FFI | PLANNED |
+
+Each integration requires its own ownership, error, packaging and consumer
+qualification gates. No new Rust detection implementation is planned.
+
 ### Native FFI and bindings
 
 - Maintain the C ABI and its applicable parity contract, ownership rules,
@@ -393,7 +410,7 @@ features are not automatically present in any adapter.
   examples; the presence of an ABI does not qualify every language consumer.
 - No additional Rust adapter is planned solely for another language unless
   demonstrated interoperability limitations justify one.
-- Go and Ruby bindings are not currently planned.
+- Ruby bindings are not currently planned.
 - Each future integration requires applicable parity, lifetime/ownership and
   error contracts, adversarial conformance, packaging and consumer tests.
 
