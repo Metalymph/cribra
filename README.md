@@ -166,12 +166,12 @@ the C ABI/FFI boundary. The core engine itself does not permit unsafe Rust.
 
 ### Rust core
 
-Core v0.7.1 is available on [crates.io](https://crates.io/crates/cribra/0.7.1)
+Core v0.7.2 is available on [crates.io](https://crates.io/crates/cribra/0.7.2)
 (verified against the registry index). Rust 1.97 is the MSRV.
 
 ```toml
 [dependencies]
-cribra = "0.7.1"
+cribra = "0.7.2"
 ```
 
 Flow enables transformations by default. Core keeps scanner, built-ins,
@@ -179,7 +179,7 @@ streaming, incremental sessions and reporting without the transformation layer
 or its BLAKE3 dependency:
 
 ```toml
-cribra = { version = "0.7.1", default-features = false }
+cribra = { version = "0.7.2", default-features = false }
 ```
 
 The standalone `Redaction` marker type remains available in Core. Enable
@@ -187,7 +187,7 @@ The standalone `Redaction` marker type remains available in Core. Enable
 with `serde` and `parallel`:
 
 ```toml
-cribra = { version = "0.7.1", features = ["serde", "parallel"] }
+cribra = { version = "0.7.2", features = ["serde", "parallel"] }
 ```
 
 | Feature | Default | Purpose |
@@ -542,14 +542,43 @@ cargo publish -p cribra-cli --dry-run
 See `CONTRIBUTING.md`, `SECURITY.md`, and `ROADMAP.md` for the broader project
 contracts.
 
+## Language bindings and interoperability
+
+Cribra uses one Rust detection engine across native and cross-language
+integration surfaces. Adapter availability does not imply identical packaging
+or platform qualification.
+
+| Language / platform | Integration | Status |
+| --- | --- | --- |
+| Rust | Native Core crate | AVAILABLE |
+| C / C++ | Native C ABI | AVAILABLE |
+| Swift | UniFFI Core / Flow / Fuse | AVAILABLE |
+| Python | UniFFI Core / Flow / Fuse | AVAILABLE |
+| Kotlin/JVM | UniFFI Core / Flow / Fuse | AVAILABLE |
+| JavaScript / TypeScript | `wasm-bindgen` adapter and generated TypeScript declarations | AVAILABLE |
+| TypeScript | Higher-level WebAssembly wrapper | PLANNED |
+| TypeScript / React Native | UniFFI integration | PLANNED |
+| C# / .NET | C ABI integration | PLANNED |
+| Go | C ABI integration (cgo) | PLANNED |
+| PHP | C ABI integration (FFI) | PLANNED |
+
+The planned TypeScript wrapper is distinct from the existing typed WASM
+exports. React Native, C#, Go and PHP bindings are not yet implemented or
+qualified.
+
+See [Interoperability](docs/INTEROP.md) for the implemented adapter capability
+matrix and [Compatibility](docs/COMPATIBILITY.md) for versions, distribution
+and qualification boundaries.
+
 ## Release status
 
 The completed `0.4.x` line established Cribra's current detection, validation,
 transformation, C ABI, WebAssembly, and downstream-consumer foundation.
 
-Core **[v0.7.1](https://github.com/Metalymph/cribra/releases/tag/v0.7.1)**
-is the latest GitHub release and is separately verified on crates.io. It fixes
-htpasswd CRLF detection. **v0.7.0**, released before it, introduced incremental
+Core **[v0.7.2](https://github.com/Metalymph/cribra/releases/tag/v0.7.2)**
+is the latest GitHub release and is separately verified on crates.io.
+It completes the P0.7 adapter conformance and release alignment.
+**v0.7.1** fixed htpasswd CRLF detection. **v0.7.0** introduced incremental
 performance improvements and configurable Rust/WASM profiles.
 
 The historical **v0.6.0** release introduced

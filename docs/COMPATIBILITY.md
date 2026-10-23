@@ -13,14 +13,14 @@ package publication. See [Getting started](GETTING_STARTED.md) for entry points.
 
 | Component | Source contract | Verified publication / distribution |
 | --- | --- | --- |
-| Rust Core `cribra` | 0.7.1; MSRV 1.97 | Latest [Core GitHub release](https://github.com/Metalymph/cribra/releases/tag/v0.7.1); independently confirmed non-yanked 0.7.1 in the [crates.io sparse registry index](https://index.crates.io/cr/ib/cribra) (published 2026-10-16) |
+| Rust Core `cribra` | 0.7.2; MSRV 1.97 | Latest [Core GitHub release](https://github.com/Metalymph/cribra/releases/tag/v0.7.2); independently verified 0.7.2 on crates.io |
 | CLI `cribra-cli` / executable `cribra` | 0.4.4; workspace currently uses Core `^0.7` | Source build available; no CLI record found in the official registry index at this audit; Core releases do not establish CLI publication |
 | C adapter `cribra-capi` | 0.3.0; native ABI protocol 0.3.0 | Source-built dynamic/static libraries and checked-in header; Cargo `publish = false` |
 | WASM `cribra-wasm` | 0.4.7; workspace currently uses Core `^0.7` | [Independent GitHub release](https://github.com/Metalymph/cribra/releases/tag/cribra-wasm-v0.4.7); [registry 0.4.7](https://github.com/rust-lang/crates.io-index/blob/master/cr/ib/cribra-wasm) depends on Core `^0.6`. Published and workspace dependency contracts differ |
-| Shared `cribra-uniffi` | 0.1.0; Core 0.7.1; UniFFI exactly 0.32.2; Rust 1.97 | Cargo `publish = false`; shared generator/adapter, not a second detection engine |
+| Shared `cribra-uniffi` | 0.1.0; Core 0.7.2; UniFFI exactly 0.32.2; Rust 1.97 | Cargo `publish = false`; shared generator/adapter, not a second detection engine |
 | Swift | Product/module `Cribra`; Core/Flow/Fuse local packages | Generated Swift/headers/static archives/XCFrameworks; local SwiftPM dependency, no remote SwiftPM publication established |
-| Python | Fuse wheel `cribra` 0.7.1+fuse; module `cribra_uniffi` | Local/CI wheels; no PyPI publication established |
-| Kotlin/JVM | Profile JAR/ZIP names use Core 0.7.1; adapter 0.1.0 | Local and CI host ZIPs; no Maven Central or other package publication established |
+| Python | Fuse wheel `cribra` 0.7.2+fuse; module `cribra_uniffi` | Local/CI wheels; no PyPI publication established |
+| Kotlin/JVM | Profile JAR/ZIP names use Core 0.7.2; adapter 0.1.0 | Local and CI host ZIPs; no Maven Central or other package publication established |
 
 Crates.io publication was checked separately from GitHub: Core via the sparse
 index, WASM via the official Git index; the CLI index path returned 404.
@@ -28,6 +28,10 @@ GitHub Core v0.7.0 and v0.7.1 releases have no attached binary assets. Generated
 binding outputs are ignored build products; source-controlled packaging does not
 make a checkout immediately usable as a prebuilt binary dependency. CI diagnostic
 artifacts have retention limits and are not permanent release downloads.
+
+The TypeScript WASM wrapper, React Native UniFFI integration, and C#,
+Go and PHP C ABI bindings are planned workstreams. They are not included
+among the implemented or qualified adapter surfaces above.
 
 ## Feature and capability boundaries
 
