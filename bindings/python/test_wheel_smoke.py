@@ -59,7 +59,7 @@ def pe_dll(machine=0x8664, characteristics=0x2000 | 0x0002):
 
 
 def write_wheel(root, *, tag=WINDOWS_TAG, library=WINDOWS_LIBRARY, native_members=None,
-                purelib="false", version="0.7.1+fuse", requires_python=">=3.11",
+                purelib="false", version="0.7.2+fuse", requires_python=">=3.11",
                 requires_dist=None, include_license=True):
     """Write a synthetic installed wheel plus a matching build-info.json under `root`."""
     generated = root / "generated.py"
@@ -235,7 +235,7 @@ class InstalledConsumerTests(unittest.TestCase):
         self.empty_path.mkdir()
         self.executable = self.external / "python"
         self.test = self.external / "test_installed_consumer.py"
-        self.wheel = self.external / "cribra-0.7.1+fuse-py3-none-manylinux_2_28_x86_64.whl"
+        self.wheel = self.external / "cribra-0.7.2+fuse-py3-none-manylinux_2_28_x86_64.whl"
         self.root = self.external / "repository"
 
     def qualify(self, calls, install_code=0, platform="linux"):

@@ -893,6 +893,41 @@ exposes built-in pack composition.
 
 Canonical or shared fixtures are preferred over unrelated duplicated corpora.
 
+### Adapter capability matrix
+
+The following matrix summarizes adapter capabilities. A check mark indicates
+an exposed capability, not identical APIs or universal platform qualification.
+
+| Capability | C ABI | Swift | Kotlin/JVM | Python | WebAssembly |
+| --- | :---: | :---: | :---: | :---: | :---: |
+| Scanner and configuration | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Findings, candidates and coordinates | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Metadata, remediation and explanations | ✓ | ✓ | ✓ | ✓ | ✓ |
+| UTF-8 streaming | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Incremental scanning | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Batch scanning | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Transformations | ✓ | ✓ | ✓ | ✓ | ✓ |
+| In-memory Share Bundles | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Parallel scanning | ✓ | ✓ | ✓ | ✓ | —* |
+
+**Notes**
+
+- **C ABI parallel scanning:** `CRIBRA_BATCH_EXECUTION_AUTO` may use parallel
+  execution when the `cribra-capi/parallel` feature is enabled; otherwise
+  execution remains serial.
+- **Swift, Kotlin/JVM and Python:** transformations and Share Bundles require
+  Flow or Fuse; parallel scanning requires Fuse.
+- **WebAssembly:** transformations and Share Bundles require Flow.
+  Rayon parallel scanning is intentionally outside the WebAssembly contract.
+- **Streaming:** only Core-admitted scanner configurations support streaming.
+- **Semantic parity:** equivalent supported operations preserve Core semantics.
+  This matrix does not imply identical APIs, identical profile availability,
+  or qualification on every operating system and runtime.
+
+See [compatibility and qualification](COMPATIBILITY.md),
+[WebAssembly interoperability](WASM_INTEROP.md), and the individual adapter
+consumer guides for evidence and platform boundaries.
+
 ## 25. Normative interoperability invariants
 
 The following invariants govern Cribra interoperability.
