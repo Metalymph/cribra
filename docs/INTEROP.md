@@ -361,6 +361,61 @@ concurrent destruction memory-safe.
 
 Those remain caller contract violations inherent to a native FFI boundary.
 
+### P0.7 — Raw Pointer Safety and CodeQL Audit
+
+An output-slot address is distinct from the pointer stored in that slot. For
+example, `CribraReport **out_report` addresses caller-owned pointer storage;
+`*out_report` may initially be null without `out_report` itself being null.
+Required output slots must be valid, correctly aligned, writable for the complete
+output value, and live throughout the call. Callers must obey documented
+exclusive-access and non-aliasing requirements for slots, inputs and handles.
+Checking a pointer for null does not validate arbitrary foreign memory.
+
+Optional diagnostic slots may be null. `ErrorSlot` checks its slot address for
+null before reading or writing through it. A non-null diagnostic slot must meet
+its documented readable/writable lifetime and exclusive-access requirements;
+its stored error pointer may initially be null.
+
+`clear_out()` writes null into a pointer slot; `clear_value()` writes a default
+record, including any null pointer fields. Neither dereferences nor frees a
+pointer previously stored there. Callers MUST release previously owned outputs
+before reusing their slots. Successful handle/report-producing calls transfer
+Rust allocations through `Box::into_raw()`; each must be released exactly once
+using its corresponding Cribra destruction function, never the caller allocator.
+See [§6, Native ownership and lifetime model](#6-native-ownership-and-lifetime-model).
+
+Incremental snapshot reports and finished-stream reports are independently
+owned. They remain valid after subsequent edits and destruction of their
+originating session or scanner, until `cribra_report_free()` releases them.
+Copying a snapshot record or raw pointer does not duplicate ownership. Borrowed
+views still require their owner to remain alive; APIs requiring a scanner still
+require a live scanner.
+
+Negative C ABI tests may store null or `ptr::dangling_mut()` sentinels in valid
+output slots to verify clearing or replacement. Passing the address of such a
+slot is different from passing a dangling slot address. Sentinels must never be
+dereferenced or freed, and successful outputs must be checked before use.
+
+**Historical audit.** The read-only audit of PR #53 at commit
+`d412cee1da90bf087171645a4cc8717fdbed6fc0` reviewed CodeQL Rust analysis
+`2004343041`, CodeQL version 2.27.3, rule `rust/access-invalid-pointer`.
+The 39 PR alerts (#59–#97) were individually classified as false positives,
+including review of 48 explicit PR code flows. Three separate existing
+`ErrorSlot` alerts (#4, #23, #24) were also classified as false positives. No
+genuine memory-safety defect was identified among the reported paths.
+
+Observed alert paths propagated initial null or sentinel values past checked
+successful output writes and complete snapshot replacement, or conflated stored
+pointer values with slot addresses and included guarded null diagnostic slots.
+These observations describe the exported analysis; they do not establish
+CodeQL's internal implementation or the precise cause of its results.
+
+The conclusions apply only to the audited revision and paths, depend on the
+documented unsafe FFI caller contracts, and do not prove whole-library memory
+safety. They do not automatically classify future alerts or justify disabling
+or suppressing the CodeQL rule. Future alerts require independent review. See
+the [§23 threat model](#23-threat-model) for caller-memory and lifetime limitations.
+
 ## 9. Scanner construction
 
 The native builder mirrors Cribra's explicit scanner-construction model.
