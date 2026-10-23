@@ -1,0 +1,645 @@
+[
+  {
+    "name": "unicode-custom-edits",
+    "rules": [
+      {
+        "kind": "literal",
+        "id": "custom/clé-🔑",
+        "value": "秘密🔑",
+        "severity": "High"
+      },
+      {
+        "kind": "prefix",
+        "id": "prefix",
+        "value": "pre_",
+        "severity": "Critical"
+      },
+      {
+        "kind": "suffix",
+        "id": "suffix",
+        "value": "_END",
+        "severity": "Medium"
+      },
+      {
+        "kind": "pattern",
+        "id": "pattern",
+        "value": "code[0-9]{2}",
+        "severity": "Low"
+      },
+      {
+        "kind": "pattern",
+        "id": "unbounded",
+        "value": "a+",
+        "severity": "Info"
+      }
+    ],
+    "source": "前\r\né🙂é 秘密🔑 pre_ABC-12 token_END code42\nABCD-EFGH-IJKL-MNOP\nQRST-UVWX-YZ12-3456",
+    "edits": [
+      {
+        "revision": "18446744073709551615",
+        "start": 0,
+        "end": 0,
+        "replacement": "DO_NOT_EXPOSE"
+      },
+      {
+        "revision": "9007199254740993",
+        "start": 0,
+        "end": 0,
+        "replacement": ""
+      },
+      {
+        "revision": "0",
+        "start": 1,
+        "end": 1,
+        "replacement": ""
+      },
+      {
+        "revision": "0",
+        "start": 3,
+        "end": 2,
+        "replacement": ""
+      },
+      {
+        "revision": "0",
+        "start": 0,
+        "end": 4294967295,
+        "replacement": ""
+      },
+      {
+        "revision": "0",
+        "start": 0,
+        "end": 0,
+        "replacement": ""
+      },
+      {
+        "revision": "1",
+        "start": 77,
+        "end": 79,
+        "replacement": "秘密🔑"
+      },
+      {
+        "revision": "2",
+        "start": 60,
+        "end": 61,
+        "replacement": "SECRET"
+      },
+      {
+        "revision": "3",
+        "start": 74,
+        "end": 76,
+        "replacement": "é🙂"
+      },
+      {
+        "revision": "4",
+        "start": 21,
+        "end": 26,
+        "replacement": "pre_ABC "
+      },
+      {
+        "revision": "5",
+        "start": 39,
+        "end": 39,
+        "replacement": "code42"
+      },
+      {
+        "revision": "6",
+        "start": 30,
+        "end": 32,
+        "replacement": " token_END "
+      },
+      {
+        "revision": "7",
+        "start": 127,
+        "end": 127,
+        "replacement": "ABCD-EFGH-IJKL-MNOP"
+      },
+      {
+        "revision": "8",
+        "start": 147,
+        "end": 147,
+        "replacement": "aaa"
+      },
+      {
+        "revision": "9",
+        "start": 92,
+        "end": 94,
+        "replacement": "\r\n"
+      },
+      {
+        "revision": "10",
+        "start": 59,
+        "end": 59,
+        "replacement": ""
+      },
+      {
+        "revision": "11",
+        "start": 98,
+        "end": 101,
+        "replacement": "é"
+      },
+      {
+        "revision": "12",
+        "start": 33,
+        "end": 33,
+        "replacement": "秘密🔑"
+      },
+      {
+        "revision": "13",
+        "start": 103,
+        "end": 109,
+        "replacement": "SECRET"
+      },
+      {
+        "revision": "14",
+        "start": 3,
+        "end": 4,
+        "replacement": "é🙂"
+      },
+      {
+        "revision": "15",
+        "start": 108,
+        "end": 110,
+        "replacement": "pre_ABC "
+      },
+      {
+        "revision": "16",
+        "start": 141,
+        "end": 141,
+        "replacement": "code42"
+      },
+      {
+        "revision": "17",
+        "start": 73,
+        "end": 76,
+        "replacement": " token_END "
+      },
+      {
+        "revision": "18",
+        "start": 91,
+        "end": 94,
+        "replacement": "ABCD-EFGH-IJKL-MNOP"
+      },
+      {
+        "revision": "19",
+        "start": 54,
+        "end": 56,
+        "replacement": "aaa"
+      },
+      {
+        "revision": "20",
+        "start": 189,
+        "end": 190,
+        "replacement": "\r\n"
+      },
+      {
+        "revision": "21",
+        "start": 166,
+        "end": 166,
+        "replacement": ""
+      },
+      {
+        "revision": "22",
+        "start": 127,
+        "end": 127,
+        "replacement": "é"
+      },
+      {
+        "revision": "23",
+        "start": 191,
+        "end": 194,
+        "replacement": "秘密🔑"
+      },
+      {
+        "revision": "24",
+        "start": 132,
+        "end": 133,
+        "replacement": "SECRET"
+      },
+      {
+        "revision": "25",
+        "start": 150,
+        "end": 152,
+        "replacement": "é🙂"
+      },
+      {
+        "revision": "26",
+        "start": 38,
+        "end": 44,
+        "replacement": "pre_ABC "
+      },
+      {
+        "revision": "27",
+        "start": 151,
+        "end": 152,
+        "replacement": "code42"
+      },
+      {
+        "revision": "28",
+        "start": 3,
+        "end": 9,
+        "replacement": " token_END "
+      },
+      {
+        "revision": "29",
+        "start": 4,
+        "end": 7,
+        "replacement": "ABCD-EFGH-IJKL-MNOP"
+      },
+      {
+        "revision": "30",
+        "start": 135,
+        "end": 136,
+        "replacement": "aaa"
+      },
+      {
+        "revision": "31",
+        "start": 52,
+        "end": 52,
+        "replacement": "\r\n"
+      },
+      {
+        "revision": "32",
+        "start": 248,
+        "end": 249,
+        "replacement": ""
+      },
+      {
+        "revision": "33",
+        "start": 79,
+        "end": 82,
+        "replacement": "é"
+      },
+      {
+        "revision": "34",
+        "start": 242,
+        "end": 243,
+        "replacement": "秘密🔑"
+      },
+      {
+        "revision": "35",
+        "start": 101,
+        "end": 101,
+        "replacement": "SECRET"
+      },
+      {
+        "revision": "36",
+        "start": 177,
+        "end": 177,
+        "replacement": "é🙂"
+      },
+      {
+        "revision": "37",
+        "start": 264,
+        "end": 264,
+        "replacement": "pre_ABC "
+      },
+      {
+        "revision": "38",
+        "start": 185,
+        "end": 186,
+        "replacement": "code42"
+      },
+      {
+        "revision": "39",
+        "start": 194,
+        "end": 196,
+        "replacement": " token_END "
+      },
+      {
+        "revision": "40",
+        "start": 150,
+        "end": 153,
+        "replacement": "ABCD-EFGH-IJKL-MNOP"
+      }
+    ]
+  },
+  {
+    "name": "builtin-metadata",
+    "builtins": true,
+    "rules": [],
+    "source": "password=CorrectHorseBatteryStaple\nGITHUB_TOKEN=ghp_AbCdEf0123456789_AbCdEf0123456789\nABCD-EFGH-IJKL-MNOP",
+    "edits": [
+      {
+        "revision": "0",
+        "start": 0,
+        "end": 0,
+        "replacement": "é🙂\r\n"
+      },
+      {
+        "revision": "1",
+        "start": 0,
+        "end": "end",
+        "replacement": "$2b$12$abcdefghijklmnopqrstuuabcdefghijklmnopqrstuvwxyzABCDE\nABCD-EFGH-IJKL-MNOP"
+      },
+      {
+        "revision": "2",
+        "start": 0,
+        "end": "end",
+        "replacement": ""
+      },
+      {
+        "revision": "3",
+        "start": 0,
+        "end": 0,
+        "replacement": "password=CorrectHorseBatteryStaple"
+      },
+      {
+        "revision": "4",
+        "start": 0,
+        "end": "end",
+        "replacement": "password=CorrectHorseBatteryStaple"
+      }
+    ]
+  },
+  {
+    "name": "empty-and-reviews",
+    "rules": [],
+    "source": "",
+    "edits": [
+      {
+        "revision": "0",
+        "start": 0,
+        "end": 0,
+        "replacement": ""
+      },
+      {
+        "revision": "1",
+        "start": 0,
+        "end": 0,
+        "replacement": "é🙂 ABCD-EFGH-IJKL-MNOP"
+      },
+      {
+        "revision": "2",
+        "start": 3,
+        "end": 3,
+        "replacement": "DO_NOT_EXPOSE"
+      },
+      {
+        "revision": "2",
+        "start": 0,
+        "end": "end",
+        "replacement": ""
+      }
+    ]
+  },
+  {
+    "name": "maxCandidates-zero",
+    "rules": [
+      {
+        "kind": "literal",
+        "id": "literal",
+        "value": "SECRET",
+        "severity": "High"
+      }
+    ],
+    "source": "",
+    "limits": {
+      "maxCandidates": 0
+    },
+    "edits": [
+      {
+        "revision": "0",
+        "start": 0,
+        "end": 0,
+        "replacement": "SECRET"
+      },
+      {
+        "revision": "0",
+        "start": 0,
+        "end": 0,
+        "replacement": ""
+      }
+    ]
+  },
+  {
+    "name": "maxCandidates-construction",
+    "rules": [
+      {
+        "kind": "literal",
+        "id": "literal",
+        "value": "SECRET",
+        "severity": "High"
+      }
+    ],
+    "source": "SECRET",
+    "limits": {
+      "maxCandidates": 0
+    },
+    "edits": []
+  },
+  {
+    "name": "maxRetainedCacheRecords-zero",
+    "rules": [
+      {
+        "kind": "literal",
+        "id": "literal",
+        "value": "SECRET",
+        "severity": "High"
+      }
+    ],
+    "source": "",
+    "limits": {
+      "maxRetainedCacheRecords": 0
+    },
+    "edits": [
+      {
+        "revision": "0",
+        "start": 0,
+        "end": 0,
+        "replacement": "SECRET"
+      },
+      {
+        "revision": "0",
+        "start": 0,
+        "end": 0,
+        "replacement": ""
+      }
+    ]
+  },
+  {
+    "name": "maxRetainedCacheRecords-construction",
+    "rules": [
+      {
+        "kind": "literal",
+        "id": "literal",
+        "value": "SECRET",
+        "severity": "High"
+      }
+    ],
+    "source": "SECRET",
+    "limits": {
+      "maxRetainedCacheRecords": 0
+    },
+    "edits": []
+  },
+  {
+    "name": "maxMaterializedResults-zero",
+    "rules": [
+      {
+        "kind": "literal",
+        "id": "literal",
+        "value": "SECRET",
+        "severity": "High"
+      }
+    ],
+    "source": "",
+    "limits": {
+      "maxMaterializedResults": 0
+    },
+    "edits": [
+      {
+        "revision": "0",
+        "start": 0,
+        "end": 0,
+        "replacement": "SECRET"
+      },
+      {
+        "revision": "0",
+        "start": 0,
+        "end": 0,
+        "replacement": ""
+      }
+    ]
+  },
+  {
+    "name": "maxMaterializedResults-construction",
+    "rules": [
+      {
+        "kind": "literal",
+        "id": "literal",
+        "value": "SECRET",
+        "severity": "High"
+      }
+    ],
+    "source": "SECRET",
+    "limits": {
+      "maxMaterializedResults": 0
+    },
+    "edits": []
+  },
+  {
+    "name": "storage-zero",
+    "rules": [
+      {
+        "kind": "literal",
+        "id": "literal",
+        "value": "SECRET",
+        "severity": "High"
+      }
+    ],
+    "source": "",
+    "limits": {
+      "maxTransactionStorageBytes": 0
+    },
+    "edits": []
+  },
+  {
+    "name": "storage-construction",
+    "rules": [
+      {
+        "kind": "literal",
+        "id": "literal",
+        "value": "SECRET",
+        "severity": "High"
+      }
+    ],
+    "source": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "limits": {
+      "maxTransactionStorageBytes": 1024
+    },
+    "edits": []
+  },
+  {
+    "name": "storage-terminal",
+    "rules": [
+      {
+        "kind": "literal",
+        "id": "literal",
+        "value": "SECRET",
+        "severity": "High"
+      }
+    ],
+    "source": "",
+    "limits": {
+      "maxTransactionStorageBytes": 1024
+    },
+    "edits": [
+      {
+        "revision": "0",
+        "start": 0,
+        "end": 0,
+        "replacement": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+      },
+      {
+        "revision": "0",
+        "start": 0,
+        "end": 0,
+        "replacement": ""
+      }
+    ]
+  },
+  {
+    "name": "cache-old-and-staged",
+    "rules": [
+      {
+        "kind": "literal",
+        "id": "literal",
+        "value": "SECRET",
+        "severity": "High"
+      }
+    ],
+    "source": "SECRET",
+    "limits": {
+      "maxRetainedCacheRecords": 1
+    },
+    "edits": [
+      {
+        "revision": "0",
+        "start": 0,
+        "end": 6,
+        "replacement": "SECRET"
+      },
+      {
+        "revision": "0",
+        "start": 0,
+        "end": 6,
+        "replacement": ""
+      }
+    ]
+  },
+  {
+    "name": "terminal-after-committed-edit",
+    "rules": [
+      {
+        "kind": "literal",
+        "id": "literal",
+        "value": "SECRET",
+        "severity": "High"
+      }
+    ],
+    "source": "",
+    "limits": {
+      "maxCandidates": 1
+    },
+    "edits": [
+      {
+        "revision": "0",
+        "start": 0,
+        "end": 0,
+        "replacement": "SECRET"
+      },
+      {
+        "revision": "1",
+        "start": 6,
+        "end": 6,
+        "replacement": " SECRET SECRET"
+      },
+      {
+        "revision": "1",
+        "start": 0,
+        "end": 6,
+        "replacement": ""
+      }
+    ]
+  }
+]

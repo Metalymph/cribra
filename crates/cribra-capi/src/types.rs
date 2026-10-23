@@ -2,6 +2,74 @@
 
 use std::ptr;
 
+/// Optional per-operation budgets for one Core incremental document.
+///
+/// Each enabled flag must be 0 (unlimited; ignore the value) or 1 (use the
+/// value). Enabled zero is a real zero budget, with no sentinel values.
+/// Zero-initialization leaves all four budgets unlimited. Old and staged data
+/// may coexist; these are Core logical payload limits, not total heap caps.
+#[repr(C)]
+#[derive(Debug, Copy, Clone, Default)]
+pub struct CribraIncrementalLimits {
+    /// Enables the per-operation raw rule candidate limit, including rejections.
+    pub max_candidates_enabled: u32,
+    /// Maximum newly emitted raw rule candidates per construction or edit.
+    pub max_candidates: usize,
+    /// Enables the simultaneous old and staged cache record limit.
+    pub max_retained_cache_records_enabled: u32,
+    /// Maximum rule/structural cache records, including hidden and rejected ones.
+    pub max_retained_cache_records: usize,
+    /// Enables the per-operation finding/structural result materialization limit.
+    pub max_materialized_results_enabled: u32,
+    /// Maximum materialized result records; suppression refunds no tickets.
+    pub max_materialized_results: usize,
+    /// Enables the conservative logical transaction payload limit.
+    pub max_transaction_storage_bytes_enabled: u32,
+    /// Maximum logical transaction bytes, including the old snapshot.
+    pub max_transaction_storage_bytes: usize,
+}
+
+/// One coherent, independently owned view of a committed incremental document.
+///
+/// The record exposes no source text. On success, the caller owns `report` and
+/// must free it exactly once with cribra_report_free. Copying this C record does
+/// not duplicate ownership. Release an earlier report before reusing its output
+/// slot. Failure clears the entire output to zeros/null and transfers no report.
+#[repr(C)]
+#[derive(Debug, Default)]
+pub struct CribraIncrementalSnapshot {
+    /// Revision of this exact source length and complete report, initially zero.
+    pub revision: u64,
+    /// Length of the committed source in UTF-8 bytes.
+    pub source_bytes: usize,
+    /// Owned complete report, independent of future edits and the session lifetime.
+    pub report: *mut crate::CribraReport,
+}
+
+/// Optional budgets for one Core streaming source.
+///
+/// Every enabled flag must be exactly 0 (unlimited) or 1 (use the corresponding
+/// value). Disabled values are ignored. Enabled zero is a real zero budget;
+/// no numeric value is a sentinel. A zero-initialized configuration is unlimited.
+/// Storage is Core's logical executor payload, excluding allocator overhead,
+/// spare capacity, compiled rules, validator workspace and output records.
+#[repr(C)]
+#[derive(Debug, Copy, Clone, Default)]
+pub struct CribraStreamLimits {
+    /// Enables the cumulative raw rule candidate limit, including rejections.
+    pub max_candidates_enabled: u32,
+    /// Maximum raw rule candidates; structural reviews use the result budget.
+    pub max_candidates: usize,
+    /// Enables Core's checked logical storage admission limit.
+    pub max_stream_storage_bytes_enabled: u32,
+    /// Maximum logical executor storage in bytes, checked before allocation.
+    pub max_stream_storage_bytes: usize,
+    /// Enables the retained finding plus structural review result limit.
+    pub max_retained_results_enabled: u32,
+    /// Maximum accepted records before normalization/suppression; no refunds.
+    pub max_retained_results: usize,
+}
+
 /// Borrowed UTF-8 string view.
 ///
 /// The pointed-to bytes are not NUL-terminated. The view does not own memory
@@ -62,6 +130,8 @@ pub const CRIBRA_REMEDIATION_REPLACE_PRIVATE_KEY: CribraRemediation = 4;
 pub const CRIBRA_REMEDIATION_REMOVE_SENSITIVE_VALUE: CribraRemediation = 5;
 /// Review whether the hash is appropriate to expose.
 pub const CRIBRA_REMEDIATION_REVIEW_SENSITIVE_HASH: CribraRemediation = 6;
+/// Review a password verifier for offline-cracking exposure.
+pub const CRIBRA_REMEDIATION_REVIEW_PASSWORD_VERIFIER: CribraRemediation = 7;
 /// A remediation variant is newer than this ABI projection understands.
 pub const CRIBRA_REMEDIATION_UNKNOWN: CribraRemediation = 0xFFFF_FFFF;
 
@@ -182,6 +252,61 @@ pub const CRIBRA_RULE_KIND_PREFIX: CribraRuleKind = 1;
 pub const CRIBRA_RULE_KIND_SUFFIX: CribraRuleKind = 2;
 /// Full regex-match span projection.
 pub const CRIBRA_RULE_KIND_PATTERN: CribraRuleKind = 3;
+
+/// Scanner-owned presentation metadata, in Core rule order.
+///
+/// `rule_id` borrows immutable scanner storage until cribra_scanner_free. Copy
+/// its bytes before freeing the scanner if they are needed longer. Do not free
+/// the view. No matcher, regex, validator or scanned source is exposed.
+#[repr(C)]
+#[derive(Debug, Copy, Clone, Default)]
+pub struct CribraRuleMetadataView {
+    /// Stable UTF-8 rule identifier, not NUL-terminated.
+    pub rule_id: CribraStringView,
+    /// Core matching family using existing CRIBRA_RULE_KIND_* values.
+    pub kind: CribraRuleKind,
+    /// Core scanner authority using existing CRIBRA_DETECTION_MODE_* values.
+    pub detection_mode: CribraDetectionMode,
+    /// Default severity assigned by Core.
+    pub severity: CribraSeverity,
+    /// Core remediation or CRIBRA_REMEDIATION_NONE.
+    pub remediation: CribraRemediation,
+}
+
+/// Stable scanner-construction category, separate from coarse CribraStatus.
+pub type CribraBuildErrorCode = u32;
+/// The error is not a Core rule/scanner-construction failure.
+pub const CRIBRA_BUILD_CODE_NONE: CribraBuildErrorCode = 0;
+/// Core rejected regex syntax or regex compilation resources.
+pub const CRIBRA_BUILD_CODE_INVALID_PATTERN: CribraBuildErrorCode = 1;
+/// Core rejected a pattern capable of matching empty input.
+pub const CRIBRA_BUILD_CODE_PATTERN_MATCHES_EMPTY: CribraBuildErrorCode = 2;
+/// A Core capture-aware rule names an absent capture group.
+pub const CRIBRA_BUILD_CODE_MISSING_CAPTURE_GROUP: CribraBuildErrorCode = 3;
+/// Core rejected an empty rule identity.
+pub const CRIBRA_BUILD_CODE_EMPTY_RULE_ID: CribraBuildErrorCode = 4;
+/// Core rejected duplicate rule identities, including catalog collisions.
+pub const CRIBRA_BUILD_CODE_DUPLICATE_RULE_ID: CribraBuildErrorCode = 5;
+/// Core rejected an empty literal, prefix or suffix matcher.
+pub const CRIBRA_BUILD_CODE_EMPTY_MATCHER: CribraBuildErrorCode = 6;
+/// Core's rule-index capacity was exceeded.
+pub const CRIBRA_BUILD_CODE_TOO_MANY_RULES: CribraBuildErrorCode = 7;
+/// Core could not compile the shared automaton.
+pub const CRIBRA_BUILD_CODE_AUTOMATON_BUILD: CribraBuildErrorCode = 8;
+
+/// Borrowed structured information for one owned error, without diagnostic parsing.
+///
+/// Non-construction errors have code NONE and a null rule_id. A non-null rule_id
+/// borrows error-owned UTF-8 bytes until cribra_error_free; do not free the view.
+/// EmptyRuleId and failures without a Core/constructor identity have no rule ID.
+#[repr(C)]
+#[derive(Debug, Copy, Clone, Default)]
+pub struct CribraBuildErrorView {
+    /// Stable Core-derived category, independent of human-readable messages.
+    pub code: CribraBuildErrorCode,
+    /// Optional rule identity; null means absent, including on non-build errors.
+    pub rule_id: CribraStringView,
+}
 
 /// Borrowed configuration used to add one public custom rule.
 ///

@@ -1,6 +1,10 @@
 package cribra.kotlin.verify.consumer
 
 import cribra.kotlin.profile.CoreProfile
+import uniffi.cribra_uniffi.Explanation
+import uniffi.cribra_uniffi.DetectionMode
+import uniffi.cribra_uniffi.Remediation
+import uniffi.cribra_uniffi.CandidateEvidence
 import uniffi.cribra_uniffi.ScanSource
 import uniffi.cribra_uniffi.Scanner
 import uniffi.cribra_uniffi.Severity
@@ -33,6 +37,12 @@ fun main(args: Array<String>) {
         check(finding.ruleId.value == "github.classic-pat") {
             "unexpected rule ${finding.ruleId.value}"
         }
+        check(finding.remediation == Remediation.REVOKE_AND_ROTATE_CREDENTIAL)
+        check(finding.explanation == Explanation.Classified(DetectionMode.DETERMINISTIC))
+        val review = scanner.scan(ScanSource(SourceId("review"), "é🙂 ABCD-EFGH-IJKL-MNOP"))
+        check(review.candidateCount == 1UL && review.needsReview && review.findings.isEmpty())
+        check(review.candidates.single().location.start == 7UL)
+        check(review.candidates.single().explanation == Explanation.Ambiguous(CandidateEvidence.STRUCTURAL))
         check(finding.severity == Severity.CRITICAL) {
             "unexpected severity ${finding.severity}"
         }

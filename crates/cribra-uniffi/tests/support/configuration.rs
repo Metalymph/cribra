@@ -53,6 +53,12 @@ pub fn cases() -> Vec<Case> {
                     "builtInOnly" => ScannerConfig::BuiltInOnly,
                     "customOnly" => ScannerConfig::CustomOnly { rules },
                     "builtInAndCustom" => ScannerConfig::BuiltInAndCustom { rules },
+                    "catalogs" => ScannerConfig::Catalogs {
+                        current: value["current"].as_bool().unwrap(),
+                        financial: value["financial"].as_bool().unwrap(),
+                        personal: value["personal"].as_bool().unwrap(),
+                        rules,
+                    },
                     _ => panic!("unknown fixture mode"),
                 },
                 source: value["source"].as_str().unwrap_or("").to_owned(),
@@ -71,14 +77,26 @@ fn rule_error(error: &cribra::RuleError, id: Option<&str>) -> Value {
 }
 
 pub fn core_build(config: &ScannerConfig) -> Result<cribra::Scanner, Value> {
-    let (builtins, specs) = match config {
-        ScannerConfig::BuiltInOnly => (true, &[][..]),
-        ScannerConfig::CustomOnly { rules } => (false, rules.as_slice()),
-        ScannerConfig::BuiltInAndCustom { rules } => (true, rules.as_slice()),
+    let (current, financial, personal, specs) = match config {
+        ScannerConfig::BuiltInOnly => (true, false, false, &[][..]),
+        ScannerConfig::CustomOnly { rules } => (false, false, false, rules.as_slice()),
+        ScannerConfig::BuiltInAndCustom { rules } => (true, false, false, rules.as_slice()),
+        ScannerConfig::Catalogs {
+            current,
+            financial,
+            personal,
+            rules,
+        } => (*current, *financial, *personal, rules.as_slice()),
     };
     let mut builder = cribra::Scanner::builder();
-    if builtins {
+    if current {
         builder = builder.builtins(cribra::builtins::CURRENT);
+    }
+    if financial {
+        builder = builder.builtins(cribra::builtins::financial::CURRENT);
+    }
+    if personal {
+        builder = builder.builtins(cribra::builtins::personal::CURRENT);
     }
     for spec in specs {
         let severity = match spec.severity {

@@ -4,12 +4,39 @@
 //!
 //! This crate projects the authoritative Rust-native `cribra` core into a
 //! JavaScript-friendly WebAssembly API. It contains no DOM, Worker, networking,
-//! storage, or application-specific policy logic.
+//! external storage, or application-specific policy logic.
 //!
 //! Browser consumers own source lifecycle and isolation. Source text crosses
 //! the WASM boundary only for explicit operations such as scanning or
-//! transformation. Scan results retain metadata only; they never retain the
+//! transformation. Incremental sessions let Core exclusively own an editable
+//! document. Results and snapshots retain metadata only; they never retain the
 //! scanned source text or matched sensitive values.
+
+mod batch;
+mod build_error;
+#[cfg(test)]
+mod configuration_tests;
+mod incremental;
+mod metadata;
+mod numeric;
+#[cfg(test)]
+mod remediation_tests;
+#[cfg(feature = "transform")]
+mod share_bundle;
+mod streaming;
+pub use batch::{ScanBatchEntry, ScanBatchResult, ScanSummaryView};
+use build_error::BuildFailure;
+pub use build_error::ScannerBuildErrorCode;
+pub use incremental::{
+    IncrementalError, IncrementalErrorCode, IncrementalLimits, IncrementalSession,
+    IncrementalSnapshot,
+};
+pub use metadata::{RuleKind, RuleMetadataView};
+#[cfg(feature = "transform")]
+pub use share_bundle::{
+    ShareBundle, ShareBundleBuilder, ShareBundleEntry, ShareManifestView, ShareModeKind,
+};
+pub use streaming::{StreamError, StreamErrorCode, StreamLimits, StreamSession};
 
 use cribra::{
     CandidateEvidence, Confidence, DetectionMode, Explanation, Finding, Remediation, Rule,
@@ -26,9 +53,14 @@ use cribra::{
 use wasm_bindgen::{JsError, prelude::*};
 
 #[cfg(feature = "transform")]
-fn key32(key: &[u8]) -> Result<[u8; 32], JsError> {
+fn key32_bytes(key: &[u8]) -> Result<[u8; 32], &'static str> {
     key.try_into()
-        .map_err(|_| JsError::new("transformation key must contain exactly 32 bytes"))
+        .map_err(|_| "transformation key must contain exactly 32 bytes")
+}
+
+#[cfg(feature = "transform")]
+fn key32(key: &[u8]) -> Result<[u8; 32], JsError> {
+    key32_bytes(key).map_err(JsError::new)
 }
 
 #[cfg(feature = "transform")]
@@ -74,6 +106,17 @@ impl ScanEngine {
     /// Resolution fails closed when the result cannot be mapped back to this
     /// scanner's rule authority.
     #[wasm_bindgen(js_name = explainFinding)]
+    pub fn explain_finding_js(
+        &self,
+        result: &ScanResult,
+        #[wasm_bindgen(unchecked_param_type = "number")] index: JsValue,
+    ) -> Result<ExplanationView, JsError> {
+        self.explain_finding(result, numeric::js_index(&index)?)
+    }
+}
+
+impl ScanEngine {
+    /// Resolves a finding against Core's scanner authority at a Rust index.
     pub fn explain_finding(
         &self,
         result: &ScanResult,
@@ -169,8 +212,62 @@ impl ScanEngineBuilder {
         pattern: &str,
         severity: FindingSeverity,
     ) -> Result<(), JsError> {
-        self.add_pattern_core(id, pattern, severity)
-            .map_err(|error| JsError::new(&error))
+        self.add_pattern_structured(id, pattern, severity, None)
+            .map_err(BuildFailure::into_js)
+    }
+
+    /// Adds a literal with optional Core remediation. Missing/null/None preserves
+    /// the default. Unknown is an output-only value and is rejected before staging.
+    #[wasm_bindgen(js_name = addLiteralWithRemediation)]
+    pub fn add_literal_with_remediation(
+        &mut self,
+        id: &str,
+        value: &str,
+        severity: FindingSeverity,
+        remediation: Option<RemediationKind>,
+    ) -> Result<(), JsError> {
+        self.push_remediated_rule_structured(Rule::literal(id, value, severity.into()), remediation)
+            .map_err(BuildFailure::into_js)
+    }
+
+    /// Adds a token-prefix rule with optional Core remediation; matching is unchanged.
+    #[wasm_bindgen(js_name = addPrefixWithRemediation)]
+    pub fn add_prefix_with_remediation(
+        &mut self,
+        id: &str,
+        value: &str,
+        severity: FindingSeverity,
+        remediation: Option<RemediationKind>,
+    ) -> Result<(), JsError> {
+        self.push_remediated_rule_structured(Rule::prefix(id, value, severity.into()), remediation)
+            .map_err(BuildFailure::into_js)
+    }
+
+    /// Adds a token-suffix rule with optional Core remediation; matching is unchanged.
+    #[wasm_bindgen(js_name = addSuffixWithRemediation)]
+    pub fn add_suffix_with_remediation(
+        &mut self,
+        id: &str,
+        value: &str,
+        severity: FindingSeverity,
+        remediation: Option<RemediationKind>,
+    ) -> Result<(), JsError> {
+        self.push_remediated_rule_structured(Rule::suffix(id, value, severity.into()), remediation)
+            .map_err(BuildFailure::into_js)
+    }
+
+    /// Adds a Core pattern with optional remediation. Core rejects invalid or
+    /// nullable patterns before staging; remediation changes no matching semantics.
+    #[wasm_bindgen(js_name = addPatternWithRemediation)]
+    pub fn add_pattern_with_remediation(
+        &mut self,
+        id: &str,
+        pattern: &str,
+        severity: FindingSeverity,
+        remediation: Option<RemediationKind>,
+    ) -> Result<(), JsError> {
+        self.add_pattern_structured(id, pattern, severity, remediation)
+            .map_err(BuildFailure::into_js)
     }
 
     /// Returns the number of custom rules staged in this builder.
@@ -181,27 +278,82 @@ impl ScanEngineBuilder {
 
     /// Validates and compiles this configuration into an immutable engine.
     pub fn build(self) -> Result<ScanEngine, JsError> {
-        self.build_core().map_err(|error| JsError::new(&error))
+        self.build_structured().map_err(BuildFailure::into_js)
     }
 }
 
 impl ScanEngineBuilder {
     /// Native-safe validation path used by both the WASM export and Rust tests.
+    #[cfg(test)]
     fn add_pattern_core(
         &mut self,
         id: &str,
         pattern: &str,
         severity: FindingSeverity,
     ) -> Result<(), String> {
-        let rule = Rule::pattern(id, pattern, Severity::from(severity))
-            .map_err(|error| error.to_string())?;
+        self.add_pattern_with_remediation_core(id, pattern, severity, None)
+    }
+
+    #[cfg(test)]
+    fn add_pattern_with_remediation_core(
+        &mut self,
+        id: &str,
+        pattern: &str,
+        severity: FindingSeverity,
+        remediation: Option<RemediationKind>,
+    ) -> Result<(), String> {
+        self.add_pattern_structured(id, pattern, severity, remediation)
+            .map_err(|error| error.message)
+    }
+
+    fn add_pattern_structured(
+        &mut self,
+        id: &str,
+        pattern: &str,
+        severity: FindingSeverity,
+        remediation: Option<RemediationKind>,
+    ) -> Result<(), BuildFailure> {
+        let rule = Rule::pattern(id, pattern, severity.into())
+            .map_err(|error| BuildFailure::rule(error, Some(id.to_owned())))?;
+        self.push_remediated_rule_structured(rule, remediation)
+    }
+
+    #[cfg(test)]
+    fn push_remediated_rule(
+        &mut self,
+        rule: Rule,
+        remediation: Option<RemediationKind>,
+    ) -> Result<(), String> {
+        self.push_remediated_rule_structured(rule, remediation)
+            .map_err(|error| error.message)
+    }
+
+    fn push_remediated_rule_structured(
+        &mut self,
+        rule: Rule,
+        remediation: Option<RemediationKind>,
+    ) -> Result<(), BuildFailure> {
+        let remediation = remediation_core(remediation).map_err(|message| BuildFailure {
+            code: ScannerBuildErrorCode::InvalidRemediation,
+            rule_id: Some(rule.id().to_string()),
+            message,
+        })?;
+        let rule = match remediation {
+            Some(remediation) => rule.with_remediation(remediation),
+            None => rule,
+        };
         self.rules.push(rule);
         Ok(())
     }
 
     /// Native-safe scanner compilation path used by both the WASM export and
     /// Rust tests. JavaScript error construction stays at the exported edge.
+    #[cfg(test)]
     fn build_core(self) -> Result<ScanEngine, String> {
+        self.build_structured().map_err(|error| error.message)
+    }
+
+    fn build_structured(self) -> Result<ScanEngine, BuildFailure> {
         let mut builder = Scanner::builder();
 
         if self.include_builtins {
@@ -219,7 +371,7 @@ impl ScanEngineBuilder {
         let scanner = builder
             .rules(self.rules)
             .build()
-            .map_err(|error| error.to_string())?;
+            .map_err(BuildFailure::scanner)?;
 
         Ok(ScanEngine { scanner })
     }
@@ -289,6 +441,24 @@ pub enum RemediationKind {
     ReviewSensitiveHash,
     ReviewPasswordVerifier,
     Unknown,
+}
+
+fn remediation_core(value: Option<RemediationKind>) -> Result<Option<Remediation>, String> {
+    Ok(match value {
+        None | Some(RemediationKind::None) => None,
+        Some(RemediationKind::RevokeAndRotateCredential) => {
+            Some(Remediation::RevokeAndRotateCredential)
+        }
+        Some(RemediationKind::RotateCredential) => Some(Remediation::RotateCredential),
+        Some(RemediationKind::RotatePassword) => Some(Remediation::RotatePassword),
+        Some(RemediationKind::ReplacePrivateKey) => Some(Remediation::ReplacePrivateKey),
+        Some(RemediationKind::RemoveSensitiveValue) => Some(Remediation::RemoveSensitiveValue),
+        Some(RemediationKind::ReviewSensitiveHash) => Some(Remediation::ReviewSensitiveHash),
+        Some(RemediationKind::ReviewPasswordVerifier) => Some(Remediation::ReviewPasswordVerifier),
+        Some(RemediationKind::Unknown) => {
+            return Err("unknown remediation cannot configure a Core rule".to_owned());
+        }
+    })
 }
 
 impl From<Option<Remediation>> for RemediationKind {
@@ -587,13 +757,13 @@ impl ScanResult {
         self.report.has_critical()
     }
 
+    /// Returns an owned finding view after lossless JavaScript index validation.
     #[wasm_bindgen(js_name = findingAt)]
-    pub fn finding_at(&self, index: usize) -> Result<FindingView, JsError> {
-        self.report
-            .findings()
-            .get(index)
-            .map(FindingView::from)
-            .ok_or_else(|| JsError::new("finding index out of range"))
+    pub fn finding_at_js(
+        &self,
+        #[wasm_bindgen(unchecked_param_type = "number")] index: JsValue,
+    ) -> Result<FindingView, JsError> {
+        self.finding_at(numeric::js_index(&index)?)
     }
 
     /// Applies Cribra's conservative default redaction to classified findings.
@@ -667,7 +837,39 @@ impl ScanResult {
         synthesize(source, &self.report, &options).map_err(transform_error)
     }
 
+    /// Returns an owned candidate view after lossless JavaScript index validation.
     #[wasm_bindgen(js_name = candidateAt)]
+    pub fn candidate_at_js(
+        &self,
+        #[wasm_bindgen(unchecked_param_type = "number")] index: JsValue,
+    ) -> Result<CandidateView, JsError> {
+        self.candidate_at(numeric::js_index(&index)?)
+    }
+
+    /// Returns typed explanation facts for one ambiguous candidate.
+    ///
+    /// Candidate explanation derives directly from the candidate's existing
+    /// evidence and never acquires finding semantics.
+    #[wasm_bindgen(js_name = candidateExplanationAt)]
+    pub fn candidate_explanation_at_js(
+        &self,
+        #[wasm_bindgen(unchecked_param_type = "number")] index: JsValue,
+    ) -> Result<ExplanationView, JsError> {
+        self.candidate_explanation_at(numeric::js_index(&index)?)
+    }
+}
+
+impl ScanResult {
+    /// Returns an independently owned finding view at a Rust index.
+    pub fn finding_at(&self, index: usize) -> Result<FindingView, JsError> {
+        self.report
+            .findings()
+            .get(index)
+            .map(FindingView::from)
+            .ok_or_else(|| JsError::new("finding index out of range"))
+    }
+
+    /// Returns an independently owned candidate view at a Rust index.
     pub fn candidate_at(&self, index: usize) -> Result<CandidateView, JsError> {
         self.report
             .candidates()
@@ -676,11 +878,7 @@ impl ScanResult {
             .ok_or_else(|| JsError::new("candidate index out of range"))
     }
 
-    /// Returns typed explanation facts for one ambiguous candidate.
-    ///
-    /// Candidate explanation derives directly from the candidate's existing
-    /// evidence and never acquires finding semantics.
-    #[wasm_bindgen(js_name = candidateExplanationAt)]
+    /// Returns Core's candidate explanation at a Rust index.
     pub fn candidate_explanation_at(&self, index: usize) -> Result<ExplanationView, JsError> {
         self.report
             .candidates()

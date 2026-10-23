@@ -48,19 +48,19 @@ use crate::{
 /// Experimental native ABI major version.
 pub const ABI_VERSION_MAJOR: u32 = 0;
 /// Experimental native ABI minor version.
-pub const ABI_VERSION_MINOR: u32 = 1;
+pub const ABI_VERSION_MINOR: u32 = 3;
 /// Experimental native ABI patch version.
 pub const ABI_VERSION_PATCH: u32 = 0;
 
-fn contain_status(operation: impl FnOnce() -> CribraStatus) -> CribraStatus {
+pub(crate) fn contain_status(operation: impl FnOnce() -> CribraStatus) -> CribraStatus {
     catch_unwind(AssertUnwindSafe(operation)).unwrap_or(CRIBRA_INTERNAL_ERROR)
 }
 
-fn contain_drop(operation: impl FnOnce()) {
+pub(crate) fn contain_drop(operation: impl FnOnce()) {
     let _ = catch_unwind(AssertUnwindSafe(operation));
 }
 
-unsafe fn clear_out<T>(out: *mut *mut T) -> Result<(), CribraStatus> {
+pub(crate) unsafe fn clear_out<T>(out: *mut *mut T) -> Result<(), CribraStatus> {
     if out.is_null() {
         return Err(CRIBRA_INVALID_ARGUMENT);
     }
@@ -69,7 +69,7 @@ unsafe fn clear_out<T>(out: *mut *mut T) -> Result<(), CribraStatus> {
     Ok(())
 }
 
-unsafe fn clear_value<T: Default>(out: *mut T) -> Result<(), CribraStatus> {
+pub(crate) unsafe fn clear_value<T: Default>(out: *mut T) -> Result<(), CribraStatus> {
     if out.is_null() {
         return Err(CRIBRA_INVALID_ARGUMENT);
     }
@@ -98,7 +98,7 @@ fn string_view(value: &str) -> CribraStringView {
     }
 }
 
-fn severity_code(value: Severity) -> CribraSeverity {
+pub(crate) fn severity_code(value: Severity) -> CribraSeverity {
     match value {
         Severity::Info => CRIBRA_SEVERITY_INFO,
         Severity::Low => CRIBRA_SEVERITY_LOW,
@@ -116,7 +116,7 @@ fn confidence_code(value: Confidence) -> CribraConfidence {
     }
 }
 
-fn remediation_code(value: Option<Remediation>) -> CribraRemediation {
+pub(crate) fn remediation_code(value: Option<Remediation>) -> CribraRemediation {
     match value {
         None => CRIBRA_REMEDIATION_NONE,
         Some(Remediation::RevokeAndRotateCredential) => {
@@ -127,6 +127,9 @@ fn remediation_code(value: Option<Remediation>) -> CribraRemediation {
         Some(Remediation::ReplacePrivateKey) => CRIBRA_REMEDIATION_REPLACE_PRIVATE_KEY,
         Some(Remediation::RemoveSensitiveValue) => CRIBRA_REMEDIATION_REMOVE_SENSITIVE_VALUE,
         Some(Remediation::ReviewSensitiveHash) => CRIBRA_REMEDIATION_REVIEW_SENSITIVE_HASH,
+        Some(Remediation::ReviewPasswordVerifier) => {
+            crate::CRIBRA_REMEDIATION_REVIEW_PASSWORD_VERIFIER
+        }
         Some(_) => CRIBRA_REMEDIATION_UNKNOWN,
     }
 }
@@ -145,7 +148,7 @@ fn candidate_evidence_code(value: CandidateEvidence) -> CribraCandidateEvidence 
     }
 }
 
-fn detection_mode_code(value: DetectionMode) -> CribraDetectionMode {
+pub(crate) fn detection_mode_code(value: DetectionMode) -> CribraDetectionMode {
     match value {
         DetectionMode::MatcherOnly => CRIBRA_DETECTION_MODE_MATCHER_ONLY,
         DetectionMode::Deterministic => CRIBRA_DETECTION_MODE_DETERMINISTIC,
@@ -195,6 +198,9 @@ fn remediation_from_code(value: CribraRemediation) -> Result<Option<Remediation>
         CRIBRA_REMEDIATION_REPLACE_PRIVATE_KEY => Ok(Some(Remediation::ReplacePrivateKey)),
         CRIBRA_REMEDIATION_REMOVE_SENSITIVE_VALUE => Ok(Some(Remediation::RemoveSensitiveValue)),
         CRIBRA_REMEDIATION_REVIEW_SENSITIVE_HASH => Ok(Some(Remediation::ReviewSensitiveHash)),
+        crate::CRIBRA_REMEDIATION_REVIEW_PASSWORD_VERIFIER => {
+            Ok(Some(Remediation::ReviewPasswordVerifier))
+        }
         _ => Err(CRIBRA_INVALID_ARGUMENT),
     }
 }
@@ -205,15 +211,15 @@ fn configured_rule(
     value: &str,
     severity: Severity,
     remediation: Option<Remediation>,
-) -> Result<Rule, CribraStatus> {
+) -> Result<Rule, CribraError> {
     let rule = match kind {
         CRIBRA_RULE_KIND_LITERAL => Rule::literal(id, value, severity),
         CRIBRA_RULE_KIND_PREFIX => Rule::prefix(id, value, severity),
         CRIBRA_RULE_KIND_SUFFIX => Rule::suffix(id, value, severity),
-        CRIBRA_RULE_KIND_PATTERN => {
-            Rule::pattern(id, value, severity).map_err(|_| CRIBRA_RULE_ERROR)?
-        }
-        _ => return Err(CRIBRA_INVALID_ARGUMENT),
+        CRIBRA_RULE_KIND_PATTERN => Rule::pattern(id, value, severity).map_err(|error| {
+            CribraError::from_status(CRIBRA_RULE_ERROR).with_rule_error(&error, Some(id))
+        })?,
+        _ => return Err(CribraError::from_status(CRIBRA_INVALID_ARGUMENT)),
     };
 
     Ok(match remediation {
@@ -544,7 +550,12 @@ pub unsafe extern "C" fn cribra_builder_add_rule(
         };
         let rule = match configured_rule(config.kind, id, value, severity, remediation) {
             Ok(rule) => rule,
-            Err(status) => return status,
+            Err(error) => {
+                let status = error.status();
+                // SAFETY: the optional error slot follows the caller's contract.
+                unsafe { set_error(out_error, error) };
+                return status;
+            }
         };
 
         // SAFETY: caller guarantees unique access to a live builder handle.
@@ -599,7 +610,8 @@ pub unsafe extern "C" fn cribra_builder_build(
                 unsafe {
                     set_error(
                         out_error,
-                        CribraError::new(CRIBRA_BUILD_ERROR, scanner_build_error_message(&error)),
+                        CribraError::new(CRIBRA_BUILD_ERROR, scanner_build_error_message(&error))
+                            .with_build_error(&error),
                     );
                 }
                 CRIBRA_BUILD_ERROR
@@ -1890,7 +1902,7 @@ mod tests {
                 cribra_abi_version_minor(),
                 cribra_abi_version_patch(),
             ),
-            (0, 1, 0)
+            (0, 3, 0)
         );
     }
 

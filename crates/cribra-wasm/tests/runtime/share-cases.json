@@ -1,0 +1,141 @@
+[
+  {
+    "name": "empty-collection-redact",
+    "builtins": false,
+    "rules": [],
+    "mode": "redact",
+    "sources": []
+  },
+  {
+    "name": "one-clean-source-redact",
+    "builtins": false,
+    "rules": [
+      { "kind": "literal", "id": "custom.secret", "value": "SECRET", "severity": "High" }
+    ],
+    "mode": "redact",
+    "sources": [
+      { "id": "clean.txt", "source": "ordinary UTF-8 text: é🦀\nno findings" }
+    ]
+  },
+  {
+    "name": "multiple-sources-preserve-order",
+    "builtins": false,
+    "rules": [
+      { "kind": "literal", "id": "custom.secret", "value": "SECRET", "severity": "High" }
+    ],
+    "mode": "redact",
+    "sources": [
+      { "id": "same", "source": "first SECRET" },
+      { "id": "", "source": "clean" },
+      { "id": "same", "source": "🦀 SECRET\nSECRET" }
+    ]
+  },
+  {
+    "name": "unicode-ids-and-content",
+    "builtins": false,
+    "rules": [
+      { "kind": "literal", "id": "custom.secret", "value": "SECRET", "severity": "Medium" }
+    ],
+    "mode": "redact",
+    "sources": [
+      { "id": "独立/🦀", "source": "前🦀 é SECRET" },
+      { "id": "e\u0301", "source": "combining SECRET" }
+    ]
+  },
+  {
+    "name": "builtin-findings-and-candidate",
+    "builtins": true,
+    "rules": [],
+    "mode": "redact",
+    "sources": [
+      { "id": "token", "source": "GITHUB_TOKEN=ghp_AbCdEf0123456789_AbCdEf0123456789" },
+      { "id": "review", "source": "ABCD-EFGH-IJKL-MNOP" },
+      { "id": "unicode-clean", "source": "é🦀" }
+    ]
+  },
+  {
+    "name": "candidate-only-review-remains-unchanged",
+    "builtins": true,
+    "rules": [],
+    "mode": "redact",
+    "sources": [
+      { "id": "review", "source": "ABCD-EFGH-IJKL-MNOP" }
+    ]
+  },
+  {
+    "name": "template-default-policy",
+    "builtins": false,
+    "rules": [
+      { "kind": "literal", "id": "custom.secret", "value": "SECRET", "severity": "Critical" }
+    ],
+    "mode": "template",
+    "sources": [
+      { "id": "one", "source": "TOKEN=SECRET" },
+      { "id": "clean", "source": "nothing here" }
+    ]
+  },
+  {
+    "name": "pseudonymize-defaults",
+    "builtins": false,
+    "rules": [
+      { "kind": "literal", "id": "custom.secret", "value": "SECRET", "severity": "High" }
+    ],
+    "mode": "pseudonymize",
+    "keyByte": 7,
+    "sources": [
+      { "id": "one", "source": "A=SECRET B=SECRET" }
+    ]
+  },
+  {
+    "name": "pseudonymize-custom-prefix-and-digest",
+    "builtins": false,
+    "rules": [
+      { "kind": "literal", "id": "custom.secret", "value": "SECRET", "severity": "High" }
+    ],
+    "mode": "pseudonymize",
+    "keyByte": 8,
+    "prefix": "pseudo:",
+    "digestBytes": 8,
+    "sources": [
+      { "id": "one", "source": "TOKEN=SECRET" },
+      { "id": "two", "source": "OTHER=SECRET" }
+    ]
+  },
+  {
+    "name": "synthesize-defaults",
+    "builtins": false,
+    "rules": [
+      { "kind": "literal", "id": "custom.secret", "value": "SECRET", "severity": "High" }
+    ],
+    "mode": "synthesize",
+    "keyByte": 9,
+    "sources": [
+      { "id": "one", "source": "TOKEN=SECRET" }
+    ]
+  },
+  {
+    "name": "synthesize-custom-marker",
+    "builtins": false,
+    "rules": [
+      { "kind": "literal", "id": "custom.secret", "value": "SECRET", "severity": "High" }
+    ],
+    "mode": "synthesize",
+    "keyByte": 10,
+    "marker": "fixture",
+    "sources": [
+      { "id": "one", "source": "TOKEN=SECRET" },
+      { "id": "clean", "source": "ordinary" }
+    ]
+  },
+  {
+    "name": "missing-mode-fails-without-bundle",
+    "builtins": false,
+    "rules": [
+      { "kind": "literal", "id": "custom.secret", "value": "SECRET", "severity": "High" }
+    ],
+    "mode": null,
+    "sources": [
+      { "id": "one", "source": "TOKEN=SECRET" }
+    ]
+  }
+]

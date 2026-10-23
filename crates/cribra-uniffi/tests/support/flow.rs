@@ -13,6 +13,8 @@ pub fn findings(case: &Value) -> Vec<Finding> {
         .unwrap()
         .iter()
         .map(|f| Finding {
+            remediation: None,
+            explanation: None,
             rule_id: RuleId {
                 value: f["id"].as_str().unwrap().into(),
             },

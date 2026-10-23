@@ -205,13 +205,19 @@ impl IncrementalLimits {
 /// lowering runs while holding the mutex.
 #[derive(uniffi::Object)]
 pub struct IncrementalSession {
+    scanner: cribra::Scanner,
     source_id: SourceId,
     inner: Mutex<cribra::IncrementalSession>,
 }
 
 impl IncrementalSession {
-    pub(crate) fn from_core(core: cribra::IncrementalSession, source_id: SourceId) -> Arc<Self> {
+    pub(crate) fn from_core(
+        core: cribra::IncrementalSession,
+        source_id: SourceId,
+        scanner: cribra::Scanner,
+    ) -> Arc<Self> {
         Arc::new(Self {
+            scanner,
             source_id,
             inner: Mutex::new(core),
         })
@@ -247,6 +253,7 @@ impl IncrementalSession {
             &self.source_id,
             source_bytes,
             &report,
+            Some(&self.scanner),
         ))
     }
 
@@ -260,7 +267,12 @@ impl IncrementalSession {
         };
         Ok(IncrementalSnapshot {
             revision,
-            report: ScanReport::from_parts(&self.source_id, source_bytes, &report),
+            report: ScanReport::from_parts(
+                &self.source_id,
+                source_bytes,
+                &report,
+                Some(&self.scanner),
+            ),
         })
     }
 
@@ -347,6 +359,7 @@ mod tests {
             SourceId {
                 value: "poison-test".into(),
             },
+            scanner.clone(),
         );
         let other = Arc::clone(&session);
         let thread = std::thread::spawn(move || {

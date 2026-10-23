@@ -9,6 +9,7 @@ builder
   → current built-ins
   → opt-in financial built-ins
   → scanner
+  → borrowed active rule metadata
   → scan
   → findings
   → redaction
@@ -54,5 +55,13 @@ Finding views borrow data from their report. Output views borrow data from their
 transformed output. Borrowed views must not outlive their owner.
 
 The original source remains caller-owned.
+
+`cribra_scanner_rule_count`/`cribra_scanner_rule_at` expose Core's active rule order
+and five public metadata fields. Rule IDs borrow the scanner until scanner free;
+copy their bytes for longer storage. The example also reads the new structured
+construction category through `cribra_error_build_info` on build failure.
+That view's optional rule ID borrows the error, independently of the builder,
+until error free. Coarse statuses, fixed diagnostic messages and cleanup are
+unchanged. No matcher/regex/source payload is exposed through metadata.
 
 See `include/cribra.h` for the normative ABI contract.

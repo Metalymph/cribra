@@ -1,5 +1,5 @@
 [
-  {"name":"builtins", "mode":"builtInOnly", "rules":[], "source":"GITHUB_TOKEN=ghp_AbCdEf0123456789_AbCdEf0123456789 LIT_é"},
+  {"name":"builtins", "mode":"builtInOnly", "rules":[], "source":"GITHUB_TOKEN=ghp_AbCdEf0123456789_AbCdEf0123456789 LIT_é\npassword=CorrectHorseBatteryStaple\né🙂 ABCD-EFGH-IJKL-MNOP"},
   {"name":"custom", "mode":"customOnly", "rules":[
     {"id":"custom/literal-é", "kind":"literal", "value":"LIT_é", "severity":"high", "remediation":"removeSensitiveValue"},
     {"id":"custom/prefix", "kind":"prefix", "value":"pre_", "severity":"critical"},
@@ -35,5 +35,26 @@
   {"name":"pattern-error-before-builder-validation", "mode":"customOnly", "rules":[
     {"id":"", "kind":"literal", "value":"", "severity":"high"},
     {"id":"invalid", "kind":"pattern", "value":"[", "severity":"high"}
-  ]}
+  ]},
+  {"name":"catalogs-000-custom-0","mode":"catalogs","current":false,"financial":false,"personal":false,"rules":[],"source":"é LIT_é\niban=GB82WEST12345698765432\nssn=123-45-6789\npassword=CorrectHorseBatteryStaple\nABCD-EFGH-IJKL-MNOP"},
+  {"name":"catalogs-000-custom-1","mode":"catalogs","current":false,"financial":false,"personal":false,"rules":[{"id":"custom/catalog","kind":"literal","value":"LIT_é","severity":"high","remediation":"removeSensitiveValue"}],"source":"é LIT_é\niban=GB82WEST12345698765432\nssn=123-45-6789\npassword=CorrectHorseBatteryStaple\nABCD-EFGH-IJKL-MNOP"},
+  {"name":"catalogs-001-custom-0","mode":"catalogs","current":false,"financial":false,"personal":true,"rules":[],"source":"é LIT_é\niban=GB82WEST12345698765432\nssn=123-45-6789\npassword=CorrectHorseBatteryStaple\nABCD-EFGH-IJKL-MNOP"},
+  {"name":"catalogs-001-custom-1","mode":"catalogs","current":false,"financial":false,"personal":true,"rules":[{"id":"custom/catalog","kind":"literal","value":"LIT_é","severity":"high","remediation":"removeSensitiveValue"}],"source":"é LIT_é\niban=GB82WEST12345698765432\nssn=123-45-6789\npassword=CorrectHorseBatteryStaple\nABCD-EFGH-IJKL-MNOP"},
+  {"name":"catalogs-010-custom-0","mode":"catalogs","current":false,"financial":true,"personal":false,"rules":[],"source":"é LIT_é\niban=GB82WEST12345698765432\nssn=123-45-6789\npassword=CorrectHorseBatteryStaple\nABCD-EFGH-IJKL-MNOP"},
+  {"name":"catalogs-010-custom-1","mode":"catalogs","current":false,"financial":true,"personal":false,"rules":[{"id":"custom/catalog","kind":"literal","value":"LIT_é","severity":"high","remediation":"removeSensitiveValue"}],"source":"é LIT_é\niban=GB82WEST12345698765432\nssn=123-45-6789\npassword=CorrectHorseBatteryStaple\nABCD-EFGH-IJKL-MNOP"},
+  {"name":"catalogs-011-custom-0","mode":"catalogs","current":false,"financial":true,"personal":true,"rules":[],"source":"é LIT_é\niban=GB82WEST12345698765432\nssn=123-45-6789\npassword=CorrectHorseBatteryStaple\nABCD-EFGH-IJKL-MNOP"},
+  {"name":"catalogs-011-custom-1","mode":"catalogs","current":false,"financial":true,"personal":true,"rules":[{"id":"custom/catalog","kind":"literal","value":"LIT_é","severity":"high","remediation":"removeSensitiveValue"}],"source":"é LIT_é\niban=GB82WEST12345698765432\nssn=123-45-6789\npassword=CorrectHorseBatteryStaple\nABCD-EFGH-IJKL-MNOP"},
+  {"name":"catalogs-100-custom-0","mode":"catalogs","current":true,"financial":false,"personal":false,"rules":[],"source":"é LIT_é\niban=GB82WEST12345698765432\nssn=123-45-6789\npassword=CorrectHorseBatteryStaple\nABCD-EFGH-IJKL-MNOP"},
+  {"name":"catalogs-100-custom-1","mode":"catalogs","current":true,"financial":false,"personal":false,"rules":[{"id":"custom/catalog","kind":"literal","value":"LIT_é","severity":"high","remediation":"removeSensitiveValue"}],"source":"é LIT_é\niban=GB82WEST12345698765432\nssn=123-45-6789\npassword=CorrectHorseBatteryStaple\nABCD-EFGH-IJKL-MNOP"},
+  {"name":"catalogs-101-custom-0","mode":"catalogs","current":true,"financial":false,"personal":true,"rules":[],"source":"é LIT_é\niban=GB82WEST12345698765432\nssn=123-45-6789\npassword=CorrectHorseBatteryStaple\nABCD-EFGH-IJKL-MNOP"},
+  {"name":"catalogs-101-custom-1","mode":"catalogs","current":true,"financial":false,"personal":true,"rules":[{"id":"custom/catalog","kind":"literal","value":"LIT_é","severity":"high","remediation":"removeSensitiveValue"}],"source":"é LIT_é\niban=GB82WEST12345698765432\nssn=123-45-6789\npassword=CorrectHorseBatteryStaple\nABCD-EFGH-IJKL-MNOP"},
+  {"name":"catalogs-110-custom-0","mode":"catalogs","current":true,"financial":true,"personal":false,"rules":[],"source":"é LIT_é\niban=GB82WEST12345698765432\nssn=123-45-6789\npassword=CorrectHorseBatteryStaple\nABCD-EFGH-IJKL-MNOP"},
+  {"name":"catalogs-110-custom-1","mode":"catalogs","current":true,"financial":true,"personal":false,"rules":[{"id":"custom/catalog","kind":"literal","value":"LIT_é","severity":"high","remediation":"removeSensitiveValue"}],"source":"é LIT_é\niban=GB82WEST12345698765432\nssn=123-45-6789\npassword=CorrectHorseBatteryStaple\nABCD-EFGH-IJKL-MNOP"},
+  {"name":"catalogs-111-custom-0","mode":"catalogs","current":true,"financial":true,"personal":true,"rules":[],"source":"é LIT_é\niban=GB82WEST12345698765432\nssn=123-45-6789\npassword=CorrectHorseBatteryStaple\nABCD-EFGH-IJKL-MNOP"},
+  {"name":"catalogs-111-custom-1","mode":"catalogs","current":true,"financial":true,"personal":true,"rules":[{"id":"custom/catalog","kind":"literal","value":"LIT_é","severity":"high","remediation":"removeSensitiveValue"}],"source":"é LIT_é\niban=GB82WEST12345698765432\nssn=123-45-6789\npassword=CorrectHorseBatteryStaple\nABCD-EFGH-IJKL-MNOP"},
+  {"name":"catalog-collision-financial.iban","mode":"catalogs","current":false,"financial":true,"personal":false,"rules":[{"id":"financial.iban","kind":"literal","value":"CUSTOM","severity":"high"}]},
+  {"name":"catalog-collision-personal.us-ssn","mode":"catalogs","current":false,"financial":false,"personal":true,"rules":[{"id":"personal.us-ssn","kind":"literal","value":"CUSTOM","severity":"high"}]},
+  {"name":"catalog-collision-github.classic-pat","mode":"catalogs","current":true,"financial":true,"personal":true,"rules":[{"id":"github.classic-pat","kind":"literal","value":"CUSTOM","severity":"high"}]},
+  {"name":"catalog-duplicate-before-empty","mode":"catalogs","current":true,"financial":true,"personal":true,"rules":[{"id":"same","kind":"literal","value":"","severity":"high"},{"id":"same","kind":"prefix","value":"pre_","severity":"low"}]},
+  {"name":"catalog-pattern-precedence","mode":"catalogs","current":true,"financial":true,"personal":true,"rules":[{"id":"financial.iban","kind":"literal","value":"","severity":"high"},{"id":"invalid","kind":"pattern","value":"[","severity":"low"}]}
 ]

@@ -79,6 +79,59 @@
       "readonly start: number"
     ]
   },
+  "IncrementalError": {
+    "kind": "class",
+    "members": [
+      "readonly code: IncrementalErrorCode",
+      "readonly message: string",
+      "readonly terminal: boolean"
+    ]
+  },
+  "IncrementalErrorCode": {
+    "kind": "enum",
+    "members": [
+      "NotActive = 0",
+      "StaleRevision = 1",
+      "InvalidRange = 2",
+      "InvalidUtf8Boundary = 3",
+      "RevisionOverflow = 4",
+      "DocumentLengthOverflow = 5",
+      "CandidateLimitExceeded = 6",
+      "CacheLimitExceeded = 7",
+      "ResultLimitExceeded = 8",
+      "TransactionStorageLimitExceeded = 9",
+      "ResourceAccountingOverflow = 10",
+      "ExecutionInvariantViolated = 11",
+      "UnknownCoreError = 12",
+      "InvalidLimit = 13",
+      "OffsetOutOfRange = 14",
+      "InvalidRevision = 15"
+    ]
+  },
+  "IncrementalLimits": {
+    "kind": "interface",
+    "members": [
+      "readonly maxCandidates?: number",
+      "readonly maxRetainedCacheRecords?: number",
+      "readonly maxMaterializedResults?: number",
+      "readonly maxTransactionStorageBytes?: number"
+    ]
+  },
+  "IncrementalSession": {
+    "kind": "class",
+    "members": [
+      "applyEdit(expectedRevision: bigint, start: number, end: number, replacement: string): bigint",
+      "isActive(): boolean",
+      "snapshot(): IncrementalSnapshot"
+    ]
+  },
+  "IncrementalSnapshot": {
+    "kind": "class",
+    "members": [
+      "readonly result: ScanResult",
+      "readonly revision: bigint"
+    ]
+  },
   "RemediationKind": {
     "kind": "enum",
     "members": [
@@ -93,13 +146,62 @@
       "Unknown = 8"
     ]
   },
+  "RuleKind": {
+    "kind": "enum",
+    "members": [
+      "Literal = 0",
+      "Prefix = 1",
+      "Suffix = 2",
+      "Pattern = 3"
+    ]
+  },
+  "RuleMetadataView": {
+    "kind": "class",
+    "members": [
+      "readonly detectionMode: DetectionModeKind",
+      "readonly kind: RuleKind",
+      "readonly remediation: RemediationKind",
+      "readonly ruleId: string",
+      "readonly severity: FindingSeverity"
+    ]
+  },
+  "ScanBatchEntry": {
+    "kind": "class",
+    "members": [
+      "readonly id: string",
+      "readonly result: ScanResult",
+      "readonly sourceBytes: number"
+    ]
+  },
+  "ScanBatchResult": {
+    "kind": "class",
+    "members": [
+      "entryAt(index: number): ScanBatchEntry",
+      "isEmpty(): boolean",
+      "summary(): ScanSummaryView",
+      "readonly length: number"
+    ]
+  },
+  "ScanBatchSource": {
+    "kind": "interface",
+    "members": [
+      "readonly id: string",
+      "readonly source: string"
+    ]
+  },
   "ScanEngine": {
     "kind": "class",
     "members": [
+      "activeRules(): RuleMetadataView[]",
       "explainFinding(result: ScanResult, index: number): ExplanationView",
+      "incremental(source: string): IncrementalSession",
+      "incrementalWithLimits(source: string, limits: IncrementalLimits): IncrementalSession",
       "constructor()",
       "rulesCount(): number",
-      "scan(source: string): ScanResult"
+      "scan(source: string): ScanResult",
+      "scanBatch(sources: ScanBatchSource[]): ScanBatchResult",
+      "stream(): StreamSession",
+      "streamWithLimits(limits: StreamLimits): StreamSession"
     ]
   },
   "ScanEngineBuilder": {
@@ -107,10 +209,14 @@
     "members": [
       "addFinancialBuiltins(): void",
       "addLiteral(id: string, value: string, severity: FindingSeverity): void",
+      "addLiteralWithRemediation(id: string, value: string, severity: FindingSeverity, remediation?: RemediationKind | null): void",
       "addPattern(id: string, pattern: string, severity: FindingSeverity): void",
+      "addPatternWithRemediation(id: string, pattern: string, severity: FindingSeverity, remediation?: RemediationKind | null): void",
       "addPersonalBuiltins(): void",
       "addPrefix(id: string, value: string, severity: FindingSeverity): void",
+      "addPrefixWithRemediation(id: string, value: string, severity: FindingSeverity, remediation?: RemediationKind | null): void",
       "addSuffix(id: string, value: string, severity: FindingSeverity): void",
+      "addSuffixWithRemediation(id: string, value: string, severity: FindingSeverity, remediation?: RemediationKind | null): void",
       "build(): ScanEngine",
       "customRuleCount(): number",
       "constructor(include_builtins: boolean)"
@@ -133,6 +239,136 @@
       "template(source: string): string",
       "templateWith(source: string, namespace: string, numbered: boolean): string",
       "readonly sourceBytes: number"
+    ]
+  },
+  "ShareBundle": {
+    "kind": "class",
+    "members": [
+      "entryAt(index: number): ShareBundleEntry",
+      "isEmpty(): boolean",
+      "manifest(): ShareManifestView",
+      "summary(): ScanSummaryView",
+      "readonly length: number"
+    ]
+  },
+  "ShareBundleBuilder": {
+    "kind": "class",
+    "members": [
+      "modePseudonymize(key: Uint8Array, prefix?: string | null, digest_bytes?: number | null): void",
+      "modeRedact(): void",
+      "modeSynthesize(key: Uint8Array, marker?: string | null): void",
+      "modeTemplate(): void",
+      "constructor()",
+      "scanAndBuild(engine: ScanEngine, sources: ScanBatchSource[]): ShareBundle"
+    ]
+  },
+  "ShareBundleEntry": {
+    "kind": "class",
+    "members": [
+      "readonly content: string",
+      "readonly id: string"
+    ]
+  },
+  "ShareManifestView": {
+    "kind": "class",
+    "members": [
+      "summary(): ScanSummaryView",
+      "readonly generatedAtNanoseconds: number",
+      "readonly generatedAtSeconds: bigint",
+      "readonly mode: ShareModeKind"
+    ]
+  },
+  "ShareModeKind": {
+    "kind": "enum",
+    "members": [
+      "Redact = 0",
+      "Template = 1",
+      "Pseudonymize = 2",
+      "Synthesize = 3",
+      "Unknown = 4"
+    ]
+  },
+  "ScanSummaryView": {
+    "kind": "class",
+    "members": [
+      "bySeverity(severity: FindingSeverity): number",
+      "readonly critical: number",
+      "readonly hasCandidates: boolean",
+      "readonly hasCritical: boolean",
+      "readonly high: number",
+      "readonly info: number",
+      "readonly isClean: boolean",
+      "readonly low: number",
+      "readonly medium: number",
+      "readonly reportsWithCandidates: number",
+      "readonly reportsWithFindings: number",
+      "readonly reportsWithoutFindings: number",
+      "readonly scannedBytes: number",
+      "readonly scannedSources: number",
+      "readonly totalCandidates: number",
+      "readonly totalFindings: number"
+    ]
+  },
+  "ScannerBuildError": {
+    "kind": "interface",
+    "extends": "Error",
+    "members": [
+      "readonly code: ScannerBuildErrorCode",
+      "readonly ruleId: string | undefined"
+    ]
+  },
+  "ScannerBuildErrorCode": {
+    "kind": "enum",
+    "members": [
+      "InvalidPattern = 0",
+      "PatternMatchesEmpty = 1",
+      "MissingCaptureGroup = 2",
+      "EmptyRuleId = 3",
+      "DuplicateRuleId = 4",
+      "EmptyMatcher = 5",
+      "TooManyRules = 6",
+      "AutomatonBuild = 7",
+      "InvalidRemediation = 8"
+    ]
+  },
+  "StreamError": {
+    "kind": "class",
+    "members": [
+      "readonly code: StreamErrorCode",
+      "readonly message: string"
+    ]
+  },
+  "StreamErrorCode": {
+    "kind": "enum",
+    "members": [
+      "UnsupportedRuleSet = 0",
+      "NotActive = 1",
+      "InvalidUtf8 = 2",
+      "IncompleteUtf8 = 3",
+      "CandidateLimitExceeded = 4",
+      "ResultLimitExceeded = 5",
+      "StorageLimitExceeded = 6",
+      "StorageRequirementOverflow = 7",
+      "SourceOffsetOverflow = 8",
+      "CoordinateOverflow = 9",
+      "ExecutionInvariantViolated = 10",
+      "UnknownCoreError = 11",
+      "InvalidLimit = 12"
+    ]
+  },
+  "StreamLimits": {
+    "kind": "interface",
+    "members": [
+      "readonly maxCandidates?: number",
+      "readonly maxStreamStorageBytes?: number",
+      "readonly maxRetainedResults?: number"
+    ]
+  },
+  "StreamSession": {
+    "kind": "class",
+    "members": [
+      "finish(): ScanResult",
+      "push(chunk: Uint8Array): void"
     ]
   }
 }

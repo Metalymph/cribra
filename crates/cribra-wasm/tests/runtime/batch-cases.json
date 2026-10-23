@@ -1,0 +1,101 @@
+[
+  {
+    "name": "empty-batch",
+    "builtins": false,
+    "rules": [],
+    "sources": []
+  },
+  {
+    "name": "single-custom-source",
+    "builtins": false,
+    "rules": [
+      { "kind": "literal", "id": "custom.secret", "value": "SECRET", "severity": "High" }
+    ],
+    "sources": [
+      { "id": "notes.txt", "source": "é SECRET" }
+    ]
+  },
+  {
+    "name": "multiple-sources-preserve-order",
+    "builtins": false,
+    "rules": [
+      { "kind": "literal", "id": "custom.secret", "value": "SECRET", "severity": "High" }
+    ],
+    "sources": [
+      { "id": "z-last", "source": "first SECRET" },
+      { "id": "a-empty", "source": "" },
+      { "id": "m-unicode", "source": "🦀 SECRET\nSECRET" }
+    ]
+  },
+  {
+    "name": "duplicate-empty-and-unicode-ids",
+    "builtins": false,
+    "rules": [
+      { "kind": "literal", "id": "custom.secret", "value": "SECRET", "severity": "Medium" }
+    ],
+    "sources": [
+      { "id": "same", "source": "SECRET one" },
+      { "id": "same", "source": "SECRET two" },
+      { "id": "", "source": "SECRET empty id" },
+      { "id": "前🦀", "source": "é SECRET" }
+    ]
+  },
+  {
+    "name": "builtin-findings-and-candidates",
+    "builtins": true,
+    "rules": [],
+    "sources": [
+      { "id": "token", "source": "GITHUB_TOKEN=ghp_AbCdEf0123456789_AbCdEf0123456789" },
+      { "id": "review", "source": "ABCD-EFGH-IJKL-MNOP" },
+      { "id": "unicode-clean", "source": "é🦀" }
+    ]
+  },
+  {
+    "name": "financial-personal-and-custom-catalogs",
+    "builtins": false,
+    "financial": true,
+    "personal": true,
+    "rules": [
+      { "kind": "literal", "id": "custom.secret", "value": "SECRET", "severity": "Critical" }
+    ],
+    "sources": [
+      { "id": "financial", "source": "card_number=1234567890123452" },
+      { "id": "personal", "source": "ssn=123-45-6789" },
+      { "id": "custom", "source": "SECRET" }
+    ]
+  },
+  {
+    "name": "custom-rule-families-and-remediation",
+    "builtins": false,
+    "rules": [
+      {
+        "kind": "literal",
+        "id": "custom.literal",
+        "value": "EXACT_SECRET",
+        "severity": "High",
+        "newMethod": true,
+        "remediation": "RemoveSensitiveValue"
+      },
+      { "kind": "prefix", "id": "custom.prefix", "value": "live_", "severity": "Critical" },
+      { "kind": "suffix", "id": "custom.suffix", "value": "_secret", "severity": "Medium" },
+      { "kind": "pattern", "id": "custom.pattern", "value": "\\bCUSTOM_[A-Z0-9]{8}\\b", "severity": "Low" }
+    ],
+    "sources": [
+      { "id": "families", "source": "EXACT_SECRET live_ABC123 token_secret CUSTOM_AB12CD34" },
+      { "id": "remediation-only", "source": "EXACT_SECRET" }
+    ]
+  },
+  {
+    "name": "utf8-byte-lengths-and-offsets",
+    "builtins": false,
+    "rules": [
+      { "kind": "literal", "id": "custom.secret", "value": "SECRET", "severity": "High" }
+    ],
+    "sources": [
+      { "id": "emoji", "source": "🦀🦀 SECRET" },
+      { "id": "cjk", "source": "前前 SECRET" },
+      { "id": "combining", "source": "e\u0301 SECRET" },
+      { "id": "empty", "source": "" }
+    ]
+  }
+]

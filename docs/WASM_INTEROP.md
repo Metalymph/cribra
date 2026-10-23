@@ -78,6 +78,7 @@ The typed WebAssembly surface includes:
   candidate-evidence values;
 - typed finding and candidate explanations;
 - redact, template, pseudonymize, and synthesize transformations;
+- Flow-only Core-backed in-memory Share Bundles and manifests;
 - exact 32-byte `Uint8Array` keys for keyed transformations;
 - a generic `ScanEngineBuilder`;
 - literal, prefix, suffix, and pattern custom rules;
@@ -89,16 +90,173 @@ outside `cribra-wasm`.
 
 ### Typed projection decision
 
-The completed adapter does not use `serde_json`, `JsValue`, JSON serialization,
-or deserialization for scan/result transport.
+The completed adapter does not use `serde_json`, JSON serialization or
+deserialization for scan/result transport. `JsValue` appears only where
+wasm-bindgen must inspect typed input-array fields at the boundary.
 
 The only explicit owned-copy behavior observed in the adapter is small boundary
-material such as owned rule identifiers. Rust error values are converted to
-strings only when crossing the JavaScript error boundary. The generated
-TypeScript declarations expose typed classes and enums rather than serialized
-generic payloads, and keyed transformations use `Uint8Array`.
+material such as owned rule and source identifiers. Rust error values are
+converted to strings only when crossing the JavaScript error boundary. The
+generated TypeScript declarations expose typed classes and enums rather than
+serialized generic payloads, and keyed transformations use `Uint8Array`.
 
 Typed projection is therefore the retained public boundary.
+
+### P0.4 source streaming contract
+
+Both Core and Flow source builds expose `ScanEngine.stream()` and
+`streamWithLimits(limits: StreamLimits)`. The exported `StreamSession` accepts
+`push(Uint8Array)` and `finish()`, and has the generated `free()` method.
+It wraps an optional Core `StreamSession`; Core exclusively owns admission,
+UTF-8 decoding, matching, limits and report ordering. No whole-source fallback,
+source buffer, second scanner, threads or runtime dependencies are added.
+The current built-in scanner fails streaming admission. Admitted custom rules
+produce the existing complete `ScanResult` projection.
+
+The typed options interface exposes `maxCandidates`, `maxStreamStorageBytes`
+and `maxRetainedResults`. Missing/undefined properties are unlimited; zero is
+meaningful. The adapter reads raw JavaScript property values solely to validate
+numbers before Core conversion: negative, fractional, non-finite, unsafe or
+WASM32-unrepresentable integers and non-number values fail with `InvalidLimit`.
+These input checks do not change the typed scan/result transport.
+
+`StreamError` is an owned wasm-bindgen object with stable `StreamErrorCode`
+and source-free `message` getters. Each Core error has a distinct code, with
+`UnknownCoreError` reserved for future variants. Callers must free caught
+`StreamError` objects as well as sessions and results. Terminal push failures
+discard Core state; finish consumes it on either outcome. Subsequent operations
+throw `NotActive`, and failures expose no partial report. A stream can outlive
+its engine, and a completed result can outlive both.
+
+The existing Core/Flow qualification runner now exercises generated bindings
+against a direct-Core oracle, byte partitions, limit validation and terminal
+ownership behavior. This qualifies the local runtime execution recorded in
+[Compatibility](COMPATIBILITY.md), not a published package or a new browser
+qualification. See the [WASM README](../crates/cribra-wasm/README.md#byte-streaming)
+for the complete limits, ownership and error-handling contract.
+
+### P0.5 source incremental contract
+
+Core and Flow source builds also expose `ScanEngine.incremental(source)` and
+`incrementalWithLimits(source, limits: IncrementalLimits)`. Core exclusively owns
+the editable UTF-8 document, revision, cached matching state and transaction.
+The adapter retains no duplicate source, scanner or edit engine. Existing built-in
+and custom configurations use Core's incremental behavior directly.
+
+`IncrementalSession.applyEdit(expectedRevision: bigint, start: number,
+end: number, replacement: string): bigint` uses half-open UTF-8 byte ranges.
+Initial revision is `0n`, and successful no-ops increment it. Revisions are exact
+u64/bigint values; invalid/out-of-u64 revisions fail with `InvalidRevision`
+instead of wrapping. Offsets are validated before Core as nonnegative JS safe
+integers representable on WASM32; invalid inputs report `OffsetOutOfRange`.
+
+Four independently optional budgets preserve Core accounting: `maxCandidates`,
+`maxRetainedCacheRecords`, `maxMaterializedResults` and
+`maxTransactionStorageBytes`. Missing/undefined means unlimited; explicit zero
+is meaningful. They reuse streaming's strict JS number validation and report
+`InvalidLimit` before construction. Logical transaction storage includes the old
+snapshot and excludes unaccounted allocator/regex/validator overhead and caller
+report clones; it is not a total memory guarantee.
+
+`isActive()` delegates to Core. Recoverable Core input errors leave edits active;
+resource/invariant failures block future edits but preserve `snapshot()`.
+`IncrementalError` has stable `code`, source-free `message` and a `terminal`
+flag read from Core activity after edit failure. Construction errors create no
+session and report `terminal: false`. Every Core variant has a distinct code,
+with `UnknownCoreError` for future variants. Numeric validation precedes Core
+and never changes the committed snapshot.
+
+`snapshot()` owns one committed `revision: bigint` and metadata projection.
+Each access to its readonly `result` returns a fresh owned existing `ScanResult`.
+Snapshot and result lifetimes are independent of edits and session destruction;
+free each session, snapshot, returned result and caught error separately.
+Neither sessions nor snapshots expose document text or matched sensitive values.
+Flow transforms continue to require caller-supplied source and retain existing
+fail-closed overlap behavior.
+
+The existing generated Core/Flow runtime qualification includes an independent
+Core incremental oracle, deterministic edits, terminal snapshot preservation,
+bigint/numeric validation, ownership, metadata/explanation and transform parity.
+Node/Bun local qualification is recorded in [Compatibility](COMPATIBILITY.md).
+It does not qualify a new release or browser execution. See the
+[WASM README](../crates/cribra-wasm/README.md#incremental-documents) for usage and
+the complete ownership and limits contract.
+
+### P0.6C sequential batch contract
+
+Both Core and Flow source builds expose the additive
+`ScanEngine.scanBatch(sources: ScanBatchSource[])` method. Each input has an
+explicit opaque `id` and a UTF-8 `source`. The adapter copies both fields once at
+the boundary, calls Core `Scanner::scan()` exactly once for the complete ordered
+batch, and then releases the input text. There is no per-source adapter scanning
+loop, no duplicate aggregation implementation and no parallel execution.
+
+`ScanBatchResult` owns one `ScanBatchEntry` per input and one Core-derived
+`ScanSummaryView`. `entryAt(index)` returns a fresh independently owned entry;
+`entry.result` returns a fresh existing `ScanResult` projection; `summary()`
+returns a fresh owned view of Core's `ScanResults::summary()`. Every public Core
+summary counter, the candidate and clean/critical predicates, and
+`bySeverity(FindingSeverity)` are exposed. Input order, empty/Unicode/duplicate
+IDs, UTF-8 byte lengths, finding/candidate semantics and report ordering are
+preserved exactly.
+
+Batches, entries, reports and summaries retain no source text and no borrow of
+the creating engine. They can outlive the batch and engine and are freed
+independently. Missing/non-string fields and non-object elements fail before a
+batch is created; out-of-range entry and report indexes fail closed. The input
+interface is type-only, and all output types use generated `free()` ownership.
+
+The same generated Core/Flow runtime qualification now compares eight batch
+fixtures and 20 ordered entries per variant/runtime with an independent
+direct-Core oracle, including every summary field, single-source `scan()` parity,
+invalid inputs and lifecycle independence. Node/Bun evidence is recorded in
+[Compatibility](COMPATIBILITY.md). This addition is semantic and ergonomic; it
+does not retroactively change the historical v0.4 performance finding that
+repeated 64 KiB scans showed no material per-source amortization.
+
+### P0.6D Share Bundle contract
+
+Flow WASM adds `ShareBundleBuilder` and owned `ShareBundle`, `ShareBundleEntry`
+and `ShareManifestView` projections. Core WASM omits all four classes and the
+`ShareModeKind` enum. The builder accepts the existing type-only
+`ScanBatchSource[]` shape and delegates the complete ordered collection to one
+Core `ShareBundleBuilder::scan_and_build_with_generated_at()` call. Scanning,
+transformation, source pairing, ordering, manifest construction and all
+Core policy decisions remain inside Core.
+
+The supported mode subset is Core `ShareMode`: redact, default template,
+keyed pseudonymization and keyed synthesis. Keyed options reuse Core defaults;
+the adapter only copies an exact 32-byte key into Core options. No mode is
+selected implicitly, so a missing mode preserves Core's `MissingShareMode`
+error. Core `ShareMode` has no per-bundle template configuration and the WASM
+adapter does not invent one. Core currently exposes no archive, serialization or
+filesystem operation on `ShareBundle`; those responsibilities remain external.
+
+`wasm32-unknown-unknown` does not implement `SystemTime::now()`. Core therefore
+adds an additive public `scan_and_build_with_generated_at()` method that stores
+a caller-supplied `SystemTime` at the same manifest-construction point used by
+the existing `scan_and_build()`. The existing method and `build()` still obtain
+`SystemTime::now()` after transformations, preserving prior behavior. Flow WASM
+reads `Date.now()` once through `wasm-bindgen` at the invocation boundary,
+converts non-negative safe milliseconds to `SystemTime`, and passes it to Core.
+The manifest exposes exact seconds as bigint and nanoseconds as a number; the
+adapter constructs neither manifest fields nor transformations.
+
+`ShareBundle` owns cloned IDs, Core-transformed content and Core manifest
+metadata. It retains no original source text. `entryAt()` returns a fresh owned
+entry, `manifest()` returns a fresh owned manifest and `summary()` returns a
+fresh existing summary projection. Entries, manifests and summaries outlive the
+builder, engine and bundle. Core failures remain source-free JavaScript
+`Error` objects; structural inputs and indexes fail closed. The adapter adds no
+transport dependency, worker, parallel path or source cache.
+
+The generated Flow runtime qualification uses a direct-Core Share Bundle oracle
+over 11 collections and 18 ordered entries, comparing every transformed content,
+manifest mode and summary field. Timestamps are validated against the
+invocation window. Runtime checks also cover key defaults and clamping, mode
+precedence, missing mode, invalid keys/inputs, repeated construction and
+independent lifetimes; Core WASM asserts the complete absence of the new
+exports. Node/Bun evidence is recorded in [Compatibility](COMPATIBILITY.md).
 
 ### Artifact size after capability parity
 
@@ -115,15 +273,36 @@ the v0.4.2 surface measure:
 The unoptimized v0.4.2 WASM binary is the common input for the Binaryen
 comparison below.
 
+Current P0.6D production package, measured from `just wasm-package-check` with
+the default Flow profile and Binaryen `-Oz`:
+
+| Artifact | P0.6D production |
+| --- | ---: |
+| `cribra.js` | 82,408 bytes |
+| `cribra.d.ts` | 39,662 bytes |
+| `cribra_bg.wasm` | 1,417,134 bytes |
+| `cribra_bg.wasm.d.ts` | 10,648 bytes |
+| `package.json` | 18 bytes |
+| Total | 1,549,870 bytes |
+
+This is a local macOS ARM64 generated-runtime measurement, not a published
+package or new CI artifact. The production package validator checks the typed
+Share Bundle declarations, generated glue, expected files and sizes before these
+figures are recorded.
+
 ### Error and ownership boundary
 
 Rust validation remains independently testable on native targets. JavaScript
 error construction occurs only at the exported WASM boundary.
 
-The adapter retains scan metadata but does not retain source text or
-transformation keys. Transform operations require the source to be supplied
-explicitly for each call. Ambiguous candidates remain review-only and are
-never promoted to transform authority.
+Scan results, batch entries, summaries and incremental snapshots retain metadata
+without source text or transformation keys. Batch results retain caller-supplied
+IDs and Core reports only. Share Bundles retain cloned IDs, Core-transformed
+content and Core manifest metadata, never original source text or keys.
+Incremental documents retain source exclusively inside their Core session.
+Transform operations require the source to be supplied explicitly for each call.
+Ambiguous candidates remain review-only and are never promoted to transform
+authority.
 
 ## Initialization, errors, Workers, and browser constraints
 
@@ -169,25 +348,48 @@ but every exposed capability delegates to the same Rust core semantics.
 | --- | --- | --- | --- |
 | current default built-ins | yes | yes | semantic parity verified |
 | opt-in financial built-ins | yes | yes | semantic parity verified |
+| opt-in personal built-ins | yes | yes | semantic parity verified |
 | literal/prefix/suffix/pattern custom rules | yes | yes | semantic parity verified |
+| optional custom remediation, all four rule families | yes | yes, additive methods | generated Core/Flow contract and direct-Core parity verified |
+| owned active rule metadata in Core order | yes | `activeRules()` | generated Core/Flow contract and direct-Core parity verified |
+| structured scanner construction categories | yes | enriched existing JS Errors | Core-derived codes; legacy signatures/messages retained |
 | finding count/order/rule ID | yes | yes | semantic parity verified |
 | byte spans and Unicode coordinates | yes | yes | semantic parity verified |
 | severity/confidence/remediation | yes | yes | semantic parity verified |
 | ambiguous candidate count/order/kind/evidence | yes | yes | semantic parity verified |
 | typed finding/candidate explanations | yes | yes | semantic parity verified |
+| admitted byte streaming and three budgets | yes | yes, both variants | local generated-runtime parity verified |
+| incremental UTF-8 edits, four budgets and committed snapshots | yes | yes, both variants | local generated-runtime parity verified |
 | redact / custom redaction | yes | yes | semantic parity verified where exposed |
 | template / custom template options | yes | yes | semantic parity verified where exposed |
 | keyed pseudonymization | yes | yes | semantic parity verified |
 | keyed deterministic synthesis | yes | yes | semantic parity verified |
-| generic ordered multi-source `ScanResults<K>` | yes | no | consumer performs repeated single-source scans |
+| in-memory Share Bundles and manifests | yes | `ShareBundleBuilder` in Flow only | local generated-runtime direct-Core parity verified |
+| explicit Share Bundle generation timestamp | yes, additive Core method | host `Date.now()` passed to Core in Flow | Core stores the authoritative manifest timestamp |
+| generic ordered multi-source `ScanResults<K>` | yes | `scanBatch()` in both variants | local generated-runtime direct-Core parity verified |
+| aggregate `ScanSummary` counters and predicates | yes | `ScanSummaryView` | local generated-runtime direct-Core parity verified |
 | Rayon parallel scan | optional native feature | no | not a WebAssembly contract |
 | Serde transport | optional | not used by adapter transport | typed projections retained |
 | raw WASM memory / allocator API | n/a | no | intentionally not exposed |
 
 The opt-in financial catalog is exposed through
 `ScanEngineBuilder.addFinancialBuiltins()` and delegates to
-`builtins::financial::CURRENT` in the Rust core. The adapter does not maintain
-its own financial rule catalog or validation logic.
+`builtins::financial::CURRENT` in the Rust core. `addPersonalBuiltins()` similarly
+delegates to `builtins::personal::CURRENT`. The adapter maintains no catalog or
+validation logic of its own. The four `add…WithRemediation` methods project the
+existing `RemediationKind` values directly to Core, preserving the old builder
+methods and defaults. See [custom remediation](../crates/cribra-wasm/README.md#custom-rule-remediation)
+for optional-value and failure behavior.
+
+`ScanEngine.activeRules()` projects all five public Core metadata fields into
+owned `RuleMetadataView` objects. Free each view independently; no regex, matcher,
+validator or scanned source is exposed. Existing builder failures remain native
+JS `Error` instances enriched with `ScannerBuildErrorCode` and optional `ruleId`.
+The type-only `ScannerBuildError extends Error` interface requires no manual
+error free. Categories derive from Core enums, while human-readable Core regex
+diagnostics may include configuration patterns. See the
+[metadata/error contract](../crates/cribra-wasm/README.md#active-rule-metadata-and-structured-build-errors)
+for lifetime, compatibility, category and privacy details.
 
 Representation differences are allowed. Semantic differences in exposed
 capabilities are not.
@@ -408,7 +610,9 @@ The v0.4 browser benchmark establishes the following policy:
   reference run.
 - Repeated 64 KiB scans show no meaningful per-source amortization between
   one, eight, and thirty-two serial sources. A WASM `scanBatch()` API is
-  therefore not justified for performance in v0.4.
+  therefore not justified for performance in v0.4. (The semantic/ergonomic
+  `scanBatch()` contract was added independently in P0.6C; it makes no
+  throughput claim.)
 - Cribra does not expose raw WASM memory, allocator handles, or alternate
   byte-input APIs solely to avoid measured copies. Such an API requires
   evidence from real workloads that the existing safe boundary is a product

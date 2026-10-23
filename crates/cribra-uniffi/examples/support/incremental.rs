@@ -6,9 +6,9 @@ mod support;
 use cribra::{IncrementalLimits, IncrementalSession, Rule, Scanner, Severity};
 use serde_json::{Value, json};
 
-fn view(session: &IncrementalSession, id: &str) -> Value {
+fn view(scanner: &Scanner, session: &IncrementalSession, id: &str) -> Value {
     json!({"revision":session.revision(),"state":if session.is_active() {"Active"} else {"Failed"},
-        "report": super::report_snapshot(id, session.source().len(), session.report())})
+        "report": super::metadata::report(scanner, id, session.source().len(), session.report())})
 }
 
 pub fn data() -> Value {
@@ -22,7 +22,7 @@ pub fn data() -> Value {
     let mut session = scanner
         .incremental_session(fixture["source"].as_str().unwrap().into())
         .unwrap();
-    let mut trace = vec![json!({"snapshot":view(&session,id)})];
+    let mut trace = vec![json!({"snapshot":view(&scanner, &session,id)})];
     for edit in fixture["edits"].as_array().unwrap() {
         let result = session.apply_edit(
             edit["revision"].as_u64().unwrap(),
@@ -40,7 +40,9 @@ pub fn data() -> Value {
                 .single_report()
                 .unwrap()
         );
-        trace.push(json!({"newRevision":revision,"error":error,"snapshot":view(&session,id)}));
+        trace.push(
+            json!({"newRevision":revision,"error":error,"snapshot":view(&scanner, &session,id)}),
+        );
     }
     let mut resources = Vec::new();
     for (name, limits, initial, replacement) in [
@@ -80,13 +82,15 @@ pub fn data() -> Value {
         if initial.is_empty() {
             session.apply_edit(0, 0..0, "").unwrap();
         }
-        let before = view(&session, id);
+        let before = view(&scanner, &session, id);
         let error = session
             .apply_edit(session.revision(), 0..0, replacement)
             .unwrap_err();
         let error = support::core_error(error, !session.is_active());
-        let after = view(&session, id);
-        let later = session.apply_edit(u64::MAX, 999..0, "").unwrap_err();
+        let after = view(&scanner, &session, id);
+        let later = session
+            .apply_edit(u64::MAX, std::ops::Range { start: 999, end: 0 }, "")
+            .unwrap_err();
         resources.push(
             json!({"name":name,"before":before,"after":after,"error":error,
             "laterError":support::core_error(later,!session.is_active())}),

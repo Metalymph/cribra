@@ -6,6 +6,8 @@
 
 package cribra.kotlin.fuse
 
+import com.google.gson.JsonNull
+import uniffi.cribra_uniffi.Explanation
 import com.google.gson.JsonArray
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
@@ -119,6 +121,13 @@ private fun summaryJson(summary: ScanSummary): JsonObject = objectOf(
     "info" to number(summary.info),
 )
 
+private fun coreName(value: Enum<*>): String = value.name.lowercase().split('_').joinToString("") { it.replaceFirstChar(Char::uppercase) }
+private fun explanation(value: Explanation?): JsonElement = when (value) {
+    null -> JsonNull.INSTANCE
+    is Explanation.Classified -> objectOf("classified" to JsonPrimitive(coreName(value.mode)))
+    is Explanation.Ambiguous -> objectOf("ambiguous" to JsonPrimitive(coreName(value.evidence)))
+}
+
 private fun snapshot(results: ScanResults): JsonObject = objectOf(
     "reports" to JsonArray().apply {
         for (report in results.reports) {
@@ -128,6 +137,15 @@ private fun snapshot(results: ScanResults): JsonObject = objectOf(
                     "sourceBytes" to number(report.sourceBytes),
                     "candidateCount" to number(report.candidateCount),
                     "needsReview" to JsonPrimitive(report.needsReview),
+                    "candidates" to JsonArray().apply {
+                        for (candidate in report.candidates) {
+                            add(objectOf("kind" to JsonPrimitive(coreName(candidate.kind)),
+                                "evidence" to JsonPrimitive(coreName(candidate.evidence)),
+                                "start" to number(candidate.location.start), "end" to number(candidate.location.end),
+                                "line" to number(candidate.location.line), "column" to number(candidate.location.column),
+                                "explanation" to explanation(candidate.explanation)))
+                        }
+                    },
                     "findings" to JsonArray().apply {
                         for (finding in report.findings) {
                             add(
@@ -139,6 +157,8 @@ private fun snapshot(results: ScanResults): JsonObject = objectOf(
                                     "column" to number(finding.location.column),
                                     "severity" to JsonPrimitive(severityName(finding.severity)),
                                     "confidence" to JsonPrimitive(confidenceName(finding.confidence)),
+                                    "remediation" to (finding.remediation?.let { JsonPrimitive(coreName(it)) } ?: JsonNull.INSTANCE),
+                                    "explanation" to explanation(finding.explanation),
                                 ),
                             )
                         }

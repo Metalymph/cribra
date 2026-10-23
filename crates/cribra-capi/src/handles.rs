@@ -26,6 +26,71 @@ impl CribraScanner {
     }
 }
 
+/// Opaque, exclusively accessed Core-owned editable UTF-8 document.
+///
+/// No adapter source buffer, revision counter or report cache is retained.
+/// Ordinary Core terminal errors preserve the committed snapshot; a contained
+/// panic permanently removes the Core session. Free with cribra_incremental_free.
+pub struct CribraIncremental {
+    pub(crate) inner: Option<cribra::IncrementalSession>,
+}
+
+impl CribraIncremental {
+    pub(crate) fn new(inner: cribra::IncrementalSession) -> Self {
+        Self { inner: Some(inner) }
+    }
+
+    pub(crate) fn with_core<T>(
+        &mut self,
+        operation: impl FnOnce(&mut cribra::IncrementalSession) -> T,
+    ) -> Result<T, crate::CribraStatus> {
+        let mut core = self
+            .inner
+            .take()
+            .ok_or(crate::CRIBRA_INCREMENTAL_SESSION_INVALIDATED)?;
+        // Restore on every normal return, including ordinary Core errors.
+        // Unwinding drops Core and leaves None, forbidding panic recovery.
+        let result = operation(&mut core);
+        self.inner = Some(core);
+        Ok(result)
+    }
+}
+
+/// Opaque, exclusively accessed byte-oriented Core streaming session.
+///
+/// Owns no adapter source buffer. The handle remains valid after finish or a
+/// terminal failure until freed with [`crate::cribra_stream_free`].
+pub struct CribraStream {
+    pub(crate) inner: Option<cribra::StreamSession>,
+    pub(crate) source_bytes: usize,
+}
+
+impl CribraStream {
+    pub(crate) fn new(inner: cribra::StreamSession) -> Self {
+        Self {
+            inner: Some(inner),
+            source_bytes: 0,
+        }
+    }
+
+    pub(crate) fn push(&mut self, chunk: &[u8]) -> Result<(), cribra::StreamError> {
+        // Taking ownership first also leaves the handle inactive if Core panics.
+        let mut inner = self.inner.take().ok_or(cribra::StreamError::NotActive)?;
+        inner.push(chunk)?;
+        self.source_bytes = self
+            .source_bytes
+            .checked_add(chunk.len())
+            .ok_or(cribra::StreamError::SourceOffsetOverflow)?;
+        self.inner = Some(inner);
+        Ok(())
+    }
+
+    pub(crate) fn finish(&mut self) -> Result<CribraReport, cribra::StreamError> {
+        let inner = self.inner.take().ok_or(cribra::StreamError::NotActive)?;
+        Ok(CribraReport::new(inner.finish()?, self.source_bytes))
+    }
+}
+
 /// Opaque immutable report handle.
 ///
 /// v0.3.3 deliberately establishes report ownership only. The report read

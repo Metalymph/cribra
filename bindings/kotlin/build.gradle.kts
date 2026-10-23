@@ -31,6 +31,8 @@ val generatedBindings = providers.gradleProperty("cribra.kotlin.generated")
     .getOrElse(repositoryRoot.resolve("target/uniffi-kotlin-smoke/generated").absolutePath)
 val nativeLibraryDir = providers.gradleProperty("cribra.kotlin.native")
     .getOrElse(repositoryRoot.resolve("target/debug").absolutePath)
+val coreSmokeDir = providers.gradleProperty("cribra.kotlin.core.smoke-dir")
+    .getOrElse(repositoryRoot.resolve("target/uniffi-kotlin-smoke").absolutePath)
 val flowSmokeDir = providers.gradleProperty("cribra.kotlin.flow.smoke-dir")
     .getOrElse(repositoryRoot.resolve("target/uniffi-kotlin-flow-smoke").absolutePath)
 val flowGeneratedBindings = File(flowSmokeDir, "generated").absolutePath
@@ -108,6 +110,37 @@ tasks.register<JavaExec>("runFuse") {
         fixtures.resolve("parallel.json").absolutePath,
         File(fuseSmokeDir, "parallel-oracle.json").absolutePath,
     )
+}
+
+// Test-only source sets keep Gson and conformance classes out of every profile
+// JAR. Each compiles the same consumers with exactly one generated binding and
+// executes in a fresh JVM against that profile's native library.
+for ((profile, smokeDir, generated) in listOf(
+    Triple("core", coreSmokeDir, generatedBindings),
+    Triple("flow", flowSmokeDir, flowGeneratedBindings),
+    Triple("fuse", fuseSmokeDir, fuseGeneratedBindings),
+)) {
+    val conformance = sourceSets.create("${profile}Conformance") {
+        kotlin.srcDir(repositoryRoot.resolve("crates/cribra-uniffi/tests/kotlin"))
+        kotlin.srcDir(generated)
+    }
+    dependencies.add(conformance.implementationConfigurationName, jna)
+    dependencies.add(conformance.implementationConfigurationName, gson)
+    tasks.register<JavaExec>("run${profile.replaceFirstChar(Char::uppercase)}Conformance") {
+        group = "verification"
+        description = "Execute $profile configuration, streaming, incremental and generated API conformance."
+        dependsOn(conformance.classesTaskName)
+        mainClass = "cribra.kotlin.conformance.ConformanceSmokeKt"
+        classpath = conformance.runtimeClasspath
+        systemProperty("jna.library.path", providers.gradleProperty("cribra.kotlin.$profile.native").getOrElse(nativeLibraryDir))
+        systemProperty("jna.nosys", "true")
+        systemProperty("file.encoding", "UTF-8")
+        workingDir = repositoryRoot
+        args(fixtures.resolve("configurations.json").absolutePath,
+            File(smokeDir, "scanner-oracle.json").absolutePath,
+            fixtures.resolve("incremental.json").absolutePath,
+            fixtures.resolve("api-contract.json").absolutePath, profile)
+    }
 }
 
 // ---- Profile JAR packaging --------------------------------------------------

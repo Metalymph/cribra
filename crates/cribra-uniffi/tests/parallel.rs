@@ -24,8 +24,9 @@ fn repeated_parallel_scans_match_sequential_and_core_for_every_observable() {
                             .report()
                             .findings()
                             .iter()
-                            .map(Finding::from)
+                            .map(|finding| Finding::from_core(finding, &core))
                             .collect(),
+                        candidates: entry.report().candidates().iter().map(Into::into).collect(),
                         candidate_count: entry.report().candidate_len() as u64,
                         needs_review: entry.report().needs_review(),
                     })

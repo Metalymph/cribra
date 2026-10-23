@@ -135,7 +135,8 @@ not become independent detection authorities.
 
 Native ownership is explicit.
 
-Rust-owned objects include scanner, report, batch-result, transformed-output,
+Rust-owned objects include scanner, stream, incremental-document, report, batch-result,
+transformed-output,
 and error handles where applicable. Every owned allocation has one documented
 destruction path.
 
@@ -199,6 +200,130 @@ independently.
 
 This consuming ownership rule is part of the public ABI contract.
 
+### Streaming lifecycle and budgets (ABI 0.2.0)
+
+`cribra_scanner_stream_new` opens an unlimited Core stream;
+`cribra_scanner_stream_new_with_limits` copies a `CribraStreamLimits` configuration.
+Complete built-in portfolios and unsupported custom patterns fail admission with
+`CRIBRA_STREAM_UNSUPPORTED_RULE_SET`. There is no whole-source fallback or adapter
+source buffer. Streaming eligibility is exactly Core's; see
+[streaming](streaming.md) and its [compatibility inventory](streaming-compatibility.md).
+
+`cribra_stream_push` accepts caller-owned bytes in source order, including partial
+UTF-8 scalars across chunks. No caller borrow survives the call. Null plus zero
+length is an empty chunk; embedded NUL is a source byte. Definite malformed UTF-8
+fails during push with `CRIBRA_STREAM_INVALID_UTF8`; EOF inside a scalar fails with
+`CRIBRA_STREAM_INCOMPLETE_UTF8`. These are distinct from the existing whole-source
+`CRIBRA_INVALID_UTF8` status, whose assignment and meaning remain unchanged.
+
+`cribra_stream_finish` signals genuine EOF and consumes the Core session, returning
+an ordinary independently owned `CribraReport` only on success. Existing report,
+explanation and transformation APIs apply unchanged, including UTF-8 byte offsets,
+Core finding/candidate order, review-only semantics and source-length validation.
+The stream handle remains valid until `cribra_stream_free`, even after finish or
+failure. Repeated finish and every later push (including empty chunks) return
+`CRIBRA_STREAM_NOT_ACTIVE`. A failed operation never transfers a partial report.
+Freeing an active stream cancels it; freeing null is a no-op. A stream may outlive
+its scanner, and a report may outlive both.
+
+`CribraStreamLimits` exposes the three Core limits with separate `uint32_t` enabled
+flags and `size_t` values. Each flag must be 0 (unlimited, ignore the value) or 1
+(use the value). Enabled zero is a real zero budget; no value is a sentinel.
+Zero-initialization makes all budgets unlimited. The limits cover cumulative raw
+rule candidates, logical executor storage at admission, and retained finding plus
+structural review records before normalization/suppression. Normalization does
+not refund slots. Logical storage excludes allocator overhead, spare capacity,
+compiled rules, validator workspace and result records; it is not an RSS cap.
+
+Each current Core streaming error has a distinct `CRIBRA_STREAM_*` status,
+including resource limits, arithmetic overflows and execution invariant failure.
+Future unrecognized Core errors return `CRIBRA_STREAM_UNKNOWN_ERROR`. All Core
+execution failures discard the session. Adapter source-byte accounting is checked
+and advances only after a successful push; overflow also makes the stream terminal.
+Diagnostics are fixed privacy-safe text, with no source, rule text or panic payload.
+Unwinding execution panics are contained as `CRIBRA_INTERNAL_ERROR` and leave the
+session inactive; process aborts and invalid-memory caller violations cannot be
+contained by this ABI.
+
+Null required pointers, invalid enabled flags and invalid buffer descriptors return
+`CRIBRA_INVALID_ARGUMENT`; they are not Core execution errors. Invalid buffer
+arguments and a null `out_report` do not consume an active stream. A valid report
+output slot is cleared before validation. Optional diagnostic slots obey the
+error ownership rules above and must be freed before reuse.
+
+Streams require exclusive access: callers must serialize push, finish and free;
+there is no adapter mutex or concurrent use guarantee. Caller buffers and output
+slots must not alias the stream. Existing immutable scanner rules remain unchanged.
+
+### Incremental documents and snapshots (ABI 0.3.0)
+
+`cribra_scanner_incremental_new` creates an unlimited Core-owned UTF-8 document;
+`cribra_scanner_incremental_new_with_limits` also accepts `CribraIncrementalLimits`.
+Construction validates UTF-8 and copies the initial bytes once into Core-owned
+storage. Core exclusively owns the editable source, caches, revision and report.
+There is no adapter source copy, matching logic or edit engine. Complete built-in
+scanners are supported by Core incremental scanning; streaming admission rules do
+not restrict incremental documents. See [Core incremental semantics](incremental.md).
+
+The initial revision is zero. `cribra_incremental_apply_edit` accepts an
+`expected_revision`, a half-open UTF-8 **byte** range `[start, end)`, and replacement
+UTF-8 bytes. Successful insertion, replacement, deletion and no-op edits each
+increment the revision once. Endpoints must fall on scalar boundaries. Core alone
+validates revisions, ranges, boundaries and transactions after ABI input validation.
+Replacement bytes are validated before Core is invoked; malformed UTF-8 returns
+the existing `CRIBRA_INVALID_UTF8` status without changing the session. Null plus
+zero length means empty input; embedded NUL is allowed. Nonempty buffers must be
+readable and at most `PTRDIFF_MAX` bytes. Invalid buffer/output arguments leave
+the document unchanged. The required edit revision output is zero on failure.
+
+Each current Core error has a distinct `CRIBRA_INCREMENTAL_*` status. Stale revision,
+invalid range, invalid UTF-8 boundary, revision overflow and document-length overflow
+are recoverable. Core resource/accounting/invariant failures terminate further edits,
+which then return `CRIBRA_INCREMENTAL_NOT_ACTIVE`, but preserve the last committed
+snapshot. Core defines error precedence for valid UTF-8 requests, including inactive
+before stale revision or bad range. A future unrecognized Core error maps to
+`CRIBRA_INCREMENTAL_UNKNOWN_ERROR` while preserving Core's actual state. Error
+messages are fixed privacy-safe text and never contain document, replacement,
+matcher text, or panic payloads.
+
+`CribraIncrementalLimits` carries four pairs of `uint32_t` enabled flags and `size_t`
+values. Each flag must be 0 (unlimited; ignore the value) or 1 (use the value).
+Enabled zero is a real budget; there are no sentinel values. Zero-initialization
+means unlimited budgets. Core charges newly emitted raw candidates per operation,
+simultaneously owned old/staged cache records, materialized finding/structural
+records per operation, and conservative peak logical transaction bytes. Rejected
+and hidden cache records count; suppression refunds no result tickets. Logical
+storage excludes allocator capacity/overhead, shared configuration, opaque
+regex/validator workspace, FFI input conversion and caller-owned report clones;
+it is not a total heap or allocation-failure guarantee.
+
+`cribra_incremental_snapshot` fills one `CribraIncrementalSnapshot` with matching
+revision, UTF-8 source byte count and an independently owned complete `CribraReport`.
+It remains available after ordinary Core terminal failures. The cloned report
+supports all existing report/candidate/explainability/transform APIs, with unchanged
+Core ordering, UTF-8 coordinates and review-only semantics. It remains valid through
+later edits and after freeing the document or scanner. There is no source getter.
+The caller must call `cribra_report_free(snapshot.report)` exactly once, including
+before reusing the same output record; copying the C record does not clone ownership.
+Snapshot failure clears all fields to zero/null and transfers no partial report.
+
+Every handle operation requires exclusive access, including snapshot and activity
+queries. Callers must serialize calls; there is no adapter mutex. Coherence covers
+one complete snapshot call, not separate calls made across intervening edits.
+Inputs, output slots and handles must not alias. The document may outlive its
+scanner. `cribra_incremental_free` releases active, terminal or panic-invalidated
+handles; null is a no-op. Snapshot reports remain independently owned.
+
+An unwinding panic during guarded Core/report operations is contained as
+`CRIBRA_INTERNAL_ERROR` and permanently removes the adapter's Core session. Later
+edits/snapshots return `CRIBRA_INCREMENTAL_SESSION_INVALIDATED`; panic recovery is
+not supported and no potentially invalid committed snapshot is exposed.
+`cribra_incremental_is_active` succeeds with a `uint32_t` 1 for active documents,
+or 0 after either an ordinary terminal failure or panic invalidation. Previously
+returned reports remain valid. Allocation aborts and invalid-memory caller-contract
+violations are outside panic containment. Optional error-output slots follow the
+same ownership and clearing conventions as other C ABI functions.
+
 ## 7. Native input contract
 
 Native source input is length-delimited rather than NUL-terminated.
@@ -236,6 +361,61 @@ concurrent destruction memory-safe.
 
 Those remain caller contract violations inherent to a native FFI boundary.
 
+### P0.7 — Raw Pointer Safety and CodeQL Audit
+
+An output-slot address is distinct from the pointer stored in that slot. For
+example, `CribraReport **out_report` addresses caller-owned pointer storage;
+`*out_report` may initially be null without `out_report` itself being null.
+Required output slots must be valid, correctly aligned, writable for the complete
+output value, and live throughout the call. Callers must obey documented
+exclusive-access and non-aliasing requirements for slots, inputs and handles.
+Checking a pointer for null does not validate arbitrary foreign memory.
+
+Optional diagnostic slots may be null. `ErrorSlot` checks its slot address for
+null before reading or writing through it. A non-null diagnostic slot must meet
+its documented readable/writable lifetime and exclusive-access requirements;
+its stored error pointer may initially be null.
+
+`clear_out()` writes null into a pointer slot; `clear_value()` writes a default
+record, including any null pointer fields. Neither dereferences nor frees a
+pointer previously stored there. Callers MUST release previously owned outputs
+before reusing their slots. Successful handle/report-producing calls transfer
+Rust allocations through `Box::into_raw()`; each must be released exactly once
+using its corresponding Cribra destruction function, never the caller allocator.
+See [§6, Native ownership and lifetime model](#6-native-ownership-and-lifetime-model).
+
+Incremental snapshot reports and finished-stream reports are independently
+owned. They remain valid after subsequent edits and destruction of their
+originating session or scanner, until `cribra_report_free()` releases them.
+Copying a snapshot record or raw pointer does not duplicate ownership. Borrowed
+views still require their owner to remain alive; APIs requiring a scanner still
+require a live scanner.
+
+Negative C ABI tests may store null or `ptr::dangling_mut()` sentinels in valid
+output slots to verify clearing or replacement. Passing the address of such a
+slot is different from passing a dangling slot address. Sentinels must never be
+dereferenced or freed, and successful outputs must be checked before use.
+
+**Historical audit.** The read-only audit of PR #53 at commit
+`d412cee1da90bf087171645a4cc8717fdbed6fc0` reviewed CodeQL Rust analysis
+`2004343041`, CodeQL version 2.27.3, rule `rust/access-invalid-pointer`.
+The 39 PR alerts (#59–#97) were individually classified as false positives,
+including review of 48 explicit PR code flows. Three separate existing
+`ErrorSlot` alerts (#4, #23, #24) were also classified as false positives. No
+genuine memory-safety defect was identified among the reported paths.
+
+Observed alert paths propagated initial null or sentinel values past checked
+successful output writes and complete snapshot replacement, or conflated stored
+pointer values with slot addresses and included guarded null diagnostic slots.
+These observations describe the exported analysis; they do not establish
+CodeQL's internal implementation or the precise cause of its results.
+
+The conclusions apply only to the audited revision and paths, depend on the
+documented unsafe FFI caller contracts, and do not prove whole-library memory
+safety. They do not automatically classify future alerts or justify disabling
+or suppressing the CodeQL rule. Future alerts require independent review. See
+the [§23 threat model](#23-threat-model) for caller-memory and lifetime limitations.
+
 ## 9. Scanner construction
 
 The native builder mirrors Cribra's explicit scanner-construction model.
@@ -268,6 +448,85 @@ exposing Rust `Rule` layouts.
 Rule-ID uniqueness and scanner-wide validation remain core authority.
 
 Once successfully constructed, a scanner is immutable and reusable.
+
+### Scanner rule metadata (P0.6B)
+
+The public native header is `include/cribra.h`, generated from `cribra-capi`
+with its existing cbindgen configuration. `cribra_scanner_rule_count` and
+`cribra_scanner_rule_at` enumerate Core's active rule metadata directly. Indexes
+follow `Scanner::rule_metadata()` exactly: caller-order custom rules precede
+the catalogs in Core builder order. The adapter keeps no second rule inventory.
+
+`CribraRuleMetadataView` has exactly five fields: `rule_id`, `kind`,
+`detection_mode`, `severity` and `remediation`. It uses existing ABI enum types;
+`CRIBRA_REMEDIATION_NONE` represents absent remediation. The newly assigned
+`CRIBRA_REMEDIATION_REVIEW_PASSWORD_VERIFIER = 7` projects Core's existing action
+through metadata and report views and is accepted in rule configuration.
+Previously this action projected as `CRIBRA_REMEDIATION_UNKNOWN`; all existing
+numeric assignments remain unchanged.
+
+`rule_id` is a borrowed, non-NUL-terminated UTF-8 view into immutable scanner
+storage. It survives scans and report destruction and expires at scanner free.
+Do not free it. Copy the bytes before freeing the scanner if needed longer.
+No field exposes matcher payloads, regexes, validators or scanned source.
+Null inputs/outputs return `CRIBRA_INVALID_ARGUMENT`; invalid indexes return
+`CRIBRA_OUT_OF_RANGE`. Writable outputs are cleared before handle/index checks.
+Pointer validity, non-aliasing and live-owner obligations follow the existing ABI.
+
+### Structured construction diagnostics (P0.6B)
+
+The existing owned `CribraError` remains opaque. `cribra_error_status`,
+`cribra_error_message`, optional error-output slots and `cribra_error_free`
+keep their existing behavior. Construction still returns coarse
+`CRIBRA_RULE_ERROR` or `CRIBRA_BUILD_ERROR`; fixed sanitized messages are unchanged.
+No new general status codes or changes to public struct layouts are introduced.
+
+`cribra_error_build_info(error, out_info)` fills a new `CribraBuildErrorView`:
+`code` is a stable Core-derived category and `rule_id` is an optional borrowed
+identity copied into the error at failure. A null ID pointer means absent;
+otherwise its UTF-8 bytes remain valid until error free, independently of the
+builder/scanner lifetime. Empty IDs may be present in constructor context;
+Core's `EmptyRuleId` build error itself has no supplied identity. Neither view
+owns memory. Non-construction errors return code `CRIBRA_BUILD_CODE_NONE` and
+no ID. Null arguments fail and clear writable output just like other accessors.
+
+| Category suffix (`CRIBRA_BUILD_CODE_*`) | Value | Core origin |
+| --- | ---: | --- |
+| `NONE` | 0 | Non-construction status/error |
+| `INVALID_PATTERN` | 1 | `RuleError::InvalidPattern` |
+| `PATTERN_MATCHES_EMPTY` | 2 | `RuleError::PatternMatchesEmpty` |
+| `MISSING_CAPTURE_GROUP` | 3 | `RuleError::MissingCaptureGroup` |
+| `EMPTY_RULE_ID` | 4 | `ScannerBuildError::EmptyRuleId` |
+| `DUPLICATE_RULE_ID` | 5 | `ScannerBuildError::DuplicateRuleId` |
+| `EMPTY_MATCHER` | 6 | `ScannerBuildError::EmptyMatcher` |
+| `TOO_MANY_RULES` | 7 | `ScannerBuildError::TooManyRules` |
+| `AUTOMATON_BUILD` | 8 | `ScannerBuildError::AutomatonBuild` |
+
+Categories come from Rust enum matches, never diagnostic parsing. Core still
+owns pattern construction, catalog composition, ordering and validation error
+precedence. Invalid patterns leave the builder usable; a validated build attempt
+consumes it on success or failure, as before. C diagnostics remain fixed and
+source-free. WASM retains Core's human-readable regex diagnostics, which may
+contain caller-supplied configuration patterns; those are not scanned source.
+
+The native regression suite compares all catalog selections and four custom
+families against Core, checks borrowed ownership/UTF-8 IDs, optional remediation,
+structured categories and null/index handling. Header contract fixtures pin
+172 prior declarations and 16 additions (types, fields, codes and signatures).
+The C11 smoke exercises the new views and errors; C/C++ examples compile and run.
+Rare capacity/capture errors are conversion checks; automaton resource failure
+is mapped but not forced. The ABI protocol remains 0.3.0 with additive symbols.
+
+Regenerate with `just capi-header` and check `just capi-header-check`. If Cargo's
+unfiltered metadata discovery needs uncached dependencies for another platform,
+the equivalent host-filtered generation is:
+
+```sh
+cbindgen --only-target-dependencies --config crates/cribra-capi/cbindgen.toml --crate cribra-capi --output include/cribra.h
+```
+
+Repeat that command with a temporary output and compare bytes for determinism.
+Filtering dependency discovery does not change the C ABI source/configuration.
 
 ## 10. Scanning
 
@@ -424,7 +683,9 @@ potentially stale header.
 ## 17. ABI versioning
 
 Cribra exposes an explicit native ABI version independently from Rust crate
-SemVer.
+SemVer. The current native protocol is **0.3.0**, adding Core-owned incremental
+documents and coherent snapshots alongside 0.2.0 streaming. Existing entry-point
+signatures and numeric statuses remain unchanged.
 
 Crate version and ABI protocol version answer different questions:
 

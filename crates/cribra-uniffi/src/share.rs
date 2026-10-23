@@ -307,7 +307,7 @@ impl Scanner {
                         .report()
                         .findings()
                         .iter()
-                        .map(Finding::from)
+                        .map(|finding| Finding::from_core(finding, &self.inner))
                         .collect(),
                     candidates,
                 })

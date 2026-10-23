@@ -2,7 +2,7 @@
 
 use std::{error::Error, fmt};
 
-use crate::{RuleId, Severity};
+use crate::{DetectionMode, Remediation, RuleId, Severity};
 
 /// Explicit rule selection; custom-only never implicitly adds built-ins.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
@@ -17,6 +17,19 @@ pub enum ScannerConfig {
     /// These custom rules plus the complete current built-in catalog.
     BuiltInAndCustom {
         /// Custom rules in caller order; Core places these before built-ins.
+        rules: Vec<RuleSpec>,
+    },
+    /// Independently selected Core catalogs plus custom rules. All flags false
+    /// and no rules is an empty scanner. Catalogs are submitted in current,
+    /// financial, personal order; Core composes and validates the final rules.
+    Catalogs {
+        /// Include Core's current default catalog.
+        current: bool,
+        /// Include Core's opt-in financial catalog.
+        financial: bool,
+        /// Include Core's opt-in personal-data catalog.
+        personal: bool,
+        /// Custom rules in caller order; Core places these before catalogs.
         rules: Vec<RuleSpec>,
     },
 }
@@ -50,36 +63,6 @@ pub struct RuleSpec {
     pub severity: Severity,
     /// Optional Core remediation; does not change detection behavior.
     pub remediation: Option<Remediation>,
-}
-
-/// Public Core remediation choices available for custom rules.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
-pub enum Remediation {
-    /// Revoke and rotate a credential.
-    RevokeAndRotateCredential,
-    /// Rotate a credential.
-    RotateCredential,
-    /// Rotate a password.
-    RotatePassword,
-    /// Replace a private key.
-    ReplacePrivateKey,
-    /// Remove a sensitive value.
-    RemoveSensitiveValue,
-    /// Review a sensitive hash.
-    ReviewSensitiveHash,
-    /// Review an exposed password verifier.
-    ReviewPasswordVerifier,
-}
-
-/// How Core decides whether a rule match becomes a finding.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
-pub enum DetectionMode {
-    /// The custom matcher is authoritative.
-    MatcherOnly,
-    /// Built-in validation depends on the matched value's structure.
-    Deterministic,
-    /// Built-in validation also depends on surrounding source context.
-    Contextual,
 }
 
 /// Presentation-safe remediation text projected from Core.
@@ -155,14 +138,26 @@ impl Error for ScannerBuildError {}
 
 impl ScannerConfig {
     pub(crate) fn build_core(self) -> Result<cribra::Scanner, ScannerBuildError> {
-        let (include_builtins, rules) = match self {
-            Self::BuiltInOnly => (true, Vec::new()),
-            Self::CustomOnly { rules } => (false, rules),
-            Self::BuiltInAndCustom { rules } => (true, rules),
+        let (current, financial, personal, rules) = match self {
+            Self::BuiltInOnly => (true, false, false, Vec::new()),
+            Self::CustomOnly { rules } => (false, false, false, rules),
+            Self::BuiltInAndCustom { rules } => (true, false, false, rules),
+            Self::Catalogs {
+                current,
+                financial,
+                personal,
+                rules,
+            } => (current, financial, personal, rules),
         };
         let mut builder = cribra::Scanner::builder();
-        if include_builtins {
+        if current {
             builder = builder.builtins(cribra::builtins::CURRENT);
+        }
+        if financial {
+            builder = builder.builtins(cribra::builtins::financial::CURRENT);
+        }
+        if personal {
+            builder = builder.builtins(cribra::builtins::personal::CURRENT);
         }
         for rule in rules {
             builder = builder.rule(rule.into_core()?);
@@ -265,11 +260,7 @@ impl From<cribra::RuleMetadata<'_>> for RuleMetadata {
                 cribra::RuleKind::Suffix => RuleKind::Suffix,
                 cribra::RuleKind::Pattern => RuleKind::Pattern,
             },
-            detection_mode: match value.detection_mode() {
-                cribra::DetectionMode::MatcherOnly => DetectionMode::MatcherOnly,
-                cribra::DetectionMode::Deterministic => DetectionMode::Deterministic,
-                cribra::DetectionMode::Contextual => DetectionMode::Contextual,
-            },
+            detection_mode: value.detection_mode().into(),
             severity: value.severity().into(),
             remediation: value.remediation().map(|remediation| RemediationMetadata {
                 label: remediation.label().to_owned(),

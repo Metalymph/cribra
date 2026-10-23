@@ -145,7 +145,7 @@ jobs:
           subprocess.run([os.environ["JAVA"], "-version"], check=True)
           subprocess.run([os.environ["KOTLINC"], "-version"], check=True, shell=sys.platform == "win32")
 
-      - name: Build bundles and qualify isolated JVM consumers
+      - name: Qualify configuration and sessions, build bundles and run isolated JVM consumers
         run: |
           import os
           from pathlib import Path
@@ -179,4 +179,5 @@ jobs:
             target/uniffi-kotlin-bundles/dist/*.zip
             target/uniffi-kotlin-bundle-consumer/qualification.json
             target/uniffi-kotlin-bundle-consumer/*.log
+            target/uniffi-kotlin-bundles/*/scanner-oracle.json
           if-no-files-found: warn

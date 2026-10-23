@@ -40,7 +40,7 @@ fn configuration_outcomes_match_core_including_error_precedence() {
                         .unwrap()
                         .findings()
                         .iter()
-                        .map(Finding::from)
+                        .map(|finding| Finding::from_core(finding, &core))
                         .collect::<Vec<_>>(),
                     "{}",
                     case.name
@@ -71,7 +71,58 @@ fn configuration_outcomes_match_core_including_error_precedence() {
             _ => panic!("adapter/Core success mismatch for {}", case.name),
         }
     }
-    assert_eq!((successes, failures), (5, 14));
+    assert_eq!((successes, failures), (21, 19));
+}
+
+#[test]
+fn catalogs_are_independent_and_equivalent_to_legacy_configs() {
+    let source = ScanSource { id: SourceId { value: "catalogs".into() }, text: "é LIT_é\niban=GB82WEST12345698765432\nssn=123-45-6789\npassword=CorrectHorseBatteryStaple\nABCD-EFGH-IJKL-MNOP".into() };
+    for current in [false, true] {
+        for financial in [false, true] {
+            for personal in [false, true] {
+                let scanner = Scanner::configured(ScannerConfig::Catalogs {
+                    current,
+                    financial,
+                    personal,
+                    rules: vec![],
+                })
+                .unwrap();
+                let report = scanner.scan(source.clone());
+                assert_eq!(
+                    report
+                        .findings
+                        .iter()
+                        .any(|f| f.rule_id.value == "financial.iban"),
+                    financial
+                );
+                assert_eq!(
+                    report
+                        .findings
+                        .iter()
+                        .any(|f| f.rule_id.value == "personal.us-ssn"),
+                    personal
+                );
+                assert_eq!(
+                    report
+                        .findings
+                        .iter()
+                        .any(|f| f.rule_id.value == "generic.password-field"),
+                    current
+                );
+                assert_eq!(report.candidate_count, 1);
+                if !financial && !personal {
+                    let legacy = Scanner::configured(if current {
+                        ScannerConfig::BuiltInOnly
+                    } else {
+                        ScannerConfig::CustomOnly { rules: vec![] }
+                    })
+                    .unwrap();
+                    assert_eq!(scanner.active_rules(), legacy.active_rules());
+                    assert_eq!(report, legacy.scan(source.clone()));
+                }
+            }
+        }
+    }
 }
 
 #[test]
@@ -144,7 +195,7 @@ fn token_boundaries_suffix_limit_and_full_regex_spans_remain_core_owned() {
             expected
                 .findings()
                 .iter()
-                .map(Finding::from)
+                .map(|finding| Finding::from_core(finding, &core))
                 .collect::<Vec<_>>()
         );
         assert_eq!(

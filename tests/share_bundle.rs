@@ -2,6 +2,8 @@
 
 //! Public ShareBundle orchestration tests.
 
+use std::time::{Duration, UNIX_EPOCH};
+
 use cribra::{
     Rule, Scanner, Severity,
     transform::{PseudonymizationOptions, ShareBundle, ShareMode, ShareModeKind, SynthesisOptions},
@@ -61,6 +63,24 @@ fn scan_and_build_keeps_scan_and_transform_source_pairing_atomic() {
     assert_eq!(summary.scanned_sources(), 1);
     assert_eq!(summary.scanned_bytes(), source.len());
     assert_eq!(summary.total_findings(), 1);
+}
+
+#[test]
+fn public_scan_and_build_accepts_an_explicit_generation_timestamp() {
+    let scanner = Scanner::builder()
+        .rule(Rule::literal("secret", "SECRET", Severity::Critical))
+        .build()
+        .expect("scanner should build");
+    let generated_at =
+        UNIX_EPOCH + Duration::from_secs(1_700_000_000) + Duration::from_nanos(123_456_789);
+
+    let bundle = ShareBundle::builder()
+        .mode(ShareMode::Redact)
+        .scan_and_build_with_generated_at(&scanner, [("memory", "A=SECRET")], generated_at)
+        .expect("explicit timestamp bundle should build");
+
+    assert_eq!(bundle.sources()[0].content(), "A=[REDACTED]");
+    assert_eq!(bundle.manifest().generated_at(), generated_at);
 }
 
 #[test]

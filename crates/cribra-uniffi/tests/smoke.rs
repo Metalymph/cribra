@@ -23,7 +23,7 @@ fn smoke_scan_projects_the_default_core_scanner() {
         .unwrap()
         .findings()
         .iter()
-        .map(Finding::from)
+        .map(|finding| Finding::from_core(finding, &scanner))
         .collect();
     let actual = smoke_scan_text(source);
     assert_eq!(actual, expected);

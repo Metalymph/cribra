@@ -107,7 +107,7 @@ fn unicode_edits_noops_and_recoverable_errors_match_core_and_whole_source() {
             core.report()
                 .findings()
                 .iter()
-                .map(Finding::from)
+                .map(|finding| Finding::from_core(finding, &core_scanner))
                 .collect::<Vec<_>>()
         );
         assert_eq!(report.candidate_count, core.report().candidate_len() as u64);
@@ -191,8 +191,12 @@ fn all_resource_failures_preserve_last_snapshot_and_block_later_edits() {
         assert_eq!(session.revision().unwrap(), revision);
         assert_eq!(session.report().unwrap(), before);
         assert_eq!(session.snapshot().unwrap(), before_snapshot);
-        // NotActive takes precedence over stale revision and an invalid range.
-        let expected = core.apply_edit(u64::MAX, 999..0, "").unwrap_err();
+        // NotActive takes precedence over stale revision and an intentionally
+        // reversed range. Construct the range explicitly so Clippy does not
+        // reinterpret this public invalid-input fixture as an iteration bug.
+        let expected = core
+            .apply_edit(u64::MAX, std::ops::Range { start: 999, end: 0 }, "")
+            .unwrap_err();
         let actual = session.apply_edit(u64::MAX, 999, 0, "".into()).unwrap_err();
         assert_eq!(error_json(actual), support::core_error(expected, true));
         assert_eq!(session.report().unwrap(), before);

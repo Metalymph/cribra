@@ -41,7 +41,38 @@ if (installed.status !== 0 || installed.stdout.trim() !== `wasm-bindgen ${versio
 }
 run("wasm-bindgen", ["--version"]);
 
-for (const variant of variants.length ? variants : ["core", "flow"]) {
+// Use Core directly for the streaming oracle, independently of adapter DTOs.
+const shared = resolve(metadata.target_directory, "wasm-qualification");
+await mkdir(shared, { recursive: true });
+const streamOracle = run("cargo", ["run", "--locked", "-p", "cribra-wasm", "--no-default-features", "--example", "stream_oracle"], {
+  stdio: ["ignore", "pipe", "inherit"], encoding: "utf8",
+});
+await writeFile(resolve(shared, "stream-oracle.json"), streamOracle);
+const incrementalOracle = run("cargo", ["run", "--locked", "-p", "cribra-wasm", "--no-default-features", "--example", "incremental_oracle"], {
+  stdio: ["ignore", "pipe", "inherit"], encoding: "utf8",
+});
+await writeFile(resolve(shared, "incremental-oracle.json"), incrementalOracle);
+const batchOracle = run("cargo", ["run", "--locked", "-p", "cribra-wasm", "--no-default-features", "--example", "batch_oracle"], {
+  stdio: ["ignore", "pipe", "inherit"], encoding: "utf8",
+});
+await writeFile(resolve(shared, "batch-oracle.json"), batchOracle);
+const configurationOracle = run("cargo", ["run", "--locked", "-p", "cribra-wasm", "--no-default-features", "--example", "configuration_oracle"], {
+  stdio: ["ignore", "pipe", "inherit"], encoding: "utf8",
+});
+await writeFile(resolve(shared, "configuration-oracle.json"), configurationOracle);
+const metadataOracle = run("cargo", ["run", "--locked", "-p", "cribra-wasm", "--no-default-features", "--example", "metadata_oracle"], {
+  stdio: ["ignore", "pipe", "inherit"], encoding: "utf8",
+});
+await writeFile(resolve(shared, "metadata-oracle.json"), metadataOracle);
+const selected = variants.length ? variants : ["core", "flow"];
+if (selected.includes("flow")) {
+  const shareOracle = run("cargo", ["run", "--locked", "-p", "cribra-wasm", "--no-default-features", "--features", "transform", "--example", "share_bundle_oracle"], {
+    stdio: ["ignore", "pipe", "inherit"], encoding: "utf8",
+  });
+  await writeFile(resolve(shared, "share-oracle.json"), shareOracle);
+}
+
+for (const variant of selected) {
   run("cargo", [
     "build", "-p", "cribra-wasm", "--locked", "--release",
     "--target", "wasm32-unknown-unknown", "--no-default-features",

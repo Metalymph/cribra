@@ -4,6 +4,42 @@ import cribra_uniffi
 
 @main
 struct Smoke {
+    static func remediationName(_ value: Remediation) -> String {
+        switch value {
+        case .revokeAndRotateCredential: return "RevokeAndRotateCredential"
+        case .rotateCredential: return "RotateCredential"
+        case .rotatePassword: return "RotatePassword"
+        case .replacePrivateKey: return "ReplacePrivateKey"
+        case .removeSensitiveValue: return "RemoveSensitiveValue"
+        case .reviewSensitiveHash: return "ReviewSensitiveHash"
+        case .reviewPasswordVerifier: return "ReviewPasswordVerifier"
+        }
+    }
+    static func explanationSnapshot(_ value: Explanation?) -> Any {
+        guard let value else { return NSNull() }
+        switch value {
+        case .classified(let mode):
+            let name: String
+            switch mode {
+            case .matcherOnly: name = "MatcherOnly"
+            case .deterministic: name = "Deterministic"
+            case .contextual: name = "Contextual"
+            }
+            return ["classified": name]
+        case .ambiguous(.structural): return ["ambiguous": "Structural"]
+        }
+    }
+    static func candidateSnapshot(_ candidate: SensitiveCandidate) -> [String: Any] {
+        let kind: String
+        switch candidate.kind { case .recoveryLikeCode: kind = "RecoveryLikeCode" }
+        let evidence: String
+        switch candidate.evidence { case .structural: evidence = "Structural" }
+        return ["kind": kind, "evidence": evidence,
+            "start": candidate.location.start, "end": candidate.location.end,
+            "line": candidate.location.line, "column": candidate.location.column,
+            "explanation": explanationSnapshot(candidate.explanation)]
+    }
+
     static func severityName(_ value: cribra_uniffi.Severity) -> String {
         switch value {
         case .info: return "info"
@@ -28,6 +64,7 @@ struct Smoke {
             "sourceBytes": report.sourceBytes,
             "candidateCount": report.candidateCount,
             "needsReview": report.needsReview,
+            "candidates": report.candidates.map(candidateSnapshot),
             "findings": report.findings.map { finding -> [String: Any] in
                 [
                     "ruleId": finding.ruleId.value,
@@ -35,6 +72,8 @@ struct Smoke {
                     "line": finding.location.line, "column": finding.location.column,
                     "severity": severityName(finding.severity),
                     "confidence": confidenceName(finding.confidence),
+                    "remediation": finding.remediation.map { remediationName($0) as Any } ?? NSNull(),
+                    "explanation": explanationSnapshot(finding.explanation),
                 ]
             },
         ]
@@ -162,6 +201,7 @@ struct Smoke {
             case "builtInOnly": config = .builtInOnly
             case "customOnly": config = .customOnly(rules: rules)
             case "builtInAndCustom": config = .builtInAndCustom(rules: rules)
+            case "catalogs": config = .catalogs(current: input["current"] as! Bool, financial: input["financial"] as! Bool, personal: input["personal"] as! Bool, rules: rules)
             default: fatalError("unknown fixture mode")
             }
             do {
@@ -190,11 +230,11 @@ struct Smoke {
                 failures += 1
             }
         }
-        precondition(successes == 5 && failures == 14, "configuration coverage changed")
+        precondition(successes == 21 && failures == 19, "configuration coverage changed")
         let defaults = cribra_uniffi.Scanner()
         let builtins = try cribra_uniffi.Scanner.configured(config: .builtInOnly)
         precondition(metadataSnapshot(defaults.activeRules()).isEqual(metadataSnapshot(builtins.activeRules())), "Scanner() behavior changed")
-        print("PASS: configurable Scanner; 5 successful configurations, 14 Core errors, active metadata/order and Rust/Swift parity")
+        print("PASS: configurable Scanner; 21 successful configurations, 19 Core errors, active metadata/order and Rust/Swift parity")
     }
 
     static func checkStreamingParity(scanner: cribra_uniffi.Scanner, source: ScanSource) throws {

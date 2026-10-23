@@ -1,5 +1,10 @@
 package cribra.kotlin.smoke
 
+import uniffi.cribra_uniffi.CandidateEvidence
+import uniffi.cribra_uniffi.DetectionMode
+import uniffi.cribra_uniffi.Explanation
+import uniffi.cribra_uniffi.Remediation
+import uniffi.cribra_uniffi.SensitiveCandidateKind
 import uniffi.cribra_uniffi.Confidence
 import uniffi.cribra_uniffi.RuleId
 import uniffi.cribra_uniffi.RuleKind
@@ -36,6 +41,8 @@ fun main() {
     val finding = findings.single()
     check(finding.ruleId.value == "github.classic-pat") { "unexpected RuleId ${finding.ruleId.value}" }
     check(finding.severity == Severity.CRITICAL) { "unexpected severity ${finding.severity}" }
+    check(finding.remediation == Remediation.REVOKE_AND_ROTATE_CREDENTIAL)
+    check(finding.explanation == Explanation.Classified(DetectionMode.DETERMINISTIC))
     check(finding.confidence == Confidence.HIGH) { "unexpected confidence ${finding.confidence}" }
     check(finding.location.start == 28UL) { "start ${finding.location.start} != 28" }
     check(finding.location.end == 28UL + utf8Length(SYNTHETIC_PAT)) { "end ${finding.location.end} mismatch" }
@@ -78,6 +85,16 @@ fun main() {
         check(review.findings.isEmpty() && review.candidateCount == 1UL && review.needsReview) {
             "candidate-only review semantics changed"
         }
+        val contextual = scanner.scan(ScanSource(SourceId("contextual"), "password=CorrectHorseBatteryStaple"))
+        check(contextual.findings.single().remediation == Remediation.ROTATE_PASSWORD)
+        check(contextual.findings.single().explanation == Explanation.Classified(DetectionMode.CONTEXTUAL))
+        val candidate = review.candidates.single()
+        check(candidate.kind == SensitiveCandidateKind.RECOVERY_LIKE_CODE)
+        check(candidate.evidence == CandidateEvidence.STRUCTURAL)
+        check(candidate.explanation == Explanation.Ambiguous(CandidateEvidence.STRUCTURAL))
+        check(candidate.location.start == 0UL && candidate.location.end == 19UL)
+        val unicodeReview = scanner.scan(ScanSource(SourceId("unicode-review"), "é🙂 ABCD-EFGH-IJKL-MNOP"))
+        check(unicodeReview.candidates.single().location.start == 7UL)
         println("PASS: reusable Scanner; single/batch parity, Unicode and duplicate IDs, empty input, Core summary")
     }
 
@@ -87,7 +104,7 @@ fun main() {
         kind = RuleKind.LITERAL,
         value = "SECRET",
         severity = Severity.HIGH,
-        remediation = null,
+        remediation = Remediation.REMOVE_SENSITIVE_VALUE,
     )
     Scanner.configured(ScannerConfig.CustomOnly(listOf(rule))).use { scanner ->
         val metadata = scanner.activeRules()
@@ -96,6 +113,8 @@ fun main() {
         val report = scanner.scan(ScanSource(SourceId("custom"), "before SECRET after"))
         check(report.findings.size == 1) { "custom detection failed" }
         check(report.findings.single().ruleId.value == "secret") { "custom rule id mismatch" }
+        check(report.findings.single().remediation == Remediation.REMOVE_SENSITIVE_VALUE)
+        check(report.findings.single().explanation == Explanation.Classified(DetectionMode.MATCHER_ONLY))
         println("PASS: configured Scanner; custom-only rules, active metadata and real Core scan")
     }
 

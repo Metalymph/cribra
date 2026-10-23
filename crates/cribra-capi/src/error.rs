@@ -18,6 +18,8 @@ use crate::{
 pub struct CribraError {
     status: CribraStatus,
     message: String,
+    build_code: crate::CribraBuildErrorCode,
+    rule_id: Option<String>,
 }
 
 impl CribraError {
@@ -27,6 +29,8 @@ impl CribraError {
         Self {
             status,
             message: message.into(),
+            build_code: crate::CRIBRA_BUILD_CODE_NONE,
+            rule_id: None,
         }
     }
 
@@ -45,6 +49,86 @@ impl CribraError {
     pub(crate) fn message(&self) -> &str {
         &self.message
     }
+
+    pub(crate) fn with_rule_error(mut self, error: &cribra::RuleError, id: Option<&str>) -> Self {
+        self.build_code = match error {
+            cribra::RuleError::InvalidPattern(_) => crate::CRIBRA_BUILD_CODE_INVALID_PATTERN,
+            cribra::RuleError::PatternMatchesEmpty => {
+                crate::CRIBRA_BUILD_CODE_PATTERN_MATCHES_EMPTY
+            }
+            cribra::RuleError::MissingCaptureGroup { .. } => {
+                crate::CRIBRA_BUILD_CODE_MISSING_CAPTURE_GROUP
+            }
+        };
+        self.rule_id = id.map(str::to_owned);
+        self
+    }
+
+    pub(crate) fn with_build_error(mut self, error: &cribra::ScannerBuildError) -> Self {
+        use cribra::ScannerBuildError as Core;
+        let (code, id) = match error {
+            Core::Rule(error) => return self.with_rule_error(error, None),
+            Core::EmptyRuleId => (crate::CRIBRA_BUILD_CODE_EMPTY_RULE_ID, None),
+            Core::DuplicateRuleId { rule_id } => (
+                crate::CRIBRA_BUILD_CODE_DUPLICATE_RULE_ID,
+                Some(rule_id.as_str()),
+            ),
+            Core::EmptyMatcher { rule_id } => (
+                crate::CRIBRA_BUILD_CODE_EMPTY_MATCHER,
+                Some(rule_id.as_str()),
+            ),
+            Core::TooManyRules => (crate::CRIBRA_BUILD_CODE_TOO_MANY_RULES, None),
+            Core::AutomatonBuild(_) => (crate::CRIBRA_BUILD_CODE_AUTOMATON_BUILD, None),
+        };
+        self.build_code = code;
+        self.rule_id = id.map(str::to_owned);
+        self
+    }
+}
+
+/// Reads Core-derived construction information without parsing the message.
+///
+/// The view is cleared on invalid arguments. Successful non-construction errors
+/// return code NONE and no rule ID. Rule-ID bytes remain valid until error free.
+///
+/// # Safety
+/// `error` must be a live immutable error handle. `out_info` must point to writable
+/// memory for one CribraBuildErrorView, without aliasing the error handle.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cribra_error_build_info(
+    error: *const CribraError,
+    out_info: *mut crate::CribraBuildErrorView,
+) -> CribraStatus {
+    contain_status(|| {
+        // SAFETY: the caller guarantees a writable output slot when non-null.
+        if let Err(status) = unsafe { crate::ffi::clear_value(out_info) } {
+            return status;
+        }
+        if error.is_null() {
+            return CRIBRA_INVALID_ARGUMENT;
+        }
+        // SAFETY: the caller guarantees a live immutable error handle.
+        let error = unsafe { &*error };
+        let rule_id = error
+            .rule_id
+            .as_ref()
+            .map(|id| CribraStringView {
+                ptr: id.as_ptr(),
+                len: id.len(),
+            })
+            .unwrap_or_default();
+        // SAFETY: clear_value validated the writable slot.
+        unsafe {
+            ptr::write(
+                out_info,
+                crate::CribraBuildErrorView {
+                    code: error.build_code,
+                    rule_id,
+                },
+            )
+        };
+        CRIBRA_OK
+    })
 }
 
 fn contain_status(operation: impl FnOnce() -> CribraStatus) -> CribraStatus {
@@ -66,6 +150,66 @@ impl CribraError {
                 "source transformation could not be applied safely"
             }
             crate::status::CRIBRA_OUT_OF_RANGE => "index is out of range",
+            crate::status::CRIBRA_STREAM_UNSUPPORTED_RULE_SET => {
+                "ruleset does not support exact streaming"
+            }
+            crate::status::CRIBRA_STREAM_NOT_ACTIVE => "stream session is not active",
+            crate::status::CRIBRA_STREAM_INVALID_UTF8 => "stream contains malformed UTF-8",
+            crate::status::CRIBRA_STREAM_INCOMPLETE_UTF8 => "stream ends with incomplete UTF-8",
+            crate::status::CRIBRA_STREAM_CANDIDATE_LIMIT_EXCEEDED => {
+                "stream candidate limit exceeded"
+            }
+            crate::status::CRIBRA_STREAM_RESULT_LIMIT_EXCEEDED => {
+                "stream retained result limit exceeded"
+            }
+            crate::status::CRIBRA_STREAM_STORAGE_LIMIT_EXCEEDED => {
+                "stream logical storage limit exceeded"
+            }
+            crate::status::CRIBRA_STREAM_STORAGE_REQUIREMENT_OVERFLOW => {
+                "stream storage requirement overflow"
+            }
+            crate::status::CRIBRA_STREAM_SOURCE_OFFSET_OVERFLOW => {
+                "stream source byte offset overflow"
+            }
+            crate::status::CRIBRA_STREAM_COORDINATE_OVERFLOW => "stream source coordinate overflow",
+            crate::status::CRIBRA_STREAM_EXECUTION_INVARIANT_VIOLATED => {
+                "stream execution invariant violated"
+            }
+            crate::status::CRIBRA_STREAM_UNKNOWN_ERROR => "unknown Core streaming failure",
+            crate::status::CRIBRA_INCREMENTAL_NOT_ACTIVE => "incremental session is not active",
+            crate::status::CRIBRA_INCREMENTAL_STALE_REVISION => {
+                "incremental edit revision is stale"
+            }
+            crate::status::CRIBRA_INCREMENTAL_INVALID_RANGE => "incremental edit range is invalid",
+            crate::status::CRIBRA_INCREMENTAL_INVALID_UTF8_BOUNDARY => {
+                "incremental edit divides a UTF-8 scalar"
+            }
+            crate::status::CRIBRA_INCREMENTAL_REVISION_OVERFLOW => "incremental revision overflow",
+            crate::status::CRIBRA_INCREMENTAL_DOCUMENT_LENGTH_OVERFLOW => {
+                "incremental document length overflow"
+            }
+            crate::status::CRIBRA_INCREMENTAL_CANDIDATE_LIMIT_EXCEEDED => {
+                "incremental candidate limit exceeded"
+            }
+            crate::status::CRIBRA_INCREMENTAL_CACHE_LIMIT_EXCEEDED => {
+                "incremental cache record limit exceeded"
+            }
+            crate::status::CRIBRA_INCREMENTAL_RESULT_LIMIT_EXCEEDED => {
+                "incremental result materialization limit exceeded"
+            }
+            crate::status::CRIBRA_INCREMENTAL_TRANSACTION_STORAGE_LIMIT_EXCEEDED => {
+                "incremental logical transaction storage limit exceeded"
+            }
+            crate::status::CRIBRA_INCREMENTAL_RESOURCE_ACCOUNTING_OVERFLOW => {
+                "incremental resource accounting overflow"
+            }
+            crate::status::CRIBRA_INCREMENTAL_EXECUTION_INVARIANT_VIOLATED => {
+                "incremental execution invariant violated"
+            }
+            crate::status::CRIBRA_INCREMENTAL_UNKNOWN_ERROR => "unknown Core incremental failure",
+            crate::status::CRIBRA_INCREMENTAL_SESSION_INVALIDATED => {
+                "incremental session invalidated by a contained panic"
+            }
             crate::status::CRIBRA_INTERNAL_ERROR => "internal Cribra native adapter failure",
             _ => "Cribra native operation failed",
         };

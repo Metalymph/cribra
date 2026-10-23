@@ -371,6 +371,14 @@ def build_native(
     if not binding.is_file():
         fail(f"{profile}: bindgen did not produce {binding}")
 
+    # Existing direct-Core oracle shared with Swift/Python, never adapter DTOs.
+    oracle = subprocess.run(
+        CARGO + ("run", "--locked", "-p", "cribra-uniffi", "--no-default-features",
+                 "--features", profile, "--example", "scanner_oracle"),
+        cwd=root, env=env, stdout=subprocess.PIPE, check=True,
+    )
+    (profile_dir / "scanner-oracle.json").write_bytes(oracle.stdout)
+
     return staged
 
 
@@ -392,9 +400,14 @@ def build_profile_jars(root: Path, bundles_root: Path) -> None:
             "profileJars",
             "verifyProfileJars",
             "stageBundleDependencies",
+            "runCoreConformance",
+            "runFlowConformance",
+            "runFuseConformance",
             f"-Pcribra.kotlin.generated={bundles_root / 'core' / 'generated'}",
+            f"-Pcribra.kotlin.core.smoke-dir={bundles_root / 'core'}",
             f"-Pcribra.kotlin.flow.smoke-dir={bundles_root / 'flow'}",
             f"-Pcribra.kotlin.fuse.smoke-dir={bundles_root / 'fuse'}",
+            *(f"-Pcribra.kotlin.{profile}.native={bundles_root / profile / 'native'}" for profile in PROFILES),
         ],
         root,
     )

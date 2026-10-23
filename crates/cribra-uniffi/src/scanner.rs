@@ -50,7 +50,11 @@ impl Scanner {
             .inner
             .incremental_session(source.text)
             .map_err(|error| IncrementalError::from_core(error, true))?;
-        Ok(IncrementalSession::from_core(core, source.id))
+        Ok(IncrementalSession::from_core(
+            core,
+            source.id,
+            self.inner.clone(),
+        ))
     }
 
     /// Creates a Core incremental document with preventive per-operation limits.
@@ -63,13 +67,21 @@ impl Scanner {
             .inner
             .incremental_session_with_limits(source.text, limits.into_core()?)
             .map_err(|error| IncrementalError::from_core(error, true))?;
-        Ok(IncrementalSession::from_core(core, source.id))
+        Ok(IncrementalSession::from_core(
+            core,
+            source.id,
+            self.inner.clone(),
+        ))
     }
 
     /// Opens a Core streaming session with unlimited optional resource budgets.
     /// Unsupported rulesets fail admission; no whole-source fallback is used.
     pub fn stream(&self, source_id: SourceId) -> Result<Arc<StreamSession>, StreamError> {
-        Ok(StreamSession::from_core(self.inner.stream()?, source_id))
+        Ok(StreamSession::from_core(
+            self.inner.stream()?,
+            source_id,
+            self.inner.clone(),
+        ))
     }
 
     /// Opens a streaming session with Core-enforced per-source resource limits.
@@ -79,13 +91,23 @@ impl Scanner {
         limits: StreamLimits,
     ) -> Result<Arc<StreamSession>, StreamError> {
         let core = self.inner.stream_with_limits(limits.into_core()?)?;
-        Ok(StreamSession::from_core(core, source_id))
+        Ok(StreamSession::from_core(
+            core,
+            source_id,
+            self.inner.clone(),
+        ))
     }
 
     /// Scans one identified UTF-8 source without retaining its contents.
     pub fn scan(&self, source: ScanSource) -> ScanReport {
         let results = self.inner.scan([(source.id, source.text.as_str())]);
-        (&results.as_slice()[0]).into()
+        let entry = &results.as_slice()[0];
+        ScanReport::from_parts(
+            entry.key(),
+            entry.source_bytes(),
+            entry.report(),
+            Some(&self.inner),
+        )
     }
 
     /// Scans sources in input order, preserving IDs including duplicates.
@@ -102,7 +124,12 @@ impl Scanner {
             reports: results
                 .iter()
                 .map(|entry| {
-                    ScanReport::from_parts(entry.key(), entry.source_bytes(), entry.report())
+                    ScanReport::from_parts(
+                        entry.key(),
+                        entry.source_bytes(),
+                        entry.report(),
+                        Some(&self.inner),
+                    )
                 })
                 .collect(),
             summary: results.summary().into(),
@@ -129,7 +156,12 @@ impl Scanner {
             reports: results
                 .iter()
                 .map(|entry| {
-                    ScanReport::from_parts(entry.key(), entry.source_bytes(), entry.report())
+                    ScanReport::from_parts(
+                        entry.key(),
+                        entry.source_bytes(),
+                        entry.report(),
+                        Some(&self.inner),
+                    )
                 })
                 .collect(),
             summary: results.summary().into(),

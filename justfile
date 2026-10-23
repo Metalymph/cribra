@@ -66,7 +66,8 @@ uniffi-kotlin-smoke:
     CARGO_TARGET_DIR=target cargo +1.97.0 build -p cribra-uniffi --no-default-features --features core --lib
     case "$(uname -s)" in Darwin) library="libcribra_uniffi.dylib" ;; Linux) library="libcribra_uniffi.so" ;; MINGW*|MSYS*|CYGWIN*) library="cribra_uniffi.dll" ;; *) echo "uniffi-kotlin-smoke: unsupported host $(uname -s)" >&2; exit 2 ;; esac; \
     CARGO_TARGET_DIR=target cargo +1.97.0 run -p cribra-uniffi --no-default-features --features bindgen,core --bin cribra-uniffi-bindgen -- generate --library "target/debug/$library" --language kotlin --out-dir target/uniffi-kotlin-smoke/generated
-    bindings/kotlin/gradlew -p bindings/kotlin --console=plain run
+    CARGO_TARGET_DIR=target cargo +1.97.0 run -p cribra-uniffi --no-default-features --features core --example scanner_oracle > target/uniffi-kotlin-smoke/scanner-oracle.json
+    bindings/kotlin/gradlew -p bindings/kotlin --console=plain run runCoreConformance
 
 # Build the Flow/Share native library, generate the Kotlin/JVM binding and the
 # direct-Core oracle outputs under target/, then run the Flow/Share JVM smoke
@@ -78,7 +79,8 @@ uniffi-kotlin-flow-smoke:
     CARGO_TARGET_DIR=target cargo +1.97.0 run -p cribra-uniffi --no-default-features --features bindgen,flow --bin cribra-uniffi-bindgen -- generate --library "target/debug/$library" --language kotlin --out-dir target/uniffi-kotlin-flow-smoke/generated && \
     CARGO_TARGET_DIR=target cargo +1.97.0 run -p cribra-uniffi --no-default-features --features flow --example flow_oracle > target/uniffi-kotlin-flow-smoke/flow-oracle.json && \
     CARGO_TARGET_DIR=target cargo +1.97.0 run -p cribra-uniffi --no-default-features --features flow --example share_oracle > target/uniffi-kotlin-flow-smoke/share-oracle.json
-    bindings/kotlin/gradlew -p bindings/kotlin --console=plain runFlow
+    CARGO_TARGET_DIR=target cargo +1.97.0 run -p cribra-uniffi --no-default-features --features flow --example scanner_oracle > target/uniffi-kotlin-flow-smoke/scanner-oracle.json
+    bindings/kotlin/gradlew -p bindings/kotlin --console=plain runFlow runFlowConformance
 
 # Build the Fuse native library, generate the Kotlin/JVM binding and the
 # direct-Core oracle output under target/, then run the Fuse parallel-scanning
@@ -89,7 +91,8 @@ uniffi-kotlin-fuse-smoke:
     CARGO_TARGET_DIR=target cargo +1.97.0 build -p cribra-uniffi --no-default-features --features fuse --lib && \
     CARGO_TARGET_DIR=target cargo +1.97.0 run -p cribra-uniffi --no-default-features --features bindgen,fuse --bin cribra-uniffi-bindgen -- generate --library "target/debug/$library" --language kotlin --out-dir target/uniffi-kotlin-fuse-smoke/generated && \
     CARGO_TARGET_DIR=target cargo +1.97.0 run -p cribra-uniffi --no-default-features --features fuse --example parallel_oracle > target/uniffi-kotlin-fuse-smoke/parallel-oracle.json
-    bindings/kotlin/gradlew -p bindings/kotlin --console=plain runFuse
+    CARGO_TARGET_DIR=target cargo +1.97.0 run -p cribra-uniffi --no-default-features --features fuse --example scanner_oracle > target/uniffi-kotlin-fuse-smoke/scanner-oracle.json
+    bindings/kotlin/gradlew -p bindings/kotlin --console=plain runFuse runFuseConformance
 
 # Regenerate the Core, Flow and Fuse Kotlin bindings and verify that Core-owned
 # parallel scanning is exported only by the Fuse profile.

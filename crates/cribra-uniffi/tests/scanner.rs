@@ -26,7 +26,7 @@ fn reusable_scanner_preserves_core_reports_and_summary() {
                 .report()
                 .findings()
                 .iter()
-                .map(Finding::from)
+                .map(|finding| Finding::from_core(finding, &core))
                 .collect::<Vec<_>>()
         );
         assert_eq!(
