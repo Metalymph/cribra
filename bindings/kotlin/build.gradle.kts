@@ -149,7 +149,7 @@ for ((profile, smokeDir, generated) in listOf(
 // profile metadata/guard class. Native libraries and third-party dependencies
 // stay external: these are thin binding JARs, never fat JARs.
 
-val cribraVersion = "0.7.1"
+val cribraVersion = "0.7.2"
 val adapterVersion = "0.1.0"
 val uniffiVersion = "0.32.2"
 

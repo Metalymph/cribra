@@ -1,6 +1,6 @@
 [package]
 name = "cribra"
-version = "0.7.1"
+version = "0.7.2"
 edition = "2024"
 description = "Embeddable, local-first, fully synchronous Rust engine for detecting, reviewing, and safely transforming secrets and sensitive data."
 license = "MIT"

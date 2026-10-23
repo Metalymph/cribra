@@ -4,7 +4,7 @@ See [Getting started](../../docs/GETTING_STARTED.md) and
 [Compatibility and distribution status](../../docs/COMPATIBILITY.md) for the
 cross-language entry points and evidence boundaries.
 
-Minimal Gradle Kotlin DSL consumer foundation for Cribra Core **0.7.1**, adapter
+Minimal Gradle Kotlin DSL consumer foundation for Cribra Core **0.7.2**, adapter
 **0.1.0**, UniFFI **=0.32.2**, Rust **1.97.0**, Kotlin **2.4.21**, JNA **5.17.0**,
 Gson **2.13.2** and Gradle **9.3.1**. The JVM baseline is **JDK 17**.
 
@@ -53,9 +53,9 @@ target/uniffi-kotlin-flow-smoke/generated/uniffi/cribra_uniffi/cribra_uniffi.kt 
 target/uniffi-kotlin-fuse-smoke/generated/uniffi/cribra_uniffi/cribra_uniffi.kt   # Fuse binding
 target/uniffi-kotlin-flow-smoke/{flow-oracle.json,share-oracle.json}              # direct-Core oracles
 target/uniffi-kotlin-fuse-smoke/parallel-oracle.json                              # direct-Core oracle
-bindings/kotlin/build/libs/cribra-kotlin-{core,flow,fuse}-0.7.1.jar               # profile JARs
+bindings/kotlin/build/libs/cribra-kotlin-{core,flow,fuse}-0.7.2.jar               # profile JARs
 target/debug/libcribra_uniffi.{dylib,so,dll}                                      # native cdylib
-target/uniffi-kotlin-bundles/dist/cribra-kotlin-{core,flow,fuse}-0.7.1-<platform>.zip  # bundles
+target/uniffi-kotlin-bundles/dist/cribra-kotlin-{core,flow,fuse}-0.7.2-<platform>.zip  # bundles
 target/uniffi-kotlin-bundles/{core,flow,fuse}/{cargo,generated,native,bundle}/         # per-profile isolation
 ```
 
@@ -223,9 +223,9 @@ formatting only, not the binding.
 
 ```
 bindings/kotlin/build/libs/
-  cribra-kotlin-core-0.7.1.jar   # Core
-  cribra-kotlin-flow-0.7.1.jar   # Flow/Share
-  cribra-kotlin-fuse-0.7.1.jar   # Fuse (parallel scanning)
+  cribra-kotlin-core-0.7.2.jar   # Core
+  cribra-kotlin-flow-0.7.2.jar   # Flow/Share
+  cribra-kotlin-fuse-0.7.2.jar   # Fuse (parallel scanning)
 ```
 
 Each JAR contains only:
@@ -252,10 +252,10 @@ reproducible (fixed entry order, no entry timestamps). Manifest metadata:
 | Attribute | Value |
 | --- | --- |
 | `Implementation-Title` | `Cribra Kotlin/JVM <profile> profile` |
-| `Implementation-Version` | `0.7.1` (Cribra Core) |
+| `Implementation-Version` | `0.7.2` (Cribra Core) |
 | `Implementation-Vendor` | `Cribra` |
 | `Cribra-Profile` | `core`, `flow` or `fuse` |
-| `Cribra-Core-Version` | `0.7.1` |
+| `Cribra-Core-Version` | `0.7.2` |
 | `Cribra-Adapter-Version` | `0.1.0` |
 | `Cribra-Uniffi-Version` | `0.32.2` |
 | `Cribra-Native-Library` | `external` |
@@ -293,16 +293,16 @@ current host:
 
 ```
 target/uniffi-kotlin-bundles/dist/
-  cribra-kotlin-core-0.7.1-macos-arm64.zip
-  cribra-kotlin-flow-0.7.1-macos-arm64.zip
-  cribra-kotlin-fuse-0.7.1-macos-arm64.zip
+  cribra-kotlin-core-0.7.2-macos-arm64.zip
+  cribra-kotlin-flow-0.7.2-macos-arm64.zip
+  cribra-kotlin-fuse-0.7.2-macos-arm64.zip
 ```
 
 Each ZIP contains exactly this layout at its root:
 
 ```
 README.md
-lib/cribra-kotlin-<profile>-0.7.1.jar
+lib/cribra-kotlin-<profile>-0.7.2.jar
 lib/jna-5.17.0.jar
 native/libcribra_uniffi.{dylib,so,dll}
 metadata/build-info.json
@@ -343,7 +343,7 @@ native library.
 
 ### Using a bundle
 
-1. Put `lib/cribra-kotlin-<profile>-0.7.1.jar` and `lib/jna-5.17.0.jar` on the
+1. Put `lib/cribra-kotlin-<profile>-0.7.2.jar` and `lib/jna-5.17.0.jar` on the
    application classpath.
 2. Provide the Kotlin standard library (2.4.21) and JDK 17+.
 3. Make `native/libcribra_uniffi.{dylib,so,dll}` loadable by JNA, for example

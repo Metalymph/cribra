@@ -125,17 +125,17 @@ uniffi-kotlin-jars:
     CARGO_TARGET_DIR=target cargo +1.97.0 run -p cribra-uniffi --no-default-features --features bindgen,fuse --bin cribra-uniffi-bindgen -- generate --library "target/debug/$library" --language kotlin --out-dir target/uniffi-kotlin-fuse-smoke/generated
     bindings/kotlin/gradlew -p bindings/kotlin --console=plain clean
     bindings/kotlin/gradlew -p bindings/kotlin --console=plain profileJars verifyProfileJars
-    javap -classpath bindings/kotlin/build/libs/cribra-kotlin-core-0.7.1.jar uniffi.cribra_uniffi.Scanner > target/uniffi-kotlin-jars/core-scanner.txt && ! grep -q parallelScan target/uniffi-kotlin-jars/core-scanner.txt
-    javap -classpath bindings/kotlin/build/libs/cribra-kotlin-flow-0.7.1.jar uniffi.cribra_uniffi.Scanner > target/uniffi-kotlin-jars/flow-scanner.txt && ! grep -q parallelScan target/uniffi-kotlin-jars/flow-scanner.txt
-    javap -classpath bindings/kotlin/build/libs/cribra-kotlin-fuse-0.7.1.jar uniffi.cribra_uniffi.Scanner > target/uniffi-kotlin-jars/fuse-scanner.txt && grep -q parallelScan target/uniffi-kotlin-jars/fuse-scanner.txt
-    java --class-path bindings/kotlin/build/libs/cribra-kotlin-core-0.7.1.jar bindings/kotlin/verify/ClasspathCheck.java core single
-    java --class-path bindings/kotlin/build/libs/cribra-kotlin-flow-0.7.1.jar bindings/kotlin/verify/ClasspathCheck.java flow single
-    java --class-path bindings/kotlin/build/libs/cribra-kotlin-fuse-0.7.1.jar bindings/kotlin/verify/ClasspathCheck.java fuse single
-    java --class-path bindings/kotlin/build/libs/cribra-kotlin-core-0.7.1.jar:bindings/kotlin/build/libs/cribra-kotlin-flow-0.7.1.jar bindings/kotlin/verify/ClasspathCheck.java core mixed
-    java --class-path bindings/kotlin/build/libs/cribra-kotlin-flow-0.7.1.jar:bindings/kotlin/build/libs/cribra-kotlin-fuse-0.7.1.jar bindings/kotlin/verify/ClasspathCheck.java flow mixed
-    java --class-path bindings/kotlin/build/libs/cribra-kotlin-core-0.7.1.jar:bindings/kotlin/build/libs/cribra-kotlin-fuse-0.7.1.jar bindings/kotlin/verify/ClasspathCheck.java fuse mixed
+    javap -classpath bindings/kotlin/build/libs/cribra-kotlin-core-0.7.2.jar uniffi.cribra_uniffi.Scanner > target/uniffi-kotlin-jars/core-scanner.txt && ! grep -q parallelScan target/uniffi-kotlin-jars/core-scanner.txt
+    javap -classpath bindings/kotlin/build/libs/cribra-kotlin-flow-0.7.2.jar uniffi.cribra_uniffi.Scanner > target/uniffi-kotlin-jars/flow-scanner.txt && ! grep -q parallelScan target/uniffi-kotlin-jars/flow-scanner.txt
+    javap -classpath bindings/kotlin/build/libs/cribra-kotlin-fuse-0.7.2.jar uniffi.cribra_uniffi.Scanner > target/uniffi-kotlin-jars/fuse-scanner.txt && grep -q parallelScan target/uniffi-kotlin-jars/fuse-scanner.txt
+    java --class-path bindings/kotlin/build/libs/cribra-kotlin-core-0.7.2.jar bindings/kotlin/verify/ClasspathCheck.java core single
+    java --class-path bindings/kotlin/build/libs/cribra-kotlin-flow-0.7.2.jar bindings/kotlin/verify/ClasspathCheck.java flow single
+    java --class-path bindings/kotlin/build/libs/cribra-kotlin-fuse-0.7.2.jar bindings/kotlin/verify/ClasspathCheck.java fuse single
+    java --class-path bindings/kotlin/build/libs/cribra-kotlin-core-0.7.2.jar:bindings/kotlin/build/libs/cribra-kotlin-flow-0.7.2.jar bindings/kotlin/verify/ClasspathCheck.java core mixed
+    java --class-path bindings/kotlin/build/libs/cribra-kotlin-flow-0.7.2.jar:bindings/kotlin/build/libs/cribra-kotlin-fuse-0.7.2.jar bindings/kotlin/verify/ClasspathCheck.java flow mixed
+    java --class-path bindings/kotlin/build/libs/cribra-kotlin-core-0.7.2.jar:bindings/kotlin/build/libs/cribra-kotlin-fuse-0.7.2.jar bindings/kotlin/verify/ClasspathCheck.java fuse mixed
     @echo "Profile JARs:"
-    @ls -l bindings/kotlin/build/libs/cribra-kotlin-*-0.7.1.jar
+    @ls -l bindings/kotlin/build/libs/cribra-kotlin-*-0.7.2.jar
 
 # Build reproducible, host-specific Core, Flow/Share and Fuse Kotlin/JVM
 # distribution bundles (profile JAR + JNA + native library + metadata + README)

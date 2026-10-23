@@ -3,7 +3,7 @@
 See [Getting started](../../docs/GETTING_STARTED.md) and
 [Compatibility](../../docs/COMPATIBILITY.md) for integration and distribution status.
 
-NB-1A shared UniFFI foundation, based on Cribra Core v0.7.1. Requires Rust
+NB-1A shared UniFFI foundation, based on Cribra Core v0.7.2. Requires Rust
 1.97 and pins UniFFI to `=0.32.2`. The library produces `cdylib`, `rlib` and `staticlib`
 artifacts using proc-macro scaffolding without UDL. A build script embeds the
 Core package version.

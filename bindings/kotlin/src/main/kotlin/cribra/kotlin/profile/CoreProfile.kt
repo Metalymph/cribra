@@ -16,7 +16,7 @@ public object CoreProfile {
     public const val ID: String = "core"
 
     /** Cribra Core version this binding was generated for. */
-    public const val CORE_VERSION: String = "0.7.1"
+    public const val CORE_VERSION: String = "0.7.2"
 
     /** Cribra UniFFI adapter version. */
     public const val ADAPTER_VERSION: String = "0.1.0"

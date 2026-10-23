@@ -171,11 +171,11 @@ python3.13 -m venv target/uniffi-python-wheel/build-venv
 target/uniffi-python-wheel/build-venv/bin/python -m pip install --index-url https://pypi.org/simple -r bindings/python/build-requirements.txt
 just uniffi-python-wheel target/uniffi-python-wheel/build-venv/bin/python
 # The builder writes into a per-platform directory (macOS example):
-#   target/uniffi-python-wheel/fuse/macosx_13_0_arm64/dist/cribra-0.7.1+fuse-py3-none-macosx_13_0_arm64.whl
+#   target/uniffi-python-wheel/fuse/macosx_13_0_arm64/dist/cribra-0.7.2+fuse-py3-none-macosx_13_0_arm64.whl
 # On the qualified macOS 27 ARM64 host, qualify that same wheel across the
 # pyenv interpreter matrix (or use uniffi-python-wheel-smoke for one version):
-just uniffi-python-wheel-matrix target/uniffi-python-wheel/fuse/macosx_13_0_arm64/dist/cribra-0.7.1+fuse-py3-none-macosx_13_0_arm64.whl
-just uniffi-python-wheel-smoke target/uniffi-python-wheel/fuse/macosx_13_0_arm64/dist/cribra-0.7.1+fuse-py3-none-macosx_13_0_arm64.whl 3.13.7
+just uniffi-python-wheel-matrix target/uniffi-python-wheel/fuse/macosx_13_0_arm64/dist/cribra-0.7.2+fuse-py3-none-macosx_13_0_arm64.whl
+just uniffi-python-wheel-smoke target/uniffi-python-wheel/fuse/macosx_13_0_arm64/dist/cribra-0.7.2+fuse-py3-none-macosx_13_0_arm64.whl 3.13.7
 ```
 
 `build_wheel.py` selects the native target from the host: **macOS ARM64**
@@ -210,7 +210,7 @@ exactly the one host native library (never a foreign-platform library), keeps
 the ABI-independent `py3-none-<platform>` tag and stays non-pure
 (`Root-Is-Purelib: false`).
 
-Distribution metadata is `cribra`, version `0.7.1+fuse`, checked against the Core
+Distribution metadata is `cribra`, version `0.7.2+fuse`, checked against the Core
 version during builds. Import remains `import cribra_uniffi`. The generated
 `cribra_uniffi.py` is copied byte-for-byte to `cribra_uniffi/__init__.py`, with
 the platform library (`libcribra_uniffi.dylib` on macOS, `libcribra_uniffi.so`
@@ -232,7 +232,7 @@ x86_64 Linux; the builder refuses other hosts. It needs Rust 1.97.0 with the
 that triple, Python 3.13+ in the build environment and the pinned build frontend
 dependencies. Prepare the build environment exactly as on macOS, then run
 `just uniffi-python-wheel target/uniffi-python-wheel/build-venv/bin/python`; the
-result is `cribra-0.7.1+fuse-py3-none-linux_x86_64.whl` under
+result is `cribra-0.7.2+fuse-py3-none-linux_x86_64.whl` under
 `target/uniffi-python-wheel/fuse/linux_x86_64/dist/`.
 
 **Linux current limits.** The native Linux wheel is deliberately tagged
@@ -267,7 +267,7 @@ just uniffi-python-wheel target/uniffi-python-wheel/build-venv/Scripts/python
 target/uniffi-python-wheel/build-venv/Scripts/python bindings/python/build_wheel.py
 ```
 
-The result is `cribra-0.7.1+fuse-py3-none-win_amd64.whl` under
+The result is `cribra-0.7.2+fuse-py3-none-win_amd64.whl` under
 `target/uniffi-python-wheel/fuse/windows_x86_64/dist/`. Requirements: Rust 1.97.0
 with the `x86_64-pc-windows-msvc` target (the default host toolchain on 64-bit
 Windows), a C toolchain for that triple, and Python 3.13+ in the build
@@ -286,7 +286,7 @@ used on macOS and Linux, against the final `py3-none-win_amd64` wheel:
 
 ```powershell
 # Default: qualify the running interpreter (sys.executable).
-target/uniffi-python-wheel/build-venv/Scripts/python bindings/python/wheel_smoke.py target/uniffi-python-wheel/fuse/windows_x86_64/dist/cribra-0.7.1+fuse-py3-none-win_amd64.whl
+target/uniffi-python-wheel/build-venv/Scripts/python bindings/python/wheel_smoke.py target/uniffi-python-wheel/fuse/windows_x86_64/dist/cribra-0.7.2+fuse-py3-none-win_amd64.whl
 # Additional interpreters (repeatable, an explicit interpreter path):
 target/uniffi-python-wheel/build-venv/Scripts/python bindings/python/wheel_smoke.py <wheel> --python C:\Python311\python.exe --python C:\Python314\python.exe
 ```
@@ -424,7 +424,7 @@ For a separate application, installation needs only the wheel and a Python
 
 ```sh
 python3.13 -m venv /private/tmp/cribra-app
-/private/tmp/cribra-app/bin/python -m pip install --no-index --no-deps /absolute/path/to/cribra-0.7.1+fuse-py3-none-macosx_13_0_arm64.whl
+/private/tmp/cribra-app/bin/python -m pip install --no-index --no-deps /absolute/path/to/cribra-0.7.2+fuse-py3-none-macosx_13_0_arm64.whl
 cd /private/tmp
 /private/tmp/cribra-app/bin/python -I -c 'import cribra_uniffi; print(cribra_uniffi.cribra_version())'
 ```

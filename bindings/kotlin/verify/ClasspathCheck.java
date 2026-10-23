@@ -7,7 +7,7 @@ import java.lang.reflect.InvocationTargetException;
  * JNA or the generated binding are initialized. Run it with JDK 17 source-file
  * mode:
  *
- *   java --class-path cribra-kotlin-core-0.7.1.jar verify/ClasspathCheck.java core single
+ *   java --class-path cribra-kotlin-core-0.7.2.jar verify/ClasspathCheck.java core single
  *   java --class-path core.jar:flow.jar verify/ClasspathCheck.java core mixed
  */
 public final class ClasspathCheck {

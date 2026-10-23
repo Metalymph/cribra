@@ -9,7 +9,26 @@ history.
 
 ## [Unreleased]
 
-## [0.7.1] — unreleased
+## [0.7.2] — unreleased
+
+### Compatibility
+
+- Updated Python wheel and Kotlin/JVM Core, Flow and Fuse artifact
+  version references to Core 0.7.2.
+- Documented the adapter capability matrix for Rust, C ABI, Swift,
+  Kotlin/JVM, Python and WebAssembly.
+- Preserved independent adapter crate versions and existing API boundaries.
+
+### Qualification
+
+- Validated Rust workspace formatting, compilation, tests and Clippy
+  with all features enabled.
+- Validated Python packaging tests and Kotlin/JVM profile JARs.
+- Qualified three isolated Kotlin/JVM bundle consumers on macOS ARM64,
+  including nine expected rejection cases.
+- Verified Core 0.7.2 Cargo packaging.
+
+## [0.7.1] — published 2026-10-16
 
 ### Fixed
 
