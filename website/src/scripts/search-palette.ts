@@ -12,13 +12,28 @@ function normalize(value: string) {
   return value.toLocaleLowerCase().trim();
 }
 
+function safeInternalHref(value: unknown): boolean {
+  return typeof value === 'string' && /^\/(?!\/)[a-zA-Z0-9/_-]*\/$/.test(value);
+}
+
+function isSearchItem(value: unknown): value is SearchItem {
+  if (typeof value !== 'object' || value === null) return false;
+  const item = value as Record<string, unknown>;
+  return (
+    typeof item.title === 'string' &&
+    typeof item.description === 'string' &&
+    typeof item.category === 'string' &&
+    safeInternalHref(item.href)
+  );
+}
+
 function getItems(): SearchItem[] {
   const data = document.getElementById('search-palette-data');
   if (!data?.textContent) return [];
 
   try {
     const parsed = JSON.parse(data.textContent);
-    return Array.isArray(parsed) ? parsed : [];
+    return Array.isArray(parsed) ? parsed.filter(isSearchItem) : [];
   } catch {
     return [];
   }
@@ -156,7 +171,10 @@ export function mountSearchPalette(root: ParentNode = document) {
 
     if (event.key === 'Enter' && renderedItems[activeIndex]) {
       event.preventDefault();
-      window.location.href = renderedItems[activeIndex].href;
+      const link = results.querySelector<HTMLAnchorElement>(
+        `a[data-search-palette-item][data-index="${activeIndex}"]`
+      );
+      link?.click();
     }
   });
 
