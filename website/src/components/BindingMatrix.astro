@@ -1,0 +1,50 @@
+---
+import { bindings, evidenceDate } from '../data/bindings';
+---
+
+<p id="matrix-help">
+  Repository evidence reviewed {evidenceDate}. Scroll horizontally to compare all four dimensions.
+  An implemented API, a successful consumer, and a published package are separate facts.
+</p>
+<div
+  class="table-scroll"
+  role="region"
+  aria-label="Language integration compatibility"
+  aria-describedby="matrix-help"
+  tabindex="0"
+>
+  <table>
+    <caption>Cribra integration availability, qualification, distribution, and capabilities</caption
+    >
+    <thead
+      ><tr
+        ><th scope="col">Integration</th><th scope="col">Implementation</th><th scope="col"
+          >Qualification evidence</th
+        ><th scope="col">Distribution / publication</th><th scope="col">Capability coverage</th></tr
+      ></thead
+    >
+    <tbody
+      >{
+        bindings.map((binding) => (
+          <tr id={binding.id}>
+            <th scope="row">{binding.name}</th>
+            <td>{binding.implementation}</td>
+            <td>
+              {binding.qualification}
+              <p>{binding.limits}</p>
+              <ul>
+                {binding.sources.map((source) => (
+                  <li>
+                    <a href={source.href}>{source.label}</a>
+                  </li>
+                ))}
+              </ul>
+            </td>
+            <td>{binding.distribution}</td>
+            <td>{binding.capabilities}</td>
+          </tr>
+        ))
+      }</tbody
+    >
+  </table>
+</div>

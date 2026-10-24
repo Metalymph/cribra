@@ -1,0 +1,71 @@
+---
+import DocLayout from '../../layouts/DocLayout.astro';
+import { Code } from 'astro-expressive-code/components';
+const cli =
+  'cargo build -p cribra-cli\ntarget/debug/cribra scan examples/fixtures/inputs/credentials.env --format json';
+const wasm = 'just wasm-production\nnode examples/wasm-runtime/scan.mjs';
+---
+
+<DocLayout
+  title="Examples"
+  description="Runnable repository examples, synthetic inputs, and explicit integration boundaries."
+  back="/"
+  backLabel="Cribra"
+>
+  <h2 id="rust-scanning">Rust scanning</h2>
+  <p>
+    <a href="https://github.com/Metalymph/cribra/blob/main/examples/scan_basic.rs">scan_basic.rs</a> builds
+    custom rules, scans an ordered batch, and inspects finding metadata. Run <code
+      >cargo run --example scan_basic</code
+    >.
+  </p>
+  <p>
+    <a href="https://github.com/Metalymph/cribra/blob/main/examples/query_results.rs"
+      >query_results.rs</a
+    > demonstrates finding queries and aggregate results. The <a href="/docs/getting-started/"
+      >quick start</a
+    > includes a short scanning excerpt.
+  </p>
+  <h2 id="transformations">Redaction and transformation</h2>
+  <p>
+    <a href="https://github.com/Metalymph/cribra/blob/main/examples/financial_review.rs"
+      >financial_review.rs</a
+    > composes current and opt-in financial catalogs, reviews synthetic PAN/IBAN findings, and creates
+    a redacted derivative. Run <code>cargo run --example financial_review</code>.
+  </p>
+  <p>
+    <a href="https://github.com/Metalymph/cribra/blob/main/examples/share_safe.rs">share_safe.rs</a> builds
+    a redacted Share Bundle. Transformations act on findings; candidates and undetected values may remain.
+    Read <a href="/docs/transformations/">the transformation guide</a>.
+  </p>
+  <h2 id="cli">CLI</h2>
+  <p>
+    From the repository root, build the existing binary and scan a checked-in synthetic fixture:
+  </p>
+  <Code code={cli} lang="sh" />
+  <p>
+    The CLI accepts an explicit UTF-8 file or stdin and performs no directory traversal. Exit code 0
+    includes finding-bearing scans. See the <a
+      href="https://github.com/Metalymph/cribra/blob/main/docs/CLI_PARITY.md">CLI contract</a
+    >; registry installation is not assumed.
+  </p>
+  <h2 id="webassembly">WebAssembly</h2>
+  <p>
+    The <a href="https://github.com/Metalymph/cribra/tree/main/examples/wasm-browser"
+      >browser example</a
+    > scans and redacts caller-owned text locally. The <a
+      href="https://github.com/Metalymph/cribra/tree/main/examples/wasm-runtime">runtime example</a
+    > loads the same production artifact in Node.js, Bun, or Deno.
+  </p>
+  <Code code={wasm} lang="sh" />
+  <p>
+    These repository commands require the documented Rust WASM target, matching wasm-bindgen CLI,
+    and Binaryen. The website does not bundle a scanner or build Rust/WASM. Follow each example's
+    prerequisites and compare <a href="/bindings/#wasm">source and distribution coverage</a>.
+  </p>
+  <h2>Built with Cribra</h2>
+  <p>
+    A future collection of applications and integration stories, added when their availability and
+    use of Cribra can be verified.
+  </p>
+</DocLayout>

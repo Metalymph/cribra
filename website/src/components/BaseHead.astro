@@ -1,0 +1,96 @@
+---
+import '../styles/global.css';
+import type { ImageMetadata } from 'astro';
+import config from '../../astro-theme-config';
+import pretendardFontUrl from '../assets/fonts/pretendard-variable.woff2';
+import { withBase } from '../utils/paths';
+import { serializeScriptJson } from '../utils/serialize-script-json';
+
+interface Props {
+  title: string;
+  description: string;
+  image?: ImageMetadata;
+  ogImageUrl?: string;
+  type?: 'website' | 'article';
+  pubDate?: string;
+  updatedDate?: string;
+  robots?: string;
+  canonicalUrl?: string;
+  pageUrl?: string;
+  locale?: string;
+}
+const {
+  title,
+  description,
+  image,
+  ogImageUrl,
+  type = 'website',
+  robots,
+  canonicalUrl,
+  pageUrl,
+  locale,
+} = Astro.props;
+const origin = Astro.site;
+const canonical = origin ? new URL(canonicalUrl ?? Astro.url.pathname, origin).href : undefined;
+const socialUrl = origin ? new URL(pageUrl ?? Astro.url.pathname, origin).href : undefined;
+const socialImage =
+  origin && (ogImageUrl || image?.src) ? new URL(ogImageUrl || image!.src, origin).href : undefined;
+const documentTitle = title === config.site.title ? title : `${title} — ${config.site.title}`;
+const jsonLd = origin
+  ? serializeScriptJson({
+      '@context': 'https://schema.org',
+      '@type': 'WebSite',
+      name: config.site.title,
+      description: config.site.description,
+      url: origin.href,
+    })
+  : undefined;
+---
+
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<script is:inline>
+  (function () {
+    let theme;
+    try {
+      theme = localStorage.getItem('theme');
+    } catch {
+      /* The system preference remains available without storage. */
+    }
+    if (theme !== 'light' && theme !== 'dark') {
+      theme = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    }
+    const el = document.documentElement;
+    el.setAttribute('data-theme', theme);
+    el.classList.add('no-transitions');
+    requestAnimationFrame(() => requestAnimationFrame(() => el.classList.remove('no-transitions')));
+  })();
+</script>
+<link
+  rel="icon"
+  type="image/png"
+  href={withBase('/brand/cribra-mask-v1.png')}
+/>
+<link rel="preload" href={pretendardFontUrl} as="font" type="font/woff2" crossorigin />
+{origin && <link rel="sitemap" href={new URL('/sitemap-index.xml', origin).href} />}
+{canonical && <link rel="canonical" href={canonical} />}
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+<meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)" />
+<meta name="generator" content={Astro.generator} />
+<meta name="robots" content={origin ? (robots ?? 'index, follow') : 'noindex, nofollow'} />
+<title>{documentTitle}</title>
+<meta name="description" content={description} />
+<meta name="author" content={config.site.author} />
+<meta property="og:type" content={type} />
+{socialUrl && <meta property="og:url" content={socialUrl} />}
+<meta property="og:title" content={documentTitle} />
+<meta property="og:description" content={description} />
+<meta property="og:locale" content={locale ?? config.site.locale} />
+<meta property="og:site_name" content={config.site.title} />
+{socialImage && <meta property="og:image" content={socialImage} />}
+{socialImage && <meta property="og:image:alt" content={title} />}
+<meta name="twitter:card" content={socialImage ? 'summary_large_image' : 'summary'} />
+<meta name="twitter:title" content={documentTitle} />
+<meta name="twitter:description" content={description} />
+{socialImage && <meta name="twitter:image" content={socialImage} />}
+{jsonLd && <script is:inline type="application/ld+json" set:html={jsonLd} />}

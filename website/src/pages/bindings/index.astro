@@ -1,0 +1,35 @@
+---
+import DocLayout from '../../layouts/DocLayout.astro';
+import BindingMatrix from '../../components/BindingMatrix.astro';
+import { plannedBindings } from '../../data/bindings';
+---
+
+<DocLayout
+  title="Language integrations"
+  description="One Rust engine. Explicit capability, qualification, and distribution boundaries."
+  back="/"
+  backLabel="Cribra"
+>
+  <p>
+    Native and WebAssembly adapters project Cribra Core semantics. They preserve classification
+    authority, review-only candidates, UTF-8 coordinates, and explicit transformations without
+    creating another detection engine.
+  </p>
+  <BindingMatrix />
+  <h2>Choose a matching profile</h2>
+  <p>
+    For UniFFI consumers, use one matching generated binding, native library, and profile set per
+    process. Kotlin requires one profile JAR per classpath; Swift requires one package exposing <code
+      >Cribra</code
+    >. Streaming admission and resource limits remain Core-owned.
+  </p>
+  <h2>Planned integrations</h2>
+  <p>These roadmap workstreams are not implemented or qualified integrations:</p>
+  <ul>{plannedBindings.map((name) => <li>{name}</li>)}</ul>
+  <p>
+    See the <a href="https://github.com/Metalymph/cribra/blob/main/ROADMAP.md">roadmap</a> and <a
+      href="https://github.com/Metalymph/cribra/blob/main/docs/INTEROP.md"
+      >interoperability contract</a
+    > for responsibilities and future qualification gates.
+  </p>
+</DocLayout>

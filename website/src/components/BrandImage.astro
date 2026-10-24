@@ -1,0 +1,62 @@
+---
+import { availableAsset, type BrandAsset } from '../data/brand';
+interface Props {
+  asset?: BrandAsset;
+}
+const asset = availableAsset(Astro.props.asset);
+---
+
+{
+  asset ? (
+    <span class="brand-image" style={`aspect-ratio: ${asset.width} / ${asset.height}`}>
+      <img
+        class:list={{ 'brand-light': !!asset.dark }}
+        src={asset.light}
+        width={asset.width}
+        height={asset.height}
+        alt={asset.alt}
+      />
+      {asset.dark && (
+        <img
+          class="brand-dark"
+          src={asset.dark}
+          width={asset.width}
+          height={asset.height}
+          alt={asset.alt}
+        />
+      )}
+    </span>
+  ) : (
+    <slot />
+  )
+}
+<style>
+  .brand-image {
+    display: block;
+    max-width: 100%;
+  }
+  img {
+    display: block;
+    width: 100%;
+    height: auto;
+    object-fit: contain;
+  }
+  .brand-dark {
+    display: none;
+  }
+  :global([data-theme='dark']) .brand-light {
+    display: none;
+  }
+  :global([data-theme='dark']) .brand-dark {
+    display: block;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :global(:root:not([data-theme='light'])) .brand-light {
+      display: none;
+    }
+    :global(:root:not([data-theme='light'])) .brand-dark {
+      display: block;
+    }
+  }
+</style>

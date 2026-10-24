@@ -12,6 +12,18 @@ default:
 help:
     @just --list
 
+# Start the independent Astro website development server.
+website-dev:
+    npm --prefix website run dev
+
+# Build the static website and its Pagefind search index.
+website-build:
+    npm --prefix website run build
+
+# Check Astro and TypeScript in the website only.
+website-check:
+    npm --prefix website run check
+
 # Format the workspace.
 fmt:
     cargo fmt --all

@@ -1,0 +1,58 @@
+---
+import { getCollection } from 'astro:content';
+import DocLayout from '../../layouts/DocLayout.astro';
+const docs = (await getCollection('docs')).sort((a, b) => a.data.order - b.data.order);
+const topics = [
+  ['Getting started', '/docs/getting-started/'],
+  ['Core concepts', '/docs/core-concepts/'],
+  ['Detection and validation', '/docs/core-concepts/#detection-and-validation'],
+  ['Reporting and review', '/docs/core-concepts/#reporting-and-review'],
+  ['Transformations', '/docs/transformations/'],
+  ['Streaming', '/docs/scanning-modes/#streaming'],
+  ['Incremental scanning', '/docs/scanning-modes/#incremental-scanning'],
+  ['Interoperability', '/bindings/'],
+];
+---
+
+<DocLayout
+  title="Documentation"
+  description="A small set of guides to embedding Cribra and understanding its contracts."
+  back="/"
+  backLabel="Cribra"
+>
+  <h2>Start with a guide</h2>
+  <div class="link-list">
+    {
+      docs.map((doc) => (
+        <a href={`/docs/${doc.id}/`}>
+          <>
+            <strong>{doc.data.title}</strong>
+            <span>{doc.data.description}</span>
+          </>
+        </a>
+      ))
+    }
+  </div>
+  <h2>Browse by topic</h2>
+  <ul>
+    {
+      topics.map(([label, href]) => (
+        <li>
+          <a href={href}>{label}</a>
+        </li>
+      ))
+    }
+  </ul>
+  <h2>Go deeper</h2>
+  <p>
+    These guides introduce the contracts. The <a
+      href="https://github.com/Metalymph/cribra/tree/main/docs">repository documentation</a
+    > retains detailed design and qualification evidence; <a
+      href="https://docs.rs/cribra/0.7.2/cribra/">Rust API documentation</a
+    > describes public types and methods.
+  </p>
+  <p>
+    Check <a href="/bindings/">compatibility and distribution</a> before choosing an adapter, or explore
+    <a href="/examples/">runnable examples</a>.
+  </p>
+</DocLayout>

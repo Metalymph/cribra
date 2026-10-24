@@ -1,0 +1,113 @@
+.post-main {
+  --post-meta-size: var(--text-footnote);
+
+  max-width: var(--max-width-wide);
+  margin: 0 auto;
+  padding: var(--space-20) var(--space-6) var(--space-24);
+}
+
+.back-link,
+.post-header,
+.post-divider,
+.prose {
+  max-width: var(--max-width-content);
+}
+
+/* ── Back link ───────────────────────────── */
+.back-link {
+  display: inline-flex;
+  align-items: center;
+  font-size: var(--text-footnote);
+  font-weight: 500;
+  color: var(--label-tertiary);
+  text-decoration: none;
+  margin-bottom: var(--space-10);
+  transition: color var(--duration-fast) var(--ease-out);
+  letter-spacing: 0.01em;
+}
+
+.back-link:hover {
+  color: var(--color-blue);
+  opacity: 1;
+}
+
+/* ── Post header ────────────────────────── */
+.post-header {
+  padding-bottom: var(--space-8);
+}
+
+/* Blue accent bar above title */
+.post-accent {
+  width: 32px;
+  height: 3px;
+  background: var(--color-blue);
+  border-radius: 99px;
+  margin-bottom: var(--space-6);
+}
+
+.post-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--post-meta-size);
+  color: var(--label-tertiary);
+  margin-bottom: var(--space-5);
+}
+
+.meta-date {
+  font-variant-numeric: tabular-nums;
+}
+
+.dot {
+  color: var(--label-quaternary);
+}
+.meta-updated {
+  color: var(--label-quaternary);
+}
+
+.post-title {
+  font-size: 2.5rem;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  line-height: 1.12;
+  margin: 0 0 var(--space-5);
+  color: var(--label-primary);
+  /* Subtle weight contrast via text-shadow trick */
+  text-shadow: 0 0 0 transparent;
+}
+
+.post-description {
+  font-size: var(--text-callout);
+  color: var(--label-secondary);
+  font-weight: 400;
+  line-height: 1.64;
+  margin: 0;
+  max-width: 520px;
+  border-left: 2px solid var(--separator);
+  padding-left: var(--space-4);
+}
+
+/* ── Divider ────────────────────────────── */
+.post-divider {
+  height: 1px;
+  background: var(--separator);
+  margin: var(--space-6) 0 var(--space-10);
+}
+
+/* ── Tablet ─────────────────────────────── */
+@media (max-width: 900px) {
+  .post-title {
+    font-size: 2.25rem;
+  }
+}
+
+/* ── Mobile ─────────────────────────────── */
+@media (max-width: 600px) {
+  .post-main {
+    padding: var(--space-12) var(--space-4) var(--space-16);
+  }
+
+  .post-title {
+    font-size: 2.08rem;
+  }
+}
