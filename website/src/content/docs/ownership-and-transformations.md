@@ -28,3 +28,9 @@ Keyed transformation modes require correct key management by the caller. A deter
 - **UniFFI Swift/Python/Kotlin:** use a matching generated binding/native-library/profile set. Do not mix profiles or independently built artifacts in one process.
 
 **Source of truth:** `docs/INTEROP.md`, `docs/ARCHITECTURE.md`, `docs/COMPATIBILITY.md`, `docs/streaming.md`, `docs/incremental.md`.
+
+## Related guides
+
+- [Findings and reports](/docs/findings-reports/)
+- [Explicit transformations](/docs/transformations/)
+- [Security model](/docs/security-model/)

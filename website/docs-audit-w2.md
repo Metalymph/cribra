@@ -88,3 +88,11 @@ Troubleshooting, cross-links, examples, navigation and final validation.
 ## Validation
 
 Validation results must be recorded after executing the project checks.
+
+## W2.5 — Developer experience and final review
+
+- Added troubleshooting covering streaming admission/EOF, incremental revision and terminal errors, resource budgets, candidates, adapter distribution, and output policy.
+- Connected previously isolated W2.4 contracts to related guides and improved scanning-mode discovery.
+- Expanded documentation topic navigation without changing public Rust APIs.
+- Verify build, Pagefind, link resolution, examples, and desktop/mobile light/dark presentation before final PR.
+- This entry records planned checks, not their successful execution.

@@ -34,3 +34,9 @@ Swift device/Simulator compile-and-link checks are not execution checks for ever
 Never combine generated binding files with a different native library or profile. For C, match the header and binary; for WASM, match the generated JS glue and WASM binary.
 
 **Source of truth:** `docs/COMPATIBILITY.md`, `docs/INTEROP.md`, `docs/WASM_INTEROP.md`, and binding-specific README files. Recheck these records when releasing.
+
+## Related guides
+
+- [Integration guides](/docs/)
+- [Security model](/docs/security-model/)
+- [Troubleshooting](/docs/troubleshooting/)

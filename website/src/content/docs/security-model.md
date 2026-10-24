@@ -31,3 +31,9 @@ Dropping retained buffers is **not a secure-zeroization guarantee**. Streaming a
 5. Avoid recording raw source, transformed source or secret-bearing diagnostics in application logs.
 
 **Source of truth:** `docs/ARCHITECTURE.md`, `docs/INTEROP.md`, `docs/streaming.md`, `docs/incremental.md`.
+
+## Related guides
+
+- [Ownership and transformations](/docs/ownership-and-transformations/)
+- [Resource limits and errors](/docs/resource-limits-and-errors/)
+- [Troubleshooting](/docs/troubleshooting/)

@@ -46,3 +46,9 @@ Limits are independent and optional. Streaming's retained-result limit and incre
 5. Propagate errors without appending original sensitive source to diagnostics.
 
 **Source of truth:** `docs/streaming.md`, `docs/incremental.md`, `docs/ARCHITECTURE.md`.
+
+## Related guides
+
+- [Streaming scanning](/docs/streaming-scanning/)
+- [Incremental scanning](/docs/incremental-scanning/)
+- [Troubleshooting](/docs/troubleshooting/)
