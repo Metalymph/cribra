@@ -5,6 +5,11 @@ const docs = (await getCollection('docs')).sort((a, b) => a.data.order - b.data.
 const topics = [
   ['Getting started', '/docs/getting-started/'],
   ['Core concepts', '/docs/core-concepts/'],
+  ['Rust API reference', '/docs/api-reference/'],
+  ['Scanner and configuration', '/docs/scanner-configuration/'],
+  ['Rules and built-ins', '/docs/rules-builtins/'],
+  ['Findings and reports', '/docs/findings-reports/'],
+  ['Queries and summaries', '/docs/queries-summaries/'],
   ['Detection and validation', '/docs/core-concepts/#detection-and-validation'],
   ['Reporting and review', '/docs/core-concepts/#reporting-and-review'],
   ['Transformations', '/docs/transformations/'],
@@ -16,7 +21,7 @@ const topics = [
 
 <DocLayout
   title="Documentation"
-  description="A small set of guides to embedding Cribra and understanding its contracts."
+  description="Guides and API references for integrating Cribra and understanding its contracts."
   back="/"
   backLabel="Cribra"
 >

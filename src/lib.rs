@@ -148,7 +148,7 @@
 //! Optional limits account for controlled logical payload and result ownership,
 //! not total heap memory. Incremental resource/execution failures preserve the
 //! last complete snapshot and prevent further edits. Input errors are recoverable.
-//! Session APIs are Rust-core surfaces; current adapters do not expose them.
+//! Session APIs are available in Rust Core and selected adapter surfaces. Adapter capabilities, qualification and distribution differ; see `docs/COMPATIBILITY.md` for the current evidence.
 pub mod builtins;
 mod candidate_detection;
 mod compiled_rule;
