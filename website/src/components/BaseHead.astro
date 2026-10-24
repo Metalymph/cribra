@@ -33,8 +33,9 @@ const {
 const origin = Astro.site;
 const canonical = origin ? new URL(canonicalUrl ?? Astro.url.pathname, origin).href : undefined;
 const socialUrl = origin ? new URL(pageUrl ?? Astro.url.pathname, origin).href : undefined;
-const socialImage =
-  origin && (ogImageUrl || image?.src) ? new URL(ogImageUrl || image!.src, origin).href : undefined;
+const socialImage = origin
+  ? new URL(ogImageUrl || image?.src || '/brand/cribra-concept.png', origin).href
+  : undefined;
 const documentTitle = title === config.site.title ? title : `${title} — ${config.site.title}`;
 const jsonLd = origin
   ? serializeScriptJson({
