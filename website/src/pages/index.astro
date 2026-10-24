@@ -1,0 +1,160 @@
+---
+import { Code } from 'astro-expressive-code/components';
+import BaseLayout from '../layouts/BaseLayout.astro';
+import BrandConcept from '../components/BrandConcept.astro';
+import ProcessDiagram from '../components/ProcessDiagram.astro';
+import config from '../../astro-theme-config';
+import { bindings } from '../data/bindings';
+import '../styles/site.css';
+import '../styles/pages/home.css';
+
+const example = `use cribra::{Rule, Scanner, Severity};
+
+let scanner = Scanner::builder()
+    .rule(Rule::prefix("acme.api-key", "acme_live_", Severity::Critical))
+    .build()?;
+
+let results = scanner.scan([
+    ("config.env", "ACME_API_KEY=acme_live_7f3a91\\n"),
+]);
+
+for (source, finding) in results.findings() {
+    println!("{source}: {}", finding.rule_id());
+}`;
+---
+
+<BaseLayout title="Cribra" description={config.site.description}>
+  <main id="main-content" class="home-main" data-pagefind-body>
+    <section class="hero" aria-labelledby="hero-title">
+      <div class="hero-copy">
+        <p class="eyebrow">Local-first · Deterministic · Embeddable</p>
+        <h1 id="hero-title" class="hero-title" data-pagefind-meta="title">Cribra</h1>
+        <p class="hero-tagline">Sensitive data.<br />Under control.</p>
+        <p class="hero-desc">{config.site.description}</p>
+        <div class="actions">
+          <a class="btn btn-primary" href="/docs/getting-started/">Get Started</a><a
+            class="btn btn-secondary"
+            href="https://github.com/Metalymph/cribra">GitHub ↗</a>
+        </div>
+      </div>
+      <div class="hero-brand"><BrandConcept /></div>
+    </section>
+
+    <section class="site-section" aria-labelledby="why-title">
+      <p class="eyebrow">The engine, inside your application</p>
+      <h2 id="why-title">Why Cribra?</h2>
+      <div class="editorial-grid">
+        <div>
+          <h3>Keep data local.</h3><p>
+            Process caller-provided text without a network service. Your application controls where
+            data comes from and where it goes.
+          </p>
+        </div>
+        <div>
+          <h3>Make behavior predictable.</h3><p>
+            Synchronous execution, deterministic classification, and explicit contracts. No async
+            runtime required.
+          </p>
+        </div>
+        <div>
+          <h3>Choose what happens next.</h3><p>
+            Review structured results, query findings, or transform a derivative. Storage, sharing,
+            and application policy remain yours.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="site-section" aria-labelledby="capabilities-title">
+      <p class="eyebrow">One reusable Rust core</p>
+      <h2 id="capabilities-title">Core capabilities</h2>
+      <dl class="capabilities">
+        <div>
+          <dt>Detect and validate</dt><dd>
+            Built-in and custom rules, deterministic and contextual validators, explicit opt-in
+            catalogs.
+          </dd>
+        </div>
+        <div>
+          <dt>Report and review</dt><dd>
+            Metadata-only findings, separate review candidates, coordinates, explanations, queries,
+            and summaries.
+          </dd>
+        </div>
+        <div>
+          <dt>Scan in context</dt><dd>
+            Whole sources, admitted append-only streams, and revisioned incremental documents.
+          </dd>
+        </div>
+        <div>
+          <dt>Transform explicitly</dt><dd>
+            Redaction, templates, keyed pseudonymization, deterministic synthesis, and Share
+            Bundles.
+          </dd>
+        </div>
+      </dl>
+      <p class="section-note">
+        Rust Core provides scanning and reporting; default Flow adds transformations; Fuse adds
+        Serde and optional parallel scans of independent sources. <a href="/docs/getting-started/"
+          >Choose a profile →</a>
+      </p>
+    </section>
+
+    <section class="site-section" aria-labelledby="how-title">
+      <p class="eyebrow">Input → engine → application-controlled output</p>
+      <h2 id="how-title">How Cribra works</h2>
+      <BrandConcept />
+      <ProcessDiagram />
+      <p class="section-note">
+        Your application owns acquisition, persistence, networking, and sharing. Derived output
+        may still contain sensitive information. <a
+          href="/docs/core-concepts/">Understand the boundary →</a>
+      </p>
+    </section>
+
+    <section class="site-section" aria-labelledby="languages-title">
+      <p class="eyebrow">Embed the same semantics</p>
+      <h2 id="languages-title">Language integrations</h2>
+      <ul class="integration-list">
+        {
+          bindings.map((binding) => (
+            <li>
+              <a href={`/bindings/#${binding.id}`}>{binding.name}</a>
+            </li>
+          ))
+        }
+      </ul>
+      <p>
+        Implementation, qualification, distribution, and capability coverage vary by integration. A
+        local binding or CI artifact is not automatically a published package.
+      </p>
+      <a class="text-link" href="/bindings/">Compare integration evidence →</a>
+    </section>
+
+    <section class="site-section" aria-labelledby="start-title">
+      <p class="eyebrow">A few lines of Rust</p>
+      <h2 id="start-title">Getting started</h2>
+      <p>
+        Add <code>cribra = "0.7.2"</code> to your dependencies. Configure a scanner and supply the text
+        your application owns.
+      </p>
+      <Code code={example} lang="rust" />
+      <p class="section-note">
+        Synthetic custom-rule input; excerpted from <a
+          href="https://github.com/Metalymph/cribra/blob/main/examples/scan_basic.rs"
+          >the runnable Rust example</a
+        >. The <a href="/docs/getting-started/">quick start</a> includes a complete program.
+      </p>
+    </section>
+
+    <section class="site-section closing" aria-labelledby="next-title">
+      <h2 id="next-title">Build on explicit contracts.</h2>
+      <p>Start with the concepts, then explore runnable integrations.</p>
+      <div class="actions">
+        <a class="text-link" href="/docs/">Read the documentation →</a><a
+          class="text-link"
+          href="/examples/">Explore examples →</a>
+      </div>
+    </section>
+  </main>
+</BaseLayout>

@@ -1,0 +1,9 @@
+---
+import BrandImage from './BrandImage.astro';
+import { brand, type BrandAsset } from '../data/brand';
+interface Props {
+  asset?: BrandAsset;
+}
+---
+
+<BrandImage asset={Astro.props.asset ?? brand.logo}><span>Cribra</span></BrandImage>

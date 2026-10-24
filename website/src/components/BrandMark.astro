@@ -1,0 +1,24 @@
+---
+import BrandImage from './BrandImage.astro';
+import { brand, type BrandAsset } from '../data/brand';
+interface Props {
+  asset?: BrandAsset;
+}
+---
+
+<div class="brand-mark">
+  <BrandImage asset={Astro.props.asset ?? brand.mark}><span>Cribra</span></BrandImage>
+</div>
+<style>
+  .brand-mark {
+    width: min(100%, 15rem);
+    aspect-ratio: 1;
+    display: grid;
+    align-items: center;
+  }
+  span {
+    color: var(--label-tertiary);
+    font-size: var(--text-title-1);
+    letter-spacing: var(--tracking-tight);
+  }
+</style>

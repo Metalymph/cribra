@@ -1,0 +1,165 @@
+/* Cribra additions use Tone's existing type, color, and spacing tokens. */
+.site-section {
+  padding: var(--space-12) 0;
+  border-top: 1px solid var(--separator);
+}
+.site-section h2 {
+  font-size: var(--text-title-1);
+  font-weight: 650;
+  letter-spacing: var(--tracking-tight);
+  margin: 0 0 var(--space-6);
+}
+.site-section h3 {
+  font-size: var(--text-headline);
+  margin: 0 0 var(--space-3);
+}
+.site-section p {
+  color: var(--label-secondary);
+  line-height: var(--leading-relaxed);
+}
+.eyebrow {
+  font-size: var(--text-caption-1);
+  color: var(--color-blue);
+  font-weight: var(--weight-medium);
+  margin: 0 0 var(--space-5);
+}
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-5);
+}
+.text-link {
+  color: var(--color-link);
+  font-size: var(--text-callout);
+  font-weight: var(--weight-medium);
+  text-underline-offset: 4px;
+}
+.section-note {
+  font-size: var(--text-footnote);
+  line-height: var(--leading-relaxed);
+  margin-top: var(--space-6);
+}
+.editorial-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-8);
+}
+.editorial-grid p {
+  margin-bottom: 0;
+  font-size: var(--text-callout);
+}
+.capabilities {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-8);
+}
+.capabilities dt {
+  font-weight: var(--weight-semibold);
+  margin-bottom: var(--space-2);
+}
+.capabilities dd {
+  margin: 0;
+  color: var(--label-secondary);
+  font-size: var(--text-callout);
+  line-height: var(--leading-relaxed);
+}
+.concept-steps {
+  margin: 0;
+  padding-left: var(--space-6);
+}
+.concept-steps li {
+  padding-left: var(--space-2);
+  margin-bottom: var(--space-5);
+  color: var(--label-secondary);
+  line-height: var(--leading-relaxed);
+}
+.concept-steps strong {
+  color: var(--label-primary);
+}
+.integration-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3) var(--space-6);
+  list-style: none;
+  padding: 0;
+}
+.integration-list a {
+  color: var(--label-primary);
+  text-underline-offset: 5px;
+}
+.link-list {
+  display: grid;
+  gap: var(--space-5);
+}
+.link-list a {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-4) 0;
+  border-bottom: 1px solid var(--separator);
+  text-decoration: none;
+}
+.link-list span {
+  color: var(--label-secondary);
+  font-size: var(--text-callout);
+}
+.table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  margin-block: var(--space-8);
+  border: 1px solid var(--separator);
+  border-radius: var(--radius-sm);
+}
+.table-scroll table {
+  min-width: 76rem;
+  margin: 0;
+  font-size: var(--text-footnote);
+}
+.table-scroll caption {
+  padding: var(--space-4);
+  text-align: left;
+  color: var(--label-secondary);
+}
+.table-scroll th {
+  text-transform: none;
+  letter-spacing: normal;
+  vertical-align: top;
+}
+.table-scroll td {
+  vertical-align: top;
+  min-width: 12rem;
+  line-height: var(--leading-relaxed);
+}
+.table-scroll td p {
+  font-size: inherit;
+}
+.table-scroll td ul {
+  padding-left: var(--space-4);
+}
+.table-scroll li {
+  margin-bottom: var(--space-2);
+}
+.table-scroll tr[id] {
+  scroll-margin-top: calc(var(--nav-height) + var(--space-6));
+}
+.prose > .expressive-code {
+  min-width: 0;
+}
+.btn-primary {
+  color: var(--bg-primary);
+}
+:focus-visible {
+  outline: 2px solid var(--color-blue);
+  outline-offset: 4px;
+}
+
+@media (max-width: 600px) {
+  .editorial-grid,
+  .capabilities {
+    grid-template-columns: 1fr;
+    gap: var(--space-6);
+  }
+  .site-section {
+    padding: var(--space-10) 0;
+  }
+}

@@ -1,5 +1,13 @@
 # Cribra
 
+<p align="center">
+  <img
+    src="website/public/brand/cribra-concept.png"
+    alt="Cribra — deterministic sensitive-data processing"
+    width="640"
+  />
+</p>
+
 Cribra is an embeddable, local-first, fully synchronous Rust engine for deterministic sensitive-data detection, validation, classification, and safe transformation.
 
 It is not a file, repository, or vulnerability scanner. Cribra operates on caller-provided data and provides reusable security primitives that applications, CLIs, APIs, pipelines, WebAssembly hosts, and native integrations can compose into their own workflows.

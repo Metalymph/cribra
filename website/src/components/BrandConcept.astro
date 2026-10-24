@@ -1,0 +1,26 @@
+---
+import BrandImage from './BrandImage.astro';
+import { brand, type BrandAsset } from '../data/brand';
+interface Props {
+  asset?: BrandAsset;
+}
+---
+
+<BrandImage asset={Astro.props.asset ?? brand.concept}>
+  <ol class="concept-steps">
+    <li>
+      <strong>Provide data.</strong> Your application supplies UTF-8 text and chooses the rules.
+    </li>
+    <li>
+      <strong>Detect and validate.</strong> Cribra classifies findings and keeps ambiguous candidates
+      separate.
+    </li>
+    <li>
+      <strong>Review the report.</strong> Inspect metadata, coordinates, explanations, and summaries.
+    </li>
+    <li>
+      <strong>Choose the output.</strong> Transform findings explicitly; your application controls storage
+      and sharing.
+    </li>
+  </ol>
+</BrandImage>

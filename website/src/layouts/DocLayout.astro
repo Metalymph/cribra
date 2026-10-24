@@ -1,0 +1,27 @@
+---
+import BaseLayout from './BaseLayout.astro';
+import '../styles/layouts/post.css';
+import '../styles/site.css';
+interface Props {
+  title: string;
+  description: string;
+  back?: string;
+  backLabel?: string;
+}
+const { title, description, back = '/docs/', backLabel = 'All documentation' } = Astro.props;
+---
+
+<BaseLayout title={title} description={description}>
+  <main id="main-content" class="post-main">
+    <article data-pagefind-body>
+      <a class="back-link" href={back}>← {backLabel}</a>
+      <header class="post-header">
+        <div class="post-accent"></div>
+        <h1 class="post-title" data-pagefind-meta="title">{title}</h1>
+        <p class="post-description">{description}</p>
+      </header>
+      <div class="post-divider"></div>
+      <div class="prose"><slot /></div>
+    </article>
+  </main>
+</BaseLayout>
