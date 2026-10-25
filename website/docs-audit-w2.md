@@ -55,44 +55,48 @@ distinct claims.
 
 Consult `docs/COMPATIBILITY.md` for recorded environments and evidence.
 
-## Remaining milestones
+## Completed milestones
 
 ### W2.2 — Integration guides
 
-Rust, Swift, Python, Kotlin/JVM, C ABI and WASM consumer procedures, ownership,
-build requirements, capability boundaries and distribution status.
+Added Rust, Swift, Python, Kotlin/JVM, C ABI and WASM integration guides.
+Each documents its implementation, consumer requirements, capabilities,
+ownership and distribution boundaries.
 
 ### W2.3 — Advanced scanning
 
-Whole-source, streaming, incremental, admission rules, lifecycle, budgets and
-failure semantics, using runnable examples.
+Added whole-source, streaming and incremental scanning guides, including
+admission, lifecycle, resource limits and failure semantics.
 
 ### W2.4 — Security and contracts
 
-Security model, source ownership, transformation limitations, guarantees,
-resource limits, error handling and compatibility.
-
-### W2.4 generated documentation
-
-- Security model and trust boundaries (`security-model.md`).
-- Ownership and explicit transformations (`ownership-and-transformations.md`).
-- Streaming/incremental limits and error contracts (`resource-limits-and-errors.md`).
-- Compatibility and distribution status (`compatibility-and-distribution.md`).
-
-These pages summarize the recorded source contracts; canonical detailed evidence remains in `docs/`.
+Added security, ownership, transformation, resource-limit, error and
+compatibility documentation. Canonical contracts remain in `docs/`.
 
 ### W2.5 — Developer experience
 
-Troubleshooting, cross-links, examples, navigation and final validation.
+Added troubleshooting, cross-links and expanded documentation navigation.
+
+### W2.6 — Integration qualification
+
+Completed local qualification for the exercised Rust, Swift, Python,
+Kotlin/JVM, C ABI and WASM integration surfaces.
+
+The qualification environments, tested contracts and publication limits
+are recorded in `docs/COMPATIBILITY.md`. These checks do not establish
+universal platform support or complete cross-language API parity.
+
+### W2.6.7 — Compatibility evidence alignment
+
+Updated the canonical compatibility record, website binding matrix and
+website compatibility guide with evidence reviewed on 2026-10-25.
 
 ## Validation
 
-Validation results must be recorded after executing the project checks.
-
-## W2.5 — Developer experience and final review
-
-- Added troubleshooting covering streaming admission/EOF, incremental revision and terminal errors, resource budgets, candidates, adapter distribution, and output policy.
-- Connected previously isolated W2.4 contracts to related guides and improved scanning-mode discovery.
-- Expanded documentation topic navigation without changing public Rust APIs.
-- Verify build, Pagefind, link resolution, examples, and desktop/mobile light/dark presentation before final PR.
-- This entry records planned checks, not their successful execution.
+- `cargo doc -p cribra --no-deps --all-features`: passed during W2.1.
+- `just website-check`: passed after W2.6.7.
+- `just website-build`: passed after W2.6.7, including Pagefind generation.
+- `git diff --check main...HEAD`: passed during W2.6.8.
+- Documentation navigation diff reviewed during W2.6.9.
+- Browser visual inspection and independent link-resolution audit are not
+  established by these results.
