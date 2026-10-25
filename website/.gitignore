@@ -2,6 +2,9 @@
 dist/
 .astro/
 
+# generated Swift-DocC static API reference
+public/api/
+
 # dependencies
 node_modules/
 
