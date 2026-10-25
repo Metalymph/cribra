@@ -1,5 +1,5 @@
 /** Repository evidence snapshot, not a live package-registry lookup. */
-export const evidenceDate = '2026-10-23';
+export const evidenceDate = '2026-10-25';
 export const repository = 'https://github.com/Metalymph/cribra';
 
 /** One independently evidenced integration surface. */
@@ -30,7 +30,7 @@ export const bindings: readonly Binding[] = [
     capabilities:
       'Core: scanning, reports, batch, admitted streaming and incremental documents. Flow (default): four transforms and Share Bundles. Fuse: Flow plus Serde and parallel independent-source scans. These are Cargo feature combinations, not features named core/flow/fuse.',
     qualification:
-      'Recorded engine CI: Linux full gate, native Linux ARM64, RISC-V64 under QEMU, and macOS/Windows tests.',
+      'Recorded engine CI: Linux full gate, native Linux ARM64, RISC-V64 under QEMU, and macOS/Windows tests. Local minimal/default/all-features public API contracts and three independent Cargo consumers passed.',
     limits:
       'Recorded environments are evidence, not a promise for every platform. Whole-source execution is the semantic reference.',
     distribution:
@@ -48,7 +48,7 @@ export const bindings: readonly Binding[] = [
     capabilities:
       'Scanner configuration, metadata, findings/review, batch, admitted byte streaming, incremental snapshots, four transformations and in-memory Share Bundles. AUTO batches may use parallel scanning only with the adapter parallel feature.',
     qualification:
-      'Native C ABI gates recorded on Ubuntu, macOS and Windows; real C/C++ consumers and header checks. Later metadata checks were local macOS ARM64 source checks.',
+      'Native C ABI gates recorded on Ubuntu, macOS and Windows; real C/C++ consumers and header checks. Additional macOS ARM64 checks verified 57 exports, header synchronization, and an independent C11 consumer using a copied header and dynamic library (ABI 0.3.0).',
     limits:
       'Explicit ownership and destruction. Borrowed views must not outlive their owner. Existing C evidence does not qualify every FFI language.',
     distribution:
@@ -66,7 +66,7 @@ export const bindings: readonly Binding[] = [
     capabilities:
       'Checkout Core/Flow: configuration, metadata, ordered sequential batch scans, admitted streaming and incremental snapshots. Flow adds transformations and Share Bundles. No Fuse or Rayon parallel API.',
     qualification:
-      'Existing production browser and Node/Bun/Deno examples. Newer sessions, configuration, batches and Share Bundles checked locally on macOS ARM64 with Node 26.12.0/Bun 1.4.3 against Core oracles.',
+      'Existing production browser and Node/Bun/Deno examples. Newer sessions, configuration, batches and Share Bundles checked locally on macOS ARM64 with Node 26.12.0/Bun 1.4.3 against Core oracles. On 2026-10-25, Node 26.12.1 Core/Flow runtime qualification and the Binaryen -Oz production release gate passed, including JS/TypeScript contract, Rust parity and package validation.',
     limits:
       'Earlier WASM CI predates source session APIs. New session browser execution and Deno qualification are not established by those local checks; Workers/CSP remain host responsibilities.',
     distribution:
@@ -105,7 +105,7 @@ export const bindings: readonly Binding[] = [
     capabilities:
       'Core: configuration, reports, batch, admitted streaming and incremental snapshots. Flow adds transformations/Share Bundles. Fuse adds Core-owned parallel scans. Select one matching Cribra module/package per process.',
     qualification:
-      'macOS ARM64, Swift 6.4 and external package consumers; recorded Apple CI passed all three packages. ARM64 device/Simulator archives built; Simulator compiled/linked.',
+      'macOS ARM64, Swift 6.4 and independent Core/Flow/Fuse SwiftPM package consumers passed; recorded Apple CI passed all three packages. ARM64 device/Simulator archives built; Simulator compiled/linked.',
     limits:
       'No device or Simulator execution claim. macOS 13/iOS 16 are declared minimums, not runtime coverage of each OS. Intel slices absent.',
     distribution:
@@ -126,7 +126,7 @@ export const bindings: readonly Binding[] = [
     capabilities:
       'Core scanning/configuration, batch, admitted streaming and incremental snapshots. Flow adds transformations/Share Bundles; Fuse adds parallel scans. Packaged wheel contains Fuse only.',
     qualification:
-      'Installed Fuse wheel on macOS ARM64 CPython 3.11–3.14. Recorded CI includes Linux x86_64, repaired manylinux_2_28_x86_64 and native Windows x86_64 installed-wheel gates.',
+      'Installed Fuse wheel on macOS ARM64 CPython 3.11.17, 3.12.15, 3.13.7 and 3.14.8 passed isolated consumer tests. Recorded CI includes Linux x86_64, repaired manylinux_2_28_x86_64 and native Windows x86_64 installed-wheel gates.',
     limits:
       'macOS 13 deployment metadata is not runtime qualification on macOS 13. No musl, Linux/Windows ARM64 or Intel macOS qualification established.',
     distribution:
@@ -144,7 +144,7 @@ export const bindings: readonly Binding[] = [
     capabilities:
       'Core/Flow/Fuse with scanning, configuration, batch, admitted streams and incremental snapshots; Flow transformations/Share Bundles; Fuse parallel scanning. One profile JAR and matching native library per classpath.',
     qualification:
-      'Recorded Kotlin 2.4.21/JDK 17 bundle consumers on macOS ARM64, Linux x86_64 and Windows x86_64. Later configuration/session conformance ran locally on macOS ARM64.',
+      'Recorded Kotlin 2.4.21/JDK 17 bundle consumers on macOS ARM64, Linux x86_64 and Windows x86_64. Later configuration/session conformance and Core/Flow/Fuse isolated bundle consumers passed locally on macOS ARM64 (three positive consumers and nine expected rejections).',
     limits:
       'No Android, Kotlin Multiplatform, other architecture/JDK or external Gradle application qualification inferred. Later local conformance does not update earlier CI evidence.',
     distribution:

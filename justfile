@@ -239,6 +239,10 @@ swift-apple-inspect profile="core": _swift-apple-tool
 swift-apple-consumer profile="core" directory="": _swift-apple-tool
     target/swift-apple/apple "{{justfile_directory()}}" consumer "{{profile}}" "{{directory}}"
 
+# Generate and validate Swift-DocC API documentation for Core, Flow or Fuse.
+swift-docc profile="all":
+    bash bindings/swift/scripts/generate-docc.sh "{{profile}}"
+
 # Check, lint, and build the native C adapter artifact skeleton.
 capi:
     cargo check -p cribra-capi
