@@ -35,6 +35,16 @@ chunks without changing that execution model.
 
 Matched secret values are not stored in public findings.
 
+## Repositories and contributions
+
+[GitHub](https://github.com/Metalymph/cribra) is the canonical repository. Issues,
+pull requests, releases, CI, and all development activity happen there.
+
+[Codeberg](https://codeberg.org/Metalymph/cribra) is a read-only contribution
+mirror. It receives `main` and release tags automatically, has issues and pull
+requests disabled, and does not accept contributions. Open issues and pull
+requests on GitHub.
+
 ## Streaming core — available since 0.5.0
 
 Streaming is synchronous and opt-in. Build an admitted ruleset, feed arbitrary
