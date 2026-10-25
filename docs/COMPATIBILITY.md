@@ -136,6 +136,25 @@ mixing builds. All surfaces preserve UTF-8 byte spans and the distinction betwee
 findings and review-only candidates. Streaming admission and resource limits
 remain Core-owned; a default scanner is not automatically streamable.
 
+## W2.6.6 local integration qualification — 2026-10-25
+
+The following checks were completed against the local source checkout.
+They supplement the historical CI receipts above and below; they do not
+establish new registry publication or universal platform compatibility.
+
+| Surface | Newly verified local evidence |
+| --- | --- |
+| Rust | Public API contract tests passed with minimal, default and all-features configurations. Three independent external Cargo consumers passed for the exercised APIs. |
+| C ABI | Header regeneration matched the checked-in header; C11 smoke, static-library and symbol gates passed. The macOS ARM64 dynamic library exposed 57 checked symbols. An external C11 consumer compiled and ran using a copied public header and dynamic library, confirming ABI 0.3.0. |
+| WASM | `wasm-release-gate` passed, including Rust/WASM parity and validation of the Binaryen `-Oz` production artifact. Node.js 26.12.1 Core/Flow runtime qualification passed generated JS/TypeScript contracts and direct-Core oracles for streaming, incremental documents, batch scans, configuration, remediation and metadata; Flow additionally passed Share Bundle checks. The five-file local production package totaled 1,551,414 bytes. Browser session execution and publication of these workspace additions were not established. |
+| Swift | Core/Flow/Fuse Apple build, inspection and independent SwiftPM consumer gates passed on macOS ARM64. iOS Simulator compilation/linking was checked, not Simulator or device execution. |
+| Python | A locally built macOS ARM64 Fuse wheel `cribra` 0.7.2+fuse passed isolated installed-wheel tests on CPython 3.11.17, 3.12.15, 3.13.7 and 3.14.8. This does not establish PyPI publication or execution on every macOS deployment target. |
+| Kotlin/JVM | Core/Flow/Fuse generated bindings, JARs and macOS ARM64 host bundles passed the repository gates. Isolated bundle consumers passed three positive profile checks and nine expected rejection checks with Kotlin 2.4.21/JDK 17. |
+
+These results qualify the tested interfaces and environments, not complete
+cross-language API equivalence. Core/Flow/Fuse remain capability profiles
+with adapter-specific availability and distribution boundaries.
+
 ## Qualification and platform limits
 
 These are recorded environments, not inferred compatibility ranges. The linked

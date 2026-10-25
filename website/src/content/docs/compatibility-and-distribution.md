@@ -6,7 +6,7 @@ order: 22
 
 # Compatibility & Distribution
 
-**Implementation, local qualification, CI qualification and publication are distinct claims.** A passing build, local test or temporary CI artifact does not establish a public package or supported runtime. The canonical status record is `docs/COMPATIBILITY.md` (evidence snapshot dated 2026-10-20, with additional local source checks on 2026-10-22).
+**Implementation, local qualification, CI qualification and publication are distinct claims.** A passing build, local test or temporary CI artifact does not establish a public package or supported runtime. The canonical status record is `docs/COMPATIBILITY.md` (historical evidence from 2026-10-20 onward, supplemented by local six-integration qualification on 2026-10-25).
 
 ## Components and distribution
 
@@ -26,6 +26,22 @@ order: 22
 Rust **Core/Flow/Fuse** describe feature combinations, **not Cargo features** named `core`, `flow` or `fuse`. Core can be selected with `default-features = false`; default Rust `transform` enables Flow operations; Fuse additionally combines `serde` and `parallel`. UniFFI has explicit `core`, `flow`, `fuse` profiles. WASM supports Core and Flow, **not Fuse**.
 
 Workspace WASM source adds streaming, incremental, batches and Flow Share Bundles, but these source checks **do not prove those APIs exist in the published 0.4.7 package**. Check the installed artifact and matching dependency versions, not just current source documentation.
+
+## Local qualification update — 2026-10-25
+
+The current checkout passed additional Rust public API and external Cargo
+consumer checks; C ABI 0.3.0 header, symbol and independent C11 consumer checks;
+Swift Core/Flow/Fuse independent SwiftPM consumer gates; Kotlin/JVM Core/Flow/Fuse
+isolated bundle consumers; and installed Python Fuse wheel tests on macOS ARM64
+with CPython 3.11–3.14.
+
+WASM Core/Flow passed generated JavaScript/TypeScript runtime qualification
+against direct Rust Core oracles. The local production package passed the
+Binaryen `-Oz` release gate and package validation.
+
+These results concern the exercised contracts and local artifacts. They do not
+establish complete API parity, additional published packages, browser session
+qualification or universal operating-system support.
 
 ## Qualified does not mean universal
 
