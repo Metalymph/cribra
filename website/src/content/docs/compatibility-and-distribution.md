@@ -6,7 +6,7 @@ order: 22
 
 # Compatibility & Distribution
 
-**Implementation, local qualification, CI qualification and publication are distinct claims.** A passing build, local test or temporary CI artifact does not establish a public package or supported runtime. The canonical status record is `docs/COMPATIBILITY.md` (historical evidence from 2026-10-20 onward, supplemented by local six-integration qualification on 2026-10-25).
+**Implementation, local qualification, CI qualification and publication are distinct claims.** A passing build, local test or temporary CI artifact does not establish a public package or supported runtime. The canonical status record is [`docs/COMPATIBILITY.md`](https://github.com/Metalymph/cribra/blob/main/docs/COMPATIBILITY.md) (historical evidence from 2026-10-20 onward, supplemented by local six-integration qualification on 2026-10-25).
 
 ## Components and distribution
 
@@ -49,7 +49,7 @@ Swift device/Simulator compile-and-link checks are not execution checks for ever
 
 Never combine generated binding files with a different native library or profile. For C, match the header and binary; for WASM, match the generated JS glue and WASM binary.
 
-**Source of truth:** `docs/COMPATIBILITY.md`, `docs/INTEROP.md`, `docs/WASM_INTEROP.md`, and binding-specific README files. Recheck these records when releasing.
+**Source of truth:** [`docs/COMPATIBILITY.md`](https://github.com/Metalymph/cribra/blob/main/docs/COMPATIBILITY.md), [`docs/INTEROP.md`](https://github.com/Metalymph/cribra/blob/main/docs/INTEROP.md), [`docs/WASM_INTEROP.md`](https://github.com/Metalymph/cribra/blob/main/docs/WASM_INTEROP.md), and binding-specific README files. Recheck these records when releasing.
 
 ## Related guides
 

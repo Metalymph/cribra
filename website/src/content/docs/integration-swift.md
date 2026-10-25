@@ -26,9 +26,9 @@ Generated sources, static archives and XCFrameworks are build outputs.
 
 | Profile | Local package directory | Operations |
 | --- | --- | --- |
-| Core | `bindings/swift` | Scan, configure, stream, incremental, snapshot |
-| Flow | `bindings/swift/Profiles/Flow` | Core plus transformations and Share Bundles |
-| Fuse | `bindings/swift/Profiles/Fuse` | Flow plus parallel scan |
+| Core | [`bindings/swift`](https://github.com/Metalymph/cribra/tree/main/bindings/swift) | Scan, configure, stream, incremental, snapshot |
+| Flow | [`bindings/swift/Profiles/Flow`](https://github.com/Metalymph/cribra/tree/main/bindings/swift/Profiles/Flow) | Core plus transformations and Share Bundles |
+| Fuse | [`bindings/swift/Profiles/Fuse`](https://github.com/Metalymph/cribra/tree/main/bindings/swift/Profiles/Fuse) | Flow plus parallel scan |
 
 Choose exactly **one** profile per application/process. All packages expose
 the same module and native symbols; mixing them is unsupported.
@@ -70,6 +70,6 @@ package and native library together; transformation keys are caller-owned.
 
 ## Source references
 
-- `bindings/swift/README.md`
-- `crates/cribra-uniffi/README.md`
-- `docs/COMPATIBILITY.md`
+- [`bindings/swift/README.md`](https://github.com/Metalymph/cribra/blob/main/bindings/swift/README.md)
+- [`crates/cribra-uniffi/README.md`](https://github.com/Metalymph/cribra/blob/main/crates/cribra-uniffi/README.md)
+- [`docs/COMPATIBILITY.md`](https://github.com/Metalymph/cribra/blob/main/docs/COMPATIBILITY.md)

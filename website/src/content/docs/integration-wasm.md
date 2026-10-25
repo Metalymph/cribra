@@ -59,7 +59,7 @@ browser/runtime coverage or published parity for the new APIs.
 
 ## Source references
 
-- `crates/cribra-wasm/README.md`
-- `examples/wasm-browser/README.md`
-- `examples/wasm-runtime/README.md`
-- `docs/COMPATIBILITY.md`
+- [`crates/cribra-wasm/README.md`](https://github.com/Metalymph/cribra/blob/main/crates/cribra-wasm/README.md)
+- [`examples/wasm-browser/README.md`](https://github.com/Metalymph/cribra/blob/main/examples/wasm-browser/README.md)
+- [`examples/wasm-runtime/README.md`](https://github.com/Metalymph/cribra/blob/main/examples/wasm-runtime/README.md)
+- [`docs/COMPATIBILITY.md`](https://github.com/Metalymph/cribra/blob/main/docs/COMPATIBILITY.md)

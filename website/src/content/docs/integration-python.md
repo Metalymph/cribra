@@ -66,6 +66,6 @@ a revision/report pair must describe one committed state.
 
 ## Source references
 
-- `bindings/python/README.md`
-- `crates/cribra-uniffi/README.md`
-- `docs/COMPATIBILITY.md`
+- [`bindings/python/README.md`](https://github.com/Metalymph/cribra/blob/main/bindings/python/README.md)
+- [`crates/cribra-uniffi/README.md`](https://github.com/Metalymph/cribra/blob/main/crates/cribra-uniffi/README.md)
+- [`docs/COMPATIBILITY.md`](https://github.com/Metalymph/cribra/blob/main/docs/COMPATIBILITY.md)

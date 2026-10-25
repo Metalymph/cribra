@@ -27,8 +27,8 @@ package publication is established by these facts.
 
 ## Start with the checked-in example
 
-Use `examples/c/scan.c` together with the checked-in header and
-`docs/INTEROP.md`. The C ABI has its own function signatures and resource
+Use [`examples/c/scan.c`](https://github.com/Metalymph/cribra/blob/main/examples/c/scan.c) together with the checked-in header and
+[`docs/INTEROP.md`](https://github.com/Metalymph/cribra/blob/main/docs/INTEROP.md). The C ABI has its own function signatures and resource
 ownership; do not translate Rust method names directly into assumed C symbols.
 
 ## Ownership and errors
@@ -51,7 +51,7 @@ is a total-process memory cap.
 
 ## Source references
 
-- `docs/INTEROP.md`
-- `examples/c/scan.c`
-- `crates/cribra-capi/`
-- `docs/COMPATIBILITY.md`
+- [`docs/INTEROP.md`](https://github.com/Metalymph/cribra/blob/main/docs/INTEROP.md)
+- [`examples/c/scan.c`](https://github.com/Metalymph/cribra/blob/main/examples/c/scan.c)
+- [`crates/cribra-capi/`](https://github.com/Metalymph/cribra/tree/main/crates/cribra-capi/)
+- [`docs/COMPATIBILITY.md`](https://github.com/Metalymph/cribra/blob/main/docs/COMPATIBILITY.md)

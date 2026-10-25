@@ -30,7 +30,7 @@ Dropping retained buffers is **not a secure-zeroization guarantee**. Streaming a
 4. Set execution limits appropriate to the source and runtime; handle admission and terminal errors.
 5. Avoid recording raw source, transformed source or secret-bearing diagnostics in application logs.
 
-**Source of truth:** `docs/ARCHITECTURE.md`, `docs/INTEROP.md`, `docs/streaming.md`, `docs/incremental.md`.
+**Source of truth:** [`docs/ARCHITECTURE.md`](https://github.com/Metalymph/cribra/blob/main/docs/ARCHITECTURE.md), [`docs/INTEROP.md`](https://github.com/Metalymph/cribra/blob/main/docs/INTEROP.md), [`docs/streaming.md`](https://github.com/Metalymph/cribra/blob/main/docs/streaming.md), [`docs/incremental.md`](https://github.com/Metalymph/cribra/blob/main/docs/incremental.md).
 
 ## Related guides
 

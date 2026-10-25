@@ -41,7 +41,7 @@ just uniffi-kotlin-jars
 just uniffi-kotlin-bundles
 ```
 
-Profile JARs are under `bindings/kotlin/build/libs/`; bundles are generated
+Profile JARs are under [`bindings/kotlin/build/libs/`](https://github.com/Metalymph/cribra/tree/main/bindings/kotlin/build/libs/); bundles are generated
 under ignored `target/uniffi-kotlin-bundles/dist/`. A JAR alone does not include
 the host native library. The consumer must supply Kotlin runtime and JNA and
 follow the documented native loader contract (`jna.library.path` where needed).
@@ -57,6 +57,6 @@ finding/candidate distinctions apply to Kotlin consumers.
 
 ## Source references
 
-- `bindings/kotlin/README.md`
-- `bindings/kotlin/verify/consumer/`
-- `docs/COMPATIBILITY.md`
+- [`bindings/kotlin/README.md`](https://github.com/Metalymph/cribra/blob/main/bindings/kotlin/README.md)
+- [`bindings/kotlin/verify/consumer/`](https://github.com/Metalymph/cribra/tree/main/bindings/kotlin/verify/consumer/)
+- [`docs/COMPATIBILITY.md`](https://github.com/Metalymph/cribra/blob/main/docs/COMPATIBILITY.md)

@@ -23,11 +23,11 @@ Keyed transformation modes require correct key management by the caller. A deter
 ## Adapter lifetimes
 
 - **Rust:** ownership and borrows are enforced by the API; cloned reports belong to the caller.
-- **C ABI:** opaque handles own native state; borrowed pointer-plus-length views are valid only while their documented owner remains alive. Follow the checked-in `include/cribra.h` contract and release owned handles.
+- **C ABI:** opaque handles own native state; borrowed pointer-plus-length views are valid only while their documented owner remains alive. Follow the checked-in [`include/cribra.h`](https://github.com/Metalymph/cribra/blob/main/include/cribra.h) contract and release owned handles.
 - **WASM:** generated JavaScript objects and owned results have explicit `free()` lifetimes; do not use them after release.
 - **UniFFI Swift/Python/Kotlin:** use a matching generated binding/native-library/profile set. Do not mix profiles or independently built artifacts in one process.
 
-**Source of truth:** `docs/INTEROP.md`, `docs/ARCHITECTURE.md`, `docs/COMPATIBILITY.md`, `docs/streaming.md`, `docs/incremental.md`.
+**Source of truth:** [`docs/INTEROP.md`](https://github.com/Metalymph/cribra/blob/main/docs/INTEROP.md), [`docs/ARCHITECTURE.md`](https://github.com/Metalymph/cribra/blob/main/docs/ARCHITECTURE.md), [`docs/COMPATIBILITY.md`](https://github.com/Metalymph/cribra/blob/main/docs/COMPATIBILITY.md), [`docs/streaming.md`](https://github.com/Metalymph/cribra/blob/main/docs/streaming.md), [`docs/incremental.md`](https://github.com/Metalymph/cribra/blob/main/docs/incremental.md).
 
 ## Related guides
 

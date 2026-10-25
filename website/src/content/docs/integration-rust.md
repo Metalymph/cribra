@@ -40,8 +40,8 @@ or custom rules, then call `scan()` for a complete report. The financial and
 personal catalogs are opt-in; custom-only rules do not implicitly enable
 built-ins. Use `parallel_scan()` only when the `parallel` feature is enabled.
 
-For exact compilable code, consult `examples/scan_basic.rs`,
-`examples/custom_rules.rs`, and `examples/query_results.rs` in the checkout.
+For exact compilable code, consult [`examples/scan_basic.rs`](https://github.com/Metalymph/cribra/blob/main/examples/scan_basic.rs),
+[`examples/custom_rules.rs`](https://github.com/Metalymph/cribra/blob/main/examples/custom_rules.rs), and [`examples/query_results.rs`](https://github.com/Metalymph/cribra/blob/main/examples/query_results.rs) in the checkout.
 The API reference covers `ScanReport`, `ScanQuery`, `ScanSummary` and
 rule metadata.
 
@@ -55,7 +55,7 @@ sessions expose committed reports and revisions under their own lifecycle.
 
 ## Source references
 
-- `docs/GETTING_STARTED.md`
-- `docs/COMPATIBILITY.md`
-- `examples/scan_basic.rs`
-- `src/lib.rs`
+- [`docs/GETTING_STARTED.md`](https://github.com/Metalymph/cribra/blob/main/docs/GETTING_STARTED.md)
+- [`docs/COMPATIBILITY.md`](https://github.com/Metalymph/cribra/blob/main/docs/COMPATIBILITY.md)
+- [`examples/scan_basic.rs`](https://github.com/Metalymph/cribra/blob/main/examples/scan_basic.rs)
+- [`src/lib.rs`](https://github.com/Metalymph/cribra/blob/main/src/lib.rs)

@@ -8,7 +8,7 @@ order: 21
 
 ## Streaming admission
 
-Streaming is **opt-in and configuration-dependent**. `Scanner::stream()` does not make every scanner streamable: unsupported matcher/validator combinations are rejected at admission, with **no silent whole-source fallback**. For example, the complete built-in portfolio and per-rule regex prefilters are not automatically admissible. Check `docs/streaming.md` before selecting rules for chunked execution.
+Streaming is **opt-in and configuration-dependent**. `Scanner::stream()` does not make every scanner streamable: unsupported matcher/validator combinations are rejected at admission, with **no silent whole-source fallback**. For example, the complete built-in portfolio and per-rule regex prefilters are not automatically admissible. Check [`docs/streaming.md`](https://github.com/Metalymph/cribra/blob/main/docs/streaming.md) before selecting rules for chunked execution.
 
 `push(&[u8])` accepts ordered fragments, including fragments that split UTF-8 scalars. Genuine EOF with incomplete UTF-8 fails. Only a successful consuming `finish()` produces a complete report. Execution failures are terminal; subsequent `push`/`finish` operations return inactive-session errors. If a push encounters an execution failure before a later transport-validation failure, the first execution failure takes precedence.
 
@@ -45,7 +45,7 @@ Limits are independent and optional. Streaming's retained-result limit and incre
 4. Never publish a partially constructed report or treat budget admission as an operating-system memory cap.
 5. Propagate errors without appending original sensitive source to diagnostics.
 
-**Source of truth:** `docs/streaming.md`, `docs/incremental.md`, `docs/ARCHITECTURE.md`.
+**Source of truth:** [`docs/streaming.md`](https://github.com/Metalymph/cribra/blob/main/docs/streaming.md), [`docs/incremental.md`](https://github.com/Metalymph/cribra/blob/main/docs/incremental.md), [`docs/ARCHITECTURE.md`](https://github.com/Metalymph/cribra/blob/main/docs/ARCHITECTURE.md).
 
 ## Related guides
 
