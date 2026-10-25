@@ -18,6 +18,7 @@ const config = {
   footerNav: [
     { label: 'Docs', href: '/docs/' },
     { label: 'GitHub', href: 'https://github.com/Metalymph/cribra' },
+    { label: 'Codeberg', href: 'https://codeberg.org/Metalymph/cribra' },
     { label: 'Search', href: '/search/' },
   ],
   behavior: { smoothScroll: true },

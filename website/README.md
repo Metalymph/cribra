@@ -134,6 +134,35 @@ origin; prevent public indexing using Cloudflare's preview controls. No remote
 preview, hosting integration, or production deployment was qualified locally.
 If the production domain changes, update the environment setting and rebuild.
 
+### Swift-DocC Core API reference
+
+The Core 0.7.2 reference is staged at `/api/0.7.2/swift/core/` but is not linked
+from public website pages yet. Do not enable those links until the deployment
+pipeline can produce and publish the reference with the site.
+
+Generate and stage it from the repository root:
+
+```sh
+# Only needed when bindings/swift/Generated/ is absent.
+just swift-apple core
+
+just swift-docc-core
+just stage-swift-docc-core
+just website-build
+```
+
+`just website-build-swift-core` runs the same generation, staging, and website
+build steps in order. The generated DocC tree is written to
+`public/api/0.7.2/swift/core/`, which is ignored by Git. Its entry point
+redirects to the generated `documentation/cribra/` module page.
+
+The Cloudflare Pages v3 Git build image cannot produce this output: it does not
+provide Xcode or `xcrun docc`, and the generated Swift package and native
+artifacts are intentionally not tracked. Production publication therefore
+requires one macOS-based CI pipeline that builds both Astro and Swift-DocC and
+uploads the combined `dist` output. Do not mix a Git-integrated Cloudflare Pages
+deployment with independent direct uploads.
+
 References:
 - https://developers.cloudflare.com/pages/framework-guides/deploy-an-astro-site/
 - https://developers.cloudflare.com/pages/configuration/build-image/

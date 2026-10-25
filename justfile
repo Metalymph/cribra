@@ -243,6 +243,20 @@ swift-apple-consumer profile="core" directory="": _swift-apple-tool
 swift-docc profile="all":
     bash bindings/swift/scripts/generate-docc.sh "{{profile}}"
 
+# Generate Core Swift-DocC with the versioned public hosting base path.
+swift-docc-core:
+    bash bindings/swift/scripts/generate-docc.sh core --hosting-base-path /api/0.7.2/swift/core
+
+# Stage generated Core Swift-DocC assets into Astro's ignored build inputs.
+stage-swift-docc-core:
+    node website/scripts/stage-swift-docc.mjs --profile core --version 0.7.2
+
+# Generate, stage, and build the website with the Core API reference at /api/0.7.2/swift/core/.
+website-build-swift-core:
+    just swift-docc-core
+    just stage-swift-docc-core
+    just website-build
+
 # Check, lint, and build the native C adapter artifact skeleton.
 capi:
     cargo check -p cribra-capi

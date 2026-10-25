@@ -5,6 +5,26 @@ root="$(git rev-parse --show-toplevel)"
 cd "$root"
 
 profile="${1:-all}"
+shift || true
+
+hosting_base_path=""
+
+while (( $# > 0 )); do
+  case "$1" in
+    --hosting-base-path)
+      if (( $# < 2 )) || [[ -z "$2" ]]; then
+        echo "FAIL: --hosting-base-path requires a value" >&2
+        exit 2
+      fi
+      hosting_base_path="$2"
+      shift 2
+      ;;
+    *)
+      echo "Usage: $0 <core|flow|fuse|all> [--hosting-base-path <path>]" >&2
+      exit 2
+      ;;
+  esac
+done
 
 case "$profile" in
   core|flow|fuse)
@@ -14,10 +34,21 @@ case "$profile" in
     profiles=(core flow fuse)
     ;;
   *)
-    echo "Usage: $0 <core|flow|fuse|all>" >&2
+    echo "Usage: $0 <core|flow|fuse|all> [--hosting-base-path <path>]" >&2
     exit 2
     ;;
 esac
+
+if [[ -n "$hosting_base_path" ]]; then
+  if [[ "$profile" == "all" ]]; then
+    echo "FAIL: --hosting-base-path requires one profile" >&2
+    exit 2
+  fi
+  if [[ "$hosting_base_path" != /* || "$hosting_base_path" == */ ]]; then
+    echo "FAIL: hosting base path must start with '/' and have no trailing slash" >&2
+    exit 2
+  fi
+fi
 
 sdk="$(xcrun --sdk macosx --show-sdk-path)"
 
@@ -86,6 +117,14 @@ if missing:
 print(f"PASS: {profile}: {len(symbols)} public symbols")
 PY
 
+  hosting_args=()
+  if [[ -n "$hosting_base_path" ]]; then
+    hosting_args=(
+      --transform-for-static-hosting
+      --hosting-base-path "$hosting_base_path"
+    )
+  fi
+
   xcrun docc convert \
     bindings/swift/Documentation/Cribra.docc \
     --additional-symbol-graph-dir "$symbols" \
@@ -94,7 +133,8 @@ PY
     --fallback-bundle-identifier "dev.metalymph.cribra.$current" \
     --fallback-default-module-kind "Library" \
     --experimental-documentation-coverage \
-    --analyze
+    --analyze \
+    ${hosting_args[@]+"${hosting_args[@]}"}
 
   test -d "$archive"
 
