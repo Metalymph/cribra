@@ -1,3 +1,10 @@
 self-hosted-runner:
   labels:
     - xcode-27
+
+paths:
+  .github/workflows/website-swift-docc.yml:
+    ignore:
+      # The Cloudflare deployment job is intentionally hard-disabled until the
+      # project settings and credentials are verified.
+      - 'constant expression "false" in condition'

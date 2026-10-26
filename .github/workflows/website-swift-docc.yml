@@ -1,0 +1,285 @@
+name: Website Swift-DocC
+
+on:
+  pull_request:
+    paths:
+      - "website/**"
+      - "bindings/swift/**"
+      - "crates/cribra-uniffi/**"
+      - "src/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "justfile"
+      - ".github/workflows/website-swift-docc.yml"
+
+  push:
+    branches: [main]
+    paths:
+      - "website/**"
+      - "bindings/swift/**"
+      - "crates/cribra-uniffi/**"
+      - "src/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "justfile"
+      - ".github/workflows/website-swift-docc.yml"
+
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: website-swift-docc-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  ASTRO_SITE_URL: https://cribra.pages.dev
+
+jobs:
+  build:
+    name: Build and validate website with Swift-DocC
+    runs-on: xcode-27
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: website/.nvmrc
+          cache: npm
+          cache-dependency-path: website/package-lock.json
+
+      - name: Install Rust 1.97 and Apple targets
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.97.0"
+          targets: >
+            aarch64-apple-darwin,
+            aarch64-apple-ios,
+            aarch64-apple-ios-sim
+
+      - name: Cache Rust artifacts
+        uses: Swatinem/rust-cache@v2.9.1
+        with:
+          key: website-swift-docc
+
+      - name: Install just
+        run: brew install just
+
+      - name: Verify host and toolchains
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          test "$(uname -s)" = "Darwin"
+          test "$(uname -m)" = "arm64"
+
+          swiftc --version
+          swiftc --version | grep -F "Swift version 6.4"
+          xcrun --find docc
+          xcodebuild -version
+
+          rustc +1.97.0 --version
+          rustc +1.97.0 --version | grep -F "rustc 1.97.0"
+
+          installed_targets="$(rustup target list --installed --toolchain 1.97.0)"
+          for target in \
+            aarch64-apple-darwin \
+            aarch64-apple-ios \
+            aarch64-apple-ios-sim; do
+            grep -Fxq "$target" <<<"$installed_targets"
+          done
+
+          node --version
+          node --version | grep -Fx "v22.22.0"
+          npm --version
+          python3 --version
+          just --version
+
+      - name: Install website dependencies
+        run: npm ci --prefix website
+
+      - name: Generate Swift Core artifacts
+        run: just swift-apple core
+
+      - name: Generate Swift-DocC for Core
+        run: just swift-docc-core
+
+      - name: Stage Swift-DocC into Astro
+        run: just stage-swift-docc-core
+
+      - name: Check website
+        run: just website-check
+
+      - name: Build Astro and Pagefind
+        run: just website-build
+
+      - name: Validate combined website output
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          node website/scripts/validate-swift-docc-build.mjs \
+            --manifest "$RUNNER_TEMP/website-build-manifest.json"
+
+          {
+            echo "### Website build manifest"
+            echo
+            echo '```json'
+            cat "$RUNNER_TEMP/website-build-manifest.json"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Record publication candidate
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        shell: bash
+        run: |
+          {
+            echo "### Production publication candidate"
+            echo
+            echo "The combined website artifact was validated. Cloudflare deployment is disabled in this workflow."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # DocC generates filenames that are not valid on Windows, such as
+      # `!=(_:_:).json`. Archive the validated tree so artifact transport never
+      # has to represent those names as individual artifact entries.
+      - name: Archive combined website output
+        shell: bash
+        env:
+          WEBSITE_ARCHIVE: ${{ runner.temp }}/cribra-website-swift-docc-${{ github.sha }}.tar.gz
+        run: |
+          set -euo pipefail
+
+          rm -f "$WEBSITE_ARCHIVE"
+          tar --create --gzip --file "$WEBSITE_ARCHIVE" --directory website dist
+
+          gzip -t "$WEBSITE_ARCHIVE"
+          tar --list --gzip --file "$WEBSITE_ARCHIVE" > "$RUNNER_TEMP/website-archive-contents.txt"
+
+          expected_files="$(find website/dist -type f | wc -l | tr -d ' ')"
+          archived_files="$(awk '!/\/$/' "$RUNNER_TEMP/website-archive-contents.txt" | wc -l | tr -d ' ')"
+          if [ "$archived_files" -ne "$expected_files" ]; then
+            echo "::error::website archive contains $archived_files files; website/dist contains $expected_files"
+            exit 1
+          fi
+
+          {
+            echo "### Website archive"
+            echo
+            echo "- Archive: \`$(basename "$WEBSITE_ARCHIVE")\`"
+            echo "- Files: $archived_files"
+            echo "- SHA-256: \`$(shasum -a 256 "$WEBSITE_ARCHIVE" | awk '{print $1}')\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Verify website archive round trip
+        shell: bash
+        env:
+          WEBSITE_ARCHIVE: ${{ runner.temp }}/cribra-website-swift-docc-${{ github.sha }}.tar.gz
+        run: |
+          set -euo pipefail
+
+          extraction_root="$(mktemp -d "$RUNNER_TEMP/website-archive-check.XXXXXX")"
+          trap 'rm -rf "$extraction_root"' EXIT
+
+          tar --extract --gzip --file "$WEBSITE_ARCHIVE" --directory "$extraction_root"
+
+          homepage="$extraction_root/dist/index.html"
+          module_page="$extraction_root/dist/api/0.7.2/swift/core/documentation/cribra/index.html"
+          windows_hostile_json="$extraction_root/dist/api/0.7.2/swift/core/data/documentation/cribra/builderrorcode/!=(_:_:).json"
+
+          test -s "$homepage"
+          test -s "$module_page"
+          test -s "$windows_hostile_json"
+
+          expected_files="$(find website/dist -type f | wc -l | tr -d ' ')"
+          extracted_files="$(find "$extraction_root/dist" -type f | wc -l | tr -d ' ')"
+          if [ "$extracted_files" -ne "$expected_files" ]; then
+            echo "::error::extracted archive contains $extracted_files files; expected $expected_files"
+            exit 1
+          fi
+
+          if ! cmp -s website/dist/index.html "$homepage"; then
+            echo "::error::extracted Astro homepage differs from website/dist/index.html"
+            exit 1
+          fi
+
+          if ! cmp -s \
+            website/dist/api/0.7.2/swift/core/documentation/cribra/index.html \
+            "$module_page"; then
+            echo "::error::extracted DocC module page differs from website/dist"
+            exit 1
+          fi
+
+          echo "PASS: archive round trip preserved $extracted_files files, including the Astro homepage and DocC module page"
+
+      - name: Upload combined website archive
+        uses: actions/upload-artifact@v7
+        with:
+          name: cribra-website-swift-docc-${{ github.sha }}
+          path: ${{ runner.temp }}/cribra-website-swift-docc-${{ github.sha }}.tar.gz
+          if-no-files-found: error
+          retention-days: 14
+
+  deploy:
+    name: Deploy to Cloudflare Pages (disabled)
+    # Hard-disabled. Do not replace this condition until the Cloudflare project
+    # is verified and its automatic Git deployments are disabled. See
+    # website/README.md for the activation and rollback procedure.
+    if: ${{ false }}
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    permissions:
+      contents: read
+      deployments: write
+
+    environment:
+      name: production
+      url: https://cribra.pages.dev
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: website/.nvmrc
+
+      - name: Download combined website artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: cribra-website-swift-docc-${{ github.sha }}
+          path: ${{ runner.temp }}/website-artifact
+
+      - name: Extract combined website artifact
+        shell: bash
+        env:
+          WEBSITE_ARCHIVE: ${{ runner.temp }}/website-artifact/cribra-website-swift-docc-${{ github.sha }}.tar.gz
+        run: |
+          set -euo pipefail
+
+          test -f "$WEBSITE_ARCHIVE"
+          gzip -t "$WEBSITE_ARCHIVE"
+
+          mkdir -p website
+          tar --extract --gzip --file "$WEBSITE_ARCHIVE" --directory website
+
+          test -s website/dist/index.html
+          test -s website/dist/api/0.7.2/swift/core/documentation/cribra/index.html
+
+          echo "PASS: extracted $(find website/dist -type f | wc -l | tr -d ' ') files to website/dist"
+
+      - name: Deploy with Wrangler
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          wranglerVersion: "4.153.0"
+          command: pages deploy website/dist --project-name=cribra --branch=main
+          gitHubToken: ${{ secrets.GITHUB_TOKEN }}
