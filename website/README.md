@@ -109,10 +109,82 @@ fallbacks remain intentional. See `public/brand/README.md` for the asset contrac
 
 No separate application icon or dedicated social-preview image is included.
 
-## Cloudflare Pages — manual Git configuration
+## CI generation and Cloudflare publication
 
-No Cloudflare resources or deployments are created by this foundation.
-When deploying later, configure:
+### GitHub Actions pipeline
+
+`.github/workflows/website-swift-docc.yml` builds the complete website on a
+GitHub-hosted `xcode-27` macOS ARM64 runner. It validates pull requests and
+pushes to `main` that touch `website/**`, `bindings/swift/**`,
+`crates/cribra-uniffi/**`, `src/**`, `Cargo.toml`, `Cargo.lock`, the `justfile`,
+or the workflow itself. `workflow_dispatch` starts it manually.
+
+The pipeline reuses the repository's generation, staging, and build recipes:
+
+```sh
+npm ci --prefix website
+just swift-apple core
+just swift-docc-core
+just stage-swift-docc-core
+just website-check
+just website-build
+node website/scripts/validate-swift-docc-build.mjs
+```
+
+It requires:
+
+| Tool | Requirement |
+| --- | --- |
+| Runner / Xcode | GitHub-hosted `xcode-27`, macOS ARM64, Xcode 27 |
+| Swift | Swift 6.4 with `xcrun docc` |
+| Rust | 1.97.0 with `aarch64-apple-darwin`, `aarch64-apple-ios`, `aarch64-apple-ios-sim` |
+| Node | `.nvmrc` = `22.22.0` |
+| Python | Python 3 from the runner, used by the DocC generator |
+| `just` | Installed with Homebrew |
+
+`npm ci` uses the committed lockfile. No build secrets are required. A
+successful run uploads `website/dist` as the
+`cribra-website-swift-docc-<commit-sha>` artifact for 14 days.
+
+The validator checks the homepage, the versioned DocC entry point and module
+page, required symbol pages, DocC assets, Pagefind output, and every root-relative
+`href`/`src` reference in the built HTML. It also writes a manifest with file
+counts, byte size, and required-file sizes to the workflow step summary.
+Validation failures fail the job.
+
+### Local generation and validation
+
+Run from the repository root:
+
+```sh
+npm ci --prefix website
+just swift-apple core
+just swift-docc-core
+just stage-swift-docc-core
+just website-check
+ASTRO_SITE_URL=https://cribra.pages.dev just website-build
+node website/scripts/validate-swift-docc-build.mjs
+```
+
+`just website-build-swift-core` still performs the DocC generation, staging, and
+website build subset. It does not build the Swift Apple artifacts or run the
+combined-output validator.
+
+### Validation versus publication
+
+Pull-request and manual runs only validate and upload an artifact. Builds from
+`main` are publication candidates, but the workflow does not deploy. The
+deployment job is intentionally hard-disabled with `if: ${{ false }}` and no
+Cloudflare credentials are used by the build job.
+
+The Core 0.7.2 reference is staged at `/api/0.7.2/swift/core/` but is not linked
+from public website pages. Do not enable those links until publication is
+qualified; that belongs to W2.9.3.
+
+### Cloudflare Pages prerequisites
+
+The existing Cloudflare Pages project is assumed to use Git integration with
+these settings. Verify each value before activation:
 
 | Setting | Value |
 | --- | --- |
@@ -123,47 +195,64 @@ When deploying later, configure:
 | Build output directory | `dist` |
 | `ASTRO_SITE_URL` | `https://cribra.pages.dev` |
 | Node | `.nvmrc` = `22.22.0`, or explicitly set `NODE_VERSION=22.22.0` |
+| Pages project | `cribra` (assumed from `https://cribra.pages.dev`) |
 
-The build command is `astro build && pagefind --site dist`: Pages must install
-dev dependencies because Astro checks and Pagefind are build tools. The npm
-lockfile supplies reproducible dependency resolution. Do not use a Workers/SSR
-preset, add Functions, or add a Cloudflare runtime adapter for this static site.
+The Git build command is `astro build && pagefind --site dist`: Pages must
+install dev dependencies because Astro checks and Pagefind are build tools. The
+npm lockfile supplies reproducible dependency resolution. Do not use a
+Workers/SSR preset, add Functions, or add a Cloudflare runtime adapter for this
+static site.
 
-For a preview deployment, keep canonical metadata pointed at the production
-origin; prevent public indexing using Cloudflare's preview controls. No remote
-preview, hosting integration, or production deployment was qualified locally.
-If the production domain changes, update the environment setting and rebuild.
+The Git build image does not provide Xcode, `xcrun docc`, or the Rust Apple
+toolchain, so it cannot produce the combined Astro and Swift-DocC output. Do not
+convert the project to Direct Upload: Cloudflare does not support converting a
+Git-integrated project to Direct Upload.
 
-### Swift-DocC Core API reference
+Before enabling deployment, also verify the account ID, current Git integration
+and branch-control settings, current production deployment, and any custom
+domain in the Cloudflare dashboard. Then complete this activation procedure:
 
-The Core 0.7.2 reference is staged at `/api/0.7.2/swift/core/` but is not linked
-from public website pages yet. Do not enable those links until the deployment
-pipeline can produce and publish the reference with the site.
+1. Create an API token with **Account → Cloudflare Pages → Edit**.
+2. Add `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` as GitHub environment
+   secrets for the protected `production` environment.
+3. In the Pages project, open **Build → Branch control** and disable automatic
+   production deployments. Disable automatic preview deployments as well, so
+   Wrangler is the only deployment mechanism.
+4. Require reviewers on the `production` GitHub environment.
+5. Confirm the pinned Wrangler version in the workflow
+   (`wranglerVersion: "4.153.0"`) and review the deployment command.
+6. Replace the deployment job's `if: ${{ false }}` with a reviewed main-only
+   condition. Keep the job dependent on the validated `build` job, and use the
+   protected `production` environment as the approval gate.
+7. Run the workflow manually or on a `main` merge, inspect the artifact and
+   validation manifest, then confirm the deployment.
 
-Generate and stage it from the repository root:
+The prepared command deploys the downloaded artifact:
 
 ```sh
-# Only needed when bindings/swift/Generated/ is absent.
-just swift-apple core
-
-just swift-docc-core
-just stage-swift-docc-core
-just website-build
+wrangler pages deploy website/dist --project-name=cribra --branch=main
 ```
 
-`just website-build-swift-core` runs the same generation, staging, and website
-build steps in order. The generated DocC tree is written to
-`public/api/0.7.2/swift/core/`, which is ignored by Git. Its entry point
-redirects to the generated `documentation/cribra/` module page.
+Do not re-enable automatic Git deployments after activation. That would create
+competing production deployments.
 
-The Cloudflare Pages v3 Git build image cannot produce this output: it does not
-provide Xcode or `xcrun docc`, and the generated Swift package and native
-artifacts are intentionally not tracked. Production publication therefore
-requires one macOS-based CI pipeline that builds both Astro and Swift-DocC and
-uploads the combined `dist` output. Do not mix a Git-integrated Cloudflare Pages
-deployment with independent direct uploads.
+### Rollback and future versions
+
+To roll back, open the Pages project's **Deployments** list, choose a previously
+successful production deployment, and select **Rollback to this deployment**.
+Cloudflare retains prior production deployments. GitHub artifacts are retained
+for 14 days; rebuild an older commit if a longer window is required.
+
+API references are versioned by path (`/api/<version>/swift/core/`). The
+`swift-docc-core` and `stage-swift-docc-core` recipes and the output validator
+currently hardcode `0.7.2`. A new version requires a deliberate update to those
+paths. Keep older version directories in place; do not replace or prune them.
+Add public navigation links only after the new version is published.
 
 References:
+- https://developers.cloudflare.com/pages/get-started/direct-upload/
+- https://developers.cloudflare.com/pages/configuration/git-integration/
+- https://developers.cloudflare.com/pages/configuration/rollbacks/
 - https://developers.cloudflare.com/pages/framework-guides/deploy-an-astro-site/
 - https://developers.cloudflare.com/pages/configuration/build-image/
 
