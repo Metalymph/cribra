@@ -70,6 +70,7 @@ Rust gates. Generated `.astro/`, `dist/`, and `node_modules/` are ignored here.
 - `/docs/transformations/` — transformations and Share Bundles
 - `/docs/scanning-modes/` — whole-source, streaming, incremental
 - `/bindings/` — evidence-backed integration matrix
+- `/api/0.7.2/swift/core/` — published Swift Core API reference (generated Swift-DocC)
 - `/examples/` — existing runnable repository examples and static excerpts
 - `/search/` — Pagefind; excluded from search indexing and sitemap
 - `/404.html` — static error page; excluded from search indexing and sitemap
@@ -156,8 +157,8 @@ Only the archive is uploaded, as the
 `cribra-website-swift-docc-<commit-sha>` artifact for 14 days. Generated DocC
 filenames and directory structure are preserved unchanged; archiving prevents
 `actions/upload-artifact` from rejecting Windows-incompatible names. The
-disabled deployment job downloads the archive, checks it, and extracts it so the
-archive's `dist/` root becomes `website/dist` before Wrangler runs.
+production deployment job downloads the archive, checks it, and extracts it so
+the archive's `dist/` root becomes `website/dist` before Wrangler runs.
 
 The validator checks the homepage, the versioned DocC entry point and module
 page, required symbol pages, DocC assets, Pagefind output, and every root-relative
@@ -185,19 +186,20 @@ combined-output validator.
 
 ### Validation versus publication
 
-Pull-request and manual runs only validate and upload an artifact. Builds from
-`main` are publication candidates, but the workflow does not deploy. The
-deployment job is intentionally hard-disabled with `if: ${{ false }}` and no
-Cloudflare credentials are used by the build job.
+Pull-request and manual runs only validate and upload an artifact. A push to
+`main` runs the same build, and after it succeeds the `deploy` job publishes
+the extracted archive to Cloudflare Pages through the protected `production`
+environment. The build job does not use Cloudflare credentials.
 
-The Core 0.7.2 reference is staged at `/api/0.7.2/swift/core/` but is not linked
-from public website pages. Do not enable those links until publication is
-qualified; that belongs to W2.9.3.
+The Core 0.7.2 reference is staged at `/api/0.7.2/swift/core/` and linked from
+the bindings page, the documentation index, the search palette, and the Swift
+integration guide. Those links cover the Core profile only; Flow and Fuse are
+separate distribution profiles without published DocC references.
 
 ### Cloudflare Pages prerequisites
 
-The existing Cloudflare Pages project is assumed to use Git integration with
-these settings. Verify each value before activation:
+The existing Cloudflare Pages project uses Git integration with these settings.
+Verify each value when reviewing the production project:
 
 | Setting | Value |
 | --- | --- |
@@ -221,9 +223,11 @@ toolchain, so it cannot produce the combined Astro and Swift-DocC output. Do not
 convert the project to Direct Upload: Cloudflare does not support converting a
 Git-integrated project to Direct Upload.
 
-Before enabling deployment, also verify the account ID, current Git integration
-and branch-control settings, current production deployment, and any custom
-domain in the Cloudflare dashboard. Then complete this activation procedure:
+The production pipeline activated in PR #66 also depends on the account ID,
+current Git integration and branch-control settings, current production
+deployment, and any custom domain. Recheck them in the Cloudflare dashboard when
+the project changes. The activation procedure is retained below for future
+environment changes:
 
 1. Create an API token with **Account → Cloudflare Pages → Edit**.
 2. Add `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` as GitHub environment
@@ -234,20 +238,21 @@ domain in the Cloudflare dashboard. Then complete this activation procedure:
 4. Require reviewers on the `production` GitHub environment.
 5. Confirm the pinned Wrangler version in the workflow
    (`wranglerVersion: "4.153.0"`) and review the deployment command.
-6. Replace the deployment job's `if: ${{ false }}` with a reviewed main-only
-   condition. Keep the job dependent on the validated `build` job, and use the
-   protected `production` environment as the approval gate.
-7. Run the workflow manually or on a `main` merge, inspect the downloaded
-   archive and validation manifest, then confirm the deployment.
+6. Keep the deployment job's reviewed main-only condition. The job must remain
+   dependent on the validated `build` job and use the protected `production`
+   environment as the approval gate.
+7. On a `main` merge, inspect the downloaded archive and validation manifest,
+   then confirm the protected production deployment if approval is required. A
+   manual workflow run validates only and does not deploy.
 
-The prepared command deploys the extracted tree:
+The production deploy job runs:
 
 ```sh
 wrangler pages deploy website/dist --project-name=cribra --branch=main
 ```
 
-Do not re-enable automatic Git deployments after activation. That would create
-competing production deployments.
+Do not re-enable automatic Git deployments. That would create competing
+production deployments.
 
 ### Rollback and future versions
 
