@@ -141,7 +141,7 @@ jobs:
           {
             echo "### Production publication candidate"
             echo
-            echo "The combined website artifact was validated. Cloudflare deployment is disabled in this workflow."
+            echo "The combined website artifact was validated. Cloudflare deployment follows in the production job."
           } >> "$GITHUB_STEP_SUMMARY"
 
       # DocC generates filenames that are not valid on Windows, such as
@@ -225,11 +225,11 @@ jobs:
           retention-days: 14
 
   deploy:
-    name: Deploy to Cloudflare Pages (disabled)
-    # Hard-disabled. Do not replace this condition until the Cloudflare project
-    # is verified and its automatic Git deployments are disabled. See
-    # website/README.md for the activation and rollback procedure.
-    if: ${{ false }}
+    name: Deploy to Cloudflare Pages
+    # Production only. Pull requests and manual dispatches never deploy. The
+    # workflow-level concurrency group serializes main runs so production
+    # deployments cannot overlap.
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.build.result == 'success' }}
     needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 15
