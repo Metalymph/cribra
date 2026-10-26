@@ -2,6 +2,7 @@
 import DocLayout from '../../layouts/DocLayout.astro';
 import BindingMatrix from '../../components/BindingMatrix.astro';
 import { plannedBindings } from '../../data/bindings';
+import { withBase } from '../../utils/paths';
 ---
 
 <DocLayout
@@ -22,6 +23,18 @@ import { plannedBindings } from '../../data/bindings';
     process. Kotlin requires one profile JAR per classpath; Swift requires one package exposing <code
       >Cribra</code
     >. Streaming admission and resource limits remain Core-owned.
+  </p>
+  <h2>Published API reference</h2>
+  <p>
+    The generated <a href={withBase('/api/0.7.2/swift/core/documentation/cribra/')}
+      >Swift Core API reference</a
+    > is published for Cribra 0.7.2. It covers the Swift <code>Cribra</code> module for the
+    <strong>Core</strong> profile.
+  </p>
+  <p>
+    Flow and Fuse are separate distribution profiles. Core reference availability does not imply
+    complete API coverage for Flow or Fuse, and no Flow or Fuse DocC reference is published. No
+    other generated binding has a published DocC reference on this site.
   </p>
   <h2>Planned integrations</h2>
   <p>These roadmap workstreams are not implemented or qualified integrations:</p>

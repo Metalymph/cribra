@@ -33,6 +33,11 @@ Generated sources, static archives and XCFrameworks are build outputs.
 Choose exactly **one** profile per application/process. All packages expose
 the same module and native symbols; mixing them is unsupported.
 
+The published [Swift Core API reference](/api/0.7.2/swift/core/documentation/cribra/)
+documents the generated **Core** profile for Cribra 0.7.2. It does not cover the
+Flow or Fuse profiles, which remain separate distribution profiles without
+published DocC references.
+
 ## Build and consume
 
 On native macOS ARM64, with Xcode/SDKs, Swift 6.4, Rust 1.97 and `just`:
