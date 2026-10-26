@@ -144,11 +144,83 @@ jobs:
             echo "The combined website artifact was validated. Cloudflare deployment is disabled in this workflow."
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Upload combined website artifact
+      # DocC generates filenames that are not valid on Windows, such as
+      # `!=(_:_:).json`. Archive the validated tree so artifact transport never
+      # has to represent those names as individual artifact entries.
+      - name: Archive combined website output
+        shell: bash
+        env:
+          WEBSITE_ARCHIVE: ${{ runner.temp }}/cribra-website-swift-docc-${{ github.sha }}.tar.gz
+        run: |
+          set -euo pipefail
+
+          rm -f "$WEBSITE_ARCHIVE"
+          tar --create --gzip --file "$WEBSITE_ARCHIVE" --directory website dist
+
+          gzip -t "$WEBSITE_ARCHIVE"
+          tar --list --gzip --file "$WEBSITE_ARCHIVE" > "$RUNNER_TEMP/website-archive-contents.txt"
+
+          expected_files="$(find website/dist -type f | wc -l | tr -d ' ')"
+          archived_files="$(awk '!/\/$/' "$RUNNER_TEMP/website-archive-contents.txt" | wc -l | tr -d ' ')"
+          if [ "$archived_files" -ne "$expected_files" ]; then
+            echo "::error::website archive contains $archived_files files; website/dist contains $expected_files"
+            exit 1
+          fi
+
+          {
+            echo "### Website archive"
+            echo
+            echo "- Archive: \`$(basename "$WEBSITE_ARCHIVE")\`"
+            echo "- Files: $archived_files"
+            echo "- SHA-256: \`$(shasum -a 256 "$WEBSITE_ARCHIVE" | awk '{print $1}')\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Verify website archive round trip
+        shell: bash
+        env:
+          WEBSITE_ARCHIVE: ${{ runner.temp }}/cribra-website-swift-docc-${{ github.sha }}.tar.gz
+        run: |
+          set -euo pipefail
+
+          extraction_root="$(mktemp -d "$RUNNER_TEMP/website-archive-check.XXXXXX")"
+          trap 'rm -rf "$extraction_root"' EXIT
+
+          tar --extract --gzip --file "$WEBSITE_ARCHIVE" --directory "$extraction_root"
+
+          homepage="$extraction_root/dist/index.html"
+          module_page="$extraction_root/dist/api/0.7.2/swift/core/documentation/cribra/index.html"
+          windows_hostile_json="$extraction_root/dist/api/0.7.2/swift/core/data/documentation/cribra/builderrorcode/!=(_:_:).json"
+
+          test -s "$homepage"
+          test -s "$module_page"
+          test -s "$windows_hostile_json"
+
+          expected_files="$(find website/dist -type f | wc -l | tr -d ' ')"
+          extracted_files="$(find "$extraction_root/dist" -type f | wc -l | tr -d ' ')"
+          if [ "$extracted_files" -ne "$expected_files" ]; then
+            echo "::error::extracted archive contains $extracted_files files; expected $expected_files"
+            exit 1
+          fi
+
+          if ! cmp -s website/dist/index.html "$homepage"; then
+            echo "::error::extracted Astro homepage differs from website/dist/index.html"
+            exit 1
+          fi
+
+          if ! cmp -s \
+            website/dist/api/0.7.2/swift/core/documentation/cribra/index.html \
+            "$module_page"; then
+            echo "::error::extracted DocC module page differs from website/dist"
+            exit 1
+          fi
+
+          echo "PASS: archive round trip preserved $extracted_files files, including the Astro homepage and DocC module page"
+
+      - name: Upload combined website archive
         uses: actions/upload-artifact@v7
         with:
           name: cribra-website-swift-docc-${{ github.sha }}
-          path: website/dist
+          path: ${{ runner.temp }}/cribra-website-swift-docc-${{ github.sha }}.tar.gz
           if-no-files-found: error
           retention-days: 14
 
@@ -183,7 +255,25 @@ jobs:
         uses: actions/download-artifact@v8
         with:
           name: cribra-website-swift-docc-${{ github.sha }}
-          path: website/dist
+          path: ${{ runner.temp }}/website-artifact
+
+      - name: Extract combined website artifact
+        shell: bash
+        env:
+          WEBSITE_ARCHIVE: ${{ runner.temp }}/website-artifact/cribra-website-swift-docc-${{ github.sha }}.tar.gz
+        run: |
+          set -euo pipefail
+
+          test -f "$WEBSITE_ARCHIVE"
+          gzip -t "$WEBSITE_ARCHIVE"
+
+          mkdir -p website
+          tar --extract --gzip --file "$WEBSITE_ARCHIVE" --directory website
+
+          test -s website/dist/index.html
+          test -s website/dist/api/0.7.2/swift/core/documentation/cribra/index.html
+
+          echo "PASS: extracted $(find website/dist -type f | wc -l | tr -d ' ') files to website/dist"
 
       - name: Deploy with Wrangler
         uses: cloudflare/wrangler-action@v4

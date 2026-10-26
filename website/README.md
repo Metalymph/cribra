@@ -142,9 +142,22 @@ It requires:
 | Python | Python 3 from the runner, used by the DocC generator |
 | `just` | Installed with Homebrew |
 
-`npm ci` uses the committed lockfile. No build secrets are required. A
-successful run uploads `website/dist` as the
-`cribra-website-swift-docc-<commit-sha>` artifact for 14 days.
+`npm ci` uses the committed lockfile. No build secrets are required.
+
+After validation, the pipeline creates
+`$RUNNER_TEMP/cribra-website-swift-docc-<commit-sha>.tar.gz` containing the
+complete `website/dist` tree. The archive is stored outside `website/dist` so it
+cannot include itself. It is checked with `gzip -t`, its file count is compared
+with `website/dist`, and an extraction round trip verifies the Astro homepage,
+the DocC module page, and a DocC file whose name is not valid on Windows
+(`builderrorcode/!=(_:_:).json`).
+
+Only the archive is uploaded, as the
+`cribra-website-swift-docc-<commit-sha>` artifact for 14 days. Generated DocC
+filenames and directory structure are preserved unchanged; archiving prevents
+`actions/upload-artifact` from rejecting Windows-incompatible names. The
+disabled deployment job downloads the archive, checks it, and extracts it so the
+archive's `dist/` root becomes `website/dist` before Wrangler runs.
 
 The validator checks the homepage, the versioned DocC entry point and module
 page, required symbol pages, DocC assets, Pagefind output, and every root-relative
@@ -224,10 +237,10 @@ domain in the Cloudflare dashboard. Then complete this activation procedure:
 6. Replace the deployment job's `if: ${{ false }}` with a reviewed main-only
    condition. Keep the job dependent on the validated `build` job, and use the
    protected `production` environment as the approval gate.
-7. Run the workflow manually or on a `main` merge, inspect the artifact and
-   validation manifest, then confirm the deployment.
+7. Run the workflow manually or on a `main` merge, inspect the downloaded
+   archive and validation manifest, then confirm the deployment.
 
-The prepared command deploys the downloaded artifact:
+The prepared command deploys the extracted tree:
 
 ```sh
 wrangler pages deploy website/dist --project-name=cribra --branch=main
