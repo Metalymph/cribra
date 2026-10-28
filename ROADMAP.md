@@ -388,6 +388,34 @@ maintenance commitment, and a concrete technical justification.
 Each integration requires its own ownership, error, packaging and consumer
 qualification gates. No new Rust detection implementation is planned.
 
+### Language package distribution
+
+The primary language bindings target one official public package per ecosystem,
+each exposing the complete **Fuse** profile:
+
+| Ecosystem | Official distribution target | Default profile | Status |
+| --- | --- | --- | --- |
+| Swift | SwiftPM package, discoverable through Swift Package Index | Fuse | Contract defined; not published |
+| Kotlin/JVM | Maven Central artifact | Fuse | Policy defined; contract pending |
+| Python | PyPI package | Fuse | Policy defined; contract pending |
+
+These are intended distribution targets, not claims that registry publication
+has occurred. Core and Flow remain supported source-build alternatives and are
+not separate official registry packages.
+
+W3.1B records the Swift contract in
+[`bindings/swift/README.md`](bindings/swift/README.md#remote-swiftpm-distribution-contract-fuse).
+It defines the planned `Cribra` product, Fuse XCFramework asset, independent
+versioning, platform matrix, checksum and clean-room acceptance gate without
+creating a distribution repository or publishing an asset. W3.1C is the
+implementation and remote-consumer qualification step; Swift Package Index
+registration follows only after that gate passes.
+
+Kotlin/JVM and Python registry mechanics remain separate workstreams. This
+policy does not apply automatically to the C ABI, the raw WebAssembly crate,
+Rust feature selection or the planned TypeScript runtime integrations, which are
+distinct targets rather than Core/Flow/Fuse package variants.
+
 ### Native FFI and bindings
 
 - Maintain the C ABI and its applicable parity contract, ownership rules,

@@ -18,9 +18,18 @@ package publication. See [Getting started](GETTING_STARTED.md) for entry points.
 | C adapter `cribra-capi` | 0.3.0; native ABI protocol 0.3.0 | Source-built dynamic/static libraries and checked-in header; Cargo `publish = false` |
 | WASM `cribra-wasm` | 0.4.7; workspace currently uses Core `^0.7` | [Independent GitHub release](https://github.com/Metalymph/cribra/releases/tag/cribra-wasm-v0.4.7); [registry 0.4.7](https://github.com/rust-lang/crates.io-index/blob/master/cr/ib/cribra-wasm) depends on Core `^0.6`. Published and workspace dependency contracts differ |
 | Shared `cribra-uniffi` | 0.1.0; Core 0.7.2; UniFFI exactly 0.32.2; Rust 1.97 | Cargo `publish = false`; shared generator/adapter, not a second detection engine |
-| Swift | Product/module `Cribra`; Core/Flow/Fuse local packages | Generated Swift/headers/static archives/XCFrameworks; local SwiftPM dependency, no remote SwiftPM publication established |
-| Python | Fuse wheel `cribra` 0.7.2+fuse; module `cribra_uniffi` | Local/CI wheels; no PyPI publication established |
-| Kotlin/JVM | Profile JAR/ZIP names use Core 0.7.2; adapter 0.1.0 | Local and CI host ZIPs; no Maven Central or other package publication established |
+| Swift | Product/module `Cribra`; Core/Flow/Fuse local packages; distribution version 0.7.2 planned | Generated Swift/headers/static archives/XCFrameworks; local SwiftPM dependency; planned official Fuse SwiftPM package, no remote publication established |
+| Python | Fuse wheel `cribra` 0.7.2+fuse; module `cribra_uniffi` | Local/CI wheels; planned official Fuse PyPI artifact; no PyPI publication established |
+| Kotlin/JVM | Profile JAR/ZIP names use Core 0.7.2; adapter 0.1.0 | Local and CI host ZIPs; planned official Fuse Maven artifact; no Maven Central or other package publication established |
+
+The planned official binding distribution is one Fuse-first package per
+ecosystem (SwiftPM, Maven Central and PyPI); see
+[the ecosystem distribution policy](ECOSYSTEM.md#distribution-policy). These are
+targets, not publication claims, and Core/Flow remain source-build alternatives.
+The Swift technical requirements are recorded in
+[the Swift remote distribution contract](../bindings/swift/README.md#remote-swiftpm-distribution-contract-fuse).
+Kotlin/JVM and Python registry contracts remain to be documented separately;
+Swift packaging does not define their mechanics.
 
 Crates.io publication was checked separately from GitHub: Core via the sparse
 index, WASM via the official Git index; the CLI index path returned 404.
@@ -200,4 +209,5 @@ Detailed build/consumer procedures and remaining limits:
 [Swift](../bindings/swift/README.md), [Python](../bindings/python/README.md),
 [Kotlin/JVM](../bindings/kotlin/README.md). Historical release-preparation notes
 remain historical evidence, not current publication statements. No PyPI, Maven
-Central, remote SwiftPM or new release publication is asserted by this alignment.
+Central, remote SwiftPM or new release publication is asserted by this alignment;
+the planned Fuse-first contracts define requirements only.

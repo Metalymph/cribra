@@ -85,9 +85,9 @@ Cribra provides several independently versioned interfaces:
 | Rust Core | Authoritative engine; Core, Flow, and Fuse build profiles |
 | C ABI | Native interoperability through a documented adapter contract |
 | WebAssembly | Core and Flow profiles for supported JavaScript/WASM consumers |
-| Swift | UniFFI Core, Flow, and Fuse packages and XCFrameworks |
-| Kotlin/JVM | UniFFI Core, Flow, and Fuse profile JARs and host bundles |
-| Python | UniFFI Core, Flow, and Fuse consumers; Fuse wheel packaging |
+| Swift | UniFFI Core, Flow and Fuse source packages and XCFrameworks; planned official Fuse SwiftPM package |
+| Kotlin/JVM | UniFFI Core, Flow and Fuse profile JARs and host bundles; planned official Fuse Maven artifact |
+| Python | UniFFI Core, Flow and Fuse consumers and Fuse wheel packaging; planned official Fuse PyPI package |
 | CLI | Explicit UTF-8 file or standard-input scanning |
 
 Streaming and incremental sessions are Core-owned APIs. They are exposed by the
@@ -115,9 +115,9 @@ published to a package registry; registry publication is tracked separately in
 | Rust Core | Official, implemented | Authoritative engine |
 | C ABI | Official, implemented | Source-built libraries and checked-in header; `publish = false` |
 | WebAssembly | Official, implemented | Core and Flow source; published adapter release has a separate Core contract |
-| Swift | Official, implemented | Local SwiftPM packages and XCFrameworks; no remote SwiftPM publication |
-| Kotlin/JVM | Official, implemented | Local/CI profile JARs and host bundles; no Maven publication |
-| Python | Official, implemented | Core/Flow/Fuse source consumers and a local/CI Fuse wheel; no PyPI publication |
+| Swift | Official, implemented | Local SwiftPM packages and XCFrameworks; planned Fuse SwiftPM package; no remote publication |
+| Kotlin/JVM | Official, implemented | Local/CI profile JARs and host bundles; planned Fuse Maven artifact; no Maven publication |
+| Python | Official, implemented | Core/Flow/Fuse source consumers and a local/CI Fuse wheel; planned Fuse PyPI package; no PyPI publication |
 | TypeScript (WebAssembly) | Official, planned | Higher-level wrapper over typed WASM exports for browsers and compatible JS runtimes |
 | TypeScript (UniFFI) | Official, planned | Server-side Node.js; React Native needs separate platform-specific work and is not implemented |
 | Community integrations | Community-maintained | May use public interoperability surfaces; not officially tested, packaged or supported |
@@ -128,6 +128,48 @@ surfaces. Adding a new official binding requires demonstrated demand, a credible
 maintenance commitment, and a concrete technical justification; the existence of
 an adapter surface or an open request does not by itself commit the project to
 one.
+
+### Distribution policy
+
+The primary language bindings target one official public package per ecosystem.
+Each official package exposes the complete supported **Fuse** binding profile:
+
+| Ecosystem | Official distribution target | Default profile |
+| --- | --- | --- |
+| Swift | SwiftPM package, discoverable through Swift Package Index | Fuse |
+| Kotlin/JVM | Maven Central artifact | Fuse |
+| Python | PyPI package | Fuse |
+
+These are intended distribution targets, not claims that registry publication
+has occurred. Approval, qualification and release are separate gates.
+
+The public package must expose the complete functionality implemented by the
+Fuse binding. It does not claim parity with Rust-only APIs that are absent from
+the foreign adapter.
+
+Core and Flow remain available for source-based builds. They are not published
+as separate official registry packages:
+
+- **Core** provides scanning and the related Core capabilities.
+- **Flow** provides Core plus the transformations and Share Bundle capabilities
+  implemented by that profile.
+- **Fuse** provides the complete supported binding feature set, including the
+  parallel capabilities available in that profile.
+
+Core and Flow are alternative builds of the same engine, not additional modules
+intended to coexist with the Fuse package. Use exactly one matching profile per
+application or process.
+
+The Swift technical contract is
+[the Swift remote distribution contract](../bindings/swift/README.md#remote-swiftpm-distribution-contract-fuse).
+Kotlin/JVM and Python require separate distribution contracts; Swift packaging
+details do not define their registry mechanics.
+
+This one-package, Fuse-first policy applies to Swift, Kotlin/JVM and Python
+distribution. It does not automatically define the packaging architecture of the
+C ABI, the raw WebAssembly crate, Rust feature selection or the planned
+TypeScript integrations. TypeScript/WASM and TypeScript/UniFFI are distinct
+runtime targets, not Core/Flow/Fuse package variants.
 
 ## Related projects and workflows
 
