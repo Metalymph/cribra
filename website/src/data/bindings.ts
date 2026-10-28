@@ -103,13 +103,13 @@ export const bindings: readonly Binding[] = [
     name: 'Swift',
     implementation: 'Available · Core 0.7.2 · UniFFI adapter 0.1.0',
     capabilities:
-      'Core: configuration, reports, batch, admitted streaming and incremental snapshots. Flow adds transformations/Share Bundles. Fuse adds Core-owned parallel scans. Select one matching Cribra module/package per process.',
+      'Core: configuration, reports, batch, admitted streaming and incremental snapshots. Flow adds transformations/Share Bundles. Fuse adds Core-owned parallel scans and is the planned official remote package. Core and Flow remain source-build profiles. Select one matching Cribra module/package per process.',
     qualification:
       'macOS ARM64, Swift 6.4 and independent Core/Flow/Fuse SwiftPM package consumers passed; recorded Apple CI passed all three packages. ARM64 device/Simulator archives built; Simulator compiled/linked.',
     limits:
       'No device or Simulator execution claim. macOS 13/iOS 16 are declared minimums, not runtime coverage of each OS. Intel slices absent.',
     distribution:
-      'Generated local SwiftPM packages and XCFrameworks. No remote SwiftPM publication or signed release established.',
+      'Generated local SwiftPM packages and XCFrameworks today. Planned official SwiftPM package exposes Fuse; Core and Flow remain source-build alternatives. No remote publication, release asset or checksum established.',
     sources: [
       compatibility,
       source('Swift consumer guide', 'bindings/swift/README.md'),
