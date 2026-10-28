@@ -29,9 +29,12 @@ binding outputs are ignored build products; source-controlled packaging does not
 make a checkout immediately usable as a prebuilt binary dependency. CI diagnostic
 artifacts have retention limits and are not permanent release downloads.
 
-The TypeScript WASM wrapper, React Native UniFFI integration, and C#,
-Go and PHP C ABI bindings are planned workstreams. They are not included
-among the implemented or qualified adapter surfaces above.
+The TypeScript WASM wrapper and TypeScript/UniFFI integration are official
+planned workstreams; neither is implemented. Go, C#, PHP, Ruby, Elixir and other
+language bindings are not part of the active roadmap. Community integrations may
+use the public interoperability surfaces without becoming officially maintained.
+See [Ecosystem and scope](ECOSYSTEM.md#binding-support-policy) for the
+authoritative binding policy.
 
 ## Feature and capability boundaries
 

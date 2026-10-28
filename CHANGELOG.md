@@ -9,15 +9,37 @@ history.
 
 ## [Unreleased]
 
-## [0.7.2] — unreleased
+## [0.7.2] — published 2026-10-23
 
-### Compatibility
+### Added
 
-- Updated Python wheel and Kotlin/JVM Core, Flow and Fuse artifact
-  version references to Core 0.7.2.
-- Documented the adapter capability matrix for Rust, C ABI, Swift,
-  Kotlin/JVM, Python and WebAssembly.
-- Preserved independent adapter crate versions and existing API boundaries.
+- Completed adapter parity and conformance across the Rust Core, C ABI,
+  WebAssembly and shared UniFFI surfaces.
+- C ABI protocol **0.3.0** adds Core-owned incremental documents, transactional
+  edits and coherent snapshots alongside the 0.2.0 byte-streaming contract.
+  Existing entry points, numeric statuses and field layouts are preserved.
+- WebAssembly adapter **source** adds admitted byte streaming, incremental
+  documents, sequential multi-source batches, scanner metadata/configuration
+  and in-memory Flow Share Bundles. These are workspace capabilities and were
+  not part of the previously published `cribra-wasm 0.4.7` package.
+- CLI `bundle` exports Share Bundles on macOS and Linux with an explicit mode
+  and optional key, extending the CLI's supported transformation workflows.
+- Introduced the shared `cribra-uniffi 0.1.0` Core/Flow/Fuse adapter consumed by
+  the Swift, Python and Kotlin/JVM bindings, including configuration, batch,
+  streaming, incremental and Share Bundle operations per profile.
+- Added local Swift packages and XCFrameworks, local/CI Python Fuse wheels with
+  Core/Flow/Fuse source consumers, and Kotlin/JVM profile JARs and host bundles
+  for the same Core 0.7.2 semantics.
+
+### Distribution
+
+- Core `cribra 0.7.2` is published on crates.io and documented on docs.rs.
+- The C ABI, shared UniFFI adapter, CLI, Swift, Python and Kotlin/JVM artifacts
+  are source-built or locally/CI-qualified distributions. This release does not
+  establish PyPI, Maven Central or remote SwiftPM publication.
+- Published `cribra-wasm 0.4.7` remains the independent registry release
+  depending on Core `^0.6`. Publishing the newer workspace additions requires
+  a future adapter version.
 
 ### Qualification
 
@@ -26,7 +48,9 @@ history.
 - Validated Python packaging tests and Kotlin/JVM profile JARs.
 - Qualified three isolated Kotlin/JVM bundle consumers on macOS ARM64,
   including nine expected rejection cases.
-- Verified Core 0.7.2 Cargo packaging.
+- Verified Core 0.7.2 Cargo packaging and the checked-in C ABI 0.3.0 header
+  contract.
+- Preserved independent adapter crate versions and existing API boundaries.
 
 ## [0.7.1] — published 2026-10-16
 

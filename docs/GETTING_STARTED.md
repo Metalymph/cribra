@@ -8,15 +8,15 @@ profile selection and publication status; a build artifact is not a registry pac
 
 ## Rust
 
-Core v0.7.1 is independently verified in the crates.io registry index:
+Core v0.7.2 is independently verified in the crates.io registry index:
 
 ```toml
 [dependencies]
-cribra = "0.7.1"
+cribra = "0.7.2"
 ```
 
 This selects Flow (transformations enabled). For Core use
-`cribra = { version = "0.7.1", default-features = false }`; Fuse adds
+`cribra = { version = "0.7.2", default-features = false }`; Fuse adds
 `features = ["serde", "parallel"]` to the default configuration.
 The [root quick start](../README.md#quick-start) uses the public Rust API:
 

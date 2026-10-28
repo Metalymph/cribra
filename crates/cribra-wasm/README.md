@@ -707,7 +707,41 @@ distribution from an accidentally reduced API. These smoke checks complement
 the existing package/parity checks; they do not qualify browser integration,
 Workers, CSP or optimized production artifact performance.
 
-## 0.4.6 compatibility release
+## Published package versus current source
+
+The published `cribra-wasm` **0.4.7** registry release depends on Core `^0.6`.
+The current workspace source also declares version `0.4.7` but depends on Core
+`^0.7` and adds streaming, incremental, batch, scanner configuration/metadata
+and Flow Share Bundle APIs. Those additions are not part of the published
+package, and the same version cannot be republished; publishing them requires a
+new adapter version.
+
+## Usage
+
+The following selects the published adapter and its published Core contract:
+
+```toml
+[dependencies]
+cribra-wasm = "0.4.7"
+```
+
+For the newer session, batch, configuration and Share Bundle APIs, build this
+workspace against Core 0.7.x. See
+[Compatibility](../../docs/COMPATIBILITY.md) for the registry contract and the
+source/local distinction.
+
+The crate targets wasm32-unknown-unknown and is intended to be processed with
+wasm-bindgen.
+
+See the repository
+[WASM interoperability documentation](https://github.com/Metalymph/cribra/blob/main/docs/WASM_INTEROP.md)
+for the complete contract, semantic parity policy, browser validation, and
+production build guidance.
+
+## Historical: 0.4.6 compatibility release
+
+This records the earlier published compatibility release; it is not current
+installation guidance.
 
 Version 0.4.6 depends on published `cribra ^0.5` (core 0.5.0). It preserves
 the existing JavaScript/WASM API and whole-source behavior. No streaming
@@ -717,21 +751,6 @@ Rust 1.97 remains the MSRV.
 Publication is owned by the existing `Release WASM` workflow, triggered by
 pushing `cribra-wasm-v0.4.6` at the qualified main commit. Core tag `v0.5.0`
 is independent and must remain unchanged.
-
-## Usage
-
-```toml
-[dependencies]
-cribra-wasm = "0.4.6"
-```
-
-The crate targets wasm32-unknown-unknown and is intended to be processed with
-wasm-bindgen.
-
-See the repository
-[WASM interoperability documentation](https://github.com/Metalymph/cribra/blob/main/docs/WASM_INTEROP.md)
-for the complete contract, semantic parity policy, browser validation, and
-production build guidance.
 
 ## License
 

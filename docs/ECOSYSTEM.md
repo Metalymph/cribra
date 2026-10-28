@@ -85,16 +85,49 @@ Cribra provides several independently versioned interfaces:
 | Rust Core | Authoritative engine; Core, Flow, and Fuse build profiles |
 | C ABI | Native interoperability through a documented adapter contract |
 | WebAssembly | Core and Flow profiles for supported JavaScript/WASM consumers |
+| Swift | UniFFI Core, Flow, and Fuse packages and XCFrameworks |
+| Kotlin/JVM | UniFFI Core, Flow, and Fuse profile JARs and host bundles |
+| Python | UniFFI Core, Flow, and Fuse consumers; Fuse wheel packaging |
 | CLI | Explicit UTF-8 file or standard-input scanning |
 
-Streaming and incremental sessions are currently Rust-core APIs.
-They are not automatically exposed by the C, WASM, or CLI adapters.
+Streaming and incremental sessions are Core-owned APIs. They are exposed by the
+C ABI, the WebAssembly source adapter and the UniFFI consumers, while the CLI
+does not expose them. The published `cribra-wasm 0.4.7` package predates the
+newer workspace session, batch and Share Bundle additions; a source build is
+required for those APIs.
 
 The CLI intentionally does not perform directory traversal,
 repository walking, or glob expansion.
 
 Build profiles describe supported configurations of the same engine,
 not separate detection implementations.
+
+### Binding support policy
+
+Official integrations are maintained by the Cribra project and carry an ongoing
+responsibility for compatibility, testing, packaging, documentation, and
+maintenance. Official status does **not** imply that every integration is
+published to a package registry; registry publication is tracked separately in
+[Compatibility](COMPATIBILITY.md).
+
+| Integration | Status | Boundary |
+| --- | --- | --- |
+| Rust Core | Official, implemented | Authoritative engine |
+| C ABI | Official, implemented | Source-built libraries and checked-in header; `publish = false` |
+| WebAssembly | Official, implemented | Core and Flow source; published adapter release has a separate Core contract |
+| Swift | Official, implemented | Local SwiftPM packages and XCFrameworks; no remote SwiftPM publication |
+| Kotlin/JVM | Official, implemented | Local/CI profile JARs and host bundles; no Maven publication |
+| Python | Official, implemented | Core/Flow/Fuse source consumers and a local/CI Fuse wheel; no PyPI publication |
+| TypeScript (WebAssembly) | Official, planned | Higher-level wrapper over typed WASM exports for browsers and compatible JS runtimes |
+| TypeScript (UniFFI) | Official, planned | Server-side Node.js; React Native needs separate platform-specific work and is not implemented |
+| Community integrations | Community-maintained | May use public interoperability surfaces; not officially tested, packaged or supported |
+| Go, C#, PHP, Ruby, Elixir | Not active roadmap (requested, not committed) | Possible future work only with demonstrated demand and an explicit maintenance commitment |
+
+Community integrations do not become officially maintained by using those
+surfaces. Adding a new official binding requires demonstrated demand, a credible
+maintenance commitment, and a concrete technical justification; the existence of
+an adapter surface or an open request does not by itself commit the project to
+one.
 
 ## Related projects and workflows
 

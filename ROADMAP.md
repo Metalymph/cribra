@@ -371,15 +371,19 @@ features are not automatically present in any adapter.
 ### Planned language integrations
 
 These integrations are independent adapter workstreams, not missing Rust Core
-features. Their status is **PLANNED**, not implemented or qualified.
+features. Their status is **PLANNED**, not implemented or qualified. The
+authoritative support policy is in
+[Ecosystem and scope](docs/ECOSYSTEM.md#binding-support-policy).
 
 | Target | Planned integration | Status |
 | --- | --- | --- |
 | TypeScript | Higher-level wrapper over existing typed WASM exports | PLANNED |
-| TypeScript / React Native | UniFFI integration and mobile runtime qualification | PLANNED |
-| C# / .NET | Binding over the existing C ABI | PLANNED |
-| Go | Binding over the existing C ABI via cgo | PLANNED |
-| PHP | Binding over the existing C ABI via FFI | PLANNED |
+| TypeScript / Node.js | UniFFI integration for server-side Node.js | PLANNED |
+| TypeScript / React Native | UniFFI integration and mobile runtime qualification | PLANNED, separately gated |
+
+Go, C#, PHP, Ruby, Elixir and other language bindings are not part of the active
+roadmap. They may be reconsidered only with demonstrated demand, a credible
+maintenance commitment, and a concrete technical justification.
 
 Each integration requires its own ownership, error, packaging and consumer
 qualification gates. No new Rust detection implementation is planned.
