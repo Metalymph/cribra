@@ -568,25 +568,25 @@ or platform qualification.
 
 | Language / platform | Integration | Status |
 | --- | --- | --- |
-| Rust | Native Core crate | AVAILABLE |
-| C / C++ | Native C ABI | AVAILABLE |
-| Swift | UniFFI Core / Flow / Fuse | AVAILABLE |
-| Python | UniFFI Core / Flow / Fuse | AVAILABLE |
-| Kotlin/JVM | UniFFI Core / Flow / Fuse | AVAILABLE |
-| JavaScript / TypeScript | `wasm-bindgen` adapter and generated TypeScript declarations | AVAILABLE |
-| TypeScript | Higher-level WebAssembly wrapper | PLANNED |
-| TypeScript / React Native | UniFFI integration | PLANNED |
-| C# / .NET | C ABI integration | PLANNED |
-| Go | C ABI integration (cgo) | PLANNED |
-| PHP | C ABI integration (FFI) | PLANNED |
+| Rust | Native Core crate | OFFICIAL — published (`cribra`) |
+| C / C++ | Native C ABI | OFFICIAL — source-built |
+| Swift | UniFFI Core / Flow / Fuse | OFFICIAL — local artifacts |
+| Python | UniFFI Core / Flow / Fuse | OFFICIAL — local/CI artifacts |
+| Kotlin/JVM | UniFFI Core / Flow / Fuse | OFFICIAL — local/CI artifacts |
+| JavaScript / TypeScript | `wasm-bindgen` adapter and generated TypeScript declarations | OFFICIAL — source and published adapter |
+| TypeScript | Higher-level WebAssembly wrapper | OFFICIAL — planned |
+| TypeScript / React Native | UniFFI integration | OFFICIAL — planned, separately gated |
 
 The planned TypeScript wrapper is distinct from the existing typed WASM
-exports. React Native, C#, Go and PHP bindings are not yet implemented or
-qualified.
+exports. The TypeScript/UniFFI path targets server-side Node.js, and React Native
+requires separate platform-specific work; neither is implemented. Go, C#, PHP,
+Ruby, Elixir and other language bindings are not part of the active roadmap.
 
-See [Interoperability](docs/INTEROP.md) for the implemented adapter capability
-matrix and [Compatibility](docs/COMPATIBILITY.md) for versions, distribution
-and qualification boundaries.
+See [Ecosystem and scope](docs/ECOSYSTEM.md#binding-support-policy) for the
+authoritative binding policy, [Interoperability](docs/INTEROP.md) for the
+implemented adapter capability matrix and
+[Compatibility](docs/COMPATIBILITY.md) for versions, distribution and
+qualification boundaries.
 
 ## Release status
 

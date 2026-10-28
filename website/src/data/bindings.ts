@@ -160,11 +160,9 @@ export const bindings: readonly Binding[] = [
   },
 ];
 
-/** Roadmap integrations; none is presented as implemented or qualified. */
+/** Officially planned integrations; none is presented as implemented or qualified. */
 export const plannedBindings = [
   'Higher-level TypeScript wrapper over existing typed WASM exports',
-  'TypeScript / React Native via UniFFI',
-  'C# / .NET via C ABI',
-  'Go via cgo',
-  'PHP via FFI',
+  'TypeScript / Node.js via UniFFI (server-side)',
+  'TypeScript / React Native via UniFFI (separately gated)',
 ] as const;
