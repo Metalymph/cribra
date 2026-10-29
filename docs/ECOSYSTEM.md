@@ -88,6 +88,8 @@ Cribra provides several independently versioned interfaces:
 | Swift | UniFFI Core, Flow and Fuse source packages and XCFrameworks; planned official Fuse SwiftPM package |
 | Kotlin/JVM | UniFFI Core, Flow and Fuse profile JARs and host bundles; planned official Fuse Maven artifact |
 | Python | UniFFI Core, Flow and Fuse consumers and Fuse wheel packaging; planned official Fuse PyPI package |
+| TypeScript | Planned shared isomorphic API contract; WebAssembly wrapper first, future native backend separately gated |
+| MCP | Planned native Rust binary using MCP over stdio and reusing Cribra Core |
 | CLI | Explicit UTF-8 file or standard-input scanning |
 
 Streaming and incremental sessions are Core-owned APIs. They are exposed by the
@@ -115,19 +117,27 @@ published to a package registry; registry publication is tracked separately in
 | Rust Core | Official, implemented | Authoritative engine |
 | C ABI | Official, implemented | Source-built libraries and checked-in header; `publish = false` |
 | WebAssembly | Official, implemented | Core and Flow source; published adapter release has a separate Core contract |
-| Swift | Official, implemented | Local SwiftPM packages and XCFrameworks; planned Fuse SwiftPM package; no remote publication |
-| Kotlin/JVM | Official, implemented | Local/CI profile JARs and host bundles; planned Fuse Maven artifact; no Maven publication |
-| Python | Official, implemented | Core/Flow/Fuse source consumers and a local/CI Fuse wheel; planned Fuse PyPI package; no PyPI publication |
-| TypeScript (WebAssembly) | Official, planned | Higher-level wrapper over typed WASM exports for browsers and compatible JS runtimes |
-| TypeScript (UniFFI) | Official, planned | Server-side Node.js; React Native needs separate platform-specific work and is not implemented |
+| Swift | Official, implemented; distribution in progress | Local SwiftPM packages and XCFrameworks, plus unpublished local Fuse distribution staging; planned Fuse SwiftPM package; no remote publication |
+| Kotlin/JVM | Official, implemented; distribution in progress | Local/CI profile JARs and host bundles; planned Fuse Maven artifact; no Maven publication |
+| Python | Official, implemented; distribution in progress | Core/Flow/Fuse source consumers and a local/CI Fuse wheel; planned Fuse PyPI package; no PyPI publication |
+| TypeScript shared API | Official, planned | One isomorphic public API contract for the WebAssembly and future native backends; contract precedes implementation |
+| TypeScript (WebAssembly) | Official, planned | Higher-level wrapper over typed WASM exports for browsers and compatible JS runtimes; primary motivation is Crystal |
+| TypeScript (native) | Official, planned; separately gated | Future UniFFI-backed backend against the shared contract; Node.js requirements need investigation, and UniFFI does not by itself provide a working React Native binding |
+| MCP server | Official, planned | Ultra-lightweight native Rust binary over stdio reusing Cribra Core; no Node.js/Python runtime, database or external service; no arbitrary filesystem access by default |
+| C#, Go, PHP, Ruby, Elixir | Planned — demand-driven / community contribution | Not actively scheduled; considered only with demonstrated real-world demand or a viable community contribution |
 | Community integrations | Community-maintained | May use public interoperability surfaces; not officially tested, packaged or supported |
-| Go, C#, PHP, Ruby, Elixir | Not active roadmap (requested, not committed) | Possible future work only with demonstrated demand and an explicit maintenance commitment |
+
+Demand-driven candidates have no delivery dates and are not implemented,
+qualified or published. Community contributions are welcome under the repository
+[contribution guidelines](../CONTRIBUTING.md). Official support requires an
+ongoing maintenance commitment, accurate documentation, consumer testing and CI
+coverage; the existence of an adapter surface or an open request does not by
+itself commit the project to a binding. Do not create placeholder packages or
+empty integration guides for these candidates.
 
 Community integrations do not become officially maintained by using those
 surfaces. Adding a new official binding requires demonstrated demand, a credible
-maintenance commitment, and a concrete technical justification; the existence of
-an adapter surface or an open request does not by itself commit the project to
-one.
+maintenance commitment, and a concrete technical justification.
 
 ### Distribution policy
 
@@ -142,6 +152,12 @@ Each official package exposes the complete supported **Fuse** binding profile:
 
 These are intended distribution targets, not claims that registry publication
 has occurred. Approval, qualification and release are separate gates.
+
+Swift is the immediate priority. W3.1C implements local Fuse distribution
+staging and qualification, but no distribution repository, remote package,
+release asset, published checksum or Swift Package Index entry exists yet.
+Kotlin/JVM and Python remain official priorities with local/CI artifacts only.
+None of these three ecosystems has a published public package.
 
 The public package must expose the complete functionality implemented by the
 Fuse binding. It does not claim parity with Rust-only APIs that are absent from
@@ -167,9 +183,11 @@ details do not define their registry mechanics.
 
 This one-package, Fuse-first policy applies to Swift, Kotlin/JVM and Python
 distribution. It does not automatically define the packaging architecture of the
-C ABI, the raw WebAssembly crate, Rust feature selection or the planned
-TypeScript integrations. TypeScript/WASM and TypeScript/UniFFI are distinct
-runtime targets, not Core/Flow/Fuse package variants.
+C ABI, the raw WebAssembly crate, Rust feature selection, the MCP server or the
+planned TypeScript runtime integrations. For TypeScript, the shared public API
+contract is distinct from the distribution mechanism used by each runtime;
+WebAssembly and native backends are distinct targets, not Core/Flow/Fuse package
+variants, and package names are not decided prematurely.
 
 ## Related projects and workflows
 

@@ -160,9 +160,46 @@ export const bindings: readonly Binding[] = [
   },
 ];
 
-/** Officially planned integrations; none is presented as implemented or qualified. */
+/** Official workstreams that are planned or in progress; none is a published package unless the matrix above says so. */
 export const plannedBindings = [
-  'Higher-level TypeScript wrapper over existing typed WASM exports',
-  'TypeScript / Node.js via UniFFI (server-side)',
-  'TypeScript / React Native via UniFFI (separately gated)',
+  {
+    name: 'Swift Fuse SwiftPM distribution',
+    detail:
+      'Local packaging and qualification are implemented (W3.1C); the remote package, release asset, checksum publication and Swift Package Index registration are not.',
+  },
+  {
+    name: 'TypeScript isomorphic API contract',
+    detail:
+      'One shared public API for the WebAssembly backend and a future native backend. Define the contract before either implementation.',
+  },
+  {
+    name: 'TypeScript / WebAssembly wrapper',
+    detail:
+      'Implement against the shared contract. The primary motivation is Crystal integration, with browser compatibility and simple installation first.',
+  },
+  {
+    name: 'Native Rust MCP server',
+    detail:
+      'Planned ultra-lightweight stdio server over Cribra Core, with no Node.js/Python runtime, database or external service and no arbitrary filesystem access by default.',
+  },
+  {
+    name: 'Kotlin/JVM Fuse distribution',
+    detail:
+      'Maven Central is the intended registry. Local/CI artifacts exist; no Maven Central publication is established.',
+  },
+  {
+    name: 'Python Fuse distribution',
+    detail:
+      'PyPI is the intended registry. Local/CI artifacts exist; no PyPI publication is established.',
+  },
+  {
+    name: 'TypeScript native backend',
+    detail:
+      'Future UniFFI-backed backend after the shared contract. Node.js and React Native requirements must be investigated; UniFFI does not by itself provide a working React Native binding.',
+  },
 ] as const;
+
+/** Candidates without a scheduled commitment or published package. */
+export const demandDrivenBindings = ['C#/.NET', 'Go', 'PHP', 'Ruby', 'Elixir'] as const;
+
+export const contributingHref = `${repository}/blob/main/CONTRIBUTING.md`;

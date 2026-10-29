@@ -43,6 +43,25 @@ These results concern the exercised contracts and local artifacts. They do not
 establish complete API parity, additional published packages, browser session
 qualification or universal operating-system support.
 
+## Planned and demand-driven work
+
+The immediate integration priority is completing the Fuse-first Swift
+distribution. The Swift Package Index registration, remote package and release
+asset are not established.
+
+Other official planned workstreams are the shared TypeScript isomorphic API
+contract (before either backend), the TypeScript/WASM wrapper, a native Rust MCP
+server over stdio, the Kotlin/JVM Fuse distribution, the Python Fuse
+distribution and a future TypeScript native backend.
+
+C#, Go and PHP are planned as **demand-driven / community contribution**
+candidates. Ruby, Elixir and other candidates retain the same status. They are
+not actively scheduled and are not implemented, qualified or published. No
+delivery dates are promised; the project will consider them only with
+demonstrated real-world demand or a viable community contribution. See the
+[contribution guidelines](https://github.com/Metalymph/cribra/blob/main/CONTRIBUTING.md)
+and the [roadmap priority order](https://github.com/Metalymph/cribra/blob/main/ROADMAP.md#development-priority-order-forward-looking).
+
 ## Qualified does not mean universal
 
 Swift device/Simulator compile-and-link checks are not execution checks for every Apple target; no Intel slices or remote package distribution are established. Kotlin/JVM checks do not establish Android/KMP support. Python and Kotlin native bundles target recorded host/architecture combinations, not all platforms. WASM Node/Bun local checks do not establish browser, worker, CSP or publication qualification.

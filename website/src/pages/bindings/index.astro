@@ -1,7 +1,7 @@
 ---
 import DocLayout from '../../layouts/DocLayout.astro';
 import BindingMatrix from '../../components/BindingMatrix.astro';
-import { plannedBindings } from '../../data/bindings';
+import { contributingHref, demandDrivenBindings, plannedBindings } from '../../data/bindings';
 import { withBase } from '../../utils/paths';
 ---
 
@@ -42,16 +42,42 @@ import { withBase } from '../../utils/paths';
     contract and the documented Core/Flow source-build paths. No remote SwiftPM package or Swift Package
     Index registration is established.
   </p>
-  <h2>Planned integrations</h2>
-  <p>These official workstreams are planned, not implemented or qualified:</p>
-  <ul>{plannedBindings.map((name) => <li>{name}</li>)}</ul>
+  <h2>Official planned integrations</h2>
   <p>
-    Go, C#, PHP, Ruby, Elixir and other language bindings are not part of the active roadmap. See
-    the <a
+    These are official workstreams that are planned or in progress. Except where the matrix above
+    records otherwise, they are not implemented, qualified or published.
+  </p>
+  <ul>
+    {
+      plannedBindings.map((binding) => (
+        <li>
+          <strong>{binding.name}</strong> — {binding.detail}
+        </li>
+      ))
+    }
+  </ul>
+  <h2>Demand-driven and community candidates</h2>
+  <p>
+    C#, Go and PHP are planned as demand-driven / community-contribution candidates. They are not
+    actively scheduled, and no package or integration is available. Ruby, Elixir and other
+    candidates retain the same status. The project will consider them only with demonstrated
+    real-world demand or a viable community contribution, and no delivery dates are promised.
+  </p>
+  <ul>{demandDrivenBindings.map((name) => <li>{name}</li>)}</ul>
+  <p>
+    Community contributions are welcome under the <a href={contributingHref}
+      >contribution guidelines</a
+    >. Official support requires an ongoing maintenance commitment, accurate documentation,
+    consumer testing and CI coverage. Using a public interoperability surface does not by itself
+    make a binding official.
+  </p>
+  <p>
+    See the <a
       href="https://github.com/Metalymph/cribra/blob/main/docs/ECOSYSTEM.md#binding-support-policy"
       >binding support policy</a
-    >, <a href="https://github.com/Metalymph/cribra/blob/main/ROADMAP.md">roadmap</a> and <a
-      href="https://github.com/Metalymph/cribra/blob/main/docs/INTEROP.md"
+    >, <a href="https://github.com/Metalymph/cribra/blob/main/ROADMAP.md"
+      >roadmap</a
+    > and <a href="https://github.com/Metalymph/cribra/blob/main/docs/INTEROP.md"
       >interoperability contract</a
     > for responsibilities and future qualification gates.
   </p>

@@ -8,6 +8,9 @@ This is a snapshot of distinct contracts:
 consumer ran on the recorded host; **CI-qualified** means the named remote job
 completed successfully. Neither a successful build nor an uploaded artifact is
 package publication. See [Getting started](GETTING_STARTED.md) for entry points.
+Forward-looking priorities are recorded in the
+[roadmap priority order](../ROADMAP.md#development-priority-order-forward-looking);
+this document records evidence, not delivery commitments.
 
 ## Versions and publication
 
@@ -18,7 +21,7 @@ package publication. See [Getting started](GETTING_STARTED.md) for entry points.
 | C adapter `cribra-capi` | 0.3.0; native ABI protocol 0.3.0 | Source-built dynamic/static libraries and checked-in header; Cargo `publish = false` |
 | WASM `cribra-wasm` | 0.4.7; workspace currently uses Core `^0.7` | [Independent GitHub release](https://github.com/Metalymph/cribra/releases/tag/cribra-wasm-v0.4.7); [registry 0.4.7](https://github.com/rust-lang/crates.io-index/blob/master/cr/ib/cribra-wasm) depends on Core `^0.6`. Published and workspace dependency contracts differ |
 | Shared `cribra-uniffi` | 0.1.0; Core 0.7.2; UniFFI exactly 0.32.2; Rust 1.97 | Cargo `publish = false`; shared generator/adapter, not a second detection engine |
-| Swift | Product/module `Cribra`; Core/Flow/Fuse local packages; distribution version 0.7.2 planned | Generated Swift/headers/static archives/XCFrameworks; local SwiftPM dependency; planned official Fuse SwiftPM package, no remote publication established |
+| Swift | Product/module `Cribra`; Core/Flow/Fuse local packages; distribution version 0.7.2 planned | Generated Swift/headers/static archives/XCFrameworks; local SwiftPM dependency; W3.1C unpublished local Fuse distribution staging and qualification; planned official Fuse SwiftPM package, no remote publication established |
 | Python | Fuse wheel `cribra` 0.7.2+fuse; module `cribra_uniffi` | Local/CI wheels; planned official Fuse PyPI artifact; no PyPI publication established |
 | Kotlin/JVM | Profile JAR/ZIP names use Core 0.7.2; adapter 0.1.0 | Local and CI host ZIPs; planned official Fuse Maven artifact; no Maven Central or other package publication established |
 
@@ -38,12 +41,19 @@ binding outputs are ignored build products; source-controlled packaging does not
 make a checkout immediately usable as a prebuilt binary dependency. CI diagnostic
 artifacts have retention limits and are not permanent release downloads.
 
-The TypeScript WASM wrapper and TypeScript/UniFFI integration are official
-planned workstreams; neither is implemented. Go, C#, PHP, Ruby, Elixir and other
-language bindings are not part of the active roadmap. Community integrations may
-use the public interoperability surfaces without becoming officially maintained.
-See [Ecosystem and scope](ECOSYSTEM.md#binding-support-policy) for the
-authoritative binding policy.
+The TypeScript isomorphic API contract, TypeScript/WASM wrapper, TypeScript
+native backend and native Rust MCP server are official planned workstreams;
+none is implemented. The shared TypeScript API must be defined before either
+backend, and the native backend does not exist. C#, Go and PHP are planned as
+demand-driven / community-contribution candidates and are not actively
+scheduled; Ruby, Elixir and other language candidates retain that status. These
+candidates are not implemented, qualified or published, and no delivery dates
+are promised. Community integrations may use the public interoperability
+surfaces without becoming officially maintained. See
+[Ecosystem and scope](ECOSYSTEM.md#binding-support-policy) for the authoritative
+binding policy and the
+[roadmap priority order](../ROADMAP.md#development-priority-order-forward-looking)
+for the intended sequence.
 
 ## Feature and capability boundaries
 

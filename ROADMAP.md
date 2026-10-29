@@ -45,6 +45,57 @@ language-binding versions. Adapter parity applies to each adapter's documented,
 applicable public surface; exposing a new core API requires separate design,
 implementation, and qualification.
 
+## Development priority order (forward-looking)
+
+This section records the current priority sequence for integration work. It is
+forward-looking and does not modify the historical v0.5/v0.6/v0.7 milestone
+records below. A priority is not a delivery date, and an item is complete only
+when the repository records it as released, qualified or published.
+
+1. **Complete the Swift distribution.** Finish the Fuse-first remote SwiftPM
+   package: a qualified Fuse XCFramework release asset, clean-room remote
+   consumer verification, distribution documentation, and Swift Package Index
+   registration after successful publication and qualification. Core and Flow
+   remain source-build profiles. Only Fuse is distributed as the official public
+   Swift package. W3.1C local packaging and qualification are implemented;
+   publication is not complete.
+2. **Define the TypeScript isomorphic API contract.** Design one shared public
+   TypeScript API that can support both the WebAssembly backend and a future
+   native UniFFI-backed integration. Define the shared API before either runtime
+   implementation, and distinguish common capabilities from runtime-specific
+   capabilities. The native backend does not exist yet.
+3. **Implement the TypeScript/WASM wrapper** against the shared API contract.
+   The primary motivation is integration into Crystal. Prioritize browser
+   compatibility and a straightforward installation experience. Verify the
+   actual WASM adapter surface when defining implementation milestones; do not
+   assume that every Rust-only capability is already available in WASM.
+4. **Build the native Rust MCP server.** Planned design constraints: an
+   ultra-lightweight Rust binary using MCP over stdio, direct reuse of Cribra
+   Core, a minimal dependency footprint, no Node.js or Python runtime, no
+   database or external service requirement, a small deliberate set of scanning
+   and transformation tools, and no arbitrary filesystem access by default.
+   HTTP transport and a broad service architecture are outside the initial
+   scope. This is planned, not implemented.
+5. **Complete the Kotlin/JVM distribution.** One complete official Fuse
+   artifact targeting Maven Central, with Core and Flow available through source
+   builds, consumer qualification, and accurate integration documentation.
+   Maven Central publication is not established.
+6. **Complete the Python distribution.** One complete official Fuse package
+   targeting PyPI, with Core and Flow available through source builds, consumer
+   qualification, and accurate integration documentation. Python is
+   strategically important for cybersecurity use cases. PyPI publication is not
+   established.
+7. **Implement the TypeScript native backend** against the established
+   TypeScript API contract. A potential use case is Amon. Investigate the actual
+   requirements for Node.js and React Native integration; UniFFI does not by
+   itself provide a working React Native binding. Preserve the common TypeScript
+   API where technically feasible, and document runtime-specific limitations
+   explicitly.
+
+The relative order of Kotlin/JVM, Python and the TypeScript native backend may be
+revisited when concrete integration requirements emerge. None of these items is
+a guaranteed delivery commitment.
+
 ## v0.5.0 — Streaming Core — RELEASED
 
 **Status: completed, qualified, merged, tagged, and released.**
@@ -291,10 +342,13 @@ artifacts and registry publication remain separate evidence requirements.
 
 ### Next workstream
 
-Swift, Python and Kotlin/JVM now consume the shared Core-authoritative UniFFI
-adapter. Continue their independent qualification and distribution work;
-[Compatibility](docs/COMPATIBILITY.md) records actual profiles, platforms and
-publication boundaries. No automatic CLI, C or WASM session parity is implied.
+The immediate next objective is completion of the Fuse-first Swift distribution.
+Swift, Python and Kotlin/JVM consume the shared Core-authoritative UniFFI adapter;
+their distribution status is tracked below and in
+[Compatibility](docs/COMPATIBILITY.md). No automatic CLI, C or WASM session
+parity is implied. See the
+[development priority order](#development-priority-order-forward-looking) for
+the intended sequence of integration work.
 
 ## Road to 1.0 — Maturity, not feature expansion
 
@@ -371,19 +425,39 @@ features are not automatically present in any adapter.
 ### Planned language integrations
 
 These integrations are independent adapter workstreams, not missing Rust Core
-features. Their status is **PLANNED**, not implemented or qualified. The
-authoritative support policy is in
+features. The status column distinguishes planned work from implemented or
+published packages. The authoritative support policy is in
 [Ecosystem and scope](docs/ECOSYSTEM.md#binding-support-policy).
 
 | Target | Planned integration | Status |
 | --- | --- | --- |
-| TypeScript | Higher-level wrapper over existing typed WASM exports | PLANNED |
-| TypeScript / Node.js | UniFFI integration for server-side Node.js | PLANNED |
-| TypeScript / React Native | UniFFI integration and mobile runtime qualification | PLANNED, separately gated |
+| TypeScript shared API | One isomorphic public API usable by the WASM backend and a future native backend | PLANNED — contract first |
+| TypeScript / WebAssembly | Higher-level wrapper over the existing typed WASM exports, implemented against the shared API | PLANNED |
+| TypeScript native backend | Future UniFFI-backed backend for Node.js; React Native remains separately gated | PLANNED, separately gated |
+| MCP server | Native Rust binary over stdio, reusing Cribra Core | PLANNED |
 
-Go, C#, PHP, Ruby, Elixir and other language bindings are not part of the active
-roadmap. They may be reconsidered only with demonstrated demand, a credible
-maintenance commitment, and a concrete technical justification.
+The TypeScript shared API contract must be defined before the WASM wrapper or the
+native backend is implemented. The WASM wrapper is the concrete near-term
+TypeScript target; its primary motivation is Crystal integration. The native
+backend does not exist and is not implied by the WASM adapter. Investigate actual
+Node.js and React Native requirements rather than assuming UniFFI supplies a
+working React Native binding.
+
+#### Demand-driven and community bindings
+
+C#, Go and PHP are **Planned — demand-driven / community contribution**. They are
+not actively scheduled. Implementation will be considered only when supported by
+demonstrated real-world demand or a viable community contribution. Ruby, Elixir
+and other previously documented language candidates retain the same status and
+are not removed from consideration.
+
+Community contributions are welcome under the repository
+[contribution guidelines](CONTRIBUTING.md). Official support requires an ongoing
+maintenance commitment, accurate documentation, consumer testing and CI coverage;
+using a public interoperability surface does not by itself make a binding
+official. Do not promise delivery dates, create placeholder packages or add empty
+integration guides. None of these candidates is implemented, qualified or
+published.
 
 Each integration requires its own ownership, error, packaging and consumer
 qualification gates. No new Rust detection implementation is planned.
@@ -395,9 +469,9 @@ each exposing the complete **Fuse** profile:
 
 | Ecosystem | Official distribution target | Default profile | Status |
 | --- | --- | --- | --- |
-| Swift | SwiftPM package, discoverable through Swift Package Index | Fuse | Contract defined; not published |
-| Kotlin/JVM | Maven Central artifact | Fuse | Policy defined; contract pending |
-| Python | PyPI package | Fuse | Policy defined; contract pending |
+| Swift | SwiftPM package, discoverable through Swift Package Index | Fuse | Local packaging and qualification implemented (W3.1C); remote package not published |
+| Kotlin/JVM | Maven Central artifact | Fuse | Official priority; local/CI artifacts; Maven Central not published |
+| Python | PyPI package | Fuse | Official priority; local/CI artifacts; PyPI not published |
 
 These are intended distribution targets, not claims that registry publication
 has occurred. Core and Flow remain supported source-build alternatives and are
@@ -405,16 +479,20 @@ not separate official registry packages.
 
 W3.1B records the Swift contract in
 [`bindings/swift/README.md`](bindings/swift/README.md#remote-swiftpm-distribution-contract-fuse).
-It defines the planned `Cribra` product, Fuse XCFramework asset, independent
-versioning, platform matrix, checksum and clean-room acceptance gate without
-creating a distribution repository or publishing an asset. W3.1C is the
-implementation and remote-consumer qualification step; Swift Package Index
-registration follows only after that gate passes.
+W3.1C implements local staging and qualification of that contract under
+`target/swift-distribution/`; it creates no distribution repository, release
+asset, published checksum or remote package. Publication, clean-room remote
+consumer verification and Swift Package Index registration remain the immediate
+next objective in the
+[development priority order](#development-priority-order-forward-looking).
 
-Kotlin/JVM and Python registry mechanics remain separate workstreams. This
-policy does not apply automatically to the C ABI, the raw WebAssembly crate,
-Rust feature selection or the planned TypeScript runtime integrations, which are
-distinct targets rather than Core/Flow/Fuse package variants.
+Kotlin/JVM and Python registry mechanics remain separate workstreams. For
+TypeScript, the shared public API contract is distinct from the distribution
+mechanism used by each runtime; package names and publication architecture are
+not decided prematurely. This policy does not apply automatically to the C ABI,
+the raw WebAssembly crate, Rust feature selection or the planned TypeScript
+runtime integrations, which are distinct targets rather than Core/Flow/Fuse
+package variants.
 
 ### Native FFI and bindings
 
@@ -424,15 +502,20 @@ distinct targets rather than Core/Flow/Fuse package variants.
   explicit gaps/N/A decisions, ABI compatibility guarantees, stable lifetime/error
   contracts and a shared adversarial conformance corpus. Existing C interoperability
   does not by itself qualify every future binding. See [interop](docs/INTEROP.md).
-- Swift, Python and Kotlin/JVM have implemented UniFFI consumers and qualified
-  profile-specific distributions; see [Compatibility](docs/COMPATIBILITY.md).
-- Future UniFFI binding candidates:
-  - C#/.NET, evaluating
-    [NordSecurity/uniffi-bindgen-cs](https://github.com/NordSecurity/uniffi-bindgen-cs).
-  - React Native/TypeScript, evaluating
-    [jhugman/uniffi-bindgen-react-native](https://github.com/jhugman/uniffi-bindgen-react-native).
-  Both require generator compatibility, ownership/error semantics, native
-  packaging and consumer qualification before support can be claimed.
+- Swift, Python and Kotlin/JVM have implemented UniFFI consumers and locally
+  qualified profile-specific artifacts; see [Compatibility](docs/COMPATIBILITY.md).
+  Their Fuse-first public distribution work is tracked in the
+  [development priority order](#development-priority-order-forward-looking).
+- C#/.NET and TypeScript native/React Native backends remain future,
+  separately gated integration candidates rather than implemented bindings.
+  C# is a demand-driven / community-contribution candidate and may evaluate
+  [NordSecurity/uniffi-bindgen-cs](https://github.com/NordSecurity/uniffi-bindgen-cs);
+  the TypeScript native backend follows the shared TypeScript API contract and
+  may evaluate
+  [jhugman/uniffi-bindgen-react-native](https://github.com/jhugman/uniffi-bindgen-react-native)
+  for React Native. Both require generator compatibility, ownership/error
+  semantics, native packaging and consumer qualification before support can be
+  claimed.
 - JavaScript/TypeScript browser and supported JavaScript runtime integration
   remains available through `cribra-wasm` within its documented capability
   surface. React Native is a separate integration target, not an established
@@ -442,7 +525,8 @@ distinct targets rather than Core/Flow/Fuse package variants.
   examples; the presence of an ABI does not qualify every language consumer.
 - No additional Rust adapter is planned solely for another language unless
   demonstrated interoperability limitations justify one.
-- Ruby bindings are not currently planned.
+- Ruby, Elixir and other community candidates are planned as demand-driven /
+  community contribution, not actively scheduled.
 - Each future integration requires applicable parity, lifetime/ownership and
   error contracts, adversarial conformance, packaging and consumer tests.
 

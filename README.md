@@ -570,23 +570,39 @@ or platform qualification.
 | --- | --- | --- |
 | Rust | Native Core crate | OFFICIAL — published (`cribra`) |
 | C / C++ | Native C ABI | OFFICIAL — source-built |
-| Swift | UniFFI Core / Flow / Fuse | OFFICIAL — local artifacts |
-| Python | UniFFI Core / Flow / Fuse | OFFICIAL — local/CI artifacts |
-| Kotlin/JVM | UniFFI Core / Flow / Fuse | OFFICIAL — local/CI artifacts |
+| Swift | UniFFI Core / Flow / Fuse; Fuse SwiftPM distribution in progress | OFFICIAL — local artifacts; remote package not published |
+| Python | UniFFI Core / Flow / Fuse; Fuse PyPI distribution in progress | OFFICIAL — local/CI artifacts; PyPI not published |
+| Kotlin/JVM | UniFFI Core / Flow / Fuse; Fuse Maven distribution in progress | OFFICIAL — local/CI artifacts; Maven Central not published |
 | JavaScript / TypeScript | `wasm-bindgen` adapter and generated TypeScript declarations | OFFICIAL — source and published adapter |
-| TypeScript | Higher-level WebAssembly wrapper | OFFICIAL — planned |
-| TypeScript / React Native | UniFFI integration | OFFICIAL — planned, separately gated |
+| TypeScript shared API | Isomorphic public API for WebAssembly and a future native backend | OFFICIAL — planned; contract first |
+| TypeScript / WebAssembly | Higher-level wrapper over the typed WASM exports | OFFICIAL — planned |
+| TypeScript native backend | Future UniFFI-backed backend for Node.js; React Native separately gated | OFFICIAL — planned, not implemented |
+| MCP | Native Rust server over stdio | OFFICIAL — planned, not implemented |
+| C#, Go, PHP, Ruby, Elixir | Potential additional language bindings | PLANNED — demand-driven / community contribution |
 
-The planned TypeScript wrapper is distinct from the existing typed WASM
-exports. The TypeScript/UniFFI path targets server-side Node.js, and React Native
-requires separate platform-specific work; neither is implemented. Go, C#, PHP,
-Ruby, Elixir and other language bindings are not part of the active roadmap.
+The immediate integration priority is completing the Fuse-first Swift
+distribution. Only Fuse is the official public Swift package; Core and Flow
+remain source-build profiles. The planned TypeScript wrapper is distinct from the
+existing typed WASM exports; define one shared public TypeScript API before
+implementing either the WASM wrapper or the future native backend. The native
+backend does not exist, and React Native requires separate platform-specific
+investigation. The MCP server is planned as an ultra-lightweight Rust binary over
+stdio, not a broad service.
+
+C#, Go and PHP are planned as demand-driven / community-contribution candidates,
+not actively scheduled work. Ruby, Elixir and other candidates retain the same
+status. The project will consider them only with demonstrated real-world demand
+or a viable community contribution; no delivery dates are promised, and none is
+implemented, qualified or published. Community contributions are welcome under
+[`CONTRIBUTING.md`](CONTRIBUTING.md), but official support requires an ongoing
+maintenance commitment, documentation, testing and CI coverage.
 
 See [Ecosystem and scope](docs/ECOSYSTEM.md#binding-support-policy) for the
 authoritative binding policy, [Interoperability](docs/INTEROP.md) for the
-implemented adapter capability matrix and
-[Compatibility](docs/COMPATIBILITY.md) for versions, distribution and
-qualification boundaries.
+implemented adapter capability matrix, [Compatibility](docs/COMPATIBILITY.md)
+for versions, distribution and qualification boundaries, and
+[Roadmap](ROADMAP.md#development-priority-order-forward-looking) for the
+forward-looking priority order.
 
 ## Release status
 
