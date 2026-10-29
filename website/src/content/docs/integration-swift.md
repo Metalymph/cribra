@@ -110,7 +110,10 @@ packages, generated bindings or native libraries from different profiles.
 ## Qualification limits
 
 The remote package has not been published or qualified through a clean-room
-consumer. Current evidence covers local macOS ARM64 external consumers and
+consumer. The repository now includes an unpublished local Fuse distribution
+staging and qualification workflow (W3.1C), but it does not create a remote
+package, release asset, published checksum or Swift Package Index entry. Current
+evidence covers local macOS ARM64 external consumers and
 compiled/linked iOS Simulator ARM64 consumers. **Simulator compile/link is not
 Simulator execution or physical-device runtime qualification**. Declared
 minimums macOS 13 / iOS 16 are not runtime coverage of every OS release. Intel

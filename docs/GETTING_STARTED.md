@@ -85,6 +85,18 @@ There is no WASM Fuse profile; Core/Flow expose sequential batch scanning,
 admitted byte streaming and incremental document interfaces, and Flow adds
 Core-backed in-memory Share Bundles.
 
+## TypeScript and MCP
+
+The existing WebAssembly adapter provides typed JavaScript/TypeScript exports.
+A higher-level TypeScript/WASM wrapper and a future native TypeScript backend are
+planned; define the shared isomorphic API contract before implementing either.
+Neither the wrapper nor the native backend is implemented.
+
+The native Rust MCP server is planned as an ultra-lightweight binary using MCP
+over stdio and reusing Cribra Core. It is not implemented. See the
+[roadmap priority order](../ROADMAP.md#development-priority-order-forward-looking)
+for sequencing and constraints.
+
 ## Swift
 
 On native macOS ARM64 with Swift 6.4, Xcode's macOS/iOS/Simulator SDKs, Rust

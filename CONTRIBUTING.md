@@ -13,6 +13,24 @@ Before opening a substantial pull request, open an issue describing:
 - native, C ABI, and WASM implications where relevant;
 - test coverage and benchmark impact where relevant.
 
+## Language bindings and integrations
+
+Official integration priorities and status are tracked in
+[ROADMAP.md](ROADMAP.md#development-priority-order-forward-looking) and the
+[binding support policy](docs/ECOSYSTEM.md#binding-support-policy).
+
+C#, Go and PHP are planned as **demand-driven / community contribution**
+candidates. They are not actively scheduled. The project will consider them only
+with demonstrated real-world demand or a viable community contribution. Ruby,
+Elixir and other previously discussed candidates retain the same status.
+
+Using a public interoperability surface does not make a community binding
+officially maintained. An official binding requires an ongoing maintenance
+commitment, accurate integration documentation, consumer qualification and CI
+coverage. Open an issue before starting substantial binding work so scope,
+maintenance ownership and the applicable parity contract can be agreed first.
+Do not create placeholder packages or empty integration guides.
+
 ## Development requirements
 
 Cribra declares Rust 1.97 as its MSRV. Stable Rust is used for normal
