@@ -239,6 +239,15 @@ swift-apple-inspect profile="core": _swift-apple-tool
 swift-apple-consumer profile="core" directory="": _swift-apple-tool
     target/swift-apple/apple "{{justfile_directory()}}" consumer "{{profile}}" "{{directory}}"
 
+# Stage and qualify the unpublished Fuse remote SwiftPM distribution; never publishes.
+swift-apple-dist profile="fuse": _swift-apple-tool
+    target/swift-apple/apple "{{justfile_directory()}}" dist "{{profile}}"
+
+# Test the dependency-free Swift distribution packaging validators.
+swift-apple-packaging-test:
+    mkdir -p target/swift-apple
+    tool_dir="$(mktemp -d target/swift-apple/test.XXXXXX)" && rustc +1.97.0 --edition 2024 --test bindings/swift/tools/apple.rs -o "$tool_dir/apple-tests" && "$tool_dir/apple-tests" && rm -rf "$tool_dir"
+
 # Generate and validate Swift-DocC API documentation for Core, Flow or Fuse.
 swift-docc profile="all":
     bash bindings/swift/scripts/generate-docc.sh "{{profile}}"
