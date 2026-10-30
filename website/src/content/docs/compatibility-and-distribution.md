@@ -6,7 +6,7 @@ order: 22
 
 # Compatibility & Distribution
 
-**Implementation, local qualification, CI qualification and publication are distinct claims.** A passing build, local test or temporary CI artifact does not establish a public package or supported runtime. The canonical status record is [`docs/COMPATIBILITY.md`](https://github.com/Metalymph/cribra/blob/main/docs/COMPATIBILITY.md) (historical evidence from 2026-10-20 onward, supplemented by local six-integration qualification on 2026-10-25).
+**Implementation, local qualification, CI qualification and publication are distinct claims.** A passing build, local test or temporary CI artifact does not establish a public package or supported runtime. The canonical status record is [`docs/COMPATIBILITY.md`](https://github.com/Metalymph/cribra/blob/main/docs/COMPATIBILITY.md) (historical evidence from 2026-10-20 onward, supplemented by local six-integration qualification on 2026-10-25 and Swift Fuse 0.7.2 publication with remote qualification on 2026-10-29).
 
 ## Components and distribution
 
@@ -17,7 +17,7 @@ order: 22
 | C ABI `cribra-capi` | 0.3.0 | Source-built native libraries and checked-in header; `publish = false`. |
 | WASM `cribra-wasm` | 0.4.7 | Published 0.4.7 uses Core `^0.6`; workspace source uses Core `^0.7`. |
 | Shared UniFFI adapter | 0.1.0 | Generator/adapter, `publish = false`. |
-| Swift | Generated Core/Flow/Fuse packages | Local SwiftPM/XCFramework artifacts; no remote SwiftPM publication established. |
+| Swift | Published Fuse SwiftPM package `cribra-swift` 0.7.2; Core/Flow source builds | Remote package and checksum-verified XCFramework asset published; clean-room macOS ARM64 consumer passed; iOS Simulator compile/link only; no Swift Package Index registration. |
 | Python | Fuse wheel `cribra` 0.7.2+fuse | Local/CI wheels; no PyPI publication established. |
 | Kotlin/JVM | Core 0.7.2 profile JARs/ZIPs | Local/CI artifacts; no Maven publication established. |
 
@@ -45,14 +45,12 @@ qualification or universal operating-system support.
 
 ## Planned and demand-driven work
 
-The immediate integration priority is completing the Fuse-first Swift
-distribution. The Swift Package Index registration, remote package and release
-asset are not established.
-
-Other official planned workstreams are the shared TypeScript isomorphic API
-contract (before either backend), the TypeScript/WASM wrapper, a native Rust MCP
-server over stdio, the Kotlin/JVM Fuse distribution, the Python Fuse
-distribution and a future TypeScript native backend.
+The Fuse-first Swift distribution is complete: `cribra-swift` 0.7.2 is published
+and remotely qualified, with Swift Package Index registration still outstanding.
+The next official priorities are the shared TypeScript isomorphic API contract
+(before either backend), the TypeScript/WASM wrapper and a native Rust MCP server
+over stdio. The Kotlin/JVM Fuse distribution, the Python Fuse distribution and a
+future TypeScript native backend remain later planned workstreams.
 
 C#, Go and PHP are planned as **demand-driven / community contribution**
 candidates. Ruby, Elixir and other candidates retain the same status. They are
@@ -64,7 +62,9 @@ and the [roadmap priority order](https://github.com/Metalymph/cribra/blob/main/R
 
 ## Qualified does not mean universal
 
-Swift device/Simulator compile-and-link checks are not execution checks for every Apple target; no Intel slices or remote package distribution are established. Kotlin/JVM checks do not establish Android/KMP support. Python and Kotlin native bundles target recorded host/architecture combinations, not all platforms. WASM Node/Bun local checks do not establish browser, worker, CSP or publication qualification.
+Swift's published package is qualified by remote resolution and macOS ARM64
+execution; its device/Simulator checks remain compile-and-link evidence, not
+runtime execution, and no Intel slices or Swift Package Index registration exist. Kotlin/JVM checks do not establish Android/KMP support. Python and Kotlin native bundles target recorded host/architecture combinations, not all platforms. WASM Node/Bun local checks do not establish browser, worker, CSP or publication qualification.
 
 Never combine generated binding files with a different native library or profile. For C, match the header and binary; for WASM, match the generated JS glue and WASM binary.
 

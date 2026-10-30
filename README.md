@@ -570,7 +570,7 @@ or platform qualification.
 | --- | --- | --- |
 | Rust | Native Core crate | OFFICIAL — published (`cribra`) |
 | C / C++ | Native C ABI | OFFICIAL — source-built |
-| Swift | UniFFI Core / Flow / Fuse; Fuse SwiftPM distribution in progress | OFFICIAL — local artifacts; remote package not published |
+| Swift | UniFFI Core / Flow / Fuse; published Fuse SwiftPM package | OFFICIAL — published (`cribra-swift` 0.7.2); Core/Flow source-build |
 | Python | UniFFI Core / Flow / Fuse; Fuse PyPI distribution in progress | OFFICIAL — local/CI artifacts; PyPI not published |
 | Kotlin/JVM | UniFFI Core / Flow / Fuse; Fuse Maven distribution in progress | OFFICIAL — local/CI artifacts; Maven Central not published |
 | JavaScript / TypeScript | `wasm-bindgen` adapter and generated TypeScript declarations | OFFICIAL — source and published adapter |
@@ -580,14 +580,17 @@ or platform qualification.
 | MCP | Native Rust server over stdio | OFFICIAL — planned, not implemented |
 | C#, Go, PHP, Ruby, Elixir | Potential additional language bindings | PLANNED — demand-driven / community contribution |
 
-The immediate integration priority is completing the Fuse-first Swift
-distribution. Only Fuse is the official public Swift package; Core and Flow
-remain source-build profiles. The planned TypeScript wrapper is distinct from the
-existing typed WASM exports; define one shared public TypeScript API before
-implementing either the WASM wrapper or the future native backend. The native
-backend does not exist, and React Native requires separate platform-specific
-investigation. The MCP server is planned as an ultra-lightweight Rust binary over
-stdio, not a broad service.
+The Fuse-first Swift distribution is published and remotely qualified: SwiftPM
+package [`cribra-swift` 0.7.2](https://github.com/Metalymph/cribra-swift) installs
+the Fuse binding without Rust, Cargo, UniFFI generators or a Cribra checkout; see
+[Swift installation](bindings/swift/README.md#install-fuse-from-swiftpm). Core and
+Flow remain source-build profiles. The next integration priorities are the shared
+TypeScript API contract, the TypeScript/WASM wrapper and the native Rust MCP
+server. The planned TypeScript wrapper is distinct from the existing typed WASM
+exports; define one shared public TypeScript API before implementing either the
+WASM wrapper or the future native backend. The native backend does not exist, and
+React Native requires separate platform-specific investigation. The MCP server is
+planned as an ultra-lightweight Rust binary over stdio, not a broad service.
 
 C#, Go and PHP are planned as demand-driven / community-contribution candidates,
 not actively scheduled work. Ruby, Elixir and other candidates retain the same
@@ -626,9 +629,11 @@ but are supported by the incremental API.
 See [the D4 evidence](docs/0.6-d4-qualification.md) and
 [the D5 qualification record](docs/0.6-d5-qualification.md).
 
-Existing Rayon execution of independent sources remains available. Swift,
-Python and Kotlin/JVM integrations now have qualified consumers and local or CI
-artifacts; their packaging and publication status is documented separately in
+Existing Rayon execution of independent sources remains available. Swift Fuse
+0.7.2 is published through
+[`Metalymph/cribra-swift`](https://github.com/Metalymph/cribra-swift); Python and
+Kotlin/JVM integrations have qualified consumers and local or CI artifacts. Their
+packaging and publication status is documented separately in
 [Compatibility](docs/COMPATIBILITY.md).
 
 CLI, C, WASM, native bindings and distribution remain independently versioned

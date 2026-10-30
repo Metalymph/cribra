@@ -99,8 +99,31 @@ for sequencing and constraints.
 
 ## Swift
 
-On native macOS ARM64 with Swift 6.4, Xcode's macOS/iOS/Simulator SDKs, Rust
-1.97.0 and the three Apple Rust targets installed as in the [Swift guide](../bindings/swift/README.md):
+The official Fuse package is published as SwiftPM package
+[`cribra-swift` 0.7.2](https://github.com/Metalymph/cribra-swift). Add the remote
+dependency and link the `Cribra` product; no Rust, Cargo, UniFFI generator or
+Cribra checkout is required:
+
+```swift
+.package(url: "https://github.com/Metalymph/cribra-swift", exact: "0.7.2")
+```
+
+```swift
+.product(name: "Cribra", package: "cribra-swift")
+```
+
+```swift
+import Cribra
+```
+
+See
+[Install Fuse from SwiftPM](../bindings/swift/README.md#install-fuse-from-swiftpm)
+for the complete manifest, a minimal scanning example and qualification limits.
+
+Core and Flow remain source-build alternatives. On native macOS ARM64 with Swift
+6.4, Xcode's macOS/iOS/Simulator SDKs, Rust 1.97.0 and the three Apple Rust
+targets installed as in the
+[Swift guide](../bindings/swift/README.md#build):
 
 ```sh
 just swift-apple core
