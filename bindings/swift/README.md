@@ -4,20 +4,90 @@ See [Getting started](../../docs/GETTING_STARTED.md) and
 [Compatibility and distribution status](../../docs/COMPATIBILITY.md) for the
 cross-language entry points and evidence boundaries.
 
-Local Swift Package distribution of Cribra Core **0.7.2**, adapter **0.1.0**,
+Official Swift distribution of Cribra Core **0.7.2**, adapter **0.1.0**,
 UniFFI **=0.32.2**, Rust **1.97.0** and Swift **6.4**. The public Swift module and
 library product are named **`Cribra`**. Deployment minimums are macOS 13 and iOS 16.
 
-**Current status:** the repository builds local SwiftPM packages for Core, Flow
-and Fuse. W3.1C adds a local packaging command that produces an **unpublished
-staging directory** for the planned Fuse remote package: an XCFramework ZIP,
-SwiftPM checksum, generated sources, manifest and provenance metadata. No
-distribution repository, remote package, release asset, published checksum or
-Swift Package Index entry exists yet. See
+**Current status:** the official Fuse SwiftPM package **0.7.2** is published in
+[`Metalymph/cribra-swift`](https://github.com/Metalymph/cribra-swift) and has
+passed a clean-room remote consumer gate. Consumers install it from SwiftPM and do
+not need Rust, Cargo, UniFFI generators or a Cribra source checkout. Swift Package
+Index registration has not been submitted. Core and Flow remain source-build
+alternatives in this repository. See
+[Install Fuse from SwiftPM](#install-fuse-from-swiftpm) for the authoritative
+consumer instructions and
 [Remote SwiftPM distribution contract](#remote-swiftpm-distribution-contract-fuse)
-for the target contract and
-[Local Fuse distribution packaging](#local-fuse-distribution-packaging-w31c) for
-the implemented staging workflow.
+for the release contract and qualification boundaries.
+
+## Install Fuse from SwiftPM
+
+Published package: [`Metalymph/cribra-swift`](https://github.com/Metalymph/cribra-swift).
+Release: [`0.7.2`](https://github.com/Metalymph/cribra-swift/releases/tag/0.7.2).
+
+Add the remote package to the consuming `Package.swift`:
+
+```swift
+dependencies: [
+    .package(
+        url: "https://github.com/Metalymph/cribra-swift",
+        exact: "0.7.2"
+    )
+]
+```
+
+Link the `Cribra` product from the application target:
+
+```swift
+.product(
+    name: "Cribra",
+    package: "cribra-swift"
+)
+```
+
+Import the module:
+
+```swift
+import Cribra
+```
+
+Minimal use of the generated Fuse API:
+
+```swift
+import Cribra
+
+let scanner = Cribra.Scanner()
+let results = scanner.scanMany(sources: [
+    ScanSource(id: SourceId(value: "config/.env"), text: "API_KEY=SECRET")
+])
+
+for report in results.reports {
+    for finding in report.findings {
+        print("\(report.sourceId.value): \(finding.ruleId.value) at byte \(finding.location.start)")
+    }
+}
+```
+
+`Cribra.Scanner()` uses the default built-in portfolio. Use
+`Cribra.Scanner.configured(config:)` for explicit built-in or custom rule
+selection. SwiftPM downloads `CribraFFI-fuse-0.7.2.xcframework.zip` from the
+release and verifies the manifest checksum automatically; the archive is never
+committed to the package repository or copied into the application.
+
+The package provides the complete supported Fuse surface: scanning,
+configuration, batch scanning, admitted streaming, incremental snapshots, the
+four transformations, Share Bundles and parallel scanning. It does not require
+Rust, Cargo, UniFFI generators, an Xcode build plugin or Cribra source files.
+
+Supported targets are macOS ARM64 (minimum macOS 13), iOS device ARM64 (minimum
+iOS 16) and iOS Simulator ARM64 (minimum iOS 16). Intel macOS, Intel Simulator,
+Mac Catalyst, tvOS, watchOS and visionOS are not supported.
+
+Qualification for `0.7.2`: SwiftPM resolved the exact version from the remote URL,
+downloaded and checksum-verified the XCFramework, an external macOS ARM64 consumer
+built and executed successfully, and an external consumer compiled and linked for
+`arm64-apple-ios16.0-simulator`. iOS Simulator runtime and physical-device
+runtime were not tested, and no signing or notarization qualification was
+performed.
 
 ## Layout and profile selection
 
@@ -27,7 +97,7 @@ Choose exactly one package dependency per app/process:
 | --- | --- | --- | --- | --- |
 | Core | `bindings/swift` | `--no-default-features --features core` | Scanner, configuration, stream, incremental, atomic snapshot. | Source-build alternative only. |
 | Flow | `bindings/swift/Profiles/Flow` | `--no-default-features --features flow` | Core plus four transforms and Share Bundles. | Source-build alternative only. |
-| Fuse | `bindings/swift/Profiles/Fuse` | `--no-default-features --features fuse` | Flow plus parallel scanning. | Planned official remote package; local source builds remain supported. |
+| Fuse | `bindings/swift/Profiles/Fuse` | `--no-default-features --features fuse` | Flow plus parallel scanning. | Published official SwiftPM package (`0.7.2`); local source builds remain supported. |
 
 Fuse is the intended public distribution profile because it exposes the complete
 supported binding feature set. Core and Flow remain supported source-build
@@ -65,7 +135,8 @@ The generated Swift file, headers/modulemap, archives and XCFramework are build
 products and are not committed. Copy `Package.swift` and the complete matching
 `Generated/` directory to distribute a standalone local package. The copied
 package has no path dependency on the Rust repository, Rust toolchain, generator
-or build script. This phase does not publish a remote package or signed release.
+or build script. The published Fuse package is installed from SwiftPM as
+described above; this local-copy path remains for Core, Flow and Fuse development.
 
 ## Build
 
@@ -126,14 +197,13 @@ These hashes are provenance/integrity metadata, not signed release attestations.
 
 ## Remote SwiftPM distribution contract (Fuse)
 
-**Status: contract implemented for local staging only.** This section defines the
-planned official remote SwiftPM distribution for Swift. W3.1C produces an
-unpublished local staging directory that matches this contract, but it does not
-describe a package that consumers can resolve today. The repository does not yet
-contain a committed or published distribution manifest, live remote URL, release
-asset, published SwiftPM checksum or Swift Package Index registration. Until the
-publication milestone completes, the local integration path below is the only
-usable installation method.
+**Status: published and remotely qualified for distribution version `0.7.2`.**
+This section records the contract implemented by the official remote SwiftPM
+distribution. The published package lives in
+[`Metalymph/cribra-swift`](https://github.com/Metalymph/cribra-swift) at tag
+`0.7.2`, commit `fa37a32dc04f4574e9972b488637519c602ce671`. The contract remains
+authoritative for future Swift distribution versions. Swift Package Index
+registration has not been submitted.
 
 ### Public package and profile policy
 
@@ -144,9 +214,9 @@ registry packages.
 
 | Item | Contract value |
 | --- | --- |
-| Distribution repository | `Metalymph/cribra-swift` (provisional until explicitly created) |
-| SwiftPM package identity (proposed) | `cribra-swift`, derived from the distribution URL |
-| Manifest package name (proposed) | `Cribra` |
+| Distribution repository | `Metalymph/cribra-swift` (published) |
+| SwiftPM package identity | `cribra-swift`, derived from the distribution URL |
+| Manifest package name | `Cribra` |
 | Public product | `Cribra` |
 | Consumer import | `import Cribra` |
 | Swift module | `Cribra` |
@@ -156,10 +226,9 @@ registry packages.
 | Distribution tag format | Bare semantic version, for example `0.7.2` |
 
 The `Cribra` product and module and the `CribraFFI` binary module are confirmed
-from the existing manifests and `uniffi.toml`. The package identity and manifest
-package name remain provisional with the distribution repository. The remote
-package must expose one public library product, `Cribra`, and must not rename
-generated modules or change the UniFFI configuration.
+from the published manifests and `uniffi.toml`. The remote package exposes one
+public library product, `Cribra`, and does not rename generated modules or change
+the UniFFI configuration.
 
 The package must not require consumers to install Rust, Cargo, UniFFI
 generators, Xcode build plugins, custom build tools or Cribra source files. The
@@ -268,20 +337,19 @@ The remote `Package.swift` must reference:
 - an immutable GitHub Release asset URL; and
 - the exact SwiftPM checksum of the final archive.
 
-The intended URL pattern is:
+The published asset URL is:
 
 ```text
 https://github.com/Metalymph/cribra-swift/releases/download/0.7.2/CribraFFI-fuse-0.7.2.xcframework.zip
 ```
 
-That URL is planned, not live, until the distribution repository and release
-exist. The illustrative manifest shape is:
+That URL is live for the `0.7.2` release. The published manifest shape is:
 
 ```swift
 .binaryTarget(
     name: "CribraFFI",
     url: "https://github.com/Metalymph/cribra-swift/releases/download/0.7.2/CribraFFI-fuse-0.7.2.xcframework.zip",
-    checksum: "<computed-at-release>"
+    checksum: "b1a31ca95709efaf8cb4d8dd23ebb498f2a3c8dd65b7a5121ad63e01ad4469e6"
 )
 ```
 
@@ -376,18 +444,38 @@ required, and inspect the archive's three platform slices and deployment
 minimums. The gate must fail if it falls back to a local package path, a branch,
 a version range or an unpublished asset.
 
+### Publication and remote qualification (0.7.2)
+
+The `0.7.2` package was published on 2026-10-29 from commit
+`fa37a32dc04f4574e9972b488637519c602ce671`. The bare tag `0.7.2` resolves to that
+commit. The release asset is `CribraFFI-fuse-0.7.2.xcframework.zip`, 22,944,085
+bytes, with SHA-256 and SwiftPM checksum
+`b1a31ca95709efaf8cb4d8dd23ebb498f2a3c8dd65b7a5121ad63e01ad4469e6`.
+
+A clean-room consumer outside both repositories resolved the remote package at
+exactly `0.7.2`, downloaded and checksum-verified the asset, and contained no path
+dependency, local binary target, generated Cribra source, Rust, Cargo or UniFFI
+invocation. The macOS ARM64 consumer built and executed the full Fuse assertion
+set. The same consumer compiled and linked for
+`arm64-apple-ios16.0-simulator`.
+
+This qualifies remote resolution, artifact integrity and macOS ARM64 execution
+for the recorded host. It does not qualify iOS Simulator runtime, physical-device
+runtime, Intel Apple targets, signing, notarization or toolchains below Swift 6.4.
+Swift Package Index registration has not been submitted.
+
 ### Swift Package Index
 
 Swift Package Index is a discovery and documentation service, not a binary
 hosting service. The package must first be remotely installable and pass the
-clean-room gate. Index registration is a later milestone; W3.1B does not create
-or submit an SPI entry. Do not assume Linux compatibility for an Apple-only
+clean-room gate. The `0.7.2` release has passed that gate, but no SPI entry has
+been created or submitted. Do not assume Linux compatibility for an Apple-only
 binary package.
 
 ### Unresolved distribution questions
 
-- The `Metalymph/cribra-swift` repository, package name, URL, tag and release
-  assets are provisional and do not exist under this contract.
+- The `0.7.2` package is published; Swift Package Index registration and any
+  further distribution versions remain separate work.
 - The earliest consumer Swift toolchain below 6.4 has not been established.
 - Signing, notarization, App Store submission and binary provenance attestations
   are not defined by this contract.
@@ -454,14 +542,15 @@ target/swift-distribution/fuse-0.7.2/
 archive-level values and do not replace the per-file `SourceInputs.sha256` or
 `Artifacts.sha256`.
 
-The manifest uses the planned URL
+The manifest generated during W3.1C was labelled as unpublished staging and
+referenced the then-planned URL
 `https://github.com/Metalymph/cribra-swift/releases/download/0.7.2/CribraFFI-fuse-0.7.2.xcframework.zip`
-and the computed checksum. It is explicitly labelled as an unpublished staging
-manifest; the URL is not live. `distribution.json` records the profile, Swift
-distribution version, Core/adapter/UniFFI/Rust/Swift versions, source Git
-revision and dirty flag, generated-source hashes, input metadata hashes, archive
-name/size/SHA-256/SwiftPM checksum, platform table, timestamp and the
-qualification that ran.
+and the computed checksum. That URL is now live for the published `0.7.2`
+release; the local staging directory itself is still not published.
+`distribution.json` records the profile, Swift distribution version,
+Core/adapter/UniFFI/Rust/Swift versions, source Git revision and dirty flag,
+generated-source hashes, input metadata hashes, archive name/size/SHA-256/SwiftPM
+checksum, platform table, timestamp and the qualification that ran.
 
 ### Failure handling and atomicity
 
@@ -494,8 +583,10 @@ just swift-apple-packaging-test
 
 ## Integrate from an external app
 
-This is the current source-based path. It does not use the planned remote
-distribution contract and remains valid for Core, Flow and Fuse development.
+For production use, install the published Fuse package from SwiftPM as described
+in [Install Fuse from SwiftPM](#install-fuse-from-swiftpm). The source-based path
+below remains valid for Core, Flow and Fuse development and does not use the
+remote distribution package.
 
 Add the selected directory as a **local Swift package** in Xcode, or declare:
 
@@ -585,11 +676,10 @@ git diff --check
 
 Only ARM64 macOS, iOS device and iOS Simulator slices are provided. Intel Mac,
 x86_64 Simulator, Catalyst, tvOS/watchOS/visionOS and device/simulator runtime
-qualification remain outside the qualified matrix. The remote contract is only
-locally staged, not implemented as a published package: there is no live remote
-package, release asset, published SwiftPM checksum or SPI entry. Release
-signing/notarization, App Store submission and automated distribution publication
-are also outside this phase. If an SDK or Rust target is missing, the build fails
-explicitly and keeps the previous complete package; it does not fabricate a slice
-or fall back to macOS. Core, C API, WASM and CLI are unchanged. Do not commit
-generated trees/binaries or distribution staging output.
+qualification remain outside the qualified matrix. The `0.7.2` remote package is
+published and remotely qualified; its release asset is immutable and no SPI entry
+exists. Release signing/notarization, App Store submission and automated
+distribution publication are also outside this phase. If an SDK or Rust target is
+missing, the build fails explicitly and keeps the previous complete package; it
+does not fabricate a slice or fall back to macOS. Core, C API, WASM and CLI are
+unchanged. Do not commit generated trees/binaries or distribution staging output.

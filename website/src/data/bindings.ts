@@ -101,18 +101,26 @@ export const bindings: readonly Binding[] = [
   {
     id: 'swift',
     name: 'Swift',
-    implementation: 'Available · Core 0.7.2 · UniFFI adapter 0.1.0',
+    implementation: 'Available · Core 0.7.2 · published Fuse SwiftPM package 0.7.2',
     capabilities:
-      'Core: configuration, reports, batch, admitted streaming and incremental snapshots. Flow adds transformations/Share Bundles. Fuse adds Core-owned parallel scans and is the planned official remote package. Core and Flow remain source-build profiles. Select one matching Cribra module/package per process.',
+      'Core: configuration, reports, batch, admitted streaming and incremental snapshots. Flow adds transformations/Share Bundles. Fuse adds Core-owned parallel scans and is the published official remote package. Core and Flow remain source-build profiles. Select one matching Cribra module/package per process.',
     qualification:
-      'macOS ARM64, Swift 6.4 and independent Core/Flow/Fuse SwiftPM package consumers passed; recorded Apple CI passed all three packages. ARM64 device/Simulator archives built; Simulator compiled/linked.',
+      'macOS ARM64, Swift 6.4 and independent Core/Flow/Fuse SwiftPM package consumers passed; recorded Apple CI passed all three packages. On 2026-10-29 a clean-room remote consumer resolved cribra-swift 0.7.2, downloaded and checksum-verified the XCFramework, and ran on macOS ARM64. The same consumer compiled and linked for arm64-apple-ios16.0-simulator.',
     limits:
-      'No device or Simulator execution claim. macOS 13/iOS 16 are declared minimums, not runtime coverage of each OS. Intel slices absent.',
+      'No device or Simulator runtime execution claim. macOS 13/iOS 16 are declared minimums, not runtime coverage of each OS. Intel slices absent. No signing or notarization qualification.',
     distribution:
-      'Generated local SwiftPM packages and XCFrameworks today. Planned official SwiftPM package exposes Fuse; Core and Flow remain source-build alternatives. No remote publication, release asset or checksum established.',
+      'Published official Fuse SwiftPM package: Metalymph/cribra-swift 0.7.2 (tag fa37a32), with a checksum-verified XCFramework release asset. Core and Flow remain source-build alternatives. Swift Package Index registration has not been submitted.',
     sources: [
       compatibility,
       source('Swift consumer guide', 'bindings/swift/README.md'),
+      {
+        label: 'Published Swift package',
+        href: 'https://github.com/Metalymph/cribra-swift',
+      },
+      {
+        label: 'Swift 0.7.2 release',
+        href: 'https://github.com/Metalymph/cribra-swift/releases/tag/0.7.2',
+      },
       {
         label: 'Apple CI receipt',
         href: 'https://github.com/Metalymph/cribra/actions/runs/39411373180',
@@ -162,11 +170,6 @@ export const bindings: readonly Binding[] = [
 
 /** Official workstreams that are planned or in progress; none is a published package unless the matrix above says so. */
 export const plannedBindings = [
-  {
-    name: 'Swift Fuse SwiftPM distribution',
-    detail:
-      'Local packaging and qualification are implemented (W3.1C); the remote package, release asset, checksum publication and Swift Package Index registration are not.',
-  },
   {
     name: 'TypeScript isomorphic API contract',
     detail:

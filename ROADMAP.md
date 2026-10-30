@@ -52,40 +52,40 @@ forward-looking and does not modify the historical v0.5/v0.6/v0.7 milestone
 records below. A priority is not a delivery date, and an item is complete only
 when the repository records it as released, qualified or published.
 
-1. **Complete the Swift distribution.** Finish the Fuse-first remote SwiftPM
-   package: a qualified Fuse XCFramework release asset, clean-room remote
-   consumer verification, distribution documentation, and Swift Package Index
-   registration after successful publication and qualification. Core and Flow
-   remain source-build profiles. Only Fuse is distributed as the official public
-   Swift package. W3.1C local packaging and qualification are implemented;
-   publication is not complete.
-2. **Define the TypeScript isomorphic API contract.** Design one shared public
+The Swift Fuse distribution is complete: `cribra-swift` 0.7.2 is published, its
+XCFramework asset is checksum-verified, and a clean-room remote consumer passed
+on macOS ARM64 with iOS Simulator compile/link. Swift Package Index registration
+has not been submitted and remains a separate follow-up. Core and Flow remain
+source-build profiles; only Fuse is distributed as the official public Swift
+package. The following are the next priorities:
+
+1. **Define the TypeScript isomorphic API contract.** Design one shared public
    TypeScript API that can support both the WebAssembly backend and a future
    native UniFFI-backed integration. Define the shared API before either runtime
    implementation, and distinguish common capabilities from runtime-specific
    capabilities. The native backend does not exist yet.
-3. **Implement the TypeScript/WASM wrapper** against the shared API contract.
+2. **Implement the TypeScript/WASM wrapper** against the shared API contract.
    The primary motivation is integration into Crystal. Prioritize browser
    compatibility and a straightforward installation experience. Verify the
    actual WASM adapter surface when defining implementation milestones; do not
    assume that every Rust-only capability is already available in WASM.
-4. **Build the native Rust MCP server.** Planned design constraints: an
+3. **Build the native Rust MCP server.** Planned design constraints: an
    ultra-lightweight Rust binary using MCP over stdio, direct reuse of Cribra
    Core, a minimal dependency footprint, no Node.js or Python runtime, no
    database or external service requirement, a small deliberate set of scanning
    and transformation tools, and no arbitrary filesystem access by default.
    HTTP transport and a broad service architecture are outside the initial
    scope. This is planned, not implemented.
-5. **Complete the Kotlin/JVM distribution.** One complete official Fuse
+4. **Complete the Kotlin/JVM distribution.** One complete official Fuse
    artifact targeting Maven Central, with Core and Flow available through source
    builds, consumer qualification, and accurate integration documentation.
    Maven Central publication is not established.
-6. **Complete the Python distribution.** One complete official Fuse package
+5. **Complete the Python distribution.** One complete official Fuse package
    targeting PyPI, with Core and Flow available through source builds, consumer
    qualification, and accurate integration documentation. Python is
    strategically important for cybersecurity use cases. PyPI publication is not
    established.
-7. **Implement the TypeScript native backend** against the established
+6. **Implement the TypeScript native backend** against the established
    TypeScript API contract. A potential use case is Amon. Investigate the actual
    requirements for Node.js and React Native integration; UniFFI does not by
    itself provide a working React Native binding. Preserve the common TypeScript
@@ -469,7 +469,7 @@ each exposing the complete **Fuse** profile:
 
 | Ecosystem | Official distribution target | Default profile | Status |
 | --- | --- | --- | --- |
-| Swift | SwiftPM package, discoverable through Swift Package Index | Fuse | Local packaging and qualification implemented (W3.1C); remote package not published |
+| Swift | SwiftPM package, discoverable through Swift Package Index | Fuse | Published and remotely qualified (`cribra-swift` 0.7.2); Swift Package Index registration not submitted |
 | Kotlin/JVM | Maven Central artifact | Fuse | Official priority; local/CI artifacts; Maven Central not published |
 | Python | PyPI package | Fuse | Official priority; local/CI artifacts; PyPI not published |
 
@@ -479,11 +479,11 @@ not separate official registry packages.
 
 W3.1B records the Swift contract in
 [`bindings/swift/README.md`](bindings/swift/README.md#remote-swiftpm-distribution-contract-fuse).
-W3.1C implements local staging and qualification of that contract under
-`target/swift-distribution/`; it creates no distribution repository, release
-asset, published checksum or remote package. Publication, clean-room remote
-consumer verification and Swift Package Index registration remain the immediate
-next objective in the
+W3.1C implemented local staging and qualification of that contract under
+`target/swift-distribution/`; that phase created no distribution repository,
+release asset, published checksum or remote package. W3.1D then published
+`cribra-swift` 0.7.2 and passed the clean-room remote consumer gate. Swift Package
+Index registration remains outstanding. The next priorities are recorded in the
 [development priority order](#development-priority-order-forward-looking).
 
 Kotlin/JVM and Python registry mechanics remain separate workstreams. For
@@ -504,7 +504,8 @@ package variants.
   does not by itself qualify every future binding. See [interop](docs/INTEROP.md).
 - Swift, Python and Kotlin/JVM have implemented UniFFI consumers and locally
   qualified profile-specific artifacts; see [Compatibility](docs/COMPATIBILITY.md).
-  Their Fuse-first public distribution work is tracked in the
+  Swift Fuse 0.7.2 is published and remotely qualified through `cribra-swift`.
+  Python and Kotlin/JVM Fuse-first public distribution work remains tracked in the
   [development priority order](#development-priority-order-forward-looking).
 - C#/.NET and TypeScript native/React Native backends remain future,
   separately gated integration candidates rather than implemented bindings.

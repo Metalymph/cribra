@@ -2,7 +2,8 @@
 
 Evidence reviewed on 2026-10-20; P0.4/P0.5 WASM source streaming and incremental
 scanning, P0.6A/P0.6B/P0.6C adapter configuration/metadata/batch scanning and
-P0.6D Flow Share Bundles locally checked on 2026-10-22.
+P0.6D Flow Share Bundles locally checked on 2026-10-22. Swift Fuse 0.7.2
+publication and clean-room remote qualification were recorded on 2026-10-29.
 This is a snapshot of distinct contracts:
 **implemented** means an API/build path exists; **locally qualified** means a
 consumer ran on the recorded host; **CI-qualified** means the named remote job
@@ -21,16 +22,18 @@ this document records evidence, not delivery commitments.
 | C adapter `cribra-capi` | 0.3.0; native ABI protocol 0.3.0 | Source-built dynamic/static libraries and checked-in header; Cargo `publish = false` |
 | WASM `cribra-wasm` | 0.4.7; workspace currently uses Core `^0.7` | [Independent GitHub release](https://github.com/Metalymph/cribra/releases/tag/cribra-wasm-v0.4.7); [registry 0.4.7](https://github.com/rust-lang/crates.io-index/blob/master/cr/ib/cribra-wasm) depends on Core `^0.6`. Published and workspace dependency contracts differ |
 | Shared `cribra-uniffi` | 0.1.0; Core 0.7.2; UniFFI exactly 0.32.2; Rust 1.97 | Cargo `publish = false`; shared generator/adapter, not a second detection engine |
-| Swift | Product/module `Cribra`; Core/Flow/Fuse local packages; distribution version 0.7.2 planned | Generated Swift/headers/static archives/XCFrameworks; local SwiftPM dependency; W3.1C unpublished local Fuse distribution staging and qualification; planned official Fuse SwiftPM package, no remote publication established |
+| Swift | Product/module `Cribra`; Core/Flow/Fuse local packages; published distribution `0.7.2` (Fuse) | Generated Swift/headers/static archives/XCFrameworks; local SwiftPM dependency; [`cribra-swift` 0.7.2](https://github.com/Metalymph/cribra-swift/releases/tag/0.7.2) SwiftPM package with checksum-verified XCFramework asset; clean-room remote consumer passed on macOS ARM64 and compiled/linked for iOS Simulator ARM64; no Swift Package Index registration |
 | Python | Fuse wheel `cribra` 0.7.2+fuse; module `cribra_uniffi` | Local/CI wheels; planned official Fuse PyPI artifact; no PyPI publication established |
 | Kotlin/JVM | Profile JAR/ZIP names use Core 0.7.2; adapter 0.1.0 | Local and CI host ZIPs; planned official Fuse Maven artifact; no Maven Central or other package publication established |
 
-The planned official binding distribution is one Fuse-first package per
-ecosystem (SwiftPM, Maven Central and PyPI); see
-[the ecosystem distribution policy](ECOSYSTEM.md#distribution-policy). These are
-targets, not publication claims, and Core/Flow remain source-build alternatives.
-The Swift technical requirements are recorded in
-[the Swift remote distribution contract](../bindings/swift/README.md#remote-swiftpm-distribution-contract-fuse).
+The official binding distribution policy is one Fuse-first package per ecosystem
+(SwiftPM, Maven Central and PyPI); see
+[the ecosystem distribution policy](ECOSYSTEM.md#distribution-policy). SwiftPM
+publication is complete for Swift; Maven Central and PyPI remain targets, not
+publication claims. Core/Flow remain source-build alternatives. The Swift
+technical requirements and consumer installation instructions are recorded in
+[the Swift guide](../bindings/swift/README.md#install-fuse-from-swiftpm) and
+[remote distribution contract](../bindings/swift/README.md#remote-swiftpm-distribution-contract-fuse).
 Kotlin/JVM and Python registry contracts remain to be documented separately;
 Swift packaging does not define their mechanics.
 
@@ -177,6 +180,31 @@ These results qualify the tested interfaces and environments, not complete
 cross-language API equivalence. Core/Flow/Fuse remain capability profiles
 with adapter-specific availability and distribution boundaries.
 
+## W3.1D Swift Fuse publication and remote qualification — 2026-10-29
+
+The official Swift Fuse 0.7.2 package is published at
+[`Metalymph/cribra-swift`](https://github.com/Metalymph/cribra-swift/releases/tag/0.7.2).
+Tag `0.7.2` resolves to distribution commit
+`fa37a32dc04f4574e9972b488637519c602ce671`. The release asset
+`CribraFFI-fuse-0.7.2.xcframework.zip` is 22,944,085 bytes with SHA-256 and
+SwiftPM checksum
+`b1a31ca95709efaf8cb4d8dd23ebb498f2a3c8dd65b7a5121ad63e01ad4469e6`.
+
+A clean-room consumer outside the Cribra and distribution checkouts declared only
+`.package(url: "https://github.com/Metalymph/cribra-swift", exact: "0.7.2")` and
+the `Cribra` product. SwiftPM fetched the remote repository, resolved exactly
+`0.7.2` at the recorded revision, and downloaded and checksum-verified the asset.
+The macOS ARM64 consumer built and ran scanning, batch scanning, streaming,
+incremental snapshots, all four transformations, Share Bundles, parallel scanning
+and `CribraBuild.profile == "fuse"`. The same consumer compiled and linked for
+`arm64-apple-ios16.0-simulator`. No Rust, Cargo, UniFFI generator, local binary
+target or Cribra source checkout was used.
+
+This is publication, remote-resolution and qualification evidence for the
+recorded host. iOS Simulator runtime, physical-device runtime, Intel Apple
+targets, signing/notarization and toolchains below Swift 6.4 are not qualified.
+Swift Package Index registration has not been submitted.
+
 ## Qualification and platform limits
 
 These are recorded environments, not inferred compatibility ranges. The linked
@@ -186,7 +214,7 @@ consumer guides retain the detailed fixture, ownership, error and parity scope.
 | --- | --- | --- |
 | Rust / C | Existing release qualification and native examples | [Engine CI](https://github.com/Metalymph/cribra/actions/runs/39411373054): Linux full gate, native Linux ARM64, RISC-V64 under QEMU, macOS/Windows tests; native C ABI gates on Ubuntu/macOS/Windows. This does not qualify every language binding on those platforms |
 | WASM | Existing production browser and Node 26.9.0 / Bun 1.4.2 / Deno 2.9.7 consumers. P0.4/P0.5 source sessions, P0.6C batches and P0.6D Flow Share Bundles: local macOS ARM64, Node 26.12.0 / Bun 1.4.3, generated Core/Flow contracts; 216 streaming reports plus 77 incremental snapshots across 68 edit attempts plus 8 batch cases / 20 ordered entries per variant/runtime, plus 11 Share Bundle collections / 18 ordered entries per Flow runtime, against direct-Core oracles | [WASM CI](https://github.com/Metalymph/cribra/actions/runs/39411373136): earlier wasm32 gate and Core/Flow JS/TypeScript contracts; predates P0.4/P0.5 sessions. No Fuse; session browser execution and Deno are not qualified by this local run. Browser lifecycle, Workers and CSP remain caller concerns |
-| Swift | macOS ARM64, Swift 6.4; external macOS consumer runs; real ARM64 device and Simulator archives built | [Swift Apple integration](https://github.com/Metalymph/cribra/actions/runs/39411373180) passed all three packages/external consumers. iOS Simulator compile/link only; no simulator launch or device execution claim. Declared macOS 13/iOS 16 deployment minimums are not runtime tests on every OS. Intel slices are absent |
+| Swift | macOS ARM64, Swift 6.4; external macOS consumer runs; real ARM64 device and Simulator archives built. W3.1D clean-room remote consumer resolved `cribra-swift` 0.7.2, downloaded and verified the asset, and ran on macOS ARM64 | [Swift Apple integration](https://github.com/Metalymph/cribra/actions/runs/39411373180) passed all three packages/external consumers. Published 0.7.2 iOS Simulator compile/link only; no simulator launch or device execution claim. Declared macOS 13/iOS 16 deployment minimums are not runtime tests on every OS. Intel slices are absent; no signing/notarization or SPI registration |
 | Python | macOS 27.0.1 ARM64; installed Fuse wheel on CPython 3.11.17/3.12.15/3.13.7/3.14.8; source consumers Core 25, Flow 40, Fuse 43 tests | Linux x86_64 and repaired `manylinux_2_28_x86_64` installed-wheel gates passed in [engine CI](https://github.com/Metalymph/cribra/actions/runs/39411373054); native Windows x86_64 CPython 3.11–3.14 passed in [engine CI](https://github.com/Metalymph/cribra/actions/runs/39411373054). No musl, ARM64 Linux/Windows, Intel macOS or older macOS runtime qualification |
 | Kotlin/JVM | macOS ARM64 fixture/oracle smokes and isolated bundle consumers | [NB-3.6A CI](https://github.com/Metalymph/cribra/actions/runs/39411373200), commit `0c7ac77f4e3eb959929977f3ecadbb9263824dcf`: macOS ARM64 (`macos-15`), Linux x86_64 (`ubuntu-24.04`), Windows x86_64 (`windows-2022`); Rust 1.97.0, Kotlin 2.4.21, JDK 17 |
 
@@ -218,6 +246,6 @@ not notarization or a signed distribution guarantee.
 Detailed build/consumer procedures and remaining limits:
 [Swift](../bindings/swift/README.md), [Python](../bindings/python/README.md),
 [Kotlin/JVM](../bindings/kotlin/README.md). Historical release-preparation notes
-remain historical evidence, not current publication statements. No PyPI, Maven
-Central, remote SwiftPM or new release publication is asserted by this alignment;
-the planned Fuse-first contracts define requirements only.
+remain historical evidence, not current publication statements. This alignment
+does not assert PyPI, Maven Central or new Core release publication; the published
+SwiftPM 0.7.2 package is recorded separately above.

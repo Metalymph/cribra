@@ -85,7 +85,7 @@ Cribra provides several independently versioned interfaces:
 | Rust Core | Authoritative engine; Core, Flow, and Fuse build profiles |
 | C ABI | Native interoperability through a documented adapter contract |
 | WebAssembly | Core and Flow profiles for supported JavaScript/WASM consumers |
-| Swift | UniFFI Core, Flow and Fuse source packages and XCFrameworks; planned official Fuse SwiftPM package |
+| Swift | UniFFI Core, Flow and Fuse source packages and XCFrameworks; official published Fuse SwiftPM package (`cribra-swift` 0.7.2) |
 | Kotlin/JVM | UniFFI Core, Flow and Fuse profile JARs and host bundles; planned official Fuse Maven artifact |
 | Python | UniFFI Core, Flow and Fuse consumers and Fuse wheel packaging; planned official Fuse PyPI package |
 | TypeScript | Planned shared isomorphic API contract; WebAssembly wrapper first, future native backend separately gated |
@@ -117,7 +117,7 @@ published to a package registry; registry publication is tracked separately in
 | Rust Core | Official, implemented | Authoritative engine |
 | C ABI | Official, implemented | Source-built libraries and checked-in header; `publish = false` |
 | WebAssembly | Official, implemented | Core and Flow source; published adapter release has a separate Core contract |
-| Swift | Official, implemented; distribution in progress | Local SwiftPM packages and XCFrameworks, plus unpublished local Fuse distribution staging; planned Fuse SwiftPM package; no remote publication |
+| Swift | Official, implemented; Fuse package published | Local Core/Flow/Fuse SwiftPM packages and XCFrameworks, plus the published `cribra-swift` 0.7.2 Fuse SwiftPM package and XCFramework release asset; remotely qualified on macOS ARM64 with iOS Simulator compile/link; no Swift Package Index registration |
 | Kotlin/JVM | Official, implemented; distribution in progress | Local/CI profile JARs and host bundles; planned Fuse Maven artifact; no Maven publication |
 | Python | Official, implemented; distribution in progress | Core/Flow/Fuse source consumers and a local/CI Fuse wheel; planned Fuse PyPI package; no PyPI publication |
 | TypeScript shared API | Official, planned | One isomorphic public API contract for the WebAssembly and future native backends; contract precedes implementation |
@@ -150,14 +150,15 @@ Each official package exposes the complete supported **Fuse** binding profile:
 | Kotlin/JVM | Maven Central artifact | Fuse |
 | Python | PyPI package | Fuse |
 
-These are intended distribution targets, not claims that registry publication
-has occurred. Approval, qualification and release are separate gates.
+These are intended distribution targets; publication status differs by
+ecosystem. Approval, qualification and release are separate gates.
 
-Swift is the immediate priority. W3.1C implements local Fuse distribution
-staging and qualification, but no distribution repository, remote package,
-release asset, published checksum or Swift Package Index entry exists yet.
-Kotlin/JVM and Python remain official priorities with local/CI artifacts only.
-None of these three ecosystems has a published public package.
+Swift is the first completed public distribution: `cribra-swift` 0.7.2 is
+published, its Fuse XCFramework asset is checksum-verified, and a clean-room
+remote consumer passed on macOS ARM64 with iOS Simulator compile/link. Swift
+Package Index registration has not been submitted. Kotlin/JVM and Python remain
+official priorities with local/CI artifacts only; neither has a published public
+package.
 
 The public package must expose the complete functionality implemented by the
 Fuse binding. It does not claim parity with Rust-only APIs that are absent from
@@ -177,7 +178,9 @@ intended to coexist with the Fuse package. Use exactly one matching profile per
 application or process.
 
 The Swift technical contract is
-[the Swift remote distribution contract](../bindings/swift/README.md#remote-swiftpm-distribution-contract-fuse).
+[the Swift remote distribution contract](../bindings/swift/README.md#remote-swiftpm-distribution-contract-fuse),
+with consumer installation in
+[Install Fuse from SwiftPM](../bindings/swift/README.md#install-fuse-from-swiftpm).
 Kotlin/JVM and Python require separate distribution contracts; Swift packaging
 details do not define their registry mechanics.
 

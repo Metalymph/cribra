@@ -50,6 +50,6 @@ Run these commands from the repository root. On Windows, the executable is `targ
 
 ## Choose another language
 
-The [bindings matrix](/bindings/) separates source availability, capability coverage, qualification, and distribution. Swift, Python, and Kotlin/JVM consumers are implemented, but their local or CI artifacts do not establish remote package publication.
+The [bindings matrix](/bindings/) separates source availability, capability coverage, qualification, and distribution. The Swift Fuse 0.7.2 SwiftPM package is published and remotely qualified; Python and Kotlin/JVM consumers are implemented, but their local or CI artifacts do not establish registry publication.
 
 Continue with [core concepts](/docs/core-concepts/), [transformations](/docs/transformations/), and [scanning modes](/docs/scanning-modes/). Detailed build prerequisites live in the repository's [getting-started guide](https://github.com/Metalymph/cribra/blob/main/docs/GETTING_STARTED.md).

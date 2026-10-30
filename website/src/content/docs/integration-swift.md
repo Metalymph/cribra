@@ -1,15 +1,15 @@
 ---
 title: 'Swift integration'
-description: 'Plan the official Fuse SwiftPM package and build Core or Flow from source.'
+description: 'Install the published Fuse SwiftPM package or build Core and Flow from source.'
 order: 11
 ---
 
 # Swift integration
 
-> **Availability boundary:** The official remote SwiftPM package is planned, not
-> published. The current repository builds local packages; the commands below
-> remain source-build instructions. Do not add a remote dependency or claim
-> Swift Package Index registration until the package is released and qualified.
+> **Availability:** the official Fuse SwiftPM package **0.7.2** is published at
+> [`Metalymph/cribra-swift`](https://github.com/Metalymph/cribra-swift) and has
+> passed a clean-room remote consumer gate. Swift Package Index registration has
+> not been submitted.
 
 Cribra performs deterministic scanning in Rust Core. A **finding** is an
 authoritative detection; a **sensitive candidate** is review-only and must not
@@ -18,40 +18,73 @@ Streaming admits only compatible rulesets; an ordinary default scanner is not
 automatically streamable. Resource budgets are logical limits, not process-wide
 heap guarantees.
 
-## Official installation: Fuse (planned)
+## Official installation: Fuse (published)
 
-The official Swift distribution target is one SwiftPM package using the **Fuse**
-profile. It will expose the product and module **`Cribra`** and the complete
+The official Swift distribution is one SwiftPM package using the **Fuse**
+profile. It exposes the product and module **`Cribra`** and the complete
 supported Cribra binding API: scanning, configuration, batch operations, admitted
 streaming, incremental snapshots, the four transformations, Share Bundles and
 parallel scanning.
 
-**This package is not published.** The provisional distribution repository is
-`Metalymph/cribra-swift`, the initial package version is `0.7.2`, and the planned
-native asset is `CribraFFI-fuse-0.7.2.xcframework.zip`. The repository, URL, tag,
-asset and SwiftPM checksum do not exist yet.
+Published package: [`Metalymph/cribra-swift`](https://github.com/Metalymph/cribra-swift).
+Release: [`0.7.2`](https://github.com/Metalymph/cribra-swift/releases/tag/0.7.2).
 
-When released, consumers will add the remote Git URL as a SwiftPM dependency,
-pin an exact published semantic version, and link the `Cribra` product. The
-planned form is:
+Add the remote package to `Package.swift`:
 
 ```swift
-// Planned form only. This dependency does not resolve until the package is published.
-.package(url: "<future cribra-swift repository URL>", exact: "0.7.2")
+dependencies: [
+    .package(
+        url: "https://github.com/Metalymph/cribra-swift",
+        exact: "0.7.2"
+    )
+]
 ```
+
+Link the `Cribra` product from the application target:
+
+```swift
+.product(
+    name: "Cribra",
+    package: "cribra-swift"
+)
+```
+
+Import the module:
 
 ```swift
 import Cribra
 ```
 
-The remote package will not require Rust, Cargo, UniFFI generators, generated
+Minimal use of the generated Fuse API:
+
+```swift
+import Cribra
+
+let scanner = Cribra.Scanner()
+let results = scanner.scanMany(sources: [
+    ScanSource(id: SourceId(value: "config/.env"), text: "API_KEY=SECRET")
+])
+
+for report in results.reports {
+    for finding in report.findings {
+        print("\(report.sourceId.value): \(finding.ruleId.value) at byte \(finding.location.start)")
+    }
+}
+```
+
+`Cribra.Scanner()` uses the default built-in portfolio. Use
+`Cribra.Scanner.configured(config:)` for explicit built-in or custom rule
+selection. SwiftPM downloads `CribraFFI-fuse-0.7.2.xcframework.zip` from the
+release and verifies the manifest checksum automatically.
+
+The remote package does not require Rust, Cargo, UniFFI generators, generated
 Xcode projects or local Cribra source files. The Swift source and native binary
-will come from the same qualified Fuse build, and the XCFramework will be
-downloaded from an immutable release asset.
+come from the same qualified Fuse build, and the XCFramework is downloaded from
+the immutable `0.7.2` release asset.
 
 The published [Swift Core API reference](/api/0.7.2/swift/core/documentation/cribra/)
 documents the generated **Core** profile for Cribra 0.7.2. It does not cover the
-planned Fuse package, and no Fuse DocC reference is published.
+published Fuse package, and no Fuse DocC reference is published.
 
 ## Alternative build profiles
 
@@ -59,16 +92,18 @@ Core and Flow remain supported source-build alternatives. They are alternative
 builds of the same engine, not add-on modules intended to coexist with the Fuse
 package. Use exactly one profile per application or process.
 
-| Profile | Distribution                       | Purpose                     |
-| ------- | ---------------------------------- | --------------------------- |
-| Fuse    | Official SwiftPM package (planned) | Complete supported binding  |
-| Flow    | Build from source                  | Core plus Flow capabilities |
-| Core    | Build from source                  | Core capabilities           |
+| Profile | Distribution                        | Purpose                     |
+| ------- | ----------------------------------- | --------------------------- |
+| Fuse    | Official SwiftPM package (published) | Complete supported binding  |
+| Flow    | Build from source                   | Core plus Flow capabilities |
+| Core    | Build from source                   | Core capabilities           |
 
 The profile roles and distribution policy are recorded in
 [Ecosystem and scope](https://github.com/Metalymph/cribra/blob/main/docs/ECOSYSTEM.md#distribution-policy).
 The detailed Swift packaging contract is in the
-[Swift remote distribution contract](https://github.com/Metalymph/cribra/blob/main/bindings/swift/README.md#remote-swiftpm-distribution-contract-fuse).
+[Swift remote distribution contract](https://github.com/Metalymph/cribra/blob/main/bindings/swift/README.md#remote-swiftpm-distribution-contract-fuse)
+and the authoritative consumer instructions are in
+[Install Fuse from SwiftPM](https://github.com/Metalymph/cribra/blob/main/bindings/swift/README.md#install-fuse-from-swiftpm).
 
 ## Build Core or Flow from source
 
@@ -88,7 +123,7 @@ just swift-apple-consumer core
 The profile directories and their exact capability boundaries are documented in
 [layout and profile selection](https://github.com/Metalymph/cribra/blob/main/bindings/swift/README.md#layout-and-profile-selection).
 Fuse can also be built from source with `just swift-apple fuse` for development
-and pre-release qualification; that local build is not the remote package.
+and pre-release qualification; that local build is not the published package.
 
 After generation, add the chosen directory as a **local** Swift package in Xcode
 or the consuming `Package.swift`. For example, a Core consumer uses
@@ -109,17 +144,17 @@ packages, generated bindings or native libraries from different profiles.
 
 ## Qualification limits
 
-The remote package has not been published or qualified through a clean-room
-consumer. The repository now includes an unpublished local Fuse distribution
-staging and qualification workflow (W3.1C), but it does not create a remote
-package, release asset, published checksum or Swift Package Index entry. Current
-evidence covers local macOS ARM64 external consumers and
-compiled/linked iOS Simulator ARM64 consumers. **Simulator compile/link is not
-Simulator execution or physical-device runtime qualification**. Declared
-minimums macOS 13 / iOS 16 are not runtime coverage of every OS release. Intel
-slices, Catalyst, tvOS, watchOS and visionOS are not supported.
+Remote SwiftPM resolution for `0.7.2` passed: the exact version resolved from the
+remote URL, the XCFramework was downloaded and checksum-validated, an external
+macOS ARM64 consumer built and executed, and the same consumer compiled and
+linked for `arm64-apple-ios16.0-simulator`.
 
-Swift Package Index registration is not established. Do not assume Linux
+**iOS Simulator compile/link is not Simulator execution or physical-device
+runtime qualification**. Declared minimums macOS 13 / iOS 16 are not runtime
+coverage of every OS release. Intel slices, Catalyst, tvOS, watchOS and visionOS
+are not supported. No signing or notarization qualification was performed.
+
+Swift Package Index registration has not been submitted. Do not assume Linux
 compatibility for this Apple-only binary package.
 
 Do not convert Swift string/UTF-16 offsets into incremental edit positions
