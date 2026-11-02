@@ -89,6 +89,8 @@ directly; it does not route through the C ABI.
 | Synthesis | `ScanResult.synthesize` | `crates/cribra-wasm/src/lib.rs:834` |
 | Share Bundle | `ShareBundleBuilder`, `scanAndBuild`, manifest and entries | `crates/cribra-wasm/src/share_bundle.rs:57-141` |
 | Typed limits | `StreamLimits`, `IncrementalLimits` custom TypeScript sections | `crates/cribra-wasm/src/streaming.rs:102`, `crates/cribra-wasm/src/incremental.rs:128` |
+| Adapter version | `wasmAdapterVersion()` | `crates/cribra-wasm/src/lib.rs:64` |
+| Capability manifest | `capabilityManifest()`, `CapabilityManifest` getters | `crates/cribra-wasm/src/lib.rs:73`, `crates/cribra-wasm/src/capabilities.rs:41` |
 
 Both profiles are built from the same source: `core` omits `transform`,
 `flow` enables it (`crates/cribra-wasm/Cargo.toml:18-20`). The runtime
@@ -124,8 +126,8 @@ Legend:
 | Synthesis | Yes | Flow only | `Scanner.transform` | None (W3.2B) |
 | Share Bundle | Yes | Flow only | `createShareBundle` | None (W3.2B) |
 | Parallel scan | Yes (`parallel` feature) | Absent | Capability flag only | None (W3.2B) |
-| Core/adapter versions | Crate metadata only | Absent | `getVersion` | None (W3.2B export) |
-| Capability probing | No | Absent | `getCapabilities` | None (W3.2B export) |
+| Core/adapter versions | Crate metadata only | Adapter version exported; Core version absent | `getVersion` | None (W3.2B) |
+| Capability probing | No | Exported | `getCapabilities` | None (W3.2B) |
 | Transform an already-stored result | Yes, with `&ScanReport` | Live native result only | Not offered | None (deferred) |
 | Native backend | n/a | n/a | Same contract | None (future) |
 
@@ -162,8 +164,8 @@ These items are reachable without changing Core semantics.
 | Requirement | Why | Classification |
 | --- | --- | --- |
 | Core version string | `getVersion().core` cannot be derived from the WASM crate version | Adapter work, may need an additive `cribra::VERSION` constant (**Core change, needs approval**) |
-| Adapter version string | `cribra-wasm` version is not currently exported | Adapter work |
-| Capability manifest | Values must reflect the built artifact, not a static list | Adapter work |
+| Adapter version string | `cribra-wasm` version is exposed by `wasmAdapterVersion()` | **Implemented in W3.2B-1** |
+| Capability manifest | `capabilityManifest()` reflects the built Core/Flow artifact and its exports | **Implemented in W3.2B-1** |
 | Batched explanation projection | Avoid `O(findings × rules)` native calls | Adapter work (optimization) |
 | Report reconstruction from data | Would allow transforming a stored DTO | Future work (**Core change**) |
 | Parallel batch execution in WASM | Requires threads support and qualification | Future work |
@@ -1115,23 +1117,37 @@ Rules:
 scanner is admitted. `stream()` must still be allowed to reject a ruleset with
 `stream_unsupported_ruleset`, and that failure leaves the scanner usable.
 
-### 8.3 Required exports (W3.2B)
+### 8.3 WASM metadata exports (W3.2B-1)
 
-To make section 8 honest at runtime, the adapter needs:
+`wasmAdapterVersion()` and `capabilityManifest()` are implemented additively
+by `crates/cribra-wasm` and qualified for both Core and Flow. Still unavailable:
 
 ```text
 coreVersion(): string | undefined
+```
+
+The implemented exports are:
+
+```text
 wasmAdapterVersion(): string
 capabilityManifest(): CapabilityManifest
 ```
 
+`wasmAdapterVersion()` returns the adapter's compile-time `CARGO_PKG_VERSION`.
+It is never substituted for Core's version.
+
 `CapabilityManifest` is a typed record of booleans and enums, not free-form
-strings. The wrapper validates the record at initialization and fails closed if
+strings. It is a generated `wasm-bindgen` class: the wrapper copies the getters
+into a plain object and calls `free()` in a `try`/`finally` block. The adapter
+types `CapabilityManifest`, `BackendKind` and `ProfileKind` are internal and
+must not appear in the public TypeScript package surface; the wrapper maps them
+to its plain DTO, string literals, and its own `utf16OffsetConversion: true`.
+The wrapper validates the copied record at initialization and fails closed if
 it is missing or malformed.
 
 `coreVersion` may require an additive `pub const VERSION: &str` in the `cribra`
 crate. That is a **Core change** and must be approved separately; until then
-`getVersion().core` is absent.
+`getVersion().core` is absent and no export exists for it.
 
 ### 8.4 Versions
 
@@ -1263,7 +1279,7 @@ bytes to `init()`.
 | Transforms require Flow | Methods remain declared; Core profile throws `unsupported_capability` | Verified feature gate; wrapper behavior specified |
 | No report reconstruction | A stored `ScanResult` cannot be transformed later | Deferred beyond v1 |
 | No multi-transform call | One transform request per scan | Deferred beyond v1 |
-| No version exports | `getVersion().core`/`.wasmAdapter` absent until W3.2B | Adapter work |
+| No Core version export | `getVersion().core` stays absent; `wasmAdapterVersion()` is exported and must not be used in its place | Adapter/Core work |
 | Rust regex syntax | Custom patterns differ from JavaScript `RegExp` | Verified semantic difference |
 | `usize` width | Offsets/limits must fit 32-bit `usize` on `wasm32` | Verified |
 | Published WASM artifact lag | `cribra-wasm 0.4.7` predates batch and Share Bundle work | Release dependency |
@@ -1320,7 +1336,7 @@ the answer.
 | 6 | Multi-transform batching | One request per scan; multi-output batching deferred beyond v1 | Resolved |
 | 7 | Capability scope | `getCapabilities()` is module-level and backend-level. Streaming admission is per-scanner/per-ruleset and reported by `stream_unsupported_ruleset` | Resolved |
 | 8 | Custom rule exposure | Include `ScannerOptions.rules` in v1; the WASM builder already exports all four families | Resolved |
-| 9 | Version sourcing | Version/capability exports belong to W3.2B. `core` stays absent unless an additive Core `VERSION` constant is approved | Partially pending |
+| 9 | Version sourcing | Adapter version and capability manifest are implemented in W3.2B-1. `core` stays absent unless an additive Core `VERSION` constant is approved | Partially pending: adapter resolved |
 | 10 | Explanation cost | `includeExplanations` remains opt-in. A batched projection is an optimization, not a v1 requirement | Resolved |
 | 11 | WASM asset delivery | Bundle `.wasm` in the npm tarball; callers may override with explicit bytes or a URL | Resolved |
 | 12 | Capability encoding | Typed booleans. Unsupported operations use `unsupported_capability`; no per-field reason strings | Resolved |
