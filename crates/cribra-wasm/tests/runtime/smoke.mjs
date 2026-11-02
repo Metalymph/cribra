@@ -6,6 +6,7 @@ import { assertShareAbsent, qualifyShareBundles, shareExports } from "./share_bu
 import { qualifyRemediation } from "./remediation.mjs";
 import { qualifyConfiguration } from "./configuration.mjs";
 import { qualifyIndices } from "./indices.mjs";
+import { qualifyCapabilities } from "./capabilities.mjs";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -42,6 +43,7 @@ assert.deepEqual(actual, expected, `${variant}: generated TypeScript contract ch
 
 const mod = await import(pathToFileURL(resolve(directory, "cribra.js")).href);
 await mod.default({ module_or_path: await readFile(resolve(directory, "cribra_bg.wasm")) });
+await qualifyCapabilities(mod, variant, directory);
 
 // Check the actual JS exports and prototypes as well as the TypeScript text.
 for (const [name, { kind, members }] of Object.entries(expected)) {

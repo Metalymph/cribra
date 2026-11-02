@@ -67,6 +67,70 @@ part of the supported browser WASM API; the adapter has no Fuse configuration.
 Streaming, incremental sessions and sequential batches are available in both
 configurations. Share Bundles are Flow-only.
 
+## Adapter version and capability manifest
+
+Two additive free functions describe the compiled artifact:
+
+```ts
+export function wasmAdapterVersion(): string;
+export function capabilityManifest(): CapabilityManifest;
+
+export enum BackendKind { Wasm = 0 }
+export enum ProfileKind { Core = 0, Flow = 1 }
+```
+
+`wasmAdapterVersion()` returns `cribra-wasm`'s own `CARGO_PKG_VERSION` captured
+at compile time. It is the adapter version, not Core's version. No `coreVersion()`
+export exists: Core exposes no version constant that the adapter can prove
+without a Core change, and substituting the adapter version would be false.
+
+`capabilityManifest()` reports backend-level capabilities of the built artifact:
+
+| Getter | Core | Flow | Basis |
+| --- | --- | --- | --- |
+| `backend` | `BackendKind.Wasm` | `BackendKind.Wasm` | Adapter identity |
+| `profile` | `ProfileKind.Core` | `ProfileKind.Flow` | `transform` feature |
+| `singleSourceScan` | `true` | `true` | `ScanEngine.scan` |
+| `batchScan` | `true` | `true` | `ScanEngine.scanBatch` |
+| `streaming` | `true` | `true` | `stream` / `streamWithLimits` |
+| `incremental` | `true` | `true` | `incremental` / `incrementalWithLimits` |
+| `redaction` | `false` | `true` | `redact` / `redactWith` |
+| `templating` | `false` | `true` | `template` / `templateWith` |
+| `pseudonymization` | `false` | `true` | `pseudonymize` |
+| `synthesis` | `false` | `true` | `synthesize` |
+| `shareBundle` | `false` | `true` | `ShareBundleBuilder` |
+| `ruleMetadata` | `true` | `true` | `activeRules` |
+| `explanations` | `true` | `true` | `explainFinding`, `candidateExplanationAt` |
+| `parallel` | `false` | `false` | No parallel WASM export |
+
+`streaming: true` means the operation is exported. It says nothing about a
+particular ruleset: Core still rejects non-streamable scanners with
+`StreamErrorCode.UnsupportedRuleSet`, and the scanner remains usable.
+
+`CapabilityManifest`, `BackendKind` and `ProfileKind` are internal adapter types;
+they are not part of the future TypeScript package's public surface. The
+manifest is a wasm-bindgen class, so its getters must be copied into a plain
+object and its generated `free()` called even on failure:
+
+```js
+const native = capabilityManifest();
+let manifest;
+try {
+  manifest = {
+    backend: native.backend,
+    profile: native.profile,
+    singleSourceScan: native.singleSourceScan,
+    // ...every other getter
+  };
+} finally {
+  native.free();
+}
+```
+
+The future wrapper maps the enums to `"wasm"`, `"core"` and `"flow"` string
+literals and adds its own `utf16OffsetConversion: true` helper flag, which the
+adapter does not report.
+
 ## Custom rule remediation
 
 Both variants preserve `addLiteral`, `addPrefix`, `addSuffix` and `addPattern`
@@ -635,6 +699,17 @@ methods; Core must omit them from both JS and TypeScript. A checked-in API
 contract verifies exported classes, enums, member names and TypeScript
 signatures (including the input-only limit interfaces), with runtime
 checks for JS methods, arity, getters and generated `free()` methods.
+
+Every variant also checks `wasmAdapterVersion()` against the adapter package
+version and `capabilityManifest()` against the compiled artifact: the exact
+getter set, backend/profile enums, boolean types, transform and Share Bundle
+export presence or absence, and `parallel === false`. The checks execute the
+reported operations rather than only reading flags: scanning, batches, byte
+streaming, incremental edits, rule metadata, explanations, all Flow
+transformations and Share Bundles with expected outputs. A known non-streamable
+suffix ruleset must still throw `StreamErrorCode.UnsupportedRuleSet`, proving
+that `streaming: true` describes the exported operation and not per-ruleset
+admission.
 
 The runner also generates a direct-Core oracle from the shared synthetic
 streaming fixture. Both generated variants compare complete reports across

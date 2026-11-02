@@ -1,4 +1,10 @@
 {
+  "BackendKind": {
+    "kind": "enum",
+    "members": [
+      "Wasm = 0"
+    ]
+  },
   "CandidateEvidenceKind": {
     "kind": "enum",
     "members": [
@@ -22,6 +28,25 @@
       "readonly kind: CandidateKind",
       "readonly line: number",
       "readonly start: number"
+    ]
+  },
+  "CapabilityManifest": {
+    "kind": "class",
+    "members": [
+      "readonly backend: BackendKind",
+      "readonly batchScan: boolean",
+      "readonly explanations: boolean",
+      "readonly incremental: boolean",
+      "readonly parallel: boolean",
+      "readonly profile: ProfileKind",
+      "readonly pseudonymization: boolean",
+      "readonly redaction: boolean",
+      "readonly ruleMetadata: boolean",
+      "readonly shareBundle: boolean",
+      "readonly singleSourceScan: boolean",
+      "readonly streaming: boolean",
+      "readonly synthesis: boolean",
+      "readonly templating: boolean"
     ]
   },
   "DetectionModeKind": {
@@ -130,6 +155,13 @@
     "members": [
       "readonly result: ScanResult",
       "readonly revision: bigint"
+    ]
+  },
+  "ProfileKind": {
+    "kind": "enum",
+    "members": [
+      "Core = 0",
+      "Flow = 1"
     ]
   },
   "RemediationKind": {

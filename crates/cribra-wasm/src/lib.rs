@@ -14,6 +14,9 @@
 
 mod batch;
 mod build_error;
+mod capabilities;
+#[cfg(test)]
+mod capabilities_tests;
 #[cfg(test)]
 mod configuration_tests;
 mod incremental;
@@ -27,6 +30,7 @@ mod streaming;
 pub use batch::{ScanBatchEntry, ScanBatchResult, ScanSummaryView};
 use build_error::BuildFailure;
 pub use build_error::ScannerBuildErrorCode;
+pub use capabilities::{BackendKind, CapabilityManifest, ProfileKind};
 pub use incremental::{
     IncrementalError, IncrementalErrorCode, IncrementalLimits, IncrementalSession,
     IncrementalSnapshot,
@@ -51,6 +55,24 @@ use cribra::{
     },
 };
 use wasm_bindgen::{JsError, prelude::*};
+
+/// Returns the `cribra-wasm` package version embedded at compile time.
+///
+/// This is the adapter version only. It is never a substitute for Core's
+/// version, which this adapter cannot prove without a Core version export.
+#[wasm_bindgen(js_name = wasmAdapterVersion)]
+pub fn wasm_adapter_version() -> String {
+    env!("CARGO_PKG_VERSION").to_owned()
+}
+
+/// Returns the backend-level capability manifest for this compiled artifact.
+///
+/// The returned object owns a native handle. Callers must copy the getters and
+/// call its generated `free()`, including on error paths.
+#[wasm_bindgen(js_name = capabilityManifest)]
+pub fn capability_manifest() -> CapabilityManifest {
+    CapabilityManifest::current()
+}
 
 #[cfg(feature = "transform")]
 fn key32_bytes(key: &[u8]) -> Result<[u8; 32], &'static str> {
