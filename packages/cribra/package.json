@@ -1,0 +1,52 @@
+{
+  "name": "cribra-typescript",
+  "version": "0.0.0-dev",
+  "description": "Provisional ESM-only TypeScript wrapper for the Cribra WebAssembly scanner",
+  "type": "module",
+  "private": true,
+  "license": "MIT",
+  "author": "Cribra contributors",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Metalymph/cribra.git",
+    "directory": "packages/cribra"
+  },
+  "bugs": {
+    "url": "https://github.com/Metalymph/cribra/issues"
+  },
+  "homepage": "https://cribra.pages.dev",
+  "engines": {
+    "node": ">=20"
+  },
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "browser": "./dist/index.browser.js",
+      "node": "./dist/index.node.js",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "clean": "node scripts/clean.mjs",
+    "generate:version": "node scripts/generate-version.mjs",
+    "build:wasm": "node scripts/build-wasm.mjs --profile flow --out src/wasm",
+    "build": "node scripts/build.mjs",
+    "build:core": "node scripts/build.mjs --profile core",
+    "check": "node scripts/generate-version.mjs && node scripts/build-wasm.mjs --profile flow --out src/wasm && tsc -p tsconfig.json --noEmit",
+    "test": "node scripts/run-tests.mjs",
+    "test:types": "tsc -p tsconfig.test.json",
+    "package:check": "node scripts/package-check.mjs",
+    "qualify": "node scripts/qualify.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "5.9.3"
+  }
+}

@@ -573,3 +573,21 @@ clean:
 # Measure owned edits plus exact incremental updates against edits plus full scans.
 bench-incremental:
     cargo bench --bench incremental --all-features
+
+# Type-check the provisional TypeScript package against fresh Flow bindings.
+typescript-package-check:
+    npm --prefix packages/cribra ci
+    npm --prefix packages/cribra run check
+
+# Build and test the provisional TypeScript package against the default Flow dist.
+typescript-package-test:
+    npm --prefix packages/cribra ci
+    npm --prefix packages/cribra run build
+    npm --prefix packages/cribra run test:types
+    npm --prefix packages/cribra test
+    npm --prefix packages/cribra run package:check
+
+# Qualify the provisional TypeScript package for Core and Flow (Node + Chrome).
+typescript-package-qualify:
+    npm --prefix packages/cribra ci
+    npm --prefix packages/cribra run qualify
