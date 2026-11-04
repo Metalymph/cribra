@@ -2,11 +2,16 @@
 
 import { CribraError } from "./errors.js";
 import {
+  normalizeIncrementalError,
+  normalizeStreamError,
+} from "./native-errors.js";
+import {
   isRemediation,
   isSeverity,
   remediationToNative,
   severityToNative,
 } from "./enums.js";
+import { createIncrementalSession } from "./incremental.js";
 import type { Runtime } from "./core.js";
 import {
   projectBatchEntry,
@@ -14,10 +19,19 @@ import {
   projectScanResult,
   projectSummary,
 } from "./result.js";
+import {
+  invalidSessionArgument,
+  normalizeIncrementalLimits,
+  normalizeStreamLimits,
+  safeFree,
+} from "./session.js";
+import { createStreamSession } from "./stream.js";
 import type {
   BatchEntry,
   BatchResult,
   CribraErrorCode,
+  IncrementalOptions,
+  IncrementalSession,
   RuleMetadata,
   RuleSpec,
   ScanOptions,
@@ -26,6 +40,8 @@ import type {
   Scanner,
   ScannerOptions,
   Severity,
+  StreamOptions,
+  StreamSession,
 } from "./types.js";
 import type {
   FindingSeverity,
@@ -53,15 +69,6 @@ interface NormalizedScannerOptions {
 
 function invalidArgument(): CribraError {
   return new CribraError("invalid_argument", { domain: "scanner" });
-}
-
-function safeFree(handle: { free(): void } | undefined): void {
-  if (handle === undefined) return;
-  try {
-    handle.free();
-  } catch {
-    // A generated free() must never make disposal retryable or mask failure.
-  }
 }
 
 function normalizeRule(rule: unknown): NormalizedRule {
@@ -437,6 +444,57 @@ export function createScanner(
           });
         } finally {
           safeFree(batch);
+        }
+      },
+      stream(options?: StreamOptions): StreamSession {
+        const nativeEngine = requireActive();
+        const limits = normalizeStreamLimits(options);
+
+        let native: import("./wasm/cribra.js").StreamSession;
+        try {
+          native =
+            limits === undefined
+              ? nativeEngine.stream()
+              : nativeEngine.streamWithLimits(limits);
+        } catch (error) {
+          throw normalizeStreamError(error);
+        }
+
+        try {
+          return createStreamSession(native);
+        } catch {
+          safeFree(native);
+          throw new CribraError("stream_invariant", { domain: "stream" });
+        }
+      },
+      incremental(
+        source: string,
+        options?: IncrementalOptions,
+      ): IncrementalSession {
+        const nativeEngine = requireActive();
+        if (typeof source !== "string") {
+          throw invalidSessionArgument("incremental");
+        }
+        const limits = normalizeIncrementalLimits(options);
+
+        let native: import("./wasm/cribra.js").IncrementalSession;
+        try {
+          native =
+            limits === undefined
+              ? nativeEngine.incremental(source)
+              : nativeEngine.incrementalWithLimits(source, limits);
+        } catch (error) {
+          throw normalizeIncrementalError(error);
+        }
+
+        try {
+          return createIncrementalSession(native);
+        } catch {
+          safeFree(native);
+          throw new CribraError("incremental_unknown", {
+            domain: "incremental",
+            terminal: false,
+          });
         }
       },
       dispose() {

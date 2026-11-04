@@ -83,9 +83,9 @@ function readCandidate(
   }
 }
 
-export function projectScanResult(
-  engine: ScanEngine,
+function projectResult(
   native: NativeScanResult,
+  engine: ScanEngine | undefined,
   includeExplanations: boolean,
 ): ScanResult {
   const findingCount = native.findingCount();
@@ -97,6 +97,9 @@ export function projectScanResult(
     try {
       let explanation: Explanation | undefined;
       if (includeExplanations) {
+        if (engine === undefined) {
+          throw new Error("Finding explanations require a scanner authority");
+        }
         explanation = projectExplanation(engine.explainFinding(native, index));
       }
       findings.push(projectFinding(view, explanation));
@@ -123,6 +126,22 @@ export function projectScanResult(
     needsReview: native.needsReview(),
     hasCritical: native.hasCritical(),
   });
+}
+
+export function projectScanResult(
+  engine: ScanEngine,
+  native: NativeScanResult,
+  includeExplanations: boolean,
+): ScanResult {
+  return projectResult(native, engine, includeExplanations);
+}
+
+/**
+ * Projects a stream or incremental result without a scanner authority.
+ * The approved session contracts expose no finding-explanation option.
+ */
+export function projectSessionScanResult(native: NativeScanResult): ScanResult {
+  return projectResult(native, undefined, false);
 }
 
 export function projectBatchEntry(

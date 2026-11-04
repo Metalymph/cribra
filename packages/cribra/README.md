@@ -3,16 +3,16 @@
 Provisional, unpublished TypeScript foundation for the Cribra WebAssembly
 scanner.
 
-> **Status:** W3.2B-2 package foundation.
+> **Status:** W3.2B-3 streaming and incremental scanning.
 >
 > - Package identity `cribra-typescript` is temporary and the package is marked
 >   `"private": true`. The final npm name is not approved.
 > - This package wraps the merged WASM adapter. It is not published and is not
 >   part of a release.
 > - The wrapper is **not fully qualified** until W3.2B-4.
-> - Streaming, incremental scanning, transformations, and Share Bundles are
->   **not implemented by this wrapper yet**, even when the loaded adapter reports
->   those backend capabilities as available.
+> - Transformations and Share Bundles are **not implemented by this wrapper
+>   yet**, even when the loaded Flow adapter reports those backend capabilities
+>   as available.
 
 ## What is implemented
 
@@ -23,11 +23,13 @@ scanner.
 - Synchronous `createScanner()`.
 - Single-source `scanner.scan()`.
 - Sequential `scanner.scanBatch()`.
-- Plain, serializable scan DTOs.
+- Byte-chunk `scanner.stream()` sessions.
+- Revisioned `scanner.incremental()` documents.
+- Plain, serializable scan DTOs and incremental snapshots.
 - `getCapabilities()` and `getVersion()`.
-- Structured `CribraError`.
+- Structured `CribraError` with incremental terminal classification.
 - `byteSpanToTextRange()`.
-- Deterministic scanner `dispose()`.
+- Deterministic scanner and session `dispose()`.
 
 Public runtime exports:
 
@@ -159,6 +161,78 @@ scanner.dispose();
   are half-open UTF-8 byte ranges; `line` and `column` are one-based and columns
   count Unicode scalar values.
 
+## Streaming
+
+```js
+const session = scanner.stream({ limits: { maxCandidates: 10_000 } });
+session.push(new TextEncoder().encode("first chunk"));
+session.push(new Uint8Array());
+session.push(new TextEncoder().encode("second chunk"));
+const result = session.finish();
+session.dispose();
+```
+
+- `push()` accepts `Uint8Array` chunks in source order. UTF-8 scalars and CRLF
+  pairs may cross chunk boundaries. Empty active pushes are no-ops.
+- The caller's buffer is copied into Core and never retained. There is no
+  pre-EOF or partial-report API.
+- `finish()` validates genuine EOF, completes pending work, and returns one
+  complete detached `ScanResult`. Incomplete UTF-8 at EOF fails without a
+  partial result.
+- Streaming admission is per ruleset. An unsupported ruleset fails at
+  `stream()` with `stream_unsupported_ruleset`. The default built-in catalog is
+  currently **not** streamable; use an admitted custom ruleset. There is no
+  whole-source fallback and no source-string reconstruction.
+- A native push or finalization failure is terminal and releases the stream.
+  Later `push()` or `finish()` calls throw `stream_not_active`.
+  - A successful `finish()` also consumes the stream. `disposed` is `true`
+    after success, terminal failure, or explicit disposal.
+  - Explicit `dispose()` discards partial state; later calls throw
+    `CribraError("disposed")` with domain `"stream"`.
+- `StreamLimits` accepts independent optional `maxCandidates`,
+  `maxStreamStorageBytes`, and `maxRetainedResults`. Missing means unlimited;
+  explicit `0` is a real limit.
+- A stream session owns its Core state and remains usable after its scanner is
+  disposed. Disposing the session never disposes the scanner.
+
+## Incremental scanning
+
+```js
+const session = scanner.incremental("initial text");
+let revision = session.snapshot().revision; // 0n
+
+revision = session.applyEdit(revision, 0, 0, "inserted ");
+revision = session.applyEdit(revision, 8, 8, "");
+const snapshot = session.snapshot();
+session.dispose();
+```
+
+- Edits replace the half-open **UTF-8 byte range** `[start, end)`. There is no
+  implicit UTF-16 index conversion.
+- `expectedRevision` must be an exact `bigint` in the `u64` range and must equal
+  the committed revision. A successful edit, including a no-op, returns the
+  next `bigint` revision.
+- Insertion is `start === end`; deletion uses an empty replacement.
+- Invalid revisions, offsets, range order, and non-scalar boundaries are
+  rejected. Recoverable input errors leave the committed document and revision
+  unchanged.
+- Resource or invariant failures are terminal: `isActive` becomes `false` and
+  future edits fail, but `snapshot()` continues to expose the last committed
+  state until explicit disposal.
+- `dispose()` is idempotent and frees the document. Snapshots already returned
+  remain valid. After disposal, edits and snapshots throw
+  `CribraError("disposed")` with domain `"incremental"`.
+- `IncrementalSnapshot` is a plain DTO containing `revision: bigint` and a
+  detached `ScanResult`. `JSON.stringify(snapshot)` throws because `bigint` has
+  no JSON representation; convert the revision explicitly (for example with
+  `revision.toString()`) before serializing.
+- `IncrementalLimits` accepts independent optional `maxCandidates`,
+  `maxRetainedCacheRecords`, `maxMaterializedResults`, and
+  `maxTransactionStorageBytes`. Missing means unlimited; explicit `0` is a real
+  limit.
+- An incremental session owns its Core document and remains usable after its
+  scanner is disposed. Disposing the session never disposes the scanner.
+
 ### Custom rule limitation
 
 `PatternRuleSpec.captureGroup` exists in the approved type contract, but the
@@ -172,20 +246,19 @@ in this milestone.
 `getCapabilities()` copies the manifest from the **actually loaded WASM
 artifact**. Values are not masked based on wrapper progress.
 
-During W3.2B-2:
+During W3.2B-3:
 
 - `streaming`, `incremental`, `ruleMetadata`, `explanations`, `batchScan`, and
   `singleSourceScan` are `true` for both profiles because the adapter exports
-  those operations.
+  those operations and this wrapper exposes them.
 - Transformation and Share Bundle flags follow the compiled profile (`false` for
-  Core, `true` for Flow).
+  Core, `true` for Flow). They remain backend capabilities only; the wrapper
+  does not yet declare those methods.
 - `parallel` is `false`.
 - `utf16OffsetConversion` is a wrapper capability and is always `true`.
 
-A `true` flag can therefore mean **available in the backend but not yet exposed
-as a TypeScript wrapper method**. The `Scanner` surface in this milestone
-declares only `rulesCount`, `rules`, `disposed`, `scan`, `scanBatch`, and
-`dispose`. Deferred methods are not declared yet.
+`streaming: true` describes the backend, not a particular scanner's ruleset.
+`stream()` can still reject a ruleset with `stream_unsupported_ruleset`.
 
 `getVersion()` returns `{ package, wasmAdapter }`. `core` is absent because the
 current backend cannot prove a Core version, and the adapter version is never
@@ -208,14 +281,17 @@ It never clamps, rounds, or substitutes U+FFFD.
 ## Error model
 
 `CribraError` is the only public error type. It exposes `name`, `code`,
-`domain`, and an optional `ruleId`. Messages are fixed and never interpolate
-source text, matched values, matcher payloads, or key material. Raw backend
-errors are normalized before crossing the public API. `cause` is omitted in this
-milestone because adapter diagnostics cannot be proven source-free.
+`domain`, an optional `ruleId`, and an optional incremental `terminal` boolean.
+Messages are fixed and never interpolate source text, replacement text, matched
+values, matcher payloads, or key material. Raw backend errors are normalized
+before crossing the public API. `cause` is omitted in this milestone because
+adapter diagnostics cannot be proven source-free.
 
 Adapter scanner-construction categories map through a static table to stable
 codes such as `invalid_pattern`, `pattern_matches_empty`, and
-`duplicate_rule_id`. No numeric `wasm-bindgen` enum is exposed.
+`duplicate_rule_id`. Streaming codes map to `stream_*`; incremental codes map to
+`incremental_*` and preserve the native terminal classification. No numeric
+`wasm-bindgen` enum or generated error class is exposed.
 
 ## Browser qualification
 
@@ -225,7 +301,8 @@ The browser smoke test:
 - launches Chrome/Chromium headless (`CHROME_BIN` or a common installation
   path);
 - checks default URL loading, concurrent init, capabilities, default and custom
-  scanners, batch scanning, offsets, disposal, and result independence;
+  scanners, batch scanning, streaming across UTF-8/CRLF boundaries, revisioned
+  incremental edits, offsets, disposal, and result independence;
 - runs for both Core and Flow profiles;
 - fails clearly when no browser is found, the browser exits non-zero, times out,
   or does not produce a success marker;

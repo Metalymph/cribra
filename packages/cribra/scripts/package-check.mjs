@@ -16,6 +16,8 @@ const FORBIDDEN_DECLARATION_NAMES = [
   "FindingConfidence",
   "FindingSeverity",
   "FindingView",
+  "IncrementalError",
+  "IncrementalErrorCode",
   "ProfileKind",
   "RemediationKind",
   "RuleMetadataView",
@@ -25,6 +27,24 @@ const FORBIDDEN_DECLARATION_NAMES = [
   "ScanSummaryView",
   "ScannerBuildError",
   "ScannerBuildErrorCode",
+  "StreamError",
+  "StreamErrorCode",
+];
+
+const REQUIRED_SESSION_DECLARATIONS = [
+  /\binterface\s+StreamOptions\b/,
+  /\binterface\s+StreamLimits\b/,
+  /\binterface\s+StreamSession\b/,
+  /\binterface\s+IncrementalOptions\b/,
+  /\binterface\s+IncrementalLimits\b/,
+  /\binterface\s+IncrementalSession\b/,
+  /\binterface\s+IncrementalSnapshot\b/,
+  /\bpush\s*\(\s*chunk\s*:\s*Uint8Array\s*\)\s*:\s*void\b/,
+  /\bfinish\s*\(\s*\)\s*:\s*ScanResult\b/,
+  /\bapplyEdit\s*\(\s*expectedRevision\s*:\s*bigint\s*,\s*start\s*:\s*number\s*,\s*end\s*:\s*number\s*,\s*replacement\s*:\s*string\s*\)\s*:\s*bigint\b/,
+  /\bsnapshot\s*\(\s*\)\s*:\s*IncrementalSnapshot\b/,
+  /\bstream\s*\(\s*options\?\s*:\s*StreamOptions\s*\)\s*:\s*StreamSession\b/,
+  /\bincremental\s*\(\s*source\s*:\s*string\s*,\s*options\?\s*:\s*IncrementalOptions\s*\)\s*:\s*IncrementalSession\b/,
 ];
 
 const EXPECTED_EXPORTS = [
@@ -104,7 +124,9 @@ async function walkJavaScript(entry) {
 
 async function checkDeclarations(distDir) {
   const files = await walkDeclarations(resolve(distDir, "index.d.ts"));
+  let combined = "";
   for (const { file, text } of files) {
+    combined += `\n${text}`;
     for (const match of text.matchAll(/["']([^"']*\/wasm\/[^"']*)["']/g)) {
       throw new Error(
         `public declaration graph references generated WASM types: ${match[1]} (${file})`,
@@ -117,6 +139,13 @@ async function checkDeclarations(distDir) {
           `public declaration graph exposes generated name ${name} (${file})`,
         );
       }
+    }
+  }
+  for (const pattern of REQUIRED_SESSION_DECLARATIONS) {
+    if (!pattern.test(combined)) {
+      throw new Error(
+        `public declaration graph is missing session surface ${pattern}`,
+      );
     }
   }
   return files.length;
