@@ -1,6 +1,8 @@
 # Cribra TypeScript Isomorphic API Contract
 
-Status: **proposed contract — not implemented.**
+Status: **partially implemented — W3.2B-2 foundation and W3.2B-3
+streaming/incremental are implemented in `packages/cribra/`; transformations
+and Share Bundles remain pending.**
 
 Revision: W3.2A-1R review corrections applied.
 
@@ -105,29 +107,30 @@ Legend:
   adapter; `Flow only` means available only with the `transform` feature;
   `Absent` means no export exists.
 - **TypeScript implementation** — `None` means specified by this document but
-  not implemented. No TypeScript package exists yet; W3.2B owns implementation
-  and W3.2C owns qualification.
+  not implemented in the private package. W3.2B-2 implemented the foundation and
+  W3.2B-3 implemented streaming and incremental scanning. Transformations,
+  Share Bundles, and final qualification remain pending.
 
 | Capability | Rust Core | WASM adapter (existing) | TypeScript contract | TypeScript implementation |
 | --- | --- | --- | --- | --- |
-| Single-source scan | Yes | Exported | `Scanner.scan` | None (W3.2B) |
-| Batch scan | Yes | Exported | `Scanner.scanBatch` | None (W3.2B) |
-| Streaming | Yes | Exported | `Scanner.stream` | None (W3.2B) |
-| Incremental | Yes | Exported | `Scanner.incremental` | None (W3.2B) |
-| Built-in catalog | Yes | Exported | `ScannerOptions.builtins` | None (W3.2B) |
-| Financial/personal catalogs | Yes | Exported | `ScannerOptions.financialBuiltins`, `personalBuiltins` | None (W3.2B) |
-| Custom rules | Yes | Exported | `ScannerOptions.rules` | None (W3.2B) |
-| Rule metadata | Yes | Exported | `Scanner.rules` | None (W3.2B) |
-| Finding explanations | Yes | Exported | `Finding.explanation` (opt-in) | None (W3.2B) |
-| Candidate explanations | Yes | Exported | `Candidate.explanation` | None (W3.2B) |
-| Redaction | Yes | Flow only | `Scanner.transform` | None (W3.2B) |
-| Templates | Yes | Flow only | `Scanner.transform` | None (W3.2B) |
-| Pseudonymization | Yes | Flow only | `Scanner.transform` | None (W3.2B) |
-| Synthesis | Yes | Flow only | `Scanner.transform` | None (W3.2B) |
-| Share Bundle | Yes | Flow only | `createShareBundle` | None (W3.2B) |
-| Parallel scan | Yes (`parallel` feature) | Absent | Capability flag only | None (W3.2B) |
-| Core/adapter versions | Crate metadata only | Adapter version exported; Core version absent | `getVersion` | None (W3.2B) |
-| Capability probing | No | Exported | `getCapabilities` | None (W3.2B) |
+| Single-source scan | Yes | Exported | `Scanner.scan` | Implemented (W3.2B-2) |
+| Batch scan | Yes | Exported | `Scanner.scanBatch` | Implemented (W3.2B-2) |
+| Streaming | Yes | Exported | `Scanner.stream` | Implemented (W3.2B-3) |
+| Incremental | Yes | Exported | `Scanner.incremental` | Implemented (W3.2B-3) |
+| Built-in catalog | Yes | Exported | `ScannerOptions.builtins` | Implemented (W3.2B-2) |
+| Financial/personal catalogs | Yes | Exported | `ScannerOptions.financialBuiltins`, `personalBuiltins` | Implemented (W3.2B-2) |
+| Custom rules | Yes | Exported | `ScannerOptions.rules` | Implemented (W3.2B-2) |
+| Rule metadata | Yes | Exported | `Scanner.rules` | Implemented (W3.2B-2) |
+| Finding explanations | Yes | Exported | `Finding.explanation` (opt-in) | Implemented (W3.2B-2) |
+| Candidate explanations | Yes | Exported | `Candidate.explanation` | Implemented (W3.2B-2) |
+| Redaction | Yes | Flow only | `Scanner.transform` | None (pending) |
+| Templates | Yes | Flow only | `Scanner.transform` | None (pending) |
+| Pseudonymization | Yes | Flow only | `Scanner.transform` | None (pending) |
+| Synthesis | Yes | Flow only | `Scanner.transform` | None (pending) |
+| Share Bundle | Yes | Flow only | `createShareBundle` | None (pending) |
+| Parallel scan | Yes (`parallel` feature) | Absent | Capability flag only | None |
+| Core/adapter versions | Crate metadata only | Adapter version exported; Core version absent | `getVersion` | Implemented (adapter version only) |
+| Capability probing | No | Exported | `getCapabilities` | Implemented (W3.2B-2) |
 | Transform an already-stored result | Yes, with `&ScanReport` | Live native result only | Not offered | None (deferred) |
 | Native backend | n/a | n/a | Same contract | None (future) |
 
@@ -1273,7 +1276,7 @@ bytes to `init()`.
 
 | Limitation | Impact | Status |
 | --- | --- | --- |
-| TypeScript API not implemented | This document defines the contract only | W3.2B |
+| TypeScript API partially implemented | Foundation, scanning, streaming, and incremental sessions exist; transforms and Share Bundles do not | W3.2B-2/W3.2B-3 |
 | No parallel execution in WASM | `capabilities.parallel === false`; `scanBatch` stays sequential | Deferred |
 | Default built-ins are not streamable | `stream()` rejects the default scanner with `stream_unsupported_ruleset` | Core/streaming contract |
 | Transforms require Flow | Methods remain declared; Core profile throws `unsupported_capability` | Verified feature gate; wrapper behavior specified |

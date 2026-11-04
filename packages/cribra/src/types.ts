@@ -199,6 +199,68 @@ export interface BatchResult {
   readonly summary: ScanSummary;
 }
 
+export interface StreamOptions {
+  readonly limits?: StreamLimits;
+}
+
+export interface StreamLimits {
+  readonly maxCandidates?: number;
+  readonly maxStreamStorageBytes?: number;
+  readonly maxRetainedResults?: number;
+}
+
+export interface StreamSession {
+  readonly disposed: boolean;
+
+  /** Bytes in source order. UTF-8 scalars and CRLF may cross chunks. */
+  push(chunk: Uint8Array): void;
+
+  /** Consumes the session and returns the complete detached report. */
+  finish(): ScanResult;
+
+  /** Releases the session without a report. Idempotent. */
+  dispose(): void;
+}
+
+export interface IncrementalOptions {
+  readonly limits?: IncrementalLimits;
+}
+
+export interface IncrementalLimits {
+  readonly maxCandidates?: number;
+  readonly maxRetainedCacheRecords?: number;
+  readonly maxMaterializedResults?: number;
+  readonly maxTransactionStorageBytes?: number;
+}
+
+export interface IncrementalSession {
+  readonly disposed: boolean;
+  readonly isActive: boolean;
+
+  /**
+   * Replaces the half-open UTF-8 byte range [start, end).
+   * expectedRevision must equal the last committed revision.
+   * Returns the next exact bigint revision.
+   */
+  applyEdit(
+    expectedRevision: bigint,
+    start: number,
+    end: number,
+    replacement: string,
+  ): bigint;
+
+  /** Clones the committed revision and its complete report into a DTO. */
+  snapshot(): IncrementalSnapshot;
+
+  /** Idempotent. Does not invalidate snapshots already returned. */
+  dispose(): void;
+}
+
+export interface IncrementalSnapshot {
+  readonly revision: bigint;
+  readonly result: ScanResult;
+}
+
 export interface RuleMetadata {
   readonly ruleId: string;
   readonly kind: RuleKind;
@@ -283,6 +345,12 @@ export interface Scanner {
 
   scan(source: string, options?: ScanOptions): ScanResult;
   scanBatch(sources: readonly ScanSource[], options?: ScanOptions): BatchResult;
+
+  /** Opens an admitted streaming session. The session outlives this scanner. */
+  stream(options?: StreamOptions): StreamSession;
+
+  /** Opens an editable UTF-8 document. The session outlives this scanner. */
+  incremental(source: string, options?: IncrementalOptions): IncrementalSession;
 
   /** Idempotent. After disposal, scanning methods throw CribraError("disposed"). */
   dispose(): void;

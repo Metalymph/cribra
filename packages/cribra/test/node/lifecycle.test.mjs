@@ -26,10 +26,12 @@ test("results are independent plain data that survive disposal", () => {
   assert.deepEqual(Object.keys(scanner).sort(), [
     "dispose",
     "disposed",
+    "incremental",
     "rules",
     "rulesCount",
     "scan",
     "scanBatch",
+    "stream",
   ]);
   assert.equal("free" in scanner, false);
   assert.equal(Object.isFrozen(scanner), true);

@@ -27,12 +27,17 @@ function deepEqual(actual, expected, message) {
   }
 }
 
-function expectCode(operation, code) {
+function expectCode(operation, code, terminal) {
   try {
     operation();
   } catch (error) {
     equal(error.name, "CribraError", "error name");
     equal(error.code, code, "error code");
+    if (terminal !== undefined) {
+      equal(error.terminal, terminal, "error terminal");
+    }
+    equal("cause" in error, false, "error cause omitted");
+    equal("free" in error, false, "error has no native handle");
     return error;
   }
   fail(`expected CribraError(${code})`);
@@ -235,6 +240,115 @@ async function main() {
   equal(batch.summary.totalFindings, 5, "summary findings");
   equal(batch.summary.hasCandidates, false, "summary candidates");
   equal(batch.summary.isClean, false, "summary clean");
+
+  // Streaming accepts ordered bytes and does not fall back for unsupported rules.
+  const sessionScanner = api.createScanner({
+    builtins: "none",
+    rules: customRules,
+  });
+  const streamBytes = encoder.encode(customSource);
+  const streamSplit = streamBytes.length - 3;
+  const stream = sessionScanner.stream();
+  stream.push(streamBytes.subarray(0, streamSplit));
+  stream.push(new Uint8Array());
+  stream.push(streamBytes.subarray(streamSplit));
+  const streamed = stream.finish();
+  deepEqual(
+    streamed,
+    sessionScanner.scan(customSource),
+    "stream matches whole-source scan",
+  );
+  equal(streamed.findingCount, 4, "stream finding count");
+  equal(stream.disposed, true, "finished stream disposed");
+  expectCode(
+    () => stream.push(new Uint8Array()),
+    "stream_not_active",
+  );
+  stream.dispose();
+
+  const unicodeScanner = api.createScanner({
+    builtins: "none",
+    rules: [
+      { id: "unicode.stream", kind: "literal", value: "秘密🔑", severity: "high" },
+    ],
+  });
+  const unicodeStreamSource = "前🙂\r\n秘密🔑";
+  const unicodeStreamBytes = encoder.encode(unicodeStreamSource);
+  const unicodeStream = unicodeScanner.stream();
+  const emojiSplit = encoder.encode("前🙂").length - 2;
+  const crlfSplit = encoder.encode("前🙂\r").length;
+  unicodeStream.push(unicodeStreamBytes.subarray(0, emojiSplit));
+  unicodeStream.push(unicodeStreamBytes.subarray(emojiSplit, crlfSplit));
+  unicodeStream.push(unicodeStreamBytes.subarray(crlfSplit));
+  deepEqual(
+    unicodeStream.finish(),
+    unicodeScanner.scan(unicodeStreamSource),
+    "stream splits UTF-8 and CRLF",
+  );
+  unicodeStream.dispose();
+  unicodeScanner.dispose();
+
+  const admissionScanner = api.createScanner();
+  expectCode(
+    () => admissionScanner.stream(),
+    "stream_unsupported_ruleset",
+  );
+  admissionScanner.dispose();
+
+  // Incremental edits use UTF-8 byte offsets and exact bigint revisions.
+  const incremental = sessionScanner.incremental(customSource);
+  const initialSnapshot = incremental.snapshot();
+  equal(initialSnapshot.revision, 0n, "initial revision");
+  equal(initialSnapshot.result.findingCount, 4, "initial result");
+  const insertedRevision = incremental.applyEdit(0n, 0, 0, "ADDED ");
+  equal(insertedRevision, 1n, "insert revision");
+  const insertedSnapshot = incremental.snapshot();
+  equal(insertedSnapshot.revision, 1n, "inserted snapshot revision");
+  deepEqual(
+    insertedSnapshot.result,
+    sessionScanner.scan(`ADDED ${customSource}`),
+    "incremental insert matches whole-source scan",
+  );
+
+  // Scanner disposal does not invalidate the session; snapshots stay detached.
+  sessionScanner.dispose();
+  const noopRevision = incremental.applyEdit(1n, 0, 0, "");
+  equal(noopRevision, 2n, "no-op revision");
+  const afterDisposal = incremental.snapshot();
+  equal(afterDisposal.revision, 2n, "post-disposal snapshot revision");
+  equal(initialSnapshot.revision, 0n, "old snapshot revision");
+  equal(initialSnapshot.result.findingCount, 4, "old snapshot result");
+  incremental.dispose();
+  incremental.dispose();
+  expectCode(() => incremental.snapshot(), "disposed");
+  expectCode(
+    () => incremental.applyEdit(2n, 0, 0, ""),
+    "disposed",
+  );
+
+  const terminalScanner = api.createScanner({
+    builtins: "none",
+    rules: [{ id: "terminal", kind: "literal", value: "SECRET", severity: "high" }],
+  });
+  const terminal = terminalScanner.incremental("", {
+    limits: { maxCandidates: 0 },
+  });
+  const terminalBefore = terminal.snapshot();
+  expectCode(
+    () => terminal.applyEdit(0n, 0, 0, "SECRET"),
+    "incremental_candidate_limit",
+    true,
+  );
+  equal(terminal.isActive, false, "terminal session inactive");
+  equal(terminal.disposed, false, "terminal session not disposed");
+  equal(terminal.snapshot().revision, terminalBefore.revision, "terminal snapshot revision");
+  deepEqual(
+    terminal.snapshot().result,
+    terminalBefore.result,
+    "terminal snapshot preserved",
+  );
+  terminal.dispose();
+  terminalScanner.dispose();
 
   // Offset conversion across ASCII, accents, and supplementary characters.
   const unicode = "aé🦀z";

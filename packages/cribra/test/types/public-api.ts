@@ -26,6 +26,10 @@ import type {
   ErrorDomain,
   Explanation,
   Finding,
+  IncrementalLimits,
+  IncrementalOptions,
+  IncrementalSession,
+  IncrementalSnapshot,
   InitOptions,
   LiteralRuleSpec,
   PatternRuleSpec,
@@ -42,6 +46,9 @@ import type {
   Scanner,
   ScannerOptions,
   Severity,
+  StreamLimits,
+  StreamOptions,
+  StreamSession,
   SuffixRuleSpec,
   TextRange,
   VersionInfo,
@@ -108,8 +115,41 @@ const scanOptions: ScanOptions = { includeExplanations: false };
 const initialized: Promise<void> = init(initOptions);
 const ready: boolean = isInitialized();
 
-// @ts-expect-error Streaming is deferred in W3.2B-2.
-scanner.stream();
+const streamLimits: StreamLimits = {
+  maxCandidates: 1,
+  maxStreamStorageBytes: 1024,
+  maxRetainedResults: 1,
+};
+const streamOptions: StreamOptions = { limits: streamLimits };
+const stream: StreamSession = scanner.stream(streamOptions);
+stream.push(new Uint8Array());
+const streamed: ScanResult = stream.finish();
+stream.dispose();
+
+const incrementalLimits: IncrementalLimits = {
+  maxCandidates: 1,
+  maxRetainedCacheRecords: 1,
+  maxMaterializedResults: 1,
+  maxTransactionStorageBytes: 1024,
+};
+const incrementalOptions: IncrementalOptions = {
+  limits: incrementalLimits,
+};
+const incremental: IncrementalSession = scanner.incremental(
+  "token-1234",
+  incrementalOptions,
+);
+const revision: bigint = incremental.applyEdit(0n, 0, 0, "");
+const incrementalSnapshot: IncrementalSnapshot = incremental.snapshot();
+const snapshotRevision: bigint = incrementalSnapshot.revision;
+const snapshotResult: ScanResult = incrementalSnapshot.result;
+const incrementalActive: boolean = incremental.isActive;
+const incrementalDisposed: boolean = incremental.disposed;
+incremental.dispose();
+
+const terminal: boolean | undefined = new CribraError(
+  "incremental_stale_revision",
+).terminal;
 
 void [
   entry,
@@ -128,4 +168,11 @@ void [
   scanOptions,
   initialized,
   ready,
+  streamed,
+  revision,
+  snapshotRevision,
+  snapshotResult,
+  incrementalActive,
+  incrementalDisposed,
+  terminal,
 ];

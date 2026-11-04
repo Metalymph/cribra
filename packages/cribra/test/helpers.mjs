@@ -64,7 +64,14 @@ export function occurrenceSpan(source, needle) {
 export function plainData(value, path = "root") {
   if (value === null) return;
   const type = typeof value;
-  if (type === "string" || type === "number" || type === "boolean") return;
+  if (
+    type === "string" ||
+    type === "number" ||
+    type === "boolean" ||
+    type === "bigint"
+  ) {
+    return;
+  }
   if (type === "undefined") {
     throw new Error(`undefined at ${path}`);
   }
