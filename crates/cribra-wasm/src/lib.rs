@@ -27,6 +27,8 @@ mod remediation_tests;
 #[cfg(feature = "transform")]
 mod share_bundle;
 mod streaming;
+#[cfg(feature = "transform")]
+mod transform_error;
 pub use batch::{ScanBatchEntry, ScanBatchResult, ScanSummaryView};
 use build_error::BuildFailure;
 pub use build_error::ScannerBuildErrorCode;
@@ -38,9 +40,12 @@ pub use incremental::{
 pub use metadata::{RuleKind, RuleMetadataView};
 #[cfg(feature = "transform")]
 pub use share_bundle::{
-    ShareBundle, ShareBundleBuilder, ShareBundleEntry, ShareManifestView, ShareModeKind,
+    ShareBundle, ShareBundleBuilder, ShareBundleEntry, ShareBundleError, ShareBundleErrorCode,
+    ShareManifestView, ShareModeKind,
 };
 pub use streaming::{StreamError, StreamErrorCode, StreamLimits, StreamSession};
+#[cfg(feature = "transform")]
+pub use transform_error::{TransformError, TransformErrorCode};
 
 use cribra::{
     CandidateEvidence, Confidence, DetectionMode, Explanation, Finding, Remediation, Rule,
@@ -75,19 +80,9 @@ pub fn capability_manifest() -> CapabilityManifest {
 }
 
 #[cfg(feature = "transform")]
-fn key32_bytes(key: &[u8]) -> Result<[u8; 32], &'static str> {
+fn key32_bytes(key: &[u8]) -> Result<[u8; 32], TransformError> {
     key.try_into()
-        .map_err(|_| "transformation key must contain exactly 32 bytes")
-}
-
-#[cfg(feature = "transform")]
-fn key32(key: &[u8]) -> Result<[u8; 32], JsError> {
-    key32_bytes(key).map_err(JsError::new)
-}
-
-#[cfg(feature = "transform")]
-fn transform_error(error: impl std::fmt::Display) -> JsError {
-    JsError::new(&error.to_string())
+        .map_err(|_| TransformError::new(TransformErrorCode::InvalidKeyLength))
 }
 
 #[wasm_bindgen]
@@ -792,8 +787,8 @@ impl ScanResult {
     ///
     /// Ambiguous candidates are never transformed.
     #[cfg(feature = "transform")]
-    pub fn redact(&self, source: &str) -> Result<String, JsError> {
-        redact(source, &self.report).map_err(transform_error)
+    pub fn redact(&self, source: &str) -> Result<String, TransformError> {
+        redact(source, &self.report).map_err(TransformError::from)
     }
 
     /// Applies caller-selected replacement text to classified findings.
@@ -801,15 +796,15 @@ impl ScanResult {
     /// Ambiguous candidates are never transformed.
     #[cfg(feature = "transform")]
     #[wasm_bindgen(js_name = redactWith)]
-    pub fn redact_with(&self, source: &str, replacement: &str) -> Result<String, JsError> {
+    pub fn redact_with(&self, source: &str, replacement: &str) -> Result<String, TransformError> {
         let redaction = Redaction::new(replacement);
-        redact_with(source, &self.report, &redaction).map_err(transform_error)
+        redact_with(source, &self.report, &redaction).map_err(TransformError::from)
     }
 
     /// Produces semantic placeholders using Cribra's default template options.
     #[cfg(feature = "transform")]
-    pub fn template(&self, source: &str) -> Result<String, JsError> {
-        template(source, &self.report).map_err(transform_error)
+    pub fn template(&self, source: &str) -> Result<String, TransformError> {
+        template(source, &self.report).map_err(TransformError::from)
     }
 
     /// Produces semantic placeholders with an explicit namespace and optional
@@ -821,12 +816,12 @@ impl ScanResult {
         source: &str,
         namespace: &str,
         numbered: bool,
-    ) -> Result<String, JsError> {
+    ) -> Result<String, TransformError> {
         let options = TemplateOptions::new()
             .namespace(namespace)
             .numbered(numbered);
 
-        template_with(source, &self.report, &options).map_err(transform_error)
+        template_with(source, &self.report, &options).map_err(TransformError::from)
     }
 
     /// Replaces classified findings with deterministic keyed pseudonyms.
@@ -840,12 +835,12 @@ impl ScanResult {
         key: &[u8],
         prefix: &str,
         digest_bytes: usize,
-    ) -> Result<String, JsError> {
-        let options = PseudonymizationOptions::new(key32(key)?)
+    ) -> Result<String, TransformError> {
+        let options = PseudonymizationOptions::new(key32_bytes(key)?)
             .prefix(prefix)
             .digest_bytes(digest_bytes);
 
-        pseudonymize(source, &self.report, &options).map_err(transform_error)
+        pseudonymize(source, &self.report, &options).map_err(TransformError::from)
     }
 
     /// Replaces classified findings with deterministic synthetic values.
@@ -853,10 +848,15 @@ impl ScanResult {
     /// `key` must contain exactly 32 bytes. The key is borrowed only for this
     /// call and is never retained by the result or adapter.
     #[cfg(feature = "transform")]
-    pub fn synthesize(&self, source: &str, key: &[u8], marker: &str) -> Result<String, JsError> {
-        let options = SynthesisOptions::new(key32(key)?).marker(marker);
+    pub fn synthesize(
+        &self,
+        source: &str,
+        key: &[u8],
+        marker: &str,
+    ) -> Result<String, TransformError> {
+        let options = SynthesisOptions::new(key32_bytes(key)?).marker(marker);
 
-        synthesize(source, &self.report, &options).map_err(transform_error)
+        synthesize(source, &self.report, &options).map_err(TransformError::from)
     }
 
     /// Returns an owned candidate view after lossless JavaScript index validation.

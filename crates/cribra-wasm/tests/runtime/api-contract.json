@@ -291,7 +291,8 @@
       "modeSynthesize(key: Uint8Array, marker?: string | null): void",
       "modeTemplate(): void",
       "constructor()",
-      "scanAndBuild(engine: ScanEngine, sources: ScanBatchSource[]): ShareBundle"
+      "scanAndBuild(engine: ScanEngine, sources: ScanBatchSource[]): ShareBundle",
+      "scanAndBuildWithGeneratedAt(engine: ScanEngine, sources: ScanBatchSource[], generated_at_millis: number): ShareBundle"
     ]
   },
   "ShareBundleEntry": {
@@ -299,6 +300,24 @@
     "members": [
       "readonly content: string",
       "readonly id: string"
+    ]
+  },
+  "ShareBundleError": {
+    "kind": "class",
+    "members": [
+      "readonly code: ShareBundleErrorCode",
+      "readonly message: string"
+    ]
+  },
+  "ShareBundleErrorCode": {
+    "kind": "enum",
+    "members": [
+      "MissingMode = 0",
+      "SourceCountMismatch = 1",
+      "SourceLengthMismatch = 2",
+      "TimestampInvalid = 3",
+      "InvalidArgument = 4",
+      "UnknownCoreError = 5"
     ]
   },
   "ShareManifestView": {
@@ -401,6 +420,23 @@
     "members": [
       "finish(): ScanResult",
       "push(chunk: Uint8Array): void"
+    ]
+  },
+  "TransformError": {
+    "kind": "class",
+    "members": [
+      "readonly code: TransformErrorCode",
+      "readonly message: string"
+    ]
+  },
+  "TransformErrorCode": {
+    "kind": "enum",
+    "members": [
+      "InvalidSpan = 0",
+      "InvalidUtf8Boundary = 1",
+      "OverlappingSpans = 2",
+      "InvalidKeyLength = 3",
+      "UnknownCoreError = 4"
     ]
   }
 }

@@ -19,6 +19,7 @@ import {
   projectScanResult,
   projectSummary,
 } from "./result.js";
+import { registerScanner } from "./scanner-registry.js";
 import {
   invalidSessionArgument,
   normalizeIncrementalLimits,
@@ -26,6 +27,10 @@ import {
   safeFree,
 } from "./session.js";
 import { createStreamSession } from "./stream.js";
+import {
+  normalizeTransformRequest,
+  performTransform,
+} from "./transform.js";
 import type {
   BatchEntry,
   BatchResult,
@@ -42,6 +47,8 @@ import type {
   Severity,
   StreamOptions,
   StreamSession,
+  TransformRequest,
+  TransformResult,
 } from "./types.js";
 import type {
   FindingSeverity,
@@ -360,7 +367,7 @@ export function createScanner(
       return activeEngine;
     }
 
-    return Object.freeze({
+    const scanner = Object.freeze({
       get rulesCount() {
         return rulesCount;
       },
@@ -497,12 +504,33 @@ export function createScanner(
           });
         }
       },
+      transform(source: string, request: TransformRequest): TransformResult {
+        const nativeEngine = requireActive();
+        if (typeof source !== "string") {
+          throw new CribraError("invalid_argument", { domain: "transform" });
+        }
+        const normalized = normalizeTransformRequest(request);
+        return performTransform(
+          nativeEngine,
+          state.capabilities,
+          source,
+          normalized,
+        );
+      },
       dispose() {
         if (disposed) return;
         disposed = true;
         safeFree(activeEngine);
       },
     });
+
+    registerScanner(scanner, {
+      engine: activeEngine,
+      wasm: state.wasm,
+      capabilities: state.capabilities,
+      isActive: () => !disposed,
+    });
+    return scanner;
   } catch (error) {
     if (!builderConsumed) {
       safeFree(builder);

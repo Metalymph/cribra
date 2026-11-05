@@ -2,11 +2,16 @@
 
 // @ts-expect-error Native generated classes must not be exported.
 import type { ScanEngine } from "cribra-typescript";
+// @ts-expect-error Flow-only generated classes must not be exported.
+import type { ShareBundleBuilder } from "cribra-typescript";
+// @ts-expect-error Native generated error classes must not be exported.
+import type { TransformError } from "cribra-typescript";
 
 import {
   CribraError,
   byteSpanToTextRange,
   createScanner,
+  createShareBundle,
   getCapabilities,
   getVersion,
   init,
@@ -35,6 +40,8 @@ import type {
   PatternRuleSpec,
   PrefixRuleSpec,
   Profile,
+  PseudonymizeRequest,
+  RedactRequest,
   Remediation,
   RuleKind,
   RuleMetadata,
@@ -46,11 +53,21 @@ import type {
   Scanner,
   ScannerOptions,
   Severity,
+  ShareBundle,
+  ShareBundleEntry,
+  ShareBundleOptions,
+  ShareManifest,
+  ShareMode,
+  ShareModeKind,
   StreamLimits,
   StreamOptions,
   StreamSession,
   SuffixRuleSpec,
+  SynthesizeRequest,
+  TemplateRequest,
   TextRange,
+  TransformRequest,
+  TransformResult,
   VersionInfo,
 } from "cribra-typescript";
 
@@ -151,6 +168,68 @@ const terminal: boolean | undefined = new CribraError(
   "incremental_stale_revision",
 ).terminal;
 
+const redactRequest: RedactRequest = { kind: "redact", replacement: "<x>" };
+const templateRequest: TemplateRequest = {
+  kind: "template",
+  namespace: "SAFE",
+  numbered: true,
+};
+const pseudonymizeRequest: PseudonymizeRequest = {
+  kind: "pseudonymize",
+  key: new Uint8Array(32),
+  prefix: "p_",
+  digestBytes: 16,
+};
+const synthesizeRequest: SynthesizeRequest = {
+  kind: "synthesize",
+  key: new Uint8Array(32),
+  marker: "synthetic",
+};
+const transformRequests: readonly TransformRequest[] = [
+  redactRequest,
+  templateRequest,
+  pseudonymizeRequest,
+  synthesizeRequest,
+];
+const transformed: TransformResult = scanner.transform(
+  "token-1234",
+  transformRequests[0]!,
+);
+const transformedScan: ScanResult = transformed.scan;
+const transformedOutput: string = transformed.output;
+
+const redactMode: ShareMode = { kind: "redact" };
+const templateMode: ShareMode = { kind: "template" };
+const pseudonymizeMode: ShareMode = {
+  kind: "pseudonymize",
+  key: new Uint8Array(32),
+};
+const synthesizeMode: ShareMode = {
+  kind: "synthesize",
+  key: new Uint8Array(32),
+};
+const bundleOptions: ShareBundleOptions = {
+  mode: redactMode,
+  generatedAt: new Date(0),
+};
+const shareBundle: ShareBundle = createShareBundle(
+  scanner,
+  [{ id: "x", source: "token-1234" }],
+  bundleOptions,
+);
+const bundleEntries: readonly ShareBundleEntry[] = shareBundle.entries;
+const bundleManifest: ShareManifest = shareBundle.manifest;
+const bundleMode: ShareModeKind = bundleManifest.mode;
+const bundleSeconds: number = bundleManifest.generatedAtSeconds;
+const bundleNanoseconds: number = bundleManifest.generatedAtNanoseconds;
+const bundleSummary: ScanSummary = shareBundle.summary;
+const manifestSummary: ScanSummary = bundleManifest.summary;
+
+// @ts-expect-error Share mode requires a discriminated kind.
+const invalidMode: ShareMode = {};
+// @ts-expect-error Transformation keys are Uint8Array only.
+const invalidKey: PseudonymizeRequest = { kind: "pseudonymize", key: "x" };
+
 void [
   entry,
   summary,
@@ -175,4 +254,17 @@ void [
   incrementalActive,
   incrementalDisposed,
   terminal,
+  templateMode,
+  pseudonymizeMode,
+  synthesizeMode,
+  transformedScan,
+  transformedOutput,
+  bundleEntries,
+  bundleMode,
+  bundleSeconds,
+  bundleNanoseconds,
+  bundleSummary,
+  manifestSummary,
+  invalidMode,
+  invalidKey,
 ];

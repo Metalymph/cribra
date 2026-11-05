@@ -1,8 +1,9 @@
 # Cribra TypeScript Isomorphic API Contract
 
-Status: **partially implemented — W3.2B-2 foundation and W3.2B-3
-streaming/incremental are implemented in `packages/cribra/`; transformations
-and Share Bundles remain pending.**
+Status: **implemented for the WebAssembly Flow profile — W3.2B-2 foundation,
+W3.2B-3 streaming/incremental, and W3.2B-4 transformations and Share Bundles
+are implemented in `packages/cribra/`. Core rejects transformations and Share
+Bundles with `unsupported_capability`. Qualified on Node ESM and Chrome.**
 
 Revision: W3.2A-1R review corrections applied.
 
@@ -107,9 +108,10 @@ Legend:
   adapter; `Flow only` means available only with the `transform` feature;
   `Absent` means no export exists.
 - **TypeScript implementation** — `None` means specified by this document but
-  not implemented in the private package. W3.2B-2 implemented the foundation and
-  W3.2B-3 implemented streaming and incremental scanning. Transformations,
-  Share Bundles, and final qualification remain pending.
+  not implemented in the private package. W3.2B-2 implemented the foundation,
+  W3.2B-3 streaming and incremental scanning, and W3.2B-4 transformations and
+  Share Bundles. Final qualification covers Node ESM and Chrome for both
+  profiles; bundlers and other browsers remain out of scope.
 
 | Capability | Rust Core | WASM adapter (existing) | TypeScript contract | TypeScript implementation |
 | --- | --- | --- | --- | --- |
@@ -123,11 +125,11 @@ Legend:
 | Rule metadata | Yes | Exported | `Scanner.rules` | Implemented (W3.2B-2) |
 | Finding explanations | Yes | Exported | `Finding.explanation` (opt-in) | Implemented (W3.2B-2) |
 | Candidate explanations | Yes | Exported | `Candidate.explanation` | Implemented (W3.2B-2) |
-| Redaction | Yes | Flow only | `Scanner.transform` | None (pending) |
-| Templates | Yes | Flow only | `Scanner.transform` | None (pending) |
-| Pseudonymization | Yes | Flow only | `Scanner.transform` | None (pending) |
-| Synthesis | Yes | Flow only | `Scanner.transform` | None (pending) |
-| Share Bundle | Yes | Flow only | `createShareBundle` | None (pending) |
+| Redaction | Yes | Flow only | `Scanner.transform` | Implemented (W3.2B-4) |
+| Templates | Yes | Flow only | `Scanner.transform` | Implemented (W3.2B-4) |
+| Pseudonymization | Yes | Flow only | `Scanner.transform` | Implemented (W3.2B-4) |
+| Synthesis | Yes | Flow only | `Scanner.transform` | Implemented (W3.2B-4) |
+| Share Bundle | Yes | Flow only | `createShareBundle` | Implemented (W3.2B-4) |
 | Parallel scan | Yes (`parallel` feature) | Absent | Capability flag only | None |
 | Core/adapter versions | Crate metadata only | Adapter version exported; Core version absent | `getVersion` | Implemented (adapter version only) |
 | Capability probing | No | Exported | `getCapabilities` | Implemented (W3.2B-2) |
@@ -897,10 +899,12 @@ export type CribraErrorCode =
   | "transform_invalid_span"
   | "transform_invalid_utf8_boundary"
   | "transform_overlapping_spans"
+  | "transform_unknown"
   | "share_missing_mode"
   | "share_source_count_mismatch"
   | "share_source_length_mismatch"
   | "share_timestamp_invalid"
+  | "share_unknown"
   | "wasm_load_failed"
   | "wasm_instantiate_failed";
 
@@ -925,8 +929,19 @@ Mapping rules:
 - **Verified source sets:** `ScannerBuildErrorCode`
   (`crates/cribra-wasm/src/build_error.rs:7-26`), `StreamErrorCode`
   (`crates/cribra-wasm/src/streaming.rs:10-37`), `IncrementalErrorCode`
-  (`crates/cribra-wasm/src/incremental.rs:9-42`), and `TransformError`
-  (`src/transform/mod.rs:32-78`). Every variant has a stable string code.
+  (`crates/cribra-wasm/src/incremental.rs:9-42`), the adapter
+  `TransformErrorCode` (`crates/cribra-wasm/src/transform_error.rs`), and the
+  adapter `ShareBundleErrorCode` (`crates/cribra-wasm/src/share_bundle.rs`).
+  Every variant has a stable string code.
+- **Transform mapping:** `InvalidSpan` → `transform_invalid_span`,
+  `InvalidUtf8Boundary` → `transform_invalid_utf8_boundary`,
+  `OverlappingSpans` → `transform_overlapping_spans`, `InvalidKeyLength` →
+  `invalid_key_length`, `UnknownCoreError` → `transform_unknown`.
+- **Share mapping:** `MissingMode` → `share_missing_mode`,
+  `SourceCountMismatch` → `share_source_count_mismatch`,
+  `SourceLengthMismatch` → `share_source_length_mismatch`, `TimestampInvalid` →
+  `share_timestamp_invalid`, `InvalidArgument` → `invalid_argument`,
+  `UnknownCoreError` → `share_unknown`.
 - **One code per failure.** Normalization uses a static mapping table, never
   substring matching on diagnostic text. An unmapped backend variant becomes
   its domain's `*_unknown` code with `cause` attached when safe.
@@ -1276,10 +1291,10 @@ bytes to `init()`.
 
 | Limitation | Impact | Status |
 | --- | --- | --- |
-| TypeScript API partially implemented | Foundation, scanning, streaming, and incremental sessions exist; transforms and Share Bundles do not | W3.2B-2/W3.2B-3 |
+| TypeScript API implemented for the WASM backend | Foundation, scanning, streaming, incremental, transformations, and Share Bundles exist; Core rejects Flow-only operations | Implemented (W3.2B-4); bundler/other-browser qualification deferred |
 | No parallel execution in WASM | `capabilities.parallel === false`; `scanBatch` stays sequential | Deferred |
 | Default built-ins are not streamable | `stream()` rejects the default scanner with `stream_unsupported_ruleset` | Core/streaming contract |
-| Transforms require Flow | Methods remain declared; Core profile throws `unsupported_capability` | Verified feature gate; wrapper behavior specified |
+| Transforms require Flow | Methods remain declared; Core profile throws `unsupported_capability` | Verified feature gate (W3.2B-4) |
 | No report reconstruction | A stored `ScanResult` cannot be transformed later | Deferred beyond v1 |
 | No multi-transform call | One transform request per scan | Deferred beyond v1 |
 | No Core version export | `getVersion().core` stays absent; `wasmAdapterVersion()` is exported and must not be used in its place | Adapter/Core work |

@@ -3,16 +3,18 @@
 Provisional, unpublished TypeScript foundation for the Cribra WebAssembly
 scanner.
 
-> **Status:** W3.2B-3 streaming and incremental scanning.
+> **Status:** W3.2B-4 Flow transformations and Share Bundles. Qualified on Node
+> ESM and Chrome for the Core and Flow profiles.
 >
 > - Package identity `cribra-typescript` is temporary and the package is marked
 >   `"private": true`. The final npm name is not approved.
 > - This package wraps the merged WASM adapter. It is not published and is not
 >   part of a release.
-> - The wrapper is **not fully qualified** until W3.2B-4.
-> - Transformations and Share Bundles are **not implemented by this wrapper
->   yet**, even when the loaded Flow adapter reports those backend capabilities
->   as available.
+> - Transformations are **Flow only** (`scanner.transform`) and Share Bundles are
+>   **Flow only** (`createShareBundle`). Core rejects both with
+>   `CribraError("unsupported_capability")`; there is no fallback.
+> - Bundler compatibility, Safari, Firefox, React Native, and concurrent
+>   multi-threaded WASM are still outside the tested matrix.
 
 ## What is implemented
 
@@ -25,7 +27,11 @@ scanner.
 - Sequential `scanner.scanBatch()`.
 - Byte-chunk `scanner.stream()` sessions.
 - Revisioned `scanner.incremental()` documents.
-- Plain, serializable scan DTOs and incremental snapshots.
+- Scan-coupled `scanner.transform()` for redaction, templating,
+  pseudonymization, and synthesis.
+- Core-backed `createShareBundle()` for ordered source collections.
+- Plain, serializable scan DTOs, incremental snapshots, transform results, and
+  Share Bundle DTOs.
 - `getCapabilities()` and `getVersion()`.
 - Structured `CribraError` with incremental terminal classification.
 - `byteSpanToTextRange()`.
@@ -37,6 +43,7 @@ Public runtime exports:
 init
 isInitialized
 createScanner
+createShareBundle
 getCapabilities
 getVersion
 CribraError
@@ -241,19 +248,116 @@ captured-pattern constructor is private. Supplying `captureGroup` therefore
 throws `CribraError("unsupported_capability")`. No Core or adapter change is made
 in this milestone.
 
-## Capabilities versus wrapper availability
+## Transformations (Flow only)
+
+`scanner.transform(source, request)` scans and transforms one source atomically.
+It performs exactly **one** native scan per call and returns both the scan and
+the transformed output:
+
+```js
+const result = scanner.transform("TOKEN=acme_live_...", { kind: "redact" });
+result.scan;   // detached ScanResult for the same scan
+result.output; // "[REDACTED]" transformation, candidates are never rewritten
+```
+
+There are four modes:
+
+| `kind` | Options | Core default |
+| --- | --- | --- |
+| `"redact"` | `replacement?` | `"[REDACTED]"` |
+| `"template"` | `namespace?`, `numbered?` | `"CRIBRA"`, `false` |
+| `"pseudonymize"` | `key` (exactly 32 bytes), `prefix?`, `digestBytes?` | `"cribra_pseudo_"`, `16` (Core clamps to 8..=32) |
+| `"synthesize"` | `key` (exactly 32 bytes), `marker?` | `"cribra_synthetic"` |
+
+Semantics and limits:
+
+- The transform is **scan-coupled** because the WASM adapter can only transform
+  against a live native result. Each call releases its native result; there is
+  no rescan, no stored-DTO transformation, and no TypeScript matching,
+  replacement, or synthesis.
+- Transformation only rewrites **findings**. Review candidates are never
+  modified.
+- Keyed requests require a `Uint8Array` of exactly 32 bytes. The key is copied
+  for the call and Core does not retain it. JavaScript cannot promise secure
+  erasure of the caller's buffer; zeroing it afterwards is best-effort hygiene,
+  not a security guarantee.
+- The complete request is validated before any scan. Invalid requests throw
+  `invalid_argument` (or `invalid_key_length`) with domain `"transform"` and
+  perform no native scan.
+- Overlapping findings in template, pseudonymization, or synthesis mode fail with
+  `transform_overlapping_spans`. Redaction tolerates overlaps.
+- `TransformResult` and its `scan` are frozen plain DTOs containing no native
+  handle. They remain valid after `scanner.dispose()`.
+- Core rejects `transform` with `CribraError("unsupported_capability")`
+  (domain `"capability"`) before touching native state. There is no fallback.
+
+## Share Bundles (Flow only)
+
+`createShareBundle(scanner, sources, options)` builds an ordered collection
+through Core's atomic native Share Bundle builder:
+
+```js
+const bundle = createShareBundle(
+  scanner,
+  [
+    { id: "a.txt", source: "TOKEN=acme_live_..." },
+    { id: "b.txt", source: "clean" },
+  ],
+  {
+    mode: { kind: "pseudonymize", key: new Uint8Array(32) },
+    generatedAt: new Date(1_700_000_000_123),
+  },
+);
+```
+
+`ShareBundleOptions.mode` accepts the same four discriminated modes as
+transformations. `generatedAt` is optional:
+
+- omitted: the adapter reads the JavaScript host clock once at the invocation
+  boundary and passes it to Core; the manifest still owns the value;
+- an explicit `Date`: its milliseconds are passed through the Core-backed
+  `scanAndBuildWithGeneratedAt` method, so Core, not the wrapper, sets the
+  manifest timestamp. An invalid date fails with `share_timestamp_invalid`.
+
+Returned DTOs:
+
+```ts
+interface ShareBundle {
+  readonly entries: readonly ShareBundleEntry[]; // { id, content }, input order
+  readonly manifest: ShareManifest;              // mode, seconds, nanos, summary
+  readonly summary: ScanSummary;
+}
+```
+
+- `entries` preserve input order, including empty, duplicate, and Unicode IDs.
+- `manifest.generatedAtSeconds` is a safe `number`; the adapter converts Core's
+  `bigint` only after validating `0 <= seconds <= Number.MAX_SAFE_INTEGER` and
+  `0 <= nanoseconds < 1_000_000_000`. Out-of-range values fail with
+  `share_timestamp_invalid`.
+- `manifest.summary` and `summary` are independent detached projections of
+  Core's summary.
+- The native builder, bundle, entries, manifest, and summary views are freed
+  deterministically in `finally` blocks. The returned objects contain no native
+  handle and remain valid after `scanner.dispose()`.
+- The scanner registry is a private `WeakMap`. A disposed scanner is rejected
+  before any native builder or handle is created; a foreign object is rejected
+  with `invalid_argument` (domain `"share"`).
+- Core rejects `createShareBundle` with `CribraError("unsupported_capability")`
+  (domain `"capability"`) before creating a native builder. There is no fallback.
+
+
 
 `getCapabilities()` copies the manifest from the **actually loaded WASM
 artifact**. Values are not masked based on wrapper progress.
 
-During W3.2B-3:
+During W3.2B-4:
 
 - `streaming`, `incremental`, `ruleMetadata`, `explanations`, `batchScan`, and
   `singleSourceScan` are `true` for both profiles because the adapter exports
   those operations and this wrapper exposes them.
-- Transformation and Share Bundle flags follow the compiled profile (`false` for
-  Core, `true` for Flow). They remain backend capabilities only; the wrapper
-  does not yet declare those methods.
+- `redaction`, `templating`, `pseudonymization`, `synthesis`, and `shareBundle`
+  follow the compiled profile (`false` for Core, `true` for Flow). The wrapper
+  now exposes the matching Flow methods and rejects them explicitly on Core.
 - `parallel` is `false`.
 - `utf16OffsetConversion` is a wrapper capability and is always `true`.
 
@@ -290,8 +394,12 @@ adapter diagnostics cannot be proven source-free.
 Adapter scanner-construction categories map through a static table to stable
 codes such as `invalid_pattern`, `pattern_matches_empty`, and
 `duplicate_rule_id`. Streaming codes map to `stream_*`; incremental codes map to
-`incremental_*` and preserve the native terminal classification. No numeric
-`wasm-bindgen` enum or generated error class is exposed.
+`incremental_*` and preserve the native terminal classification; adapter
+transform failures map to `transform_*`; adapter Share Bundle failures map to
+`share_*`. Unknown adapter outcomes map to `transform_unknown` or `share_unknown`
+and never leak raw native diagnostics. No numeric `wasm-bindgen` enum or
+generated error class is exposed, and generated error objects are freed exactly
+once during normalization.
 
 ## Browser qualification
 
@@ -302,7 +410,8 @@ The browser smoke test:
   path);
 - checks default URL loading, concurrent init, capabilities, default and custom
   scanners, batch scanning, streaming across UTF-8/CRLF boundaries, revisioned
-  incremental edits, offsets, disposal, and result independence;
+  incremental edits, Flow transformations, Flow Share Bundles, Core rejection of
+  both, offsets, disposal, and result independence;
 - runs for both Core and Flow profiles;
 - fails clearly when no browser is found, the browser exits non-zero, times out,
   or does not produce a success marker;

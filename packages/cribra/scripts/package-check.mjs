@@ -27,8 +27,14 @@ const FORBIDDEN_DECLARATION_NAMES = [
   "ScanSummaryView",
   "ScannerBuildError",
   "ScannerBuildErrorCode",
+  "ShareBundleBuilder",
+  "ShareBundleError",
+  "ShareBundleErrorCode",
+  "ShareManifestView",
   "StreamError",
   "StreamErrorCode",
+  "TransformError",
+  "TransformErrorCode",
 ];
 
 const REQUIRED_SESSION_DECLARATIONS = [
@@ -45,12 +51,27 @@ const REQUIRED_SESSION_DECLARATIONS = [
   /\bsnapshot\s*\(\s*\)\s*:\s*IncrementalSnapshot\b/,
   /\bstream\s*\(\s*options\?\s*:\s*StreamOptions\s*\)\s*:\s*StreamSession\b/,
   /\bincremental\s*\(\s*source\s*:\s*string\s*,\s*options\?\s*:\s*IncrementalOptions\s*\)\s*:\s*IncrementalSession\b/,
+  /\binterface\s+RedactRequest\b/,
+  /\binterface\s+TemplateRequest\b/,
+  /\binterface\s+PseudonymizeRequest\b/,
+  /\binterface\s+SynthesizeRequest\b/,
+  /\binterface\s+TransformResult\b/,
+  /\btype\s+TransformRequest\s*=/,
+  /\binterface\s+ShareBundleOptions\b/,
+  /\btype\s+ShareMode\s*=/,
+  /\btype\s+ShareModeKind\s*=/,
+  /\binterface\s+ShareBundleEntry\b/,
+  /\binterface\s+ShareManifest\b/,
+  /\binterface\s+ShareBundle\b/,
+  /\btransform\s*\(\s*source\s*:\s*string\s*,\s*request\s*:\s*TransformRequest\s*\)\s*:\s*TransformResult\b/,
+  /\bcreateShareBundle\s*\(\s*scanner\s*:\s*Scanner\b/,
 ];
 
 const EXPECTED_EXPORTS = [
   "CribraError",
   "byteSpanToTextRange",
   "createScanner",
+  "createShareBundle",
   "getCapabilities",
   "getVersion",
   "init",

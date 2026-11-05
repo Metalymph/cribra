@@ -537,6 +537,51 @@ Ordering and ownership are explicit:
 - reusing a `ScanResult` with `ScanEngine.explainFinding()` still requires a
   compatible engine, as with every existing result.
 
+## Flow transformations and typed errors
+
+Flow `ScanResult` exposes the six Core transformation methods. They borrow the
+result and return an owned JavaScript string; they never consume or invalidate
+the result or the report it came from.
+
+```ts
+export class ScanResult {
+    redact(source: string): string;
+    redactWith(source: string, replacement: string): string;
+    template(source: string): string;
+    templateWith(source: string, namespace: string, numbered: boolean): string;
+    pseudonymize(source: string, key: Uint8Array, prefix: string,
+        digest_bytes: number): string;
+    synthesize(source: string, key: Uint8Array, marker: string): string;
+}
+```
+
+Failures are typed. Catch the thrown object, read its stable numeric `code`,
+then call `free()` exactly once. Messages are fixed and never contain source
+text, matched values, replacements or key material.
+
+```ts
+export class TransformError {
+    readonly code: TransformErrorCode;
+    readonly message: string;
+    free(): void;
+}
+
+export enum TransformErrorCode {
+    InvalidSpan = 0,
+    InvalidUtf8Boundary = 1,
+    OverlappingSpans = 2,
+    InvalidKeyLength = 3,
+    UnknownCoreError = 4,
+}
+```
+
+Keyed methods require exactly 32 key bytes and otherwise fail with
+`InvalidKeyLength` before Core runs. Core's default markers are
+`[REDACTED]`, `CRIBRA`, `cribra_pseudo_` with 16 digest bytes, and
+`cribra_synthetic`. Core rejects overlapping findings in template,
+pseudonymization and synthesis modes; `OverlappingSpans` makes that outcome
+programmatic instead of string-matched.
+
 ## Share Bundles
 
 Share Bundles are available **only in the Flow configuration** (`transform`).
@@ -554,7 +599,24 @@ export class ShareBundleBuilder {
         digest_bytes?: number | null): void;
     modeSynthesize(key: Uint8Array, marker?: string | null): void;
     scanAndBuild(engine: ScanEngine, sources: ScanBatchSource[]): ShareBundle;
+    scanAndBuildWithGeneratedAt(engine: ScanEngine, sources: ScanBatchSource[],
+        generated_at_millis: number): ShareBundle;
     free(): void;
+}
+
+export class ShareBundleError {
+    readonly code: ShareBundleErrorCode;
+    readonly message: string;
+    free(): void;
+}
+
+export enum ShareBundleErrorCode {
+    MissingMode = 0,
+    SourceCountMismatch = 1,
+    SourceLengthMismatch = 2,
+    TimestampInvalid = 3,
+    InvalidArgument = 4,
+    UnknownCoreError = 5,
 }
 
 export class ShareBundle {
@@ -636,25 +698,32 @@ Configuration and failure semantics:
 - `modeTemplate()` uses Core's default Share Bundle template policy because the
   Core `ShareMode` contract exposes no template options for bundles;
 - keyed modes require exactly 32 key bytes. The caller's `Uint8Array` is copied
-  into Core options and is not retained by the adapter;
+  into Core options and is not retained by the adapter. Invalid keys throw a
+  typed `TransformError` with `TransformErrorCode.InvalidKeyLength`;
 - omitted `prefix`, `digest_bytes` and `marker` retain Core defaults. Explicit
   empty strings are preserved. Core clamps pseudonym digest lengths to its
   supported range;
-- Core transformation, source-length and missing-mode failures retain their
-  existing source-free diagnostics as native JavaScript `Error` objects;
+- Core transformation, source-length and missing-mode failures are projected
+  into typed `ShareBundleError` objects. Inspect the stable `code`, then call
+  `free()` exactly once. Messages are fixed and contain neither source text nor
+  key material;
 - structural `sources` inputs are validated before Core and never echo source
-  text. `entryAt()` fails closed for an out-of-range index.
+  text; they fail with `ShareBundleErrorCode.InvalidArgument`. `entryAt()` fails
+  closed for an out-of-range index.
 
 Timestamp handling is explicit. `wasm32-unknown-unknown` does not implement
-`SystemTime::now()`, so the adapter reads the JavaScript host clock once through
-`Date.now()` at the invocation boundary, converts the non-negative safe-integer
-milliseconds to `SystemTime`, and passes it to Core's additive
-`scan_and_build_with_generated_at()` entry point. Core remains the sole owner of
-manifest mode, summary and timestamp storage; the adapter does not construct
-manifest fields itself. `generatedAtSeconds` is a bigint and
+`SystemTime::now()`, so `scanAndBuild()` reads the JavaScript host clock once
+through `Date.now()` at the invocation boundary, converts the non-negative
+safe-integer milliseconds to `SystemTime`, and passes it to Core's additive
+`scan_and_build_with_generated_at()` entry point. `scanAndBuildWithGeneratedAt()`
+accepts the same value from the caller instead; non-finite, negative or unsafe
+values fail with `ShareBundleErrorCode.TimestampInvalid`. Core remains the sole
+owner of manifest mode, summary and timestamp storage; the adapter does not
+construct manifest fields itself. `generatedAtSeconds` is a bigint and
 `generatedAtNanoseconds` is always below one billion. Tests compare
-deterministic manifest fields and validate the timestamp against the invocation
-window rather than expecting independently generated timestamps to match.
+deterministic manifest fields, validate the host-clock path against the
+invocation window, and assert that an explicit timestamp reaches the manifest
+unchanged.
 
 Ownership boundaries:
 
@@ -670,10 +739,9 @@ Ownership boundaries:
   `free()`.
 
 The WASM surface intentionally exposes only Core's atomic `scan_and_build()`
-workflow. It does not expose precomputed `ScanResults` build, arbitrary
-timestamps from JavaScript, archives, serialization, filesystem output or
-custom bundle template options. No transport, worker, parallel path or new
-runtime dependency is involved.
+workflow. It does not expose precomputed `ScanResults` build, archives,
+serialization, filesystem output or custom bundle template options. No
+transport, worker, parallel path or new runtime dependency is involved.
 
 ## Runtime and release qualification
 

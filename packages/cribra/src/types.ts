@@ -261,6 +261,98 @@ export interface IncrementalSnapshot {
   readonly result: ScanResult;
 }
 
+export interface RedactRequest {
+  readonly kind: "redact";
+  /** Omitted uses Core's "[REDACTED]". */
+  readonly replacement?: string;
+}
+
+export interface TemplateRequest {
+  readonly kind: "template";
+  /** Omitted uses Core's "CRIBRA". */
+  readonly namespace?: string;
+  readonly numbered?: boolean;
+}
+
+export interface PseudonymizeRequest {
+  readonly kind: "pseudonymize";
+  /** Exactly 32 bytes; copied for the call and never retained by Core. */
+  readonly key: Uint8Array;
+  /** Omitted uses "cribra_pseudo_". */
+  readonly prefix?: string;
+  /** Clamped by Core to 8..=32. Omitted uses 16. */
+  readonly digestBytes?: number;
+}
+
+export interface SynthesizeRequest {
+  readonly kind: "synthesize";
+  /** Exactly 32 bytes; copied for the call and never retained by Core. */
+  readonly key: Uint8Array;
+  /** Omitted uses "cribra_synthetic". */
+  readonly marker?: string;
+}
+
+export type TransformRequest =
+  | RedactRequest
+  | TemplateRequest
+  | PseudonymizeRequest
+  | SynthesizeRequest;
+
+export interface TransformResult {
+  /** Findings for the same scan, so callers do not scan twice. */
+  readonly scan: ScanResult;
+  /** Transformed source. Candidates are never rewritten. */
+  readonly output: string;
+}
+
+export interface ShareBundleOptions {
+  readonly mode: ShareMode;
+  /** Defaults to the current time obtained by the backend. */
+  readonly generatedAt?: Date;
+}
+
+export type ShareMode =
+  | { readonly kind: "redact" }
+  | { readonly kind: "template" }
+  | {
+      readonly kind: "pseudonymize";
+      /** Exactly 32 bytes; input-only, with no guaranteed secure erasure. */
+      readonly key: Uint8Array;
+      readonly prefix?: string;
+      readonly digestBytes?: number;
+    }
+  | {
+      readonly kind: "synthesize";
+      /** Exactly 32 bytes; input-only, with no guaranteed secure erasure. */
+      readonly key: Uint8Array;
+      readonly marker?: string;
+    };
+
+export type ShareModeKind =
+  | "redact"
+  | "template"
+  | "pseudonymize"
+  | "synthesize"
+  | "unknown";
+
+export interface ShareBundleEntry {
+  readonly id: string;
+  readonly content: string;
+}
+
+export interface ShareManifest {
+  readonly mode: ShareModeKind;
+  readonly generatedAtSeconds: number;
+  readonly generatedAtNanoseconds: number;
+  readonly summary: ScanSummary;
+}
+
+export interface ShareBundle {
+  readonly entries: readonly ShareBundleEntry[];
+  readonly manifest: ShareManifest;
+  readonly summary: ScanSummary;
+}
+
 export interface RuleMetadata {
   readonly ruleId: string;
   readonly kind: RuleKind;
@@ -331,10 +423,12 @@ export type CribraErrorCode =
   | "transform_invalid_span"
   | "transform_invalid_utf8_boundary"
   | "transform_overlapping_spans"
+  | "transform_unknown"
   | "share_missing_mode"
   | "share_source_count_mismatch"
   | "share_source_length_mismatch"
   | "share_timestamp_invalid"
+  | "share_unknown"
   | "wasm_load_failed"
   | "wasm_instantiate_failed";
 
@@ -351,6 +445,12 @@ export interface Scanner {
 
   /** Opens an editable UTF-8 document. The session outlives this scanner. */
   incremental(source: string, options?: IncrementalOptions): IncrementalSession;
+
+  /**
+   * Scans and transforms one source atomically.
+   * Flow only; Core throws CribraError("unsupported_capability").
+   */
+  transform(source: string, request: TransformRequest): TransformResult;
 
   /** Idempotent. After disposal, scanning methods throw CribraError("disposed"). */
   dispose(): void;

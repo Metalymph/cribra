@@ -38,6 +38,25 @@ const INCREMENTAL_CODES: readonly CribraErrorCode[] = [
   "incremental_invalid_revision",
 ];
 
+/** Adapter TransformErrorCode order: InvalidSpan..UnknownCoreError. */
+const TRANSFORM_CODES: readonly CribraErrorCode[] = [
+  "transform_invalid_span",
+  "transform_invalid_utf8_boundary",
+  "transform_overlapping_spans",
+  "invalid_key_length",
+  "transform_unknown",
+];
+
+/** Adapter ShareBundleErrorCode order: MissingMode..UnknownCoreError. */
+const SHARE_CODES: readonly CribraErrorCode[] = [
+  "share_missing_mode",
+  "share_source_count_mismatch",
+  "share_source_length_mismatch",
+  "share_timestamp_invalid",
+  "invalid_argument",
+  "share_unknown",
+];
+
 interface NativeSessionError {
   readonly code: number;
   readonly terminal?: boolean;
@@ -112,5 +131,27 @@ export function normalizeIncrementalError(error: unknown): CribraError {
     "incremental_unknown",
     "incremental",
     true,
+  );
+}
+
+/** Normalizes a generated transformation failure. Its native object is freed once. */
+export function normalizeTransformError(error: unknown): CribraError {
+  return normalizeNativeSessionError(
+    error,
+    TRANSFORM_CODES,
+    "transform_unknown",
+    "transform",
+    false,
+  );
+}
+
+/** Normalizes a generated Share Bundle failure. Its native object is freed once. */
+export function normalizeShareBundleError(error: unknown): CribraError {
+  return normalizeNativeSessionError(
+    error,
+    SHARE_CODES,
+    "share_unknown",
+    "share",
+    false,
   );
 }

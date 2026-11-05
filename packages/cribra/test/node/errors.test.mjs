@@ -183,6 +183,14 @@ test("disposed scanners fail with disposed and disposal is idempotent", () => {
     () => scanner.scanBatch([]),
     (error) => expectCribra(error, "disposed", "scanner"),
   );
+  assert.throws(
+    () => scanner.transform("token-1234", { kind: "redact" }),
+    (error) => expectCribra(error, "disposed", "scanner"),
+  );
+  assert.throws(
+    () => api.createShareBundle(scanner, [], { mode: { kind: "redact" } }),
+    (error) => expectCribra(error, "disposed", "scanner"),
+  );
   assert.equal(scanner.rulesCount, 4);
 });
 
