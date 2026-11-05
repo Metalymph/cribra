@@ -200,3 +200,181 @@ export function nativeSnapshot(native, session) {
     snapshot.free();
   }
 }
+
+const TRANSFORM_ERROR_NAMES = [
+  "transform_invalid_span",
+  "transform_invalid_utf8_boundary",
+  "transform_overlapping_spans",
+  "invalid_key_length",
+  "transform_unknown",
+];
+
+/** Runs one Flow transformation on a fresh native scan, independent of the wrapper. */
+export function nativeTransform(native, engine, source, request) {
+  const result = engine.scan(source);
+  try {
+    switch (request.kind) {
+      case "redact":
+        return Object.freeze({
+          output:
+            request.replacement === undefined
+              ? result.redact(source)
+              : result.redactWith(source, request.replacement),
+        });
+      case "template":
+        return Object.freeze({
+          output: result.templateWith(
+            source,
+            request.namespace ?? "CRIBRA",
+            request.numbered ?? false,
+          ),
+        });
+      case "pseudonymize":
+        return Object.freeze({
+          output: result.pseudonymize(
+            source,
+            request.key,
+            request.prefix ?? "cribra_pseudo_",
+            request.digestBytes ?? 16,
+          ),
+        });
+      case "synthesize":
+        return Object.freeze({
+          output: result.synthesize(
+            source,
+            request.key,
+            request.marker ?? "cribra_synthetic",
+          ),
+        });
+      default:
+        throw new Error(`unknown transform oracle mode: ${request.kind}`);
+    }
+  } catch (error) {
+    if (error && typeof error.free === "function" && typeof error.code === "number") {
+      try {
+        return Object.freeze({
+          errorCode: TRANSFORM_ERROR_NAMES[error.code] ?? "transform_unknown",
+        });
+      } finally {
+        error.free();
+      }
+    }
+    throw error;
+  } finally {
+    result.free();
+  }
+}
+
+const SHARE_MODE_NAMES = [
+  "redact",
+  "template",
+  "pseudonymize",
+  "synthesize",
+  "unknown",
+];
+
+/** Projects one owned native summary view and frees it. */
+export function nativeSummary(view) {
+  try {
+    return Object.freeze({
+      scannedSources: view.scannedSources,
+      scannedBytes: view.scannedBytes,
+      reportsWithFindings: view.reportsWithFindings,
+      reportsWithoutFindings: view.reportsWithoutFindings,
+      totalFindings: view.totalFindings,
+      totalCandidates: view.totalCandidates,
+      reportsWithCandidates: view.reportsWithCandidates,
+      hasCandidates: view.hasCandidates,
+      critical: view.critical,
+      high: view.high,
+      medium: view.medium,
+      low: view.low,
+      info: view.info,
+      isClean: view.isClean,
+      hasCritical: view.hasCritical,
+    });
+  } finally {
+    view.free();
+  }
+}
+
+function configureNativeShareMode(native, builder, mode) {
+  switch (mode.kind) {
+    case "redact":
+      builder.modeRedact();
+      return;
+    case "template":
+      builder.modeTemplate();
+      return;
+    case "pseudonymize":
+      builder.modePseudonymize(mode.key, mode.prefix, mode.digestBytes);
+      return;
+    case "synthesize":
+      builder.modeSynthesize(mode.key, mode.marker);
+      return;
+    default:
+      throw new Error(`unknown share oracle mode: ${mode.kind}`);
+  }
+}
+
+/** Builds one Flow Share Bundle directly through the generated builder. */
+export function nativeShareBundle(
+  native,
+  rules,
+  sources,
+  mode,
+  generatedAtMillis,
+) {
+  const engine = buildNativeEngine(native, rules);
+  const builder = new native.ShareBundleBuilder();
+  try {
+    configureNativeShareMode(native, builder, mode);
+    const bundle =
+      generatedAtMillis === undefined
+        ? builder.scanAndBuild(engine, sources)
+        : builder.scanAndBuildWithGeneratedAt(
+            engine,
+            sources,
+            generatedAtMillis,
+          );
+    try {
+      const entries = [];
+      for (let index = 0; index < bundle.length; index += 1) {
+        const entry = bundle.entryAt(index);
+        try {
+          entries.push(
+            Object.freeze({ id: entry.id, content: entry.content }),
+          );
+        } finally {
+          entry.free();
+        }
+      }
+      const manifest = bundle.manifest();
+      let projectedManifest;
+      try {
+        const seconds = manifest.generatedAtSeconds;
+        if (seconds > BigInt(Number.MAX_SAFE_INTEGER)) {
+          throw new Error("native manifest seconds exceed safe integer range");
+        }
+        projectedManifest = Object.freeze({
+          mode: SHARE_MODE_NAMES[manifest.mode] ?? "unknown",
+          generatedAtSeconds: Number(seconds),
+          generatedAtNanoseconds: manifest.generatedAtNanoseconds,
+          summary: nativeSummary(manifest.summary()),
+        });
+      } finally {
+        manifest.free();
+      }
+      return Object.freeze({
+        entries: Object.freeze(entries),
+        manifest: projectedManifest,
+        summary: nativeSummary(bundle.summary()),
+      });
+    } finally {
+      bundle.free();
+    }
+  } finally {
+    builder.free();
+    engine.free();
+  }
+}

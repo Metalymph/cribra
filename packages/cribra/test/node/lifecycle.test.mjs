@@ -32,6 +32,7 @@ test("results are independent plain data that survive disposal", () => {
     "scan",
     "scanBatch",
     "stream",
+    "transform",
   ]);
   assert.equal("free" in scanner, false);
   assert.equal(Object.isFrozen(scanner), true);

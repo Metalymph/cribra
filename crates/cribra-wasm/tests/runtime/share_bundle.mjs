@@ -7,9 +7,43 @@ export const shareExports = [
   "ShareBundleBuilder",
   "ShareBundle",
   "ShareBundleEntry",
+  "ShareBundleError",
+  "ShareBundleErrorCode",
   "ShareManifestView",
   "ShareModeKind",
 ];
+
+function expectShareError(mod, operation, code) {
+  try {
+    operation();
+  } catch (error) {
+    assert.equal(error instanceof mod.ShareBundleError, true, `expected ShareBundleError(${code})`);
+    assert.equal(error.code, mod.ShareBundleErrorCode[code], `share error code ${code}`);
+    assert.equal(typeof error.message, "string");
+    assert(error.message.length > 0, "share error message must not be empty");
+    assert.equal(typeof error.free, "function", "share error exposes generated free()");
+    const message = error.message;
+    error.free();
+    return message;
+  }
+  assert.fail(`expected ShareBundleError(${code})`);
+}
+
+export function expectTransformError(mod, operation, code) {
+  try {
+    operation();
+  } catch (error) {
+    assert.equal(error instanceof mod.TransformError, true, `expected TransformError(${code})`);
+    assert.equal(error.code, mod.TransformErrorCode[code], `transform error code ${code}`);
+    assert.equal(typeof error.message, "string");
+    assert(error.message.length > 0, "transform error message must not be empty");
+    assert.equal(typeof error.free, "function", "transform error exposes generated free()");
+    const message = error.message;
+    error.free();
+    return message;
+  }
+  assert.fail(`expected TransformError(${code})`);
+}
 
 function configure(mod, builder, spec) {
   const key = () => new Uint8Array(32).fill(spec.keyByte ?? 7);
@@ -65,16 +99,15 @@ export function qualifyShareBundles(mod, cases, oracle) {
     configure(mod, builder, spec);
 
     if (expected.error !== undefined) {
-      const before = Date.now();
-      assert.throws(() => builder.scanAndBuild(engine, spec.sources), (error) => {
-        assert(error instanceof Error);
-        assert.equal(error.message, expected.error);
-        for (const input of spec.sources) {
-          assert.equal(error.message.includes(input.source), false, "Core error must not contain source text");
-        }
-        return true;
-      });
-      assert(Date.now() >= before);
+      const message = expectShareError(
+        mod,
+        () => builder.scanAndBuild(engine, spec.sources),
+        "MissingMode",
+      );
+      assert.equal(message, expected.error);
+      for (const input of spec.sources) {
+        assert.equal(message.includes(input.source), false, "Core error must not contain source text");
+      }
       builder.free();
       engine.free();
       continue;
@@ -148,21 +181,31 @@ export function qualifyShareBundles(mod, cases, oracle) {
   const engine = makeEngine(mod, missingRule);
   const unconfigured = new mod.ShareBundleBuilder();
   const secretSource = "TOKEN=SECRET";
-  assert.throws(() => unconfigured.scanAndBuild(engine, [{ id: "one", source: secretSource }]),
-    (error) => {
-      assert(error instanceof Error);
-      assert.equal(error.message, "share bundle transformation mode was not configured");
-      assert.equal(error.message.includes(secretSource), false);
-      return true;
-    });
+  const missingMessage = expectShareError(
+    mod,
+    () => unconfigured.scanAndBuild(engine, [{ id: "one", source: secretSource }]),
+    "MissingMode",
+  );
+  assert.equal(missingMessage, "share bundle transformation mode was not configured");
+  assert.equal(missingMessage.includes(secretSource), false);
 
   // Invalid key material fails before staging a mode; the builder remains usable.
   for (const bytes of [31, 33]) {
     const key = new Uint8Array(bytes);
-    assert.throws(() => unconfigured.modePseudonymize(key, undefined, undefined));
-    assert.throws(() => unconfigured.modeSynthesize(key, undefined));
+    assert.equal(
+      expectTransformError(mod, () => unconfigured.modePseudonymize(key, undefined, undefined), "InvalidKeyLength"),
+      "transformation key must contain exactly 32 bytes",
+    );
+    assert.equal(
+      expectTransformError(mod, () => unconfigured.modeSynthesize(key, undefined), "InvalidKeyLength"),
+      "transformation key must contain exactly 32 bytes",
+    );
   }
-  assert.throws(() => unconfigured.scanAndBuild(engine, [{ id: "one", source: secretSource }]));
+  expectShareError(
+    mod,
+    () => unconfigured.scanAndBuild(engine, [{ id: "one", source: secretSource }]),
+    "MissingMode",
+  );
   unconfigured.modeRedact();
   const recovered = unconfigured.scanAndBuild(engine, [{ id: "one", source: secretSource }]);
   const recoveredEntry = recovered.entryAt(0);
@@ -189,20 +232,47 @@ export function qualifyShareBundles(mod, cases, oracle) {
   const structural = new mod.ShareBundleBuilder();
   structural.modeRedact();
   for (const invalid of [null, undefined, "x", 1, true, {}, [], () => {}]) {
+    // wasm-bindgen rejects non-array arguments before the adapter body runs.
     assert.throws(() => structural.scanAndBuild(engine, [invalid]), `invalid share element: ${String(invalid)}`);
   }
   for (const invalid of [{}, { id: "only-id" }, { source: "only-source" },
     { id: 1, source: secretSource }, { id: "id", source: 1 },
     { id: null, source: secretSource }, { id: "id", source: null },
     { id: undefined, source: secretSource }, { id: "id", source: undefined }]) {
-    assert.throws(() => structural.scanAndBuild(engine, [invalid]), (error) => {
-      assert(error instanceof Error);
-      assert.equal(error.message.includes(secretSource), false);
-      return true;
-    });
+    const message = expectShareError(
+      mod,
+      () => structural.scanAndBuild(engine, [invalid]),
+      "InvalidArgument",
+    );
+    assert.equal(message, "share bundle arguments are invalid");
+    assert.equal(message.includes(secretSource), false);
   }
   assert.throws(() => structural.scanAndBuild(engine, null));
   assert.throws(() => structural.scanAndBuild(engine, "not an array"));
+
+  // An explicit generation time reaches Core's manifest unchanged.
+  const explicitMillis = 1_700_000_000_123;
+  const explicit = structural.scanAndBuildWithGeneratedAt(
+    engine,
+    [{ id: "one", source: secretSource }],
+    explicitMillis,
+  );
+  const explicitManifest = explicit.manifest();
+  assert.equal(explicitManifest.generatedAtSeconds, 1_700_000_000n);
+  assert.equal(explicitManifest.generatedAtNanoseconds, 123_000_000);
+  assert.equal(timestampMillis(explicitManifest), explicitMillis);
+  explicitManifest.free();
+  explicit.free();
+
+  for (const invalidMillis of [-1, -0.5, Number.NaN, Number.POSITIVE_INFINITY]) {
+    const message = expectShareError(
+      mod,
+      () => structural.scanAndBuildWithGeneratedAt(engine, [], invalidMillis),
+      "TimestampInvalid",
+    );
+    assert.equal(message, "share bundle generation time is invalid");
+  }
+
   const empty = structural.scanAndBuild(engine, []);
   assert.equal(empty.length, 0);
   assert.equal(empty.isEmpty(), true);

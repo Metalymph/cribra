@@ -82,6 +82,16 @@ async function main() {
     "templating profile gate",
   );
   equal(
+    capabilities.pseudonymization,
+    expectedProfile === "flow",
+    "pseudonymization profile gate",
+  );
+  equal(
+    capabilities.synthesis,
+    expectedProfile === "flow",
+    "synthesis profile gate",
+  );
+  equal(
     capabilities.shareBundle,
     expectedProfile === "flow",
     "share bundle profile gate",
@@ -381,6 +391,139 @@ async function main() {
     "invalid_unicode_string",
   );
 
+  // Flow transformations are scan-coupled; Core rejects them explicitly.
+  const transformKey = new Uint8Array(32).fill(7);
+  let retainedTransform;
+  let retainedBundle;
+  if (expectedProfile === "flow") {
+    const simpleSource = "TOKEN=custom-secret-123";
+    const redacted = customScanner.transform(simpleSource, { kind: "redact" });
+    equal(redacted.output, "TOKEN=[REDACTED]", "browser redaction");
+    equal(redacted.scan.findingCount, 1, "transform includes the scan");
+    equal(
+      redacted.output.includes("custom-secret-123"),
+      false,
+      "redaction removes the secret",
+    );
+
+    const templated = customScanner.transform(simpleSource, {
+      kind: "template",
+      namespace: "SAFE",
+      numbered: true,
+    });
+    assert(templated.output.startsWith("TOKEN=<SAFE:"), "browser template namespace");
+    equal(
+      templated.output.includes("custom-secret-123"),
+      false,
+      "template removes the secret",
+    );
+
+    const pseudonymized = customScanner.transform(simpleSource, {
+      kind: "pseudonymize",
+      key: transformKey,
+    });
+    assert(
+      pseudonymized.output.startsWith("TOKEN=cribra_pseudo_"),
+      "browser pseudonym prefix",
+    );
+    equal(
+      pseudonymized.output,
+      customScanner.transform(simpleSource, {
+        kind: "pseudonymize",
+        key: transformKey,
+      }).output,
+      "pseudonymization is deterministic",
+    );
+
+    const synthesized = customScanner.transform(simpleSource, {
+      kind: "synthesize",
+      key: transformKey,
+    });
+    equal(
+      synthesized.output,
+      customScanner.transform(simpleSource, {
+        kind: "synthesize",
+        key: transformKey,
+      }).output,
+      "synthesis is deterministic",
+    );
+    equal(
+      synthesized.output.includes("custom-secret-123"),
+      false,
+      "synthesis removes the secret",
+    );
+
+    const unicodeTransform = customScanner.transform(
+      "前🦀 custom-secret-123",
+      { kind: "redact" },
+    );
+    equal(unicodeTransform.output, "前🦀 [REDACTED]", "unicode redaction");
+    equal(unicodeTransform.scan.findingCount, 1, "unicode transform scan");
+
+    retainedTransform = unicodeTransform;
+
+    const bundle = api.createShareBundle(
+      customScanner,
+      [
+        { id: "browser.txt", source: simpleSource },
+        { id: "unicode-🦀", source: "前🦀 custom-secret-123" },
+      ],
+      {
+        mode: { kind: "redact" },
+        generatedAt: new Date(1_700_000_000_123),
+      },
+    );
+    equal(bundle.entries.length, 2, "browser bundle length");
+    deepEqual(
+      bundle.entries.map((entry) => entry.id),
+      ["browser.txt", "unicode-🦀"],
+      "browser bundle IDs",
+    );
+    equal(
+      bundle.entries[0].content,
+      "TOKEN=[REDACTED]",
+      "browser bundle redacted content",
+    );
+    equal(bundle.entries[1].content, "前🦀 [REDACTED]", "browser bundle unicode");
+    equal(bundle.manifest.mode, "redact", "browser bundle mode");
+    equal(bundle.manifest.generatedAtSeconds, 1_700_000_000, "browser bundle seconds");
+    equal(
+      bundle.manifest.generatedAtNanoseconds,
+      123_000_000,
+      "browser bundle nanoseconds",
+    );
+    equal(bundle.summary.scannedSources, 2, "browser bundle summary sources");
+    equal(bundle.summary.totalFindings, 2, "browser bundle findings");
+    deepEqual(
+      bundle.manifest.summary,
+      bundle.summary,
+      "browser manifest summary parity",
+    );
+    retainedBundle = bundle;
+
+    expectCode(
+      () =>
+        customScanner.transform(customSource, {
+          kind: "pseudonymize",
+          key: new Uint8Array(31),
+        }),
+      "invalid_key_length",
+    );
+    expectCode(
+      () => api.createShareBundle(customScanner, [], { mode: { kind: "redact" } , generatedAt: new Date(Number.NaN) }),
+      "share_timestamp_invalid",
+    );
+  } else {
+    expectCode(
+      () => customScanner.transform(customSource, { kind: "redact" }),
+      "unsupported_capability",
+    );
+    expectCode(
+      () => api.createShareBundle(customScanner, [], { mode: { kind: "redact" } }),
+      "unsupported_capability",
+    );
+  }
+
   // Results stay valid after disposal; scanning afterwards fails.
   customScanner.dispose();
   customScanner.dispose();
@@ -390,6 +533,15 @@ async function main() {
   expectCode(() => customScanner.scan("token-1234"), "disposed");
   expectCode(() => customScanner.scanBatch([]), "disposed");
   equal(customScanner.rules.length, 4, "metadata valid after dispose");
+  if (retainedTransform !== undefined) {
+    equal(retainedTransform.scan.findingCount, 1, "transform scan valid after dispose");
+    equal(retainedTransform.output, "前🦀 [REDACTED]", "transform output valid after dispose");
+  }
+  if (retainedBundle !== undefined) {
+    equal(retainedBundle.entries[1].content, "前🦀 [REDACTED]", "bundle valid after dispose");
+    equal(retainedBundle.manifest.mode, "redact", "bundle manifest valid after dispose");
+    equal(retainedBundle.summary.totalFindings, 2, "bundle summary valid after dispose");
+  }
   candidateScanner.dispose();
 
   result.textContent = "PASS";

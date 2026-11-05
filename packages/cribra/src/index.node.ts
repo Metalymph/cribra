@@ -26,6 +26,7 @@ export function createScanner(options?: ScannerOptions): Scanner {
 
 export { CribraError } from "./errors.js";
 export { byteSpanToTextRange } from "./offset.js";
+export { createShareBundle } from "./share.js";
 
 export type {
   Backend,
@@ -51,6 +52,8 @@ export type {
   PatternRuleSpec,
   PrefixRuleSpec,
   Profile,
+  PseudonymizeRequest,
+  RedactRequest,
   Remediation,
   RuleKind,
   RuleMetadata,
@@ -62,10 +65,20 @@ export type {
   Scanner,
   ScannerOptions,
   Severity,
+  ShareBundle,
+  ShareBundleEntry,
+  ShareBundleOptions,
+  ShareManifest,
+  ShareMode,
+  ShareModeKind,
   StreamLimits,
   StreamOptions,
   StreamSession,
   SuffixRuleSpec,
+  SynthesizeRequest,
+  TemplateRequest,
   TextRange,
+  TransformRequest,
+  TransformResult,
   VersionInfo,
 } from "./types.js";

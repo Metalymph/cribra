@@ -8,6 +8,7 @@ import type {
   Remediation,
   RuleKind,
   Severity,
+  ShareModeKind,
 } from "./types.js";
 
 const SEVERITIES: readonly Severity[] = [
@@ -114,6 +115,13 @@ export function remediationToNative(value: Remediation): number {
 
 export const BACKEND_KINDS: readonly ("wasm" | "native")[] = ["wasm"];
 export const PROFILE_KINDS: readonly ("core" | "flow")[] = ["core", "flow"];
+const SHARE_MODE_KINDS: readonly ShareModeKind[] = [
+  "redact",
+  "template",
+  "pseudonymize",
+  "synthesize",
+  "unknown",
+];
 
 export function backendFromNative(value: number): "wasm" | "native" {
   return indexed(BACKEND_KINDS, value, "backend");
@@ -121,4 +129,8 @@ export function backendFromNative(value: number): "wasm" | "native" {
 
 export function profileFromNative(value: number): "core" | "flow" {
   return indexed(PROFILE_KINDS, value, "profile");
+}
+
+export function shareModeFromNative(value: number): ShareModeKind {
+  return indexed(SHARE_MODE_KINDS, value, "share mode");
 }

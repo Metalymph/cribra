@@ -59,6 +59,20 @@ const MESSAGES: Partial<Record<CribraErrorCode, string>> = {
     "An incremental revision must be a bigint in the u64 range.",
   incremental_unknown:
     "The incremental operation failed with an unknown backend error.",
+  invalid_key_length: "A transformation key must contain exactly 32 bytes.",
+  transform_invalid_span: "A finding span is invalid for the transformation source.",
+  transform_invalid_utf8_boundary:
+    "A finding span is not aligned to UTF-8 character boundaries.",
+  transform_overlapping_spans:
+    "The transformation requires non-overlapping findings.",
+  transform_unknown: "The transformation failed with an unknown backend error.",
+  share_missing_mode: "The share bundle transformation mode was not configured.",
+  share_source_count_mismatch:
+    "The share bundle source count does not match the scan result.",
+  share_source_length_mismatch:
+    "A share bundle source length does not match the scan result.",
+  share_timestamp_invalid: "The share bundle generation time is invalid.",
+  share_unknown: "The share bundle failed with an unknown backend error.",
   wasm_load_failed: "The Cribra WebAssembly asset could not be loaded.",
   wasm_instantiate_failed: "The Cribra WebAssembly module could not be initialized.",
 };
