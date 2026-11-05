@@ -16,7 +16,7 @@
   },
   "homepage": "https://cribra.pages.dev",
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "sideEffects": false,
   "files": [
@@ -43,7 +43,16 @@
     "test": "node scripts/run-tests.mjs",
     "test:types": "tsc -p tsconfig.test.json",
     "package:check": "node scripts/package-check.mjs",
-    "qualify": "node scripts/qualify.mjs"
+    "qualify": "node scripts/qualify.mjs",
+    "qualify:pack": "node qualification/scripts/pack.mjs --repeat",
+    "qualify:node": "node qualification/scripts/node-consumer.mjs",
+    "qualify:typescript": "node qualification/scripts/typescript-consumer.mjs",
+    "qualify:browser": "node qualification/scripts/browser-consumer.mjs",
+    "qualify:vite": "node qualification/scripts/vite-consumer.mjs",
+    "qualify:webpack": "node qualification/scripts/webpack-consumer.mjs",
+    "qualify:safari": "node qualification/scripts/safari-native.mjs",
+    "qualify:consumers": "node qualification/scripts/all.mjs --skip-pack",
+    "qualify:all": "node qualification/scripts/all.mjs --repeat"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

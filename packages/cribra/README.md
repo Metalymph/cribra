@@ -3,8 +3,9 @@
 Provisional, unpublished TypeScript foundation for the Cribra WebAssembly
 scanner.
 
-> **Status:** W3.2B-4 Flow transformations and Share Bundles. Qualified on Node
-> ESM and Chrome for the Core and Flow profiles.
+> **Status:** W3.2C-1 installed-artifact qualification. Flow transformations,
+> Share Bundles, Node ESM, browsers, and production bundlers are qualified from
+> actual `npm pack` tarballs installed into isolated consumers.
 >
 > - Package identity `cribra-typescript` is temporary and the package is marked
 >   `"private": true`. The final npm name is not approved.
@@ -13,8 +14,18 @@ scanner.
 > - Transformations are **Flow only** (`scanner.transform`) and Share Bundles are
 >   **Flow only** (`createShareBundle`). Core rejects both with
 >   `CribraError("unsupported_capability")`; there is no fallback.
-> - Bundler compatibility, Safari, Firefox, React Native, and concurrent
->   multi-threaded WASM are still outside the tested matrix.
+> - Node.js 22, 24, and 26 are qualified. The `>=22` engine range is a minimum
+>   compatibility declaration, **not** evidence for odd-numbered or untested
+>   Node releases.
+> - Chrome, Playwright Chromium, Playwright Firefox, and Playwright WebKit are
+>   qualified from the installed package. Playwright WebKit is **not** native
+>   Safari.
+> - Native Safari remote automation is not enabled on the qualification host, so
+>   native Safari remains **unverified**.
+> - Vite 8.3.6 (development and production) and webpack 5.112.2 (production) are
+>   qualified with the package imported by name.
+> - React Native and concurrent multi-threaded WASM remain outside the tested
+>   matrix.
 
 ## What is implemented
 
@@ -55,12 +66,20 @@ public declarations or in returned values.
 
 ## Requirements
 
-- Node.js 20 or newer for the Node ESM entry.
-- Chrome or Chromium for the browser smoke test.
-- To build from source:
-  - the Rust `wasm32-unknown-unknown` target;
-  - a `wasm-bindgen` CLI whose version exactly matches `Cargo.lock`;
-  - a Node package manager (`npm` is used here).
+### Consumers
+
+- Node.js 22, 24, or 26 for the Node ESM entry.
+- A browser with WebAssembly support for the browser entry.
+- No Rust toolchain, Cargo, or `wasm-bindgen` installation. Those are build-time
+  producer requirements only.
+- No runtime npm dependencies. The installed package contains only `dist/`,
+  `README.md`, and `LICENSE`.
+
+### Building from source
+
+- the Rust `wasm32-unknown-unknown` target;
+- a `wasm-bindgen` CLI whose version exactly matches `Cargo.lock`;
+- a Node package manager (`npm` is used here).
 
 The installed `wasm-bindgen` version is checked before every WASM build. A
 mismatch fails the build instead of producing a mismatched artifact.
@@ -84,7 +103,53 @@ Flow profile.
 
 `npm pack --dry-run --json` is exercised by `npm run package:check`. The package
 contains `dist/`, including `dist/wasm/cribra_bg.wasm`; it never contains
-`src/` or `test/`.
+`src/`, `test/`, `scripts/`, `qualification/`, source maps, or qualification
+tooling.
+
+## Installed-artifact qualification
+
+The private `qualification/` workspace installs the qualification toolchain and
+tests only packed tarballs. It never imports repository `src/`, `dist/`, or a
+workspace alias as a substitute.
+
+```sh
+cd packages/cribra/qualification
+npm ci
+npx playwright install chromium firefox webkit
+
+cd ..
+npm run qualify:pack       # Flow + test-only Core tarballs, reproducible build
+npm run qualify:consumers  # Node, TypeScript, browsers, Vite, webpack, Safari
+npm run qualify:all        # pack + consumers, including repeat-build check
+```
+
+Artifacts and evidence live under
+`target/typescript-qualification/{artifacts,evidence}/`. The Flow tarball is
+`flow/cribra-typescript-0.0.0-dev.tgz`; the secondary test-only Core tarball is
+`core/cribra-typescript-0.0.0-dev-core.tgz`. Their evidence is recorded
+separately and neither artifact is published.
+
+Qualified matrix for W3.2C-1:
+
+| Area | Qualified |
+| --- | --- |
+| Node ESM | Node 22.22.0, 24.22.2, 26.13.0; default asset plus bytes, ArrayBuffer, `file:` URL, path, and HTTP URL initialization; Flow and test-only Core |
+| TypeScript | 5.9.3 and 7.0.2 with `NodeNext` and `Bundler` resolution; declaration closure checked |
+| Browser (installed package) | Google Chrome 156.0.8078.74, Playwright Chromium 156.0.8078.4, Playwright Firefox 157.0, Playwright WebKit 27.2 |
+| Bundlers (package-name import) | Vite 8.3.6 dev + production; webpack 5.112.2 production |
+| WASM delivery | emitted hashed URL, `application/wasm` response, real scan/transform/Share Bundle work in the browser |
+| Native Safari | **Unverified**: remote automation was not enabled; the runner never enables it or changes security settings |
+
+Playwright Firefox 157 needs a private `CFFIXED_USER_HOME` on macOS 27 because
+Firefox cannot locate its profile under the TCC-protected application-support
+directory. The qualification runner supplies a system-temp home; it does not
+change host settings.
+
+Interactive consumers always have the fallback of passing explicit WASM bytes
+to `init({ wasm })`. Vite's default dependency optimization worked in this
+qualification; `optimizeDeps.exclude: ["cribra-typescript"]` is documented as a
+consumer-side workaround if a future Vite release changes that behavior, never
+as manual asset copying.
 
 ## Initialization
 
@@ -124,9 +189,11 @@ const result = scanner.scan("token=...");
 Only the Node entry imports `node:*`. The browser entry graph is checked for
 static Node built-in imports.
 
-Bundler compatibility is **not claimed** in this milestone. Vite, webpack,
-Rollup, esbuild, Safari, Firefox, and React Native are outside the tested matrix.
-Callers can always pass explicit bytes to `init({ wasm })`.
+The `browser` export condition selects `dist/index.browser.js`, which resolves
+the packaged WASM through `new URL(..., import.meta.url)`. Vite and webpack are
+qualified against that conditional export. Rollup directly, esbuild directly,
+React Native, and native Safari are outside the tested matrix. Callers can
+always pass explicit bytes to `init({ wasm })`.
 
 ## Scanner and result lifecycle
 
@@ -401,9 +468,9 @@ and never leak raw native diagnostics. No numeric `wasm-bindgen` enum or
 generated error class is exposed, and generated error objects are freed exactly
 once during normalization.
 
-## Browser qualification
+## Browser and bundler qualification
 
-The browser smoke test:
+The legacy Chrome smoke test in `npm run qualify`:
 
 - starts a local Node HTTP server with `application/wasm`;
 - launches Chrome/Chromium headless (`CHROME_BIN` or a common installation
@@ -417,7 +484,14 @@ The browser smoke test:
   or does not produce a success marker;
 - always closes the HTTP server.
 
-Only Chrome/Chromium was tested. Safari and Firefox are not claimed.
+The W3.2C-1 installed-artifact matrix extends this with Playwright Chromium,
+Playwright Firefox, and Playwright WebKit, plus Vite and webpack production
+bundles that import `cribra-typescript` by package name. See
+[Installed-artifact qualification](#installed-artifact-qualification).
+
+Native Safari is **not claimed**. The qualification host does not have Safari
+remote automation enabled, and the runner never enables it or changes security
+settings. Playwright WebKit is reported separately and is not Safari evidence.
 
 ## License
 

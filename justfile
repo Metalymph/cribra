@@ -24,6 +24,18 @@ website-build:
 website-check:
     npm --prefix website run check
 
+# Build and verify the packed TypeScript Flow and test-only Core tarballs.
+typescript-pack:
+    npm --prefix packages/cribra run qualify:pack
+
+# Qualify installed TypeScript tarballs on Node, TypeScript, browsers, Vite and webpack.
+typescript-consumers:
+    npm --prefix packages/cribra run qualify:consumers
+
+# Run the complete packed-artifact TypeScript qualification, including repeat packing.
+typescript-qualify:
+    npm --prefix packages/cribra run qualify:all
+
 # Format the workspace.
 fmt:
     cargo fmt --all
