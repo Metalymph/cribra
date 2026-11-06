@@ -1,7 +1,7 @@
 /** Static, declaration, runtime-export, and package-artifact checks. */
 
 import { execFileSync } from "node:child_process";
-import { readFile, stat } from "node:fs/promises";
+import { readFile, readdir, stat } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -84,6 +84,18 @@ async function exists(path) {
     return true;
   } catch {
     return false;
+  }
+}
+
+async function assertNoSourceMaps(directory) {
+  const entries = await readdir(directory, { withFileTypes: true });
+  for (const entry of entries) {
+    const path = resolve(directory, entry.name);
+    if (entry.isDirectory()) {
+      await assertNoSourceMaps(path);
+    } else if (entry.name.endsWith(".map")) {
+      throw new Error(`package artifact contains a source map: ${path}`);
+    }
   }
 }
 
@@ -202,6 +214,17 @@ async function checkAsset(distDir) {
   return bytes.length;
 }
 
+const LIFECYCLE_SCRIPTS = [
+  "preinstall",
+  "install",
+  "postinstall",
+  "prepare",
+  "prepack",
+  "postpack",
+  "prepublish",
+  "prepublishOnly",
+];
+
 async function checkPack() {
   const output = execFileSync(
     "npm",
@@ -230,8 +253,15 @@ async function checkPack() {
     }
   }
   for (const file of files) {
-    if (file.startsWith("src/") || file.startsWith("test/")) {
-      throw new Error(`npm pack would include source/test file ${file}`);
+    if (
+      file.startsWith("src/") ||
+      file.startsWith("test/") ||
+      file.startsWith("scripts/") ||
+      file.startsWith("qualification/") ||
+      file.endsWith(".map") ||
+      file.endsWith(".tgz")
+    ) {
+      throw new Error(`npm pack would include forbidden file ${file}`);
     }
   }
   return parsed[0].files.length;
@@ -247,10 +277,32 @@ export async function checkPackage({ distDir }) {
   if (manifest.private !== true) {
     throw new Error("provisional package must stay private");
   }
-  if (manifest.dependencies !== undefined) {
-    throw new Error("package must have no runtime dependencies");
+  if (manifest.engines?.node !== ">=22") {
+    throw new Error(
+      `package must declare engines.node >=22, got ${manifest.engines?.node}`,
+    );
+  }
+  for (const key of [
+    "dependencies",
+    "optionalDependencies",
+    "peerDependencies",
+    "bundleDependencies",
+  ]) {
+    if (manifest[key] !== undefined) {
+      throw new Error(`package must not declare ${key}`);
+    }
+  }
+  for (const script of LIFECYCLE_SCRIPTS) {
+    if (manifest.scripts?.[script] !== undefined) {
+      throw new Error(`package must not define the ${script} lifecycle script`);
+    }
+  }
+  const expectedFiles = ["dist", "README.md", "LICENSE"];
+  if (JSON.stringify(manifest.files) !== JSON.stringify(expectedFiles)) {
+    throw new Error(`unexpected files list: ${JSON.stringify(manifest.files)}`);
   }
 
+  await assertNoSourceMaps(distDir);
   await checkAsset(distDir);
   const declarationCount = await checkDeclarations(distDir);
   const exportCount = await checkRuntime(distDir);

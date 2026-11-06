@@ -26,7 +26,9 @@ async function main() {
   );
   const version = manifest.version;
 
-  await rm(qualificationRoot, { recursive: true, force: true });
+  // Keep npm consumer artifacts/evidence that share this root.
+  await rm(resolve(qualificationRoot, "flow"), { recursive: true, force: true });
+  await rm(resolve(qualificationRoot, "core"), { recursive: true, force: true });
   await mkdir(qualificationRoot, { recursive: true });
 
   // Default dist is the Flow package artifact and the type-check target.

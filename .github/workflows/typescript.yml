@@ -1,0 +1,310 @@
+name: TypeScript
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "packages/cribra/**"
+      - "crates/cribra-wasm/**"
+      - "Cargo.lock"
+      - "Cargo.toml"
+      - ".github/workflows/typescript.yml"
+  pull_request:
+    paths:
+      - "packages/cribra/**"
+      - "crates/cribra-wasm/**"
+      - "Cargo.lock"
+      - "Cargo.toml"
+      - ".github/workflows/typescript.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: typescript-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  producer:
+    name: Producer (packed artifacts)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: |
+            packages/cribra/package-lock.json
+            packages/cribra/qualification/package-lock.json
+
+      - name: Install Rust stable with WASM target
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Cache Rust artifacts
+        uses: Swatinem/rust-cache@v2.9.1
+
+      - name: Install the wasm-bindgen CLI pinned by Cargo.lock
+        run: |
+          version="$(awk '/^name = "wasm-bindgen"$/{getline; gsub(/version = "|"/, ""); print; exit}' Cargo.lock)"
+          test -n "$version"
+          wasm-bindgen --version | grep -q " $version$" || cargo install wasm-bindgen-cli --version "$version" --locked
+
+      - name: Install package dependencies
+        run: npm ci --prefix packages/cribra
+
+      - name: Install qualification dependencies
+        run: npm ci --prefix packages/cribra/qualification
+
+      - name: Check TypeScript source
+        run: npm run check --prefix packages/cribra
+
+      - name: Qualify existing Core and Flow artifacts
+        run: npm run qualify --prefix packages/cribra
+
+      - name: Check public types
+        run: npm run test:types --prefix packages/cribra
+
+      - name: Check package contents
+        run: npm run package:check --prefix packages/cribra
+
+      - name: Pack Flow and test-only Core tarballs
+        run: npm run qualify:pack --prefix packages/cribra
+
+      - name: Upload packed artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: cribra-typescript-tarballs
+          if-no-files-found: error
+          retention-days: 7
+          path: |
+            target/typescript-qualification/artifacts/flow/*.tgz
+            target/typescript-qualification/artifacts/core/*.tgz
+            target/typescript-qualification/artifacts/evidence.json
+
+  node-consumer:
+    name: Node ${{ matrix.node }} consumer
+    needs: producer
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ["22", "24", "26"]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ matrix.node }}
+
+      - name: Download packed artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: cribra-typescript-tarballs
+          path: target/typescript-qualification/artifacts
+
+      - name: Qualify Flow tarball
+        run: npm run qualify:node --prefix packages/cribra -- --profile flow
+
+      - name: Qualify test-only Core tarball
+        run: npm run qualify:node --prefix packages/cribra -- --profile core
+
+      - name: Upload Node evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: typescript-evidence-node-${{ matrix.node }}
+          if-no-files-found: error
+          retention-days: 7
+          path: target/typescript-qualification/evidence/node-*.json
+
+  typescript-consumer:
+    name: TypeScript consumer
+    needs: producer
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: packages/cribra/qualification/package-lock.json
+
+      - name: Install qualification dependencies
+        run: npm ci --prefix packages/cribra/qualification
+
+      - name: Download packed artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: cribra-typescript-tarballs
+          path: target/typescript-qualification/artifacts
+
+      - name: Qualify TypeScript consumers
+        run: npm run qualify:typescript --prefix packages/cribra
+
+      - name: Upload TypeScript evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: typescript-evidence-typescript
+          if-no-files-found: error
+          retention-days: 7
+          path: target/typescript-qualification/evidence/typescript-*.json
+
+  browser-consumer:
+    name: Browser ${{ matrix.label }}
+    needs: producer
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - engine: chrome
+            browser: chromium
+            label: Chrome
+          - engine: chromium
+            browser: chromium
+            label: Chromium
+          - engine: firefox
+            browser: firefox
+            label: Firefox
+          - engine: webkit
+            browser: webkit
+            label: WebKit
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: packages/cribra/qualification/package-lock.json
+
+      - name: Install qualification dependencies
+        run: npm ci --prefix packages/cribra/qualification
+
+      - name: Install Playwright browser
+        working-directory: packages/cribra/qualification
+        run: npx playwright install --with-deps ${{ matrix.browser }}
+
+      - name: Download packed artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: cribra-typescript-tarballs
+          path: target/typescript-qualification/artifacts
+
+      - name: Qualify ${{ matrix.label }} from installed package
+        run: npm run qualify:browser --prefix packages/cribra -- --profile flow --engine ${{ matrix.engine }}
+
+      - name: Qualify Core rejection in Chrome
+        if: matrix.engine == 'chrome'
+        run: npm run qualify:browser --prefix packages/cribra -- --profile core --engine chrome
+
+      - name: Upload browser evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: typescript-evidence-browser-${{ matrix.engine }}
+          if-no-files-found: error
+          retention-days: 7
+          path: target/typescript-qualification/evidence/browser-*.json
+
+  bundler-consumer:
+    name: Bundlers
+    needs: producer
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: packages/cribra/qualification/package-lock.json
+
+      - name: Install qualification dependencies
+        run: npm ci --prefix packages/cribra/qualification
+
+      - name: Install Playwright Chromium
+        working-directory: packages/cribra/qualification
+        run: npx playwright install --with-deps chromium
+
+      - name: Download packed artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: cribra-typescript-tarballs
+          path: target/typescript-qualification/artifacts
+
+      - name: Qualify Vite development and production
+        run: npm run qualify:vite --prefix packages/cribra -- --engine chromium
+
+      - name: Qualify webpack production
+        run: npm run qualify:webpack --prefix packages/cribra -- --engine chromium
+
+      - name: Upload bundler evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: typescript-evidence-bundlers
+          if-no-files-found: error
+          retention-days: 7
+          path: |
+            target/typescript-qualification/evidence/vite.json
+            target/typescript-qualification/evidence/webpack.json
+
+  native-safari:
+    name: Native Safari probe
+    if: github.event_name == 'workflow_dispatch'
+    needs: producer
+    runs-on: macos-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+
+      - name: Download packed artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: cribra-typescript-tarballs
+          path: target/typescript-qualification/artifacts
+
+      - name: Probe native Safari without enabling automation
+        run: npm run qualify:safari --prefix packages/cribra -- --profile flow
+
+      - name: Upload Safari evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: typescript-evidence-safari
+          if-no-files-found: error
+          retention-days: 7
+          path: target/typescript-qualification/evidence/safari-native.json

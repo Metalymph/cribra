@@ -4,7 +4,7 @@ Cribra treats `main` as the release-quality branch.
 
 ## Continuous integration
 
-Pull requests and pushes to `main` are validated by four independent surfaces.
+Pull requests and pushes to `main` are validated by five independent surfaces.
 
 ### CI
 
@@ -38,6 +38,27 @@ The supported browser-oriented WASM contract is checked for
 
 The optional `parallel` feature is not part of the supported browser WASM
 contract.
+
+### TypeScript
+
+`.github/workflows/typescript.yml` is dedicated to the private
+`cribra-typescript` artifact and is scoped to `packages/cribra/**`,
+`crates/cribra-wasm/**`, `Cargo.toml`, `Cargo.lock`, and the workflow itself.
+
+One producer job builds the Flow and test-only Core `npm pack` tarballs and
+uploads them with `actions/upload-artifact`. Independent consumer jobs download
+that artifact and never rebuild it:
+
+- Node 22, 24, and 26 ESM consumers;
+- TypeScript 5.9.3 and 7.0.2 with `NodeNext` and `Bundler` resolution;
+- Chrome, Chromium, Playwright Firefox, and Playwright WebKit;
+- Vite development/production and webpack production, importing the package by
+  name.
+
+The workflow has `contents: read` permissions, no registry credentials, and no
+publish step. Native Safari is probed only on manual dispatch on macOS; it
+reports blocked when remote automation is not already enabled and never
+modifies system settings.
 
 ### Security
 

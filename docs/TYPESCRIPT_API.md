@@ -1,9 +1,48 @@
 # Cribra TypeScript Isomorphic API Contract
 
 Status: **implemented for the WebAssembly Flow profile — W3.2B-2 foundation,
-W3.2B-3 streaming/incremental, and W3.2B-4 transformations and Share Bundles
-are implemented in `packages/cribra/`. Core rejects transformations and Share
-Bundles with `unsupported_capability`. Qualified on Node ESM and Chrome.**
+W3.2B-3 streaming/incremental, W3.2B-4 transformations and Share Bundles, and
+W3.2C-1 installed-artifact qualification. Core rejects transformations and Share
+Bundles with `unsupported_capability`. Qualified from packed tarballs on Node
+22/24/26, Chrome, Chromium, Playwright Firefox, Playwright WebKit, Vite, and
+webpack. Native Safari remains unverified because remote automation is not
+enabled.**
+
+## 0. Distribution qualification (W3.2C-1)
+
+The public artifact is the Flow package. A separately labeled test-only Core
+tarball is used only to prove capability gating. Qualification installs each
+`npm pack` tarball into an isolated consumer and never imports repository
+source, `dist/`, or a workspace alias.
+
+| Area | Qualified |
+| --- | --- |
+| Node ESM | 22.22.0, 24.22.2, 26.13.0; default, bytes, ArrayBuffer, `file:` URL, path, and HTTP URL initialization |
+| TypeScript | 5.9.3 and 7.0.2 with `NodeNext` and `Bundler` module resolution |
+| Browsers | Google Chrome 156.0.8078.74, Playwright Chromium 156.0.8078.4, Playwright Firefox 157.0, Playwright WebKit 27.2 |
+| Bundlers | Vite 8.3.6 (dev + production), webpack 5.112.2 (production) |
+| Native Safari | Unverified; `AllowRemoteAutomation` is not enabled and qualification never changes it |
+
+`engines.node` is `>=22`. That range is a minimum compatibility declaration; it
+is not a claim that odd-numbered or otherwise untested Node releases are
+qualified.
+
+Consumer runtimes do not require Rust, Cargo, or `wasm-bindgen`. Playwright,
+Vite, webpack, and all qualification tooling are development dependencies of the
+private `packages/cribra/qualification` workspace and are absent from the packed
+tarball and from runtime dependencies.
+
+Browser tests that serve installed package files (`dist/index.browser.js` and
+`dist/wasm/cribra_bg.wasm` directly) are distinct from bundler tests that import
+`cribra-typescript` by package name and verify the conditional browser export.
+In both cases the tests execute real scans, streaming, incremental edits,
+transformations, and Share Bundles, and assert that the WASM request succeeds
+with `application/wasm` at a hashed production URL.
+
+Playwright WebKit is not native Safari and is never labeled as Safari. On macOS
+27, Playwright Firefox 157 requires a private `CFFIXED_USER_HOME`; the
+qualification runner supplies one under the system temp directory without
+changing host settings.
 
 Revision: W3.2A-1R review corrections applied.
 
@@ -710,10 +749,10 @@ Loading requirements:
 - Default asset resolution uses `new URL("./wasm/cribra_bg.wasm",
   import.meta.url)` only in the browser/default entry, never in a CommonJS or
   Node-specific module compiled into a browser bundle.
-- Bundler compatibility is **not assumed**. Vite, webpack 5, Rollup, and esbuild
-  behavior is a W3.2C qualification item. Until each is tested, the contract
-  guarantees only explicit `InitOptions.wasm` bytes or URLs and the Node ESM
-  path.
+- Vite 8.3.6 (development and production) and webpack 5.112.2 (production) are
+  qualified with the package imported by name and the conditional browser entry
+  selected. Rollup directly and esbuild directly are **not** claimed; those
+  callers can pass explicit `InitOptions.wasm` bytes or URLs.
 - React Native is **not** claimed. It is a separate qualification target.
 
 ### 4.2 Repeated and concurrent initialization
@@ -1234,7 +1273,7 @@ exported signature.
     "./package.json": "./package.json"
   },
   "files": ["dist", "README.md", "LICENSE"],
-  "engines": { "node": ">=20" }
+  "engines": { "node": ">=22" }
 }
 ```
 
@@ -1252,8 +1291,10 @@ exported signature.
   a deliberate decision, not a default.
 - **Publishing.** `publishConfig.access`, repository, license, and provenance
   are required. No publish happens in this workstream.
-- **Runtime baseline.** Node 20+ is the working assumption; the final baseline
-  and browser matrix are verified in W3.2C, not assumed here.
+- **Runtime baseline.** Node 22, 24, and 26 are qualified from installed
+  tarballs. `engines.node` is `>=22` as a minimum compatibility declaration;
+  it is not evidence for odd-numbered or untested Node releases. The browser,
+  bundler, and native-Safari status is recorded in section 0.
 
 ### 9.3 WASM asset loading
 
@@ -1271,10 +1312,9 @@ exported signature.
    the resolved asset URL.
 
 No browser-reachable module imports `node:*`, statically or through a top-level
-dynamic import. Bundler rewriting of `new URL(..., import.meta.url)` is
-**not assumed** to work uniformly: Vite, webpack 5, Rollup, and esbuild are
-qualified separately in W3.2C. Until then, callers can always pass explicit
-bytes to `init()`.
+dynamic import. Vite and webpack rewrite `new URL(..., import.meta.url)` into an
+emitted hashed asset and are qualified. Rollup directly and esbuild directly
+are not assumed; those callers can always pass explicit bytes to `init()`.
 
 ### 9.4 Future native backend
 
@@ -1348,7 +1388,7 @@ the answer.
 | --- | --- | --- | --- |
 | 1 | Package identity | Working name `@cribra/cribra`; final npm name and ownership are not verified | Pending |
 | 2 | Module format | ESM-only for v1. CommonJS is out of scope and may be revisited after W3.2C | Resolved |
-| 3 | Minimum runtime | Working assumption Node 20+; browser baseline and feature detection verified in W3.2C | Pending |
+| 3 | Minimum runtime | `engines.node` `>=22`; Node 22/24/26, Chrome, Chromium, Playwright Firefox, Playwright WebKit, Vite, and webpack qualified from packed artifacts. Native Safari unverified | Resolved |
 | 4 | Revision type | Keep `bigint`; never narrow to `number` | Resolved |
 | 5 | Stored-result transforms | Scan-coupled transformations only; stored-result transforms deferred beyond v1 | Resolved |
 | 6 | Multi-transform batching | One request per scan; multi-output batching deferred beyond v1 | Resolved |
