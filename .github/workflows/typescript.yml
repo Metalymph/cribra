@@ -70,14 +70,14 @@ jobs:
       - name: Check TypeScript source
         run: npm run check --prefix packages/cribra
 
+      - name: Qualify existing Core and Flow artifacts
+        run: npm run qualify --prefix packages/cribra
+
       - name: Check public types
         run: npm run test:types --prefix packages/cribra
 
       - name: Check package contents
         run: npm run package:check --prefix packages/cribra
-
-      - name: Qualify existing Core and Flow artifacts
-        run: npm run qualify --prefix packages/cribra
 
       - name: Pack Flow and test-only Core tarballs
         run: npm run qualify:pack --prefix packages/cribra
