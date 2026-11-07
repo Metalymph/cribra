@@ -1,11 +1,11 @@
 /* Compile-time public surface check. Never emitted. */
 
 // @ts-expect-error Native generated classes must not be exported.
-import type { ScanEngine } from "cribra-typescript";
+import type { ScanEngine } from "__CRIBRA_PACKAGE_SPECIFIER__";
 // @ts-expect-error Flow-only generated classes must not be exported.
-import type { ShareBundleBuilder } from "cribra-typescript";
+import type { ShareBundleBuilder } from "__CRIBRA_PACKAGE_SPECIFIER__";
 // @ts-expect-error Native generated error classes must not be exported.
-import type { TransformError } from "cribra-typescript";
+import type { TransformError } from "__CRIBRA_PACKAGE_SPECIFIER__";
 
 import {
   CribraError,
@@ -16,7 +16,7 @@ import {
   getVersion,
   init,
   isInitialized,
-} from "cribra-typescript";
+} from "__CRIBRA_PACKAGE_SPECIFIER__";
 import type {
   BatchEntry,
   BatchResult,
@@ -69,7 +69,7 @@ import type {
   TransformRequest,
   TransformResult,
   VersionInfo,
-} from "cribra-typescript";
+} from "__CRIBRA_PACKAGE_SPECIFIER__";
 
 const literal: LiteralRuleSpec = {
   kind: "literal",

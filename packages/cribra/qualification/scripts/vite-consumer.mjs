@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { build as viteBuild, createServer } from "vite";
 
 import {
+  artifactPaths,
   artifactsRoot,
   readJson,
   targetRoot,
@@ -24,13 +25,8 @@ import { flagString, parseArgs } from "../lib/cli.mjs";
 
 const flags = parseArgs(process.argv.slice(2));
 const engine = flagString(flags, "engine", "chrome");
-const tarball = resolve(
-  flagString(
-    flags,
-    "tarball",
-    resolve(artifactsRoot, "flow/cribra-typescript-0.0.0-dev.tgz"),
-  ),
-);
+const artifacts = await artifactPaths();
+const tarball = resolve(flagString(flags, "tarball", artifacts.flow));
 const evidence = await readJson(resolve(artifactsRoot, "evidence.json"));
 const qualificationRoot = resolve(
   dirname(fileURLToPath(import.meta.url)),
@@ -41,6 +37,7 @@ const appSource = resolve(qualificationRoot, "apps/vite");
 const sharedSuite = resolve(qualificationRoot, "apps/shared/app-suite.mjs");
 
 const consumer = await createConsumer({ label: `vite-${engine}`, tarball });
+process.env.CRIBRA_PACKAGE_NAME = consumer.packageName;
 let launched;
 let server;
 

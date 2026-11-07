@@ -6,6 +6,7 @@ import { resolve } from "node:path";
 
 import { buildPackage } from "./build.mjs";
 import { runBrowserSmoke } from "./browser-smoke.mjs";
+import { generateTestTypes } from "./generate-test-types.mjs";
 import { checkPackage } from "./package-check.mjs";
 import { runNodeTests } from "./run-tests.mjs";
 import { isMain, packageRoot } from "./util.mjs";
@@ -14,6 +15,7 @@ const qualificationRoot = resolve(packageRoot, "../../target/typescript-qualific
 const tsc = resolve(packageRoot, "node_modules/typescript/bin/tsc");
 
 async function typeCheck() {
+  await generateTestTypes();
   execFileSync(process.execPath, [tsc, "-p", "tsconfig.test.json"], {
     cwd: packageRoot,
     stdio: "inherit",
@@ -58,7 +60,9 @@ async function main() {
 
   await checkPackage({ distDir: flowDefault });
   await checkPackage({ distDir: flowDist });
-  await checkPackage({ distDir: coreDist });
+  // The Core dist shares the Flow manifest but must never be treated as the
+  // publishable artifact. Only its declarations, exports, and asset are checked.
+  await checkPackage({ distDir: coreDist, mode: "artifact" });
 
   await runBrowserSmoke({ distDir: flowDist, profile: "flow", version });
   await runBrowserSmoke({ distDir: coreDist, profile: "core", version });

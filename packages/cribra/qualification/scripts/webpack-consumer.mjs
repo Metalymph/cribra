@@ -7,6 +7,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import webpack from "webpack";
 
 import {
+  artifactPaths,
   artifactsRoot,
   readJson,
   targetRoot,
@@ -25,13 +26,8 @@ import { flagString, parseArgs } from "../lib/cli.mjs";
 const flags = parseArgs(process.argv.slice(2));
 const engine = flagString(flags, "engine", "chrome");
 const qualificationRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const tarball = resolve(
-  flagString(
-    flags,
-    "tarball",
-    resolve(artifactsRoot, "flow/cribra-typescript-0.0.0-dev.tgz"),
-  ),
-);
+const artifacts = await artifactPaths();
+const tarball = resolve(flagString(flags, "tarball", artifacts.flow));
 const evidence = await readJson(resolve(artifactsRoot, "evidence.json"));
 const consumer = await createConsumer({ label: `webpack-${engine}`, tarball });
 let launched;

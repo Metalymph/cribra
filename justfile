@@ -36,6 +36,18 @@ typescript-consumers:
 typescript-qualify:
     npm --prefix packages/cribra run qualify:all
 
+# Build the Flow and test-only Core tarballs and check repeat-pack reproducibility.
+typescript-release-pack:
+    npm --prefix packages/cribra run qualify:pack
+
+# Produce a local, non-publishable release manifest from existing pack evidence.
+typescript-release-readiness:
+    npm --prefix packages/cribra run release:readiness -- --local --skip-qualification --allow-provisional
+
+# Verify a local release tarball against its release manifest without registry access.
+typescript-release-verify:
+    npm --prefix packages/cribra run release:verify -- --release-root ../../target/typescript-release --provisional
+
 # Format the workspace.
 fmt:
     cargo fmt --all

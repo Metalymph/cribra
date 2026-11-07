@@ -3,5 +3,6 @@
   "compilerOptions": {
     "noEmit": true
   },
-  "include": ["test/types/**/*.ts"]
+  "include": ["test/types/**/*.ts"],
+  "exclude": ["test/types/**/*.template.ts"]
 }

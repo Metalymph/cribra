@@ -1,19 +1,35 @@
 # Cribra TypeScript Isomorphic API Contract
 
 Status: **implemented for the WebAssembly Flow profile — W3.2B-2 foundation,
-W3.2B-3 streaming/incremental, W3.2B-4 transformations and Share Bundles, and
-W3.2C-1 installed-artifact qualification. Core rejects transformations and Share
-Bundles with `unsupported_capability`. Qualified from packed tarballs on Node
-22/24/26, Chrome, Chromium, Playwright Firefox, Playwright WebKit, Vite, and
-webpack. Native Safari remains unverified because remote automation is not
-enabled.**
+W3.2B-3 streaming/incremental, W3.2B-4 transformations and Share Bundles,
+W3.2C-1 installed-artifact qualification, and W3.2C-2 release readiness. Core
+rejects transformations and Share Bundles with `unsupported_capability`.
+Qualified from packed tarballs on Node 22/24/26, Chrome, Chromium, Playwright
+Firefox, Playwright WebKit, Vite, and webpack. Native Safari remains unverified
+because remote automation is not enabled.**
 
-## 0. Distribution qualification (W3.2C-1)
+## 0. Distribution qualification (W3.2C-1, release readiness W3.2C-2)
 
 The public artifact is the Flow package. A separately labeled test-only Core
 tarball is used only to prove capability gating. Qualification installs each
 `npm pack` tarball into an isolated consumer and never imports repository
 source, `dist/`, or a workspace alias.
+
+Package identity and version are read from `packages/cribra/package.json`; no
+qualification, packing, type-test, or release script hardcodes them. The
+current working identity is `cribra-typescript@0.1.0`, marked `"private": true`.
+`cribraRelease.approvedName` records `@metalymph/cribra`, but
+`cribraRelease.state` remains `"pending-ownership"` until authenticated npm
+ownership is proven. Release mode fails closed until both the literal rename and
+the state are approved. The TypeScript package follows its own SemVer and
+`typescript-v*` tag namespace; it is independent of Core and `cribra-wasm`
+versions.
+
+The initial `0.1.0` release uses a `typescript-v0.1.0` tag. Bootstrap releases
+for a previously nonexistent package use a `0.0.0-stage` placeholder published
+only under the `stage` dist-tag; see
+[the release runbook](TYPESCRIPT_RELEASE.md). The placeholder is never
+`latest`, and no `0.0.0-stage` record is created by this workstream.
 
 | Area | Qualified |
 | --- | --- |
@@ -34,7 +50,8 @@ tarball and from runtime dependencies.
 
 Browser tests that serve installed package files (`dist/index.browser.js` and
 `dist/wasm/cribra_bg.wasm` directly) are distinct from bundler tests that import
-`cribra-typescript` by package name and verify the conditional browser export.
+the installed package by its manifest name and verify the conditional browser
+export.
 In both cases the tests execute real scans, streaming, incremental edits,
 transformations, and Share Bundles, and assert that the WASM request succeeds
 with `application/wasm` at a hashed production URL.
@@ -1260,7 +1277,16 @@ exported signature.
 
 ```json
 {
-  "name": "@cribra/cribra",
+  "name": "cribra-typescript",
+  "version": "0.1.0",
+  "private": true,
+  "cribraRelease": {
+    "approvedName": "@metalymph/cribra",
+    "state": "pending-ownership",
+    "tagPrefix": "typescript-v",
+    "distTag": "latest",
+    "registry": "https://registry.npmjs.org/"
+  },
   "type": "module",
   "sideEffects": false,
   "exports": {
@@ -1273,24 +1299,43 @@ exported signature.
     "./package.json": "./package.json"
   },
   "files": ["dist", "README.md", "LICENSE"],
-  "engines": { "node": ">=22" }
+  "engines": { "node": ">=22" },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true,
+    "registry": "https://registry.npmjs.org/",
+    "tag": "latest"
+  }
 }
 ```
 
+- **One identity source.** `name` and `version` drive the package specifier,
+  generated version constant, tarball filenames, test fixtures, and release
+  tags. Scripts fail if a generated artifact disagrees with `package.json`.
+- **Release gate.** `cribraRelease.state` must be `"approved"` and
+  `cribraRelease.approvedName` must equal `name` before release-mode checks
+  pass. The provisional state fails closed, so the literal rename to
+  `@metalymph/cribra` cannot be skipped by an operational mistake.
+- **Independent versioning.** The package uses its own SemVer and
+  `typescript-v<version>` tags. It is not synchronized with Core or
+  `cribra-wasm`.
 - **ESM-first.** One ESM build and one declaration build. CommonJS is out of v1
   scope (section 12); dual publishing would introduce the dual-package hazard
   for stateful WASM initialization.
 - **Environment-specific entries.** The `browser` and `default` entries never
   reference Node built-ins. Only `index.node.js` contains the Node asset loader.
 - **No runtime dependencies.** `wasm-bindgen` output is vendored under `dist/`.
+- **No install lifecycle scripts.** The tarball ships no `preinstall`,
+  `install`, or `postinstall` hook and is installed with `--ignore-scripts` in
+  qualification.
 - **Asset included in the tarball.** Shipping `.wasm` inside `files` avoids a
   second download, a CDN dependency, and version skew. Callers may still pass
   explicit bytes or a URL to `init()`.
 - **Subpath exports.** `./wasm` is intentionally *not* exported: it would leak
-  generated internals. If advanced consumers need direct access, that requires
-  a deliberate decision, not a default.
-- **Publishing.** `publishConfig.access`, repository, license, and provenance
-  are required. No publish happens in this workstream.
+  generated internals. `./package.json` is exported for identity checks.
+- **Publishing.** `publishConfig.access: "public"`, provenance, repository,
+  license, and the npmjs registry are required. Staging uses Trusted Publishing
+  (OIDC) and `npm stage publish`; no long-lived token is stored.
 - **Runtime baseline.** Node 22, 24, and 26 are qualified from installed
   tarballs. `engines.node` is `>=22` as a minimum compatibility declaration;
   it is not evidence for odd-numbered or untested Node releases. The browser,
@@ -1319,8 +1364,8 @@ are not assumed; those callers can always pass explicit bytes to `init()`.
 ### 9.4 Future native backend
 
 - The public `index.ts` types stay identical.
-- `init({ backend: "native" })` or a separate `@cribra/cribra/native` entry
-  selects an implementation that maps the same DTOs.
+- `init({ backend: "native" })` or a separate `/native` subpath on the approved
+  package name selects an implementation that maps the same DTOs.
 - Backend-specific capability fields may differ; no field may be added to the
   common contract without a versioned minor release.
 - No native backend exists today.
@@ -1386,7 +1431,7 @@ the answer.
 
 | # | Question | Decision | Status |
 | --- | --- | --- | --- |
-| 1 | Package identity | Working name `@cribra/cribra`; final npm name and ownership are not verified | Pending |
+| 1 | Package identity | Working manifest `cribra-typescript@0.1.0` with `private: true`; approved release name is `@metalymph/cribra`. The literal rename and `cribraRelease.state: "approved"` wait for authenticated npm ownership verification | Partially pending: release infrastructure resolved; ownership unverified |
 | 2 | Module format | ESM-only for v1. CommonJS is out of scope and may be revisited after W3.2C | Resolved |
 | 3 | Minimum runtime | `engines.node` `>=22`; Node 22/24/26, Chrome, Chromium, Playwright Firefox, Playwright WebKit, Vite, and webpack qualified from packed artifacts. Native Safari unverified | Resolved |
 | 4 | Revision type | Keep `bigint`; never narrow to `number` | Resolved |
@@ -1402,12 +1447,13 @@ the answer.
 
 Genuinely pending items:
 
-- npm package name, scope, and ownership (requires registry and maintainer
-  confirmation).
+- Authenticated npm ownership of `@metalymph` (and therefore the literal rename
+  to `@metalymph/cribra`). The release scripts fail closed until this is proven.
 - Approval of an additive `cribra::VERSION` constant, if `getVersion().core`
   should ever be non-optional.
-- Node and browser baseline verification, including `WebAssembly`,
-  `bigint`, and bundler asset handling, during W3.2C.
+- The first authorized publication after review. Readiness, staging, provenance,
+  and approval requirements are specified in
+  [the release runbook](TYPESCRIPT_RELEASE.md).
 
 ## Appendix: source references
 

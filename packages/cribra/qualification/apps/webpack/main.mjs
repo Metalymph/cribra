@@ -1,6 +1,6 @@
 /* webpack consumer entry. Imports the installed package by name. */
 
-import * as api from "cribra-typescript";
+import * as api from "__CRIBRA_PACKAGE_SPECIFIER__";
 import { runAppSuite } from "./app-suite.mjs";
 
 const result = document.getElementById("result");

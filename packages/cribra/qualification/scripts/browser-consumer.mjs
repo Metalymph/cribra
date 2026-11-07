@@ -6,6 +6,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
+  artifactPaths,
   artifactsRoot,
   packageRoot,
   readJson,
@@ -28,10 +29,8 @@ const qualificationRoot = resolve(
 const flags = parseArgs(process.argv.slice(2));
 const profile = flagString(flags, "profile", "flow");
 const engine = flagString(flags, "engine", "chrome");
-const defaultTarball =
-  profile === "core"
-    ? resolve(artifactsRoot, "core/cribra-typescript-0.0.0-dev-core.tgz")
-    : resolve(artifactsRoot, "flow/cribra-typescript-0.0.0-dev.tgz");
+const artifacts = await artifactPaths();
+const defaultTarball = profile === "core" ? artifacts.core : artifacts.flow;
 const tarball = resolve(flagString(flags, "tarball", defaultTarball));
 const evidence = await readJson(resolve(artifactsRoot, "evidence.json"));
 const expected = profile === "core" ? evidence.core : evidence.flow;
@@ -91,7 +90,7 @@ try {
       ),
     ).version,
     os: `${process.platform} ${version()} (kernel ${release()})`,
-    servedFrom: "installed tarball node_modules/cribra-typescript/dist",
+    servedFrom: `installed tarball ${consumer.packageName}/dist`,
     tarball,
     tarballSha256: expected.tarball.sha256,
     packageVersion: evidence.package.version,

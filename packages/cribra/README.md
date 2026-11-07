@@ -1,16 +1,22 @@
 # cribra-typescript
 
-Provisional, unpublished TypeScript foundation for the Cribra WebAssembly
-scanner.
+Provisional, unpublished TypeScript package for the Cribra WebAssembly scanner.
 
-> **Status:** W3.2C-1 installed-artifact qualification. Flow transformations,
-> Share Bundles, Node ESM, browsers, and production bundlers are qualified from
-> actual `npm pack` tarballs installed into isolated consumers.
+> **Status:** W3.2C-2 release readiness. Flow transformations, Share Bundles,
+> Node ESM, browsers, and production bundlers are qualified from actual
+> `npm pack` tarballs installed into isolated consumers.
 >
-> - Package identity `cribra-typescript` is temporary and the package is marked
->   `"private": true`. The final npm name is not approved.
-> - This package wraps the merged WASM adapter. It is not published and is not
->   part of a release.
+> - The working manifest is `cribra-typescript@0.1.0`, marked
+>   `"private": true`. The approved release name is `@metalymph/cribra`, but the
+>   literal rename is deferred until authenticated npm ownership is verified.
+>   Release mode fails closed while `cribraRelease.state` is
+>   `"pending-ownership"`.
+> - The package is **not published** and no registry record exists. Release
+>   readiness and staging both fail closed while the identity is provisional;
+>   local dry runs use `--allow-provisional`. Staging additionally requires an
+>   approved identity and explicit, separately protected authorization.
+> - `0.1.0` is the initial independent SemVer for this package. It is not tied to
+>   the Core crate or `cribra-wasm` versions.
 > - Transformations are **Flow only** (`scanner.transform`) and Share Bundles are
 >   **Flow only** (`createShareBundle`). Core rejects both with
 >   `CribraError("unsupported_capability")`; there is no fallback.
@@ -94,6 +100,7 @@ npm run build        # Flow profile -> dist/
 npm run test:types   # public declaration surface
 npm test             # Node ESM tests against dist/
 npm run package:check
+npm run package:check:release  # fails closed while identity is provisional
 npm run qualify      # Core + Flow: build, type check, Node, package, browser
 ```
 
@@ -124,10 +131,11 @@ npm run qualify:all        # pack + consumers, including repeat-build check
 ```
 
 Artifacts and evidence live under
-`target/typescript-qualification/{artifacts,evidence}/`. The Flow tarball is
-`flow/cribra-typescript-0.0.0-dev.tgz`; the secondary test-only Core tarball is
-`core/cribra-typescript-0.0.0-dev-core.tgz`. Their evidence is recorded
-separately and neither artifact is published.
+`target/typescript-qualification/{artifacts,evidence}/`. Tarball names derive
+from `package.json`. For the current manifest the Flow tarball is
+`flow/cribra-typescript-0.1.0.tgz`; the secondary test-only Core tarball is
+`core/cribra-typescript-0.1.0-core.tgz`. Their evidence is recorded separately
+and only the Flow tarball may ever become public.
 
 Qualified matrix for W3.2C-1:
 
@@ -147,9 +155,49 @@ change host settings.
 
 Interactive consumers always have the fallback of passing explicit WASM bytes
 to `init({ wasm })`. Vite's default dependency optimization worked in this
-qualification; `optimizeDeps.exclude: ["cribra-typescript"]` is documented as a
-consumer-side workaround if a future Vite release changes that behavior, never
-as manual asset copying.
+qualification; `optimizeDeps.exclude` with the installed package name is
+documented as a consumer-side workaround if a future Vite release changes that
+behavior, never as manual asset copying.
+
+## Release readiness and staging
+
+Package identity is centralized in `package.json`:
+
+- `name` and `version` are the only source of the package specifier and tarball
+  names. Qualification, packing, test generation, and release scripts derive
+  from them.
+- `cribraRelease.approvedName` records the reviewed release name
+  (`@metalymph/cribra`). `cribraRelease.state` is `"pending-ownership"` until
+  authenticated npm ownership is proven.
+- Release mode requires `state: "approved"`, `name === approvedName`,
+  `private` absent, `publishConfig.access: "public"`,
+  `publishConfig.provenance: true`, and the npmjs registry.
+
+Local release checks:
+
+```sh
+npm run release:readiness -- --local --skip-qualification --allow-provisional
+npm run release:verify -- \
+  --release-root ../../target/typescript-release --provisional
+```
+
+The workflow `.github/workflows/typescript-release.yml` has two manual paths:
+
+1. `readiness` reuses the full `typescript.yml` qualification matrix, verifies
+   the dispatched tag and commit, requires byte-for-byte repeat-pack evidence
+   and the complete consumer matrix, then uploads
+   `typescript-release-<tag>` containing the manifest, `SHA256SUMS`, and the
+   qualified tarball. It has `contents: read` and no OIDC permission.
+2. `stage` runs only after the protected `npm-release` environment approves. It
+   requires `CRIBRA_RELEASE_AUTHORIZED=1`, an exact `stage <tag>` confirmation,
+   an approved identity, the qualified commit/ref, the recorded tarball digest,
+   and proof that the version is not already published. It uses
+   `id-token: write` and `npm stage publish`, then stops. A maintainer must
+   download the staged tarball, compare its SHA-256 with the manifest, and
+   approve with 2FA. The workflow never approves or promotes the staged version.
+
+See [the release runbook](../../docs/TYPESCRIPT_RELEASE.md) for the ownership
+proof, first-release bootstrap, and rollback limits.
 
 ## Initialization
 

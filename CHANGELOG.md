@@ -9,6 +9,44 @@ history.
 
 ## [Unreleased]
 
+## [TypeScript 0.1.0] — unreleased
+
+The TypeScript package at `packages/cribra` is independently versioned from the
+Rust Core and `cribra-wasm`. It is not published and has no npm registry record.
+
+### Added
+
+- Initial independent SemVer `0.1.0` for the ESM-only TypeScript bindings to
+  the Cribra WebAssembly Flow scanner.
+- Installed-artifact qualification of the packed Flow package and a test-only
+  Core package: Node 22/24/26, TypeScript 5.9.3/7.0.2, Chrome, Chromium,
+  Playwright Firefox, Playwright WebKit, Vite, and webpack.
+- Release readiness infrastructure: manifest-derived package identity, generated
+  version constant, deterministic repeat-pack verification, release manifest,
+  strict tarball verification, fail-closed identity checks, and a bootstrap
+  runbook.
+- Manual `.github/workflows/typescript-release.yml` with a non-mutating
+  readiness path and a separately protected `npm-release` staging path using
+  OIDC Trusted Publishing and `npm stage publish`.
+- `package:check:release`, `release:readiness`, `release:verify`, and
+  `release:stage-check` scripts plus Just recipes.
+
+### Security
+
+- Release mode refuses the provisional `cribra-typescript` identity,
+  `private: true`, an unapproved release state, a non-npmjs registry, missing
+  provenance, an unverified ref/commit, a mismatched tarball digest, or an
+  already-published version.
+- Staging requires `CRIBRA_RELEASE_AUTHORIZED=1` and an exact `stage <tag>`
+  confirmation. No long-lived npm token is used.
+
+### Known limitations
+
+- The literal rename to `@metalymph/cribra` is blocked until authenticated npm
+  ownership is verified.
+- Native Safari remains unverified.
+- The Core package is test-only and is never published.
+
 ## [0.7.2] — published 2026-10-23
 
 ### Added

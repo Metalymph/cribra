@@ -2,8 +2,11 @@ import { defineConfig } from "vite";
 
 const appDir = process.env.CRIBRA_APP_DIR;
 const outDir = process.env.CRIBRA_OUT_DIR;
-if (!appDir || !outDir) {
-  throw new Error("CRIBRA_APP_DIR and CRIBRA_OUT_DIR are required");
+const packageName = process.env.CRIBRA_PACKAGE_NAME;
+if (!appDir || !outDir || !packageName) {
+  throw new Error(
+    "CRIBRA_APP_DIR, CRIBRA_OUT_DIR and CRIBRA_PACKAGE_NAME are required",
+  );
 }
 
 export default defineConfig({
@@ -11,7 +14,7 @@ export default defineConfig({
   base: "/app/",
   optimizeDeps:
     process.env.CRIBRA_VITE_EXCLUDE === "1"
-      ? { exclude: ["cribra-typescript"] }
+      ? { exclude: [packageName] }
       : undefined,
   build: {
     outDir,
