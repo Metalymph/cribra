@@ -5,6 +5,13 @@ import { readFile, readdir, stat } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
+import {
+  assertReleaseIdentity,
+  isProvisional,
+  publishConfig,
+  readManifest,
+  tarballNames,
+} from "./identity.mjs";
 import { isMain, packageRoot, parseArgs } from "./util.mjs";
 
 const FORBIDDEN_DECLARATION_NAMES = [
@@ -225,7 +232,22 @@ const LIFECYCLE_SCRIPTS = [
   "prepublishOnly",
 ];
 
-async function checkPack() {
+async function checkGeneratedVersion(distDir, manifest) {
+  const path = resolve(distDir, "generated/package-version.js");
+  let text;
+  try {
+    text = await readFile(path, "utf8");
+  } catch {
+    throw new Error(`package artifact is missing ${path}`);
+  }
+  if (!text.includes(JSON.stringify(manifest.version))) {
+    throw new Error(
+      `generated package version does not match package.json ${manifest.version}`,
+    );
+  }
+}
+
+async function checkPack(manifest) {
   const output = execFileSync(
     "npm",
     ["pack", "--dry-run", "--json", "--ignore-scripts"],
@@ -237,12 +259,19 @@ async function checkPack() {
     },
   );
   const parsed = JSON.parse(output);
+  const expectedFilename = tarballNames(manifest).flow;
+  if (parsed[0].filename !== expectedFilename) {
+    throw new Error(
+      `npm pack would produce ${parsed[0].filename}, expected ${expectedFilename}`,
+    );
+  }
   const files = new Set(parsed[0].files.map((entry) => entry.path));
   for (const required of [
     "dist/index.js",
     "dist/index.d.ts",
     "dist/index.browser.js",
     "dist/index.node.js",
+    "dist/generated/package-version.js",
     "dist/wasm/cribra.js",
     "dist/wasm/cribra_bg.wasm",
     "README.md",
@@ -267,15 +296,39 @@ async function checkPack() {
   return parsed[0].files.length;
 }
 
-export async function checkPackage({ distDir }) {
-  const manifest = JSON.parse(
-    await readFile(resolve(packageRoot, "package.json"), "utf8"),
-  );
+export async function checkPackage({
+  distDir,
+  mode = "auto",
+  manifest: providedManifest,
+}) {
+  const manifest = providedManifest ?? (await readManifest());
+  const resolvedMode =
+    mode === "auto" ? (manifest.private === true ? "provisional" : "release") : mode;
+  if (
+    resolvedMode !== "provisional" &&
+    resolvedMode !== "release" &&
+    resolvedMode !== "artifact"
+  ) {
+    throw new Error(`unknown package check mode: ${String(resolvedMode)}`);
+  }
+  if (resolvedMode === "release") {
+    assertReleaseIdentity(manifest);
+  } else if (resolvedMode === "provisional") {
+    if (manifest.private !== true) {
+      throw new Error("provisional package must stay private");
+    }
+    if (manifest.publishConfig !== undefined) {
+      const config = publishConfig(manifest);
+      if (config.access !== "public") {
+        throw new Error("publishConfig.access must be public");
+      }
+      if (config.provenance !== true) {
+        throw new Error("publishConfig.provenance must be true");
+      }
+    }
+  }
   if (manifest.type !== "module") {
     throw new Error("package.json must be ESM-only");
-  }
-  if (manifest.private !== true) {
-    throw new Error("provisional package must stay private");
   }
   if (manifest.engines?.node !== ">=22") {
     throw new Error(
@@ -304,6 +357,7 @@ export async function checkPackage({ distDir }) {
 
   await assertNoSourceMaps(distDir);
   await checkAsset(distDir);
+  await checkGeneratedVersion(distDir, manifest);
   const declarationCount = await checkDeclarations(distDir);
   const exportCount = await checkRuntime(distDir);
 
@@ -314,7 +368,7 @@ export async function checkPackage({ distDir }) {
   let packCount = 0;
   const defaultDist = resolve(packageRoot, "dist");
   if (resolve(distDir) === defaultDist) {
-    packCount = await checkPack();
+    packCount = await checkPack(manifest);
   }
 
   process.stdout.write(
@@ -334,5 +388,6 @@ if (isMain(import.meta.url)) {
     typeof dist === "string"
       ? resolve(packageRoot, dist)
       : resolve(packageRoot, "dist");
-  await checkPackage({ distDir });
+  const mode = flags.get("release") === true ? "release" : "auto";
+  await checkPackage({ distDir, mode });
 }

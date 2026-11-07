@@ -7,6 +7,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
+  artifactPaths,
   artifactsRoot,
   readJson,
   targetRoot,
@@ -19,8 +20,9 @@ const scripts = resolve(qualificationRoot, "scripts");
 const evidenceDir = resolve(targetRoot, "evidence");
 const flags = parseArgs(process.argv.slice(2));
 
-const flowTarball = resolve(artifactsRoot, "flow/cribra-typescript-0.0.0-dev.tgz");
-const coreTarball = resolve(artifactsRoot, "core/cribra-typescript-0.0.0-dev-core.tgz");
+const artifacts = await artifactPaths();
+const flowTarball = artifacts.flow;
+const coreTarball = artifacts.core;
 const browsers = flagString(flags, "browsers", "chrome,chromium,firefox,webkit")
   .split(",")
   .map((entry) => entry.trim())

@@ -41,9 +41,12 @@ contract.
 
 ### TypeScript
 
-`.github/workflows/typescript.yml` is dedicated to the private
-`cribra-typescript` artifact and is scoped to `packages/cribra/**`,
-`crates/cribra-wasm/**`, `Cargo.toml`, `Cargo.lock`, and the workflow itself.
+`.github/workflows/typescript.yml` is dedicated to the TypeScript package
+artifact and is scoped to `packages/cribra/**`, `crates/cribra-wasm/**`,
+`Cargo.toml`, `Cargo.lock`, and the workflow itself. It is also callable via
+`workflow_call` by the release workflow. The package is currently
+`cribra-typescript@0.1.0` with `private: true`; its manifest is the single
+source of the package name, version, and tarball names.
 
 One producer job builds the Flow and test-only Core `npm pack` tarballs and
 uploads them with `actions/upload-artifact`. Independent consumer jobs download
@@ -59,6 +62,42 @@ The workflow has `contents: read` permissions, no registry credentials, and no
 publish step. Native Safari is probed only on manual dispatch on macOS; it
 reports blocked when remote automation is not already enabled and never
 modifies system settings.
+
+### TypeScript release
+
+`.github/workflows/typescript-release.yml` is manual only and has two paths.
+Ordinary pushes, pull requests, and unreviewed tag creation never reach staging.
+
+1. **Readiness** reuses `typescript.yml` through `workflow_call`, then verifies
+   the dispatched tag and commit, byte-for-byte repeat-pack reproducibility, the
+   complete consumer matrix, and the approved package identity. It writes
+   `release-manifest.json` and `SHA256SUMS` and uploads
+   `typescript-release-<tag>`. It has `contents: read` and no OIDC permission.
+2. **Stage** requires the protected GitHub environment `npm-release` and
+   `id-token: write`. It fails unless the identity is approved, the tag/commit
+   match the qualified manifest, the tarball digest and file records match, the
+   version is not already published, the protected environment defines
+   `CRIBRA_RELEASE_AUTHORIZED=1`, and the confirmation is exactly
+   `stage <tag>`. It runs
+   `npm stage publish` and stops. A maintainer must download the staged
+   tarball, compare its SHA-256 with the manifest, verify provenance, and approve
+   with 2FA. The workflow never approves or promotes the version.
+
+The current manifest remains `private: true` with
+`cribraRelease.state: "pending-ownership"`, so release mode fails closed and no
+staging can occur. The approved release name is `@metalymph/cribra`, but the
+literal rename waits for authenticated npm ownership verification. No npm
+record exists.
+
+Trusted Publishing is configured only for the approved package and only
+immediately before an authorized release; npm expires an unused configuration
+after two days. A brand-new package needs a `0.0.0-stage` placeholder published
+only under the `stage` dist-tag before OIDC staging can work. The placeholder is
+never `latest` and is not a release.
+
+See [the TypeScript release runbook](TYPESCRIPT_RELEASE.md) for ownership proof,
+bootstrap, digest verification, approval, and rollback limits. Rollback means a
+new patch plus `npm deprecate`; published versions cannot be overwritten.
 
 ### Security
 

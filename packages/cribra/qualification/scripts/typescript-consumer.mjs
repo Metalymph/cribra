@@ -4,6 +4,7 @@ import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 
 import {
+  artifactPaths,
   artifactsRoot,
   qualificationRoot,
   readJson,
@@ -19,13 +20,8 @@ import {
 import { flagString, parseArgs } from "../lib/cli.mjs";
 
 const flags = parseArgs(process.argv.slice(2));
-const tarball = resolve(
-  flagString(
-    flags,
-    "tarball",
-    resolve(artifactsRoot, "flow/cribra-typescript-0.0.0-dev.tgz"),
-  ),
-);
+const artifacts = await artifactPaths();
+const tarball = resolve(flagString(flags, "tarball", artifacts.flow));
 const requestedCompiler = flags.get("compiler");
 const compilers = [
   { version: "5.9.3", tsc: resolve(qualificationRoot, "node_modules/typescript-5/bin/tsc") },
@@ -160,8 +156,10 @@ try {
       throw new Error(`usage fixture imports local path ${forbidden}`);
     }
   }
-  if (!usage.includes('from "cribra-typescript"')) {
-    throw new Error("usage fixture does not import the package by name");
+  if (!usage.includes(`from "${consumer.packageName}"`)) {
+    throw new Error(
+      `usage fixture does not import ${consumer.packageName} by name`,
+    );
   }
 
   const declarationCount = await checkDeclarations(consumer.installed);

@@ -9,6 +9,7 @@ import { createServer } from "node:net";
 import { resolve } from "node:path";
 
 import {
+  artifactPaths,
   artifactsRoot,
   packageRoot,
   readJson,
@@ -21,13 +22,8 @@ import { flagString, parseArgs } from "../lib/cli.mjs";
 
 const flags = parseArgs(process.argv.slice(2));
 const profile = flagString(flags, "profile", "flow");
-const tarball = resolve(
-  flagString(
-    flags,
-    "tarball",
-    resolve(artifactsRoot, "flow/cribra-typescript-0.0.0-dev.tgz"),
-  ),
-);
+const artifacts = await artifactPaths();
+const tarball = resolve(flagString(flags, "tarball", artifacts.flow));
 
 function probeAutomation() {
   const driver = spawnSync("which", ["safaridriver"], {

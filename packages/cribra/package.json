@@ -1,9 +1,16 @@
 {
   "name": "cribra-typescript",
-  "version": "0.0.0-dev",
-  "description": "Provisional ESM-only TypeScript wrapper for the Cribra WebAssembly scanner",
+  "version": "0.1.0",
+  "description": "ESM-only TypeScript bindings for the Cribra WebAssembly scanner",
   "type": "module",
   "private": true,
+  "cribraRelease": {
+    "approvedName": "@metalymph/cribra",
+    "state": "pending-ownership",
+    "tagPrefix": "typescript-v",
+    "distTag": "latest",
+    "registry": "https://registry.npmjs.org/"
+  },
   "license": "MIT",
   "author": "Cribra contributors",
   "repository": {
@@ -15,10 +22,24 @@
     "url": "https://github.com/Metalymph/cribra/issues"
   },
   "homepage": "https://cribra.pages.dev",
+  "keywords": [
+    "cribra",
+    "secrets",
+    "scanner",
+    "redaction",
+    "wasm",
+    "typescript"
+  ],
   "engines": {
     "node": ">=22"
   },
   "sideEffects": false,
+  "publishConfig": {
+    "access": "public",
+    "provenance": true,
+    "registry": "https://registry.npmjs.org/",
+    "tag": "latest"
+  },
   "files": [
     "dist",
     "README.md",
@@ -41,8 +62,12 @@
     "build:core": "node scripts/build.mjs --profile core",
     "check": "node scripts/generate-version.mjs && node scripts/build-wasm.mjs --profile flow --out src/wasm && tsc -p tsconfig.json --noEmit",
     "test": "node scripts/run-tests.mjs",
-    "test:types": "tsc -p tsconfig.test.json",
+    "test:types": "node scripts/generate-test-types.mjs && tsc -p tsconfig.test.json",
     "package:check": "node scripts/package-check.mjs",
+    "package:check:release": "node scripts/package-check.mjs --release",
+    "release:readiness": "node scripts/release-readiness.mjs",
+    "release:verify": "node scripts/release-verify.mjs",
+    "release:stage-check": "node scripts/release-stage-check.mjs",
     "qualify": "node scripts/qualify.mjs",
     "qualify:pack": "node qualification/scripts/pack.mjs --repeat",
     "qualify:node": "node qualification/scripts/node-consumer.mjs",

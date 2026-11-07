@@ -1,14 +1,16 @@
+import { createRequire } from "node:module";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
+const require = createRequire(import.meta.url);
 
 export const distDir = resolve(
   process.env.CRIBRA_PACKAGE_DIST ?? resolve(here, "..", "dist"),
 );
 export const profile = process.env.CRIBRA_PROFILE ?? "flow";
 
-export const packageVersion = "0.0.0-dev";
+export const packageVersion = require("../package.json").version;
 export const githubToken = "ghp_AbCdEf0123456789_AbCdEf0123456789";
 export const candidateSource = "ABCD-EFGH-IJKL-MNOP";
 export const privacySentinel = "SCANNED_SECRET_DO_NOT_EXPOSE";

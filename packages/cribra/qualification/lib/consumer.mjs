@@ -1,12 +1,18 @@
 /** Isolated consumer creation and child-process helpers. */
 
 import { spawn, spawnSync } from "node:child_process";
-import { cp, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, resolve } from "node:path";
 
+import {
+  PACKAGE_SPECIFIER_TOKEN,
+  installedPackagePath,
+  readManifest,
+} from "../../scripts/identity.mjs";
 import { consumersRoot } from "./artifacts.mjs";
 
 export async function createConsumer({ label, tarball }) {
+  const identity = await readManifest();
   await mkdir(consumersRoot, { recursive: true });
   const directory = await mkdtemp(resolve(consumersRoot, `${label}-`));
   await writeFile(
@@ -45,18 +51,27 @@ export async function createConsumer({ label, tarball }) {
       `npm install failed for ${label}: ${install.stderr || install.stdout}`,
     );
   }
-  const installed = resolve(directory, "node_modules/cribra-typescript");
+  const installed = installedPackagePath(directory, identity.name);
   const manifest = JSON.parse(
     await readFile(resolve(installed, "package.json"), "utf8"),
   );
-  if (manifest.name !== "cribra-typescript") {
-    throw new Error(`unexpected installed package ${manifest.name}`);
+  if (manifest.name !== identity.name) {
+    throw new Error(
+      `unexpected installed package ${manifest.name}; expected ${identity.name}`,
+    );
   }
-  return { directory, installed, manifest };
+  return { directory, installed, manifest, packageName: identity.name };
 }
 
-export async function copyFixture(source, destination) {
-  await cp(source, destination, { recursive: true });
+export async function copyFixture(source, destination, { specifier } = {}) {
+  const name = specifier ?? (await readManifest()).name;
+  const text = await readFile(source, "utf8");
+  await mkdir(dirname(destination), { recursive: true });
+  await writeFile(
+    destination,
+    text.replaceAll(PACKAGE_SPECIFIER_TOKEN, name),
+    "utf8",
+  );
 }
 
 export async function removeConsumer(directory) {

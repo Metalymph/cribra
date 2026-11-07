@@ -1,0 +1,210 @@
+name: TypeScript Release
+
+# Manual only. Ordinary pushes, pull requests, and unreviewed tag creation never
+# reach the staging job. `readiness` has no OIDC permission and performs no
+# registry mutation. `stage` is protected by the `npm-release` environment and
+# only receives `id-token: write` after that environment approves the run.
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "readiness (no registry mutation) or stage (protected staging)"
+        type: choice
+        options:
+          - readiness
+          - stage
+        default: readiness
+      tag:
+        description: "Release tag, for example typescript-v0.1.0"
+        type: string
+        required: true
+      confirmation:
+        description: 'Stage only; type exactly: stage <tag>'
+        type: string
+        required: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: typescript-release-${{ inputs.tag }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: "1"
+  NODE_VERSION: "24"
+  NPM_VERSION: "12.2.2"
+
+jobs:
+  qualification:
+    name: Reusable qualification matrix
+    uses: ./.github/workflows/typescript.yml
+    permissions:
+      contents: read
+
+  readiness:
+    name: Release readiness
+    needs: qualification
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+
+    steps:
+      - name: Verify release ref and tag format
+        shell: bash
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          if ! printf '%s' "$TAG" | grep -Eq '^typescript-v[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$'; then
+            echo "invalid release tag: $TAG" >&2
+            exit 1
+          fi
+          if [ "${GITHUB_REF}" != "refs/tags/${TAG}" ]; then
+            echo "dispatch this workflow from refs/tags/${TAG}, got ${GITHUB_REF}" >&2
+            exit 1
+          fi
+
+      - name: Checkout release tag
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag }}
+          fetch-depth: 0
+
+      - name: Install Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install pinned npm
+        run: npm install --global "npm@${NPM_VERSION}" --ignore-scripts
+
+      - name: Download qualified tarballs
+        uses: actions/download-artifact@v4
+        with:
+          name: cribra-typescript-tarballs
+          path: target/typescript-qualification/artifacts
+
+      - name: Download qualification evidence
+        uses: actions/download-artifact@v4
+        with:
+          pattern: typescript-evidence-*
+          path: target/typescript-qualification/evidence
+          merge-multiple: true
+
+      - name: Verify readiness and write release manifest
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          node packages/cribra/scripts/release-readiness.mjs \
+            --tag "$TAG" \
+            --skip-qualification \
+            --require-matrix \
+            --require-releaseable
+
+      - name: Upload release candidate
+        uses: actions/upload-artifact@v4
+        with:
+          name: typescript-release-${{ inputs.tag }}
+          if-no-files-found: error
+          retention-days: 30
+          path: target/typescript-release
+
+  stage:
+    name: Stage on npm (protected)
+    needs: readiness
+    if: inputs.mode == 'stage'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: npm-release
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Verify protected release ref
+        shell: bash
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          if [ "${GITHUB_REF}" != "refs/tags/${TAG}" ]; then
+            echo "staging requires refs/tags/${TAG}, got ${GITHUB_REF}" >&2
+            exit 1
+          fi
+
+      - name: Checkout release tag
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag }}
+          fetch-depth: 0
+
+      - name: Install Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+
+      - name: Install pinned npm
+        run: npm install --global "npm@${NPM_VERSION}" --ignore-scripts
+
+      - name: Download release candidate
+        uses: actions/download-artifact@v4
+        with:
+          name: typescript-release-${{ inputs.tag }}
+          path: target/typescript-release
+
+      - name: Verify staging authorization
+        env:
+          TAG: ${{ inputs.tag }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+          # Environment-scoped variable on `npm-release`. Staging fails when it
+          # is absent or not exactly "1".
+          CRIBRA_RELEASE_AUTHORIZED: ${{ vars.CRIBRA_RELEASE_AUTHORIZED }}
+        run: |
+          set -euo pipefail
+          tarball="$(find target/typescript-release/flow -maxdepth 1 -name '*.tgz' -type f -print -quit)"
+          test -n "$tarball"
+          node packages/cribra/scripts/release-stage-check.mjs \
+            --tag "$TAG" \
+            --manifest target/typescript-release/release-manifest.json \
+            --tarball "$tarball" \
+            --confirmation "$CONFIRMATION" \
+            --authorized
+
+      - name: Stage approved tarball on npm
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          tarball="$(find target/typescript-release/flow -maxdepth 1 -name '*.tgz' -type f -print -quit)"
+          test -n "$tarball"
+          access="$(node -p "require('./packages/cribra/package.json').publishConfig.access")"
+          dist_tag="$(node -p "require('./packages/cribra/package.json').publishConfig.tag")"
+          npm stage publish "$tarball" \
+            --access "$access" \
+            --provenance \
+            --tag "$dist_tag" \
+            --ignore-scripts | tee target/typescript-release/stage-result.txt
+          {
+            echo "## Staged npm release"
+            echo
+            echo "Package: \`$TAG\`"
+            echo "Tarball: \`$tarball\`"
+            echo
+            echo "A maintainer must verify the staged digest and approve with 2FA."
+            echo "This workflow never approves or promotes the staged version."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload stage record
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: typescript-stage-${{ inputs.tag }}
+          if-no-files-found: warn
+          retention-days: 30
+          path: target/typescript-release/stage-result.txt

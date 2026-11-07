@@ -1,11 +1,12 @@
 /** Builds Flow and test-only Core tarballs and records qualification evidence. */
 
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, rm, writeFile } from "node:fs/promises";
 import { release, version } from "node:os";
 import { resolve } from "node:path";
 
 import { buildPackage } from "../../scripts/build.mjs";
 import { checkPackage } from "../../scripts/package-check.mjs";
+import { tarballNames } from "../../scripts/identity.mjs";
 import {
   adapterVersion,
   artifactsRoot,
@@ -15,7 +16,7 @@ import {
   packAndVerify,
   packageRoot,
   readJson,
-  sha256File,
+  run,
   targetRoot,
   writeJson,
 } from "../lib/artifacts.mjs";
@@ -24,6 +25,14 @@ import { parseArgs } from "../lib/cli.mjs";
 const flowArtifacts = resolve(artifactsRoot, "flow");
 const coreArtifacts = resolve(artifactsRoot, "core");
 const verificationRoot = resolve(targetRoot, "verification");
+
+function toolVersion(command, args) {
+  try {
+    return run(command, args).trim();
+  } catch {
+    return "unknown";
+  }
+}
 
 function compareFileRecords(left, right) {
   const differences = [];
@@ -53,18 +62,23 @@ async function packFlow({ destination, renameTo }) {
   return { dist, manifest, evidence };
 }
 
-async function packCore() {
+async function packCore(names) {
   const corePackage = resolve(coreArtifacts, "package");
   await mkdir(corePackage, { recursive: true });
-  await copyPackageMetadata(packageRoot, corePackage);
+  await copyPackageMetadata(packageRoot, corePackage, { forcePrivate: true });
   const dist = resolve(corePackage, "dist");
   await buildPackage({ profile: "core", distDir: dist });
-  await checkPackage({ distDir: dist });
+  await checkPackage({
+    distDir: dist,
+    mode: "provisional",
+    manifest: await readJson(resolve(corePackage, "package.json")),
+  });
   const evidence = await packAndVerify({
     cwd: corePackage,
     destination: coreArtifacts,
     extractRoot: verificationRoot,
-    renameTo: resolve(coreArtifacts, "cribra-typescript-0.0.0-dev-core.tgz"),
+    renameTo: resolve(coreArtifacts, names.core),
+    mode: "provisional",
   });
   return evidence;
 }
@@ -79,9 +93,12 @@ async function main() {
   await mkdir(coreArtifacts, { recursive: true });
   await mkdir(verificationRoot, { recursive: true });
 
+  const manifest = await readJson(resolve(packageRoot, "package.json"));
+  const names = tarballNames(manifest);
+
   const flow = await packFlow({
     destination: flowArtifacts,
-    renameTo: resolve(flowArtifacts, "cribra-typescript-0.0.0-dev.tgz"),
+    renameTo: resolve(flowArtifacts, names.flow),
   });
 
   let repeatEvidence;
@@ -90,7 +107,7 @@ async function main() {
     await mkdir(repeatDir, { recursive: true });
     const second = await packFlow({
       destination: repeatDir,
-      renameTo: resolve(repeatDir, "cribra-typescript-0.0.0-dev.tgz"),
+      renameTo: resolve(repeatDir, names.flow),
     });
     repeatEvidence = {
       firstTarballSha256: flow.evidence.tarball.sha256,
@@ -104,8 +121,7 @@ async function main() {
     };
   }
 
-  const core = await packCore();
-  const manifest = await readJson(resolve(packageRoot, "package.json"));
+  const core = await packCore(names);
   const git = gitInfo();
   const evidence = {
     generatedAt: new Date().toISOString(),
@@ -124,6 +140,15 @@ async function main() {
       arch: process.arch,
       os: `${version()} (kernel ${release()})`,
     },
+    toolchain: {
+      rustc: toolVersion("rustc", ["--version"]),
+      cargo: toolVersion("cargo", ["--version"]),
+      wasmBindgen: toolVersion("wasm-bindgen", ["--version"]),
+      typescript: toolVersion(process.execPath, [
+        resolve(packageRoot, "node_modules/typescript/bin/tsc"),
+        "--version",
+      ]),
+    },
     git,
     flow: flow.evidence,
     core: core,
@@ -133,8 +158,8 @@ async function main() {
   await writeFile(
     resolve(artifactsRoot, "SHA256SUMS"),
     [
-      `${flow.evidence.tarball.sha256}  flow/cribra-typescript-0.0.0-dev.tgz`,
-      `${core.tarball.sha256}  core/cribra-typescript-0.0.0-dev-core.tgz`,
+      `${flow.evidence.tarball.sha256}  flow/${names.flow}`,
+      `${core.tarball.sha256}  core/${names.core}`,
       "",
     ].join("\n"),
     "utf8",

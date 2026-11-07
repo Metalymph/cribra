@@ -5,6 +5,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
 import {
+  artifactPaths,
   artifactsRoot,
   packageRoot,
   readJson,
@@ -22,10 +23,8 @@ import { flagString, parseArgs } from "../lib/cli.mjs";
 const flags = parseArgs(process.argv.slice(2));
 const profile = flagString(flags, "profile", "flow");
 const nodeBinary = flagString(flags, "node", process.execPath);
-const defaultTarball =
-  profile === "core"
-    ? resolve(artifactsRoot, "core/cribra-typescript-0.0.0-dev-core.tgz")
-    : resolve(artifactsRoot, "flow/cribra-typescript-0.0.0-dev.tgz");
+const artifacts = await artifactPaths();
+const defaultTarball = profile === "core" ? artifacts.core : artifacts.flow;
 const tarball = resolve(flagString(flags, "tarball", defaultTarball));
 const evidencePath = resolve(artifactsRoot, "evidence.json");
 const evidence = await readJson(evidencePath);

@@ -6,6 +6,13 @@ import { cp, mkdir, mkdtemp, readFile, readdir, rename, rm, stat, writeFile } fr
 import { dirname, extname, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import {
+  assertReleaseIdentity,
+  publishConfig,
+  readManifest,
+  tarballNames,
+} from "../../scripts/identity.mjs";
+
 const libDir = dirname(fileURLToPath(import.meta.url));
 
 export const qualificationRoot = resolve(libDir, "..");
@@ -15,6 +22,18 @@ export const targetRoot = resolve(repoRoot, "target/typescript-qualification");
 export const artifactsRoot = resolve(targetRoot, "artifacts");
 export const consumersRoot = resolve(targetRoot, "consumers");
 
+/** Manifest-derived identity plus the exact tarball paths used by consumers. */
+export async function artifactPaths() {
+  const manifest = await readManifest();
+  const names = tarballNames(manifest);
+  return {
+    manifest,
+    names,
+    flow: resolve(artifactsRoot, "flow", names.flow),
+    core: resolve(artifactsRoot, "core", names.core),
+  };
+}
+
 export const REQUIRED_FILES = [
   "LICENSE",
   "README.md",
@@ -23,6 +42,7 @@ export const REQUIRED_FILES = [
   "dist/index.d.ts",
   "dist/index.browser.js",
   "dist/index.node.js",
+  "dist/generated/package-version.js",
   "dist/wasm/cribra.js",
   "dist/wasm/cribra_bg.wasm",
   "dist/wasm/cribra_bg.wasm.d.ts",
@@ -186,12 +206,49 @@ export async function extractTarball(tarball, destination) {
   return resolve(destination, "package");
 }
 
-async function verifyInstalledPackage(packageDir, tarball) {
+async function verifyInstalledPackage(
+  packageDir,
+  tarball,
+  { mode = "auto", expectedManifest } = {},
+) {
+  const expected = expectedManifest ?? (await readManifest());
   const manifest = await readJson(resolve(packageDir, "package.json"));
+  const resolvedMode =
+    mode === "auto"
+      ? manifest.private === true
+        ? "provisional"
+        : "release"
+      : mode;
+  if (resolvedMode !== "provisional" && resolvedMode !== "release") {
+    throw new Error(`unknown tarball verification mode: ${String(resolvedMode)}`);
+  }
   if (manifest.type !== "module") throw new Error("installed package is not ESM");
-  if (manifest.private !== true) throw new Error("installed package must stay private");
-  if (manifest.name !== "cribra-typescript") {
-    throw new Error(`unexpected package name: ${manifest.name}`);
+  if (manifest.name !== expected.name) {
+    throw new Error(
+      `unexpected package name: ${manifest.name}; expected ${expected.name}`,
+    );
+  }
+  if (manifest.version !== expected.version) {
+    throw new Error(
+      `unexpected package version: ${manifest.version}; expected ${expected.version}`,
+    );
+  }
+  if (resolvedMode === "provisional") {
+    if (manifest.private !== true) {
+      throw new Error("installed package must stay private");
+    }
+  } else {
+    assertReleaseIdentity(expected);
+    if (manifest.private === true) {
+      throw new Error("release package must not be private");
+    }
+    const config = publishConfig(manifest);
+    if (config.access !== "public") {
+      throw new Error("release package publishConfig.access must be public");
+    }
+    if (config.provenance !== true) {
+      throw new Error("release package publishConfig.provenance must be true");
+    }
   }
   if (manifest.engines?.node !== ">=22") {
     throw new Error(`unexpected node engine range: ${manifest.engines?.node}`);
@@ -225,6 +282,16 @@ async function verifyInstalledPackage(packageDir, tarball) {
     if (!files.includes(required)) {
       throw new Error(`tarball is missing ${required}`);
     }
+  }
+
+  const generatedVersion = await readFile(
+    resolve(packageDir, "dist/generated/package-version.js"),
+    "utf8",
+  );
+  if (!generatedVersion.includes(JSON.stringify(manifest.version))) {
+    throw new Error(
+      `installed generated version does not match ${manifest.version}`,
+    );
   }
 
   const absoluteNeedles = [packageRoot, repoRoot, "/Users/", "/private/"];
@@ -273,6 +340,7 @@ async function verifyInstalledPackage(packageDir, tarball) {
       engines: manifest.engines,
       exports: manifest.exports,
       files: manifest.files,
+      publishConfig: manifest.publishConfig,
     },
     tarball: {
       path: tarball,
@@ -287,11 +355,20 @@ async function verifyInstalledPackage(packageDir, tarball) {
   };
 }
 
-export async function verifyTarball({ tarball, extractRoot }) {
+export async function verifyTarball({
+  tarball,
+  extractRoot,
+  mode = "auto",
+  manifest,
+}) {
+  await mkdir(extractRoot, { recursive: true });
   const extraction = await mkdtemp(resolve(extractRoot, "verify-"));
   try {
     const packageDir = await extractTarball(tarball, extraction);
-    return await verifyInstalledPackage(packageDir, tarball);
+    return await verifyInstalledPackage(packageDir, tarball, {
+      mode,
+      expectedManifest: manifest,
+    });
   } finally {
     await rm(extraction, { recursive: true, force: true });
   }
@@ -302,6 +379,7 @@ export async function packAndVerify({
   destination,
   extractRoot,
   renameTo,
+  mode = "auto",
 }) {
   const packed = await npmPack({ cwd, destination });
   let tarball = packed.tarball;
@@ -309,7 +387,7 @@ export async function packAndVerify({
     await rename(tarball, renameTo);
     tarball = renameTo;
   }
-  const evidence = await verifyTarball({ tarball, extractRoot });
+  const evidence = await verifyTarball({ tarball, extractRoot, mode });
   return {
     ...evidence,
     npmPack: {
@@ -322,10 +400,20 @@ export async function packAndVerify({
   };
 }
 
-export async function copyPackageMetadata(source, destination) {
+export async function copyPackageMetadata(
+  source,
+  destination,
+  { forcePrivate = false } = {},
+) {
   await mkdir(destination, { recursive: true });
   for (const name of ["package.json", "README.md", "LICENSE"]) {
     await cp(resolve(source, name), resolve(destination, name));
+  }
+  if (forcePrivate) {
+    const manifestPath = resolve(destination, "package.json");
+    const manifest = await readJson(manifestPath);
+    manifest.private = true;
+    await writeJson(manifestPath, manifest);
   }
 }
 

@@ -8,10 +8,10 @@ import { createRequire } from "node:module";
 import { dirname, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import * as api from "cribra-typescript";
+import * as api from "__CRIBRA_PACKAGE_SPECIFIER__";
 
 const require = createRequire(import.meta.url);
-const packageJsonPath = require.resolve("cribra-typescript/package.json");
+const packageJsonPath = require.resolve("__CRIBRA_PACKAGE_SPECIFIER__/package.json");
 const packageDir = dirname(packageJsonPath);
 const packageManifest = JSON.parse(await readFile(packageJsonPath, "utf8"));
 const wasmPath = resolve(packageDir, "dist/wasm/cribra_bg.wasm");
