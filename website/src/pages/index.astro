@@ -5,6 +5,7 @@ import BrandConcept from '../components/BrandConcept.astro';
 import ProcessDiagram from '../components/ProcessDiagram.astro';
 import config from '../../astro-theme-config';
 import { bindings } from '../data/bindings';
+import { withBase } from '../utils/paths';
 import '../styles/site.css';
 import '../styles/pages/home.css';
 
@@ -119,7 +120,14 @@ for (source, finding) in results.findings() {
         {
           bindings.map((binding) => (
             <li>
-              <a href={`/bindings/#${binding.id}`}>{binding.name}</a>
+              <a href={withBase(binding.guide.href)}>{binding.name}</a>
+              <a
+                class="integration-detail"
+                href={`/bindings/#${binding.id}`}
+                aria-label={`${binding.name} evidence`}
+              >
+                evidence
+              </a>
             </li>
           ))
         }

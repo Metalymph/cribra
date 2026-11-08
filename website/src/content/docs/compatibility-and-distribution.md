@@ -17,7 +17,7 @@ order: 26
 | C ABI `cribra-capi` | 0.3.0 | Source-built native libraries and checked-in header; `publish = false`. |
 | WASM `cribra-wasm` | 0.4.7 | Published 0.4.7 uses Core `^0.6`; workspace source uses Core `^0.7`. |
 | Shared UniFFI adapter | 0.1.0 | Generator/adapter, `publish = false`. |
-| Swift | Published Fuse SwiftPM package `cribra-swift` 0.7.2; Core/Flow source builds | Remote package and checksum-verified XCFramework asset published; clean-room macOS ARM64 consumer passed; iOS Simulator compile/link only; no Swift Package Index registration. |
+| Swift | Published Fuse SwiftPM package `cribra-swift` 0.7.2; Core/Flow source builds | Remote package and checksum-verified XCFramework asset published; clean-room macOS ARM64 consumer passed; iOS Simulator compile/link only; listed on the Swift Package Index for discovery; the listing is not Cribra compatibility-build evidence. |
 | Python | Fuse wheel `cribra` 0.7.2+fuse | Local/CI wheels; no PyPI publication established. |
 | Kotlin/JVM | Core 0.7.2 profile JARs/ZIPs | Local/CI artifacts; no Maven publication established. |
 | TypeScript `cribra-typescript` | 0.1.0; Flow WebAssembly package; Node `>=22` declaration | **Not published.** Provisional private package; no registry record. Intended future name `@metalymph/cribra`, with `cribraRelease.state` `pending-ownership`. Local source or packed-tarball installation only. |
@@ -65,7 +65,9 @@ guide](/docs/typescript-runtime-compatibility/).
 ## Planned and demand-driven work
 
 The Fuse-first Swift distribution is complete: `cribra-swift` 0.7.2 is published
-and remotely qualified, with Swift Package Index registration still outstanding.
+and remotely qualified, and it is listed on the [Swift Package
+Index](https://swiftpackageindex.com/Metalymph/cribra-swift) for discovery. The
+listing is not Cribra compatibility-build evidence for additional platforms.
 The next official priorities are the native Rust MCP server over stdio, the
 Kotlin/JVM and Python Fuse distributions, and a future TypeScript native backend.
 The TypeScript WebAssembly package is implemented but unpublished; the native
@@ -83,7 +85,8 @@ and the [roadmap priority order](https://github.com/Metalymph/cribra/blob/main/R
 
 Swift's published package is qualified by remote resolution and macOS ARM64
 execution; its device/Simulator checks remain compile-and-link evidence, not
-runtime execution, and no Intel slices or Swift Package Index registration exist. Kotlin/JVM checks do not establish Android/KMP support. Python and Kotlin native bundles target recorded host/architecture combinations, not all platforms. WASM Node/Bun local checks do not establish browser, worker, CSP or publication qualification.
+runtime execution, and no Intel slices exist. Its Swift Package Index listing is
+discovery only and is not Cribra compatibility-build evidence. Kotlin/JVM checks do not establish Android/KMP support. Python and Kotlin native bundles target recorded host/architecture combinations, not all platforms. WASM Node/Bun local checks do not establish browser, worker, CSP or publication qualification.
 
 Never combine generated binding files with a different native library or profile. For C, match the header and binary; for WASM, match the generated JS glue and WASM binary.
 

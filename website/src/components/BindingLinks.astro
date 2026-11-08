@@ -1,0 +1,61 @@
+---
+import type { Binding, BindingLink } from '../data/bindings';
+import { withBase } from '../utils/paths';
+
+interface Props {
+  binding: Binding;
+}
+
+interface LinkEntry {
+  kind: string;
+  link: BindingLink;
+}
+
+const { binding } = Astro.props;
+
+const links: LinkEntry[] = [
+  { kind: 'Guide', link: binding.guide },
+  ...(binding.additionalGuides ?? []).map((link) => ({ kind: 'Guide', link })),
+  ...(binding.apiReference ? [{ kind: 'API', link: binding.apiReference }] : []),
+  ...(binding.package ? [{ kind: 'Package', link: binding.package }] : []),
+  ...(binding.registry ? [{ kind: 'Listing', link: binding.registry }] : []),
+];
+---
+
+<ul class="binding-links">
+  {
+    links.map(({ kind, link }) => (
+      <li>
+        <span class="binding-links-kind">{kind}</span>
+        <a href={withBase(link.href)}>{link.label}</a>
+      </li>
+    ))
+  }
+</ul>
+
+<style>
+  .binding-links {
+    display: grid;
+    gap: var(--space-2);
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  .binding-links li {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--space-2);
+    margin: 0;
+  }
+  .binding-links-kind {
+    color: var(--label-tertiary);
+    font-size: var(--text-caption-2);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .binding-links a {
+    display: inline-block;
+    padding-block: var(--space-1);
+  }
+</style>

@@ -54,10 +54,10 @@ when the repository records it as released, qualified or published.
 
 The Swift Fuse distribution is complete: `cribra-swift` 0.7.2 is published, its
 XCFramework asset is checksum-verified, and a clean-room remote consumer passed
-on macOS ARM64 with iOS Simulator compile/link. Swift Package Index registration
-has not been submitted and remains a separate follow-up. Core and Flow remain
-source-build profiles; only Fuse is distributed as the official public Swift
-package. The following are the next priorities:
+on macOS ARM64 with iOS Simulator compile/link. The package is listed on the
+Swift Package Index for discovery; the listing is not Cribra compatibility-build
+evidence. Core and Flow remain source-build profiles; only Fuse is distributed as
+the official public Swift package. The following are the next priorities:
 
 1. **TypeScript isomorphic API contract — complete.** The shared public API is
    implemented in [`docs/TYPESCRIPT_API.md`](docs/TYPESCRIPT_API.md) for the
@@ -468,7 +468,7 @@ each exposing the complete **Fuse** profile:
 
 | Ecosystem | Official distribution target | Default profile | Status |
 | --- | --- | --- | --- |
-| Swift | SwiftPM package, discoverable through Swift Package Index | Fuse | Published and remotely qualified (`cribra-swift` 0.7.2); Swift Package Index registration not submitted |
+| Swift | SwiftPM package, discoverable through Swift Package Index | Fuse | Published and remotely qualified (`cribra-swift` 0.7.2); listed on the Swift Package Index for discovery, without treating it as Cribra compatibility-build evidence |
 | Kotlin/JVM | Maven Central artifact | Fuse | Official priority; local/CI artifacts; Maven Central not published |
 | Python | PyPI package | Fuse | Official priority; local/CI artifacts; PyPI not published |
 
@@ -481,8 +481,9 @@ W3.1B records the Swift contract in
 W3.1C implemented local staging and qualification of that contract under
 `target/swift-distribution/`; that phase created no distribution repository,
 release asset, published checksum or remote package. W3.1D then published
-`cribra-swift` 0.7.2 and passed the clean-room remote consumer gate. Swift Package
-Index registration remains outstanding. The next priorities are recorded in the
+`cribra-swift` 0.7.2 and passed the clean-room remote consumer gate. The package
+is listed on the Swift Package Index for discovery, without treating it as
+Cribra compatibility-build evidence. The next priorities are recorded in the
 [development priority order](#development-priority-order-forward-looking).
 
 Kotlin/JVM and Python registry mechanics remain separate workstreams. For
