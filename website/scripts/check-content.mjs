@@ -698,9 +698,12 @@ async function checkBindingLinkMetadata() {
     );
   }
 
+  const swiftRegistry = bindingLinks.find(
+    (binding) => binding.id === 'swift',
+  )?.registry;
   assert(
-    source.includes('https://swiftpackageindex.com/Metalymph/cribra-swift'),
-    'bindings data does not link the verified Swift Package Index listing',
+    swiftRegistry === 'https://swiftpackageindex.com/Metalymph/cribra-swift',
+    'Swift binding must use the exact Swift Package Index URL',
   );
   assert(
     source.includes('not Cribra compatibility-build evidence'),
@@ -812,9 +815,11 @@ async function checkSwiftPackageIndexDisclosure() {
   const swiftGuide = await readText(
     path.join(docsSourceDirectory, 'integration-swift.md'),
   ).catch(() => '');
+  const swiftIndexLink =
+    /\[Swift Package Index\]\(([^)\s]+)\)/.exec(swiftGuide);
   assert(
-    swiftGuide.includes('https://swiftpackageindex.com/Metalymph/cribra-swift'),
-    'Swift integration guide does not link the verified Swift Package Index listing',
+    swiftIndexLink?.[1] === 'https://swiftpackageindex.com/Metalymph/cribra-swift',
+    'Swift integration guide must link the exact Swift Package Index URL',
   );
   assert(
     /not Cribra compatibility-build evidence/i.test(swiftGuide),
