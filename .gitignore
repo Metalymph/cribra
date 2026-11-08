@@ -1,4 +1,5 @@
 /target
+packages/cribra/test/types/public-api.ts
 **/*.rs.bk
 .DS_Store
 .idea/
