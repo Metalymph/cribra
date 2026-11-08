@@ -117,7 +117,7 @@ published to a package registry; registry publication is tracked separately in
 | Rust Core | Official, implemented | Authoritative engine |
 | C ABI | Official, implemented | Source-built libraries and checked-in header; `publish = false` |
 | WebAssembly | Official, implemented | Core and Flow source; published adapter release has a separate Core contract |
-| Swift | Official, implemented; Fuse package published | Local Core/Flow/Fuse SwiftPM packages and XCFrameworks, plus the published `cribra-swift` 0.7.2 Fuse SwiftPM package and XCFramework release asset; remotely qualified on macOS ARM64 with iOS Simulator compile/link; no Swift Package Index registration |
+| Swift | Official, implemented; Fuse package published | Local Core/Flow/Fuse SwiftPM packages and XCFrameworks, plus the published `cribra-swift` 0.7.2 Fuse SwiftPM package and XCFramework release asset; remotely qualified on macOS ARM64 with iOS Simulator compile/link; listed on the Swift Package Index for discovery, without treating it as Cribra compatibility-build evidence |
 | Kotlin/JVM | Official, implemented; distribution in progress | Local/CI profile JARs and host bundles; planned Fuse Maven artifact; no Maven publication |
 | Python | Official, implemented; distribution in progress | Core/Flow/Fuse source consumers and a local/CI Fuse wheel; planned Fuse PyPI package; no PyPI publication |
 | TypeScript (WebAssembly) | Official, implemented; provisional package unpublished | Higher-level package over typed WASM exports for browsers and compatible JS runtimes. Node 22/24/26, selected browsers and Vite/webpack are qualified from installed tarballs; no npm record or publication exists. |
@@ -154,8 +154,9 @@ ecosystem. Approval, qualification and release are separate gates.
 
 Swift is the first completed public distribution: `cribra-swift` 0.7.2 is
 published, its Fuse XCFramework asset is checksum-verified, and a clean-room
-remote consumer passed on macOS ARM64 with iOS Simulator compile/link. Swift
-Package Index registration has not been submitted. Kotlin/JVM and Python remain
+remote consumer passed on macOS ARM64 with iOS Simulator compile/link. The
+package is listed on the Swift Package Index for discovery; the listing is not
+Cribra compatibility-build evidence. Kotlin/JVM and Python remain
 official priorities with local/CI artifacts only; neither has a published public
 package.
 

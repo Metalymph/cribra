@@ -2,16 +2,32 @@
 export const evidenceDate = '2026-11-07';
 export const repository = 'https://github.com/Metalymph/cribra';
 
+/** A labeled destination that is safe to render as a link. */
+export interface BindingLink {
+  label: string;
+  href: string;
+}
+
 /** One independently evidenced integration surface. */
 export interface Binding {
   id: string;
   name: string;
+  /** Primary integration guide on this website. */
+  guide: BindingLink;
+  /** Additional existing guide pages for the same integration. */
+  additionalGuides?: BindingLink[];
+  /** Generated or hand-written API reference, when one exists. */
+  apiReference?: BindingLink;
+  /** Published package, release, or repository distribution entry. */
+  package?: BindingLink;
+  /** Discovery/registry listing, never compatibility-build evidence. */
+  registry?: BindingLink;
   implementation: string;
   capabilities: string;
   qualification: string;
   limits: string;
   distribution: string;
-  sources: { label: string; href: string }[];
+  sources: BindingLink[];
 }
 
 const source = (label: string, path: string) => ({
@@ -26,6 +42,9 @@ export const bindings: readonly Binding[] = [
   {
     id: 'rust',
     name: 'Rust',
+    guide: { label: 'Rust integration guide', href: '/docs/integration-rust/' },
+    apiReference: { label: 'Rust API overview', href: '/docs/api-reference/' },
+    package: { label: 'cribra 0.7.2 release', href: `${repository}/releases/tag/v0.7.2` },
     implementation: 'Available · cribra 0.7.2 · MSRV 1.97',
     capabilities:
       'Core: scanning, reports, batch, admitted streaming and incremental documents. Flow (default): four transforms and Share Bundles. Fuse: Flow plus Serde and parallel independent-source scans. These are Cargo feature combinations, not features named core/flow/fuse.',
@@ -44,6 +63,7 @@ export const bindings: readonly Binding[] = [
   {
     id: 'c',
     name: 'C ABI',
+    guide: { label: 'C ABI integration guide', href: '/docs/integration-c/' },
     implementation: 'Available · cribra-capi 0.3.0 · ABI protocol 0.3.0',
     capabilities:
       'Scanner configuration, metadata, findings/review, batch, admitted byte streaming, incremental snapshots, four transformations and in-memory Share Bundles. AUTO batches may use parallel scanning only with the adapter parallel feature.',
@@ -62,6 +82,12 @@ export const bindings: readonly Binding[] = [
   {
     id: 'wasm',
     name: 'WebAssembly',
+    guide: { label: 'WebAssembly integration guide', href: '/docs/integration-wasm/' },
+    additionalGuides: [{ label: 'WebAssembly examples', href: '/examples/#webassembly' }],
+    package: {
+      label: 'cribra-wasm 0.4.7 release',
+      href: `${repository}/releases/tag/cribra-wasm-v0.4.7`,
+    },
     implementation: 'Available · cribra-wasm 0.4.7 · typed JS/TypeScript exports',
     capabilities:
       'Checkout Core/Flow: configuration, metadata, ordered sequential batch scans, admitted streaming and incremental snapshots. Flow adds transformations and Share Bundles. No Fuse or Rayon parallel API.',
@@ -83,6 +109,21 @@ export const bindings: readonly Binding[] = [
   {
     id: 'typescript',
     name: 'TypeScript',
+    guide: { label: 'TypeScript quick start', href: '/docs/typescript/' },
+    additionalGuides: [
+      {
+        label: 'TypeScript sessions and transformations',
+        href: '/docs/typescript-sessions-and-transformations/',
+      },
+      {
+        label: 'TypeScript runtime compatibility',
+        href: '/docs/typescript-runtime-compatibility/',
+      },
+    ],
+    apiReference: {
+      label: 'TypeScript API reference',
+      href: '/docs/typescript-api-reference/',
+    },
     implementation:
       'Implemented · cribra-typescript 0.1.0 · WebAssembly backend · provisional and unpublished',
     capabilities:
@@ -104,6 +145,11 @@ export const bindings: readonly Binding[] = [
   {
     id: 'cli',
     name: 'CLI',
+    guide: {
+      label: 'CLI guide',
+      href: '/docs/getting-started/#use-the-cli-from-this-repository',
+    },
+    additionalGuides: [{ label: 'CLI examples', href: '/examples/#cli' }],
     implementation: 'Available · cribra-cli 0.4.4 · executable cribra',
     capabilities:
       'Explicit UTF-8 file/stdin scanning, filters, sorting, metadata reports, four transforms and explicit-file bundle export. No directory traversal, streaming session or incremental-document command; parallel execution is library-only.',
@@ -122,6 +168,19 @@ export const bindings: readonly Binding[] = [
   {
     id: 'swift',
     name: 'Swift',
+    guide: { label: 'Swift integration guide', href: '/docs/integration-swift/' },
+    apiReference: {
+      label: 'Swift Core API reference (0.7.2)',
+      href: '/api/0.7.2/swift/core/documentation/cribra/',
+    },
+    package: {
+      label: 'Published cribra-swift package',
+      href: 'https://github.com/Metalymph/cribra-swift',
+    },
+    registry: {
+      label: 'Swift Package Index listing',
+      href: 'https://swiftpackageindex.com/Metalymph/cribra-swift',
+    },
     implementation: 'Available · Core 0.7.2 · published Fuse SwiftPM package 0.7.2',
     capabilities:
       'Core: configuration, reports, batch, admitted streaming and incremental snapshots. Flow adds transformations/Share Bundles. Fuse adds Core-owned parallel scans and is the published official remote package. Core and Flow remain source-build profiles. Select one matching Cribra module/package per process.',
@@ -130,7 +189,7 @@ export const bindings: readonly Binding[] = [
     limits:
       'No device or Simulator runtime execution claim. macOS 13/iOS 16 are declared minimums, not runtime coverage of each OS. Intel slices absent. No signing or notarization qualification.',
     distribution:
-      'Published official Fuse SwiftPM package: Metalymph/cribra-swift 0.7.2 (tag fa37a32), with a checksum-verified XCFramework release asset. Core and Flow remain source-build alternatives. Swift Package Index registration has not been submitted.',
+      'Published official Fuse SwiftPM package: Metalymph/cribra-swift 0.7.2 (tag fa37a32), with a checksum-verified XCFramework release asset. Core and Flow remain source-build alternatives. The package is listed on the Swift Package Index for discovery; the listing is not Cribra compatibility-build evidence.',
     sources: [
       compatibility,
       source('Swift consumer guide', 'bindings/swift/README.md'),
@@ -151,6 +210,7 @@ export const bindings: readonly Binding[] = [
   {
     id: 'python',
     name: 'Python',
+    guide: { label: 'Python integration guide', href: '/docs/integration-python/' },
     implementation: 'Available · module cribra_uniffi · Core/Flow/Fuse consumers',
     capabilities:
       'Core scanning/configuration, batch, admitted streaming and incremental snapshots. Flow adds transformations/Share Bundles; Fuse adds parallel scans. Packaged wheel contains Fuse only.',
@@ -169,6 +229,7 @@ export const bindings: readonly Binding[] = [
   {
     id: 'kotlin',
     name: 'Kotlin/JVM',
+    guide: { label: 'Kotlin/JVM integration guide', href: '/docs/integration-kotlin/' },
     implementation: 'Available · Core 0.7.2 · adapter 0.1.0 · JDK 17',
     capabilities:
       'Core/Flow/Fuse with scanning, configuration, batch, admitted streams and incremental snapshots; Flow transformations/Share Bundles; Fuse parallel scanning. One profile JAR and matching native library per classpath.',

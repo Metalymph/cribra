@@ -1,7 +1,13 @@
 ---
 import DocLayout from '../../layouts/DocLayout.astro';
+import BindingLinks from '../../components/BindingLinks.astro';
 import BindingMatrix from '../../components/BindingMatrix.astro';
-import { contributingHref, demandDrivenBindings, plannedBindings } from '../../data/bindings';
+import {
+  bindings,
+  contributingHref,
+  demandDrivenBindings,
+  plannedBindings,
+} from '../../data/bindings';
 import { withBase } from '../../utils/paths';
 ---
 
@@ -24,6 +30,21 @@ import { withBase } from '../../utils/paths';
       >TypeScript quick start</a
     >.
   </p>
+  <h2>Start with an integration guide</h2>
+  <p>
+    Every implemented integration has a directly accessible guide. Each card also links the
+    integration's existing API reference, package, or discovery listing where one exists.
+  </p>
+  <ul class="binding-guide-list">
+    {
+      bindings.map((binding) => (
+        <li>
+          <h3>{binding.name}</h3>
+          <BindingLinks binding={binding} />
+        </li>
+      ))
+    }
+  </ul>
   <BindingMatrix />
   <h2>Choose a matching profile</h2>
   <p>
@@ -52,8 +73,9 @@ import { withBase } from '../../utils/paths';
   </p>
   <p>
     See <a href={withBase('/docs/integration-swift/')}>Swift integration</a> for Fuse installation
-    and the documented Core/Flow source-build paths. The Fuse package is published; Swift Package
-    Index registration has not been submitted.
+    and the documented Core/Flow source-build paths. The Fuse package is also listed on the <a
+      href="https://swiftpackageindex.com/Metalymph/cribra-swift">Swift Package Index</a
+    > for discovery; the listing is not Cribra compatibility-build evidence.
   </p>
   <h2>Official planned integrations</h2>
   <p>

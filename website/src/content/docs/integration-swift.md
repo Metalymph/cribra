@@ -8,8 +8,9 @@ order: 11
 
 > **Availability:** the official Fuse SwiftPM package **0.7.2** is published at
 > [`Metalymph/cribra-swift`](https://github.com/Metalymph/cribra-swift) and has
-> passed a clean-room remote consumer gate. Swift Package Index registration has
-> not been submitted.
+> passed a clean-room remote consumer gate. It is also listed on the
+> [Swift Package Index](https://swiftpackageindex.com/Metalymph/cribra-swift) for
+> discovery; the listing is not Cribra compatibility-build evidence.
 
 Cribra performs deterministic scanning in Rust Core. A **finding** is an
 authoritative detection; a **sensitive candidate** is review-only and must not
@@ -154,8 +155,10 @@ runtime qualification**. Declared minimums macOS 13 / iOS 16 are not runtime
 coverage of every OS release. Intel slices, Catalyst, tvOS, watchOS and visionOS
 are not supported. No signing or notarization qualification was performed.
 
-Swift Package Index registration has not been submitted. Do not assume Linux
-compatibility for this Apple-only binary package.
+The package is listed on the
+[Swift Package Index](https://swiftpackageindex.com/Metalymph/cribra-swift) for
+discovery and documentation. The listing is not Cribra compatibility-build evidence
+or Linux compatibility for this Apple-only binary package.
 
 Do not convert Swift string/UTF-16 offsets into incremental edit positions
 without explicit UTF-8 byte conversion. Keep the complete matching generated

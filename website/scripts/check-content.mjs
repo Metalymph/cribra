@@ -37,6 +37,60 @@ const typescriptDocs = new Map([
   ],
 ]);
 
+const repositoryPrefix = 'https://github.com/Metalymph/cribra/';
+
+/**
+ * Every implemented integration must expose a directly reachable guide from
+ * /bindings/. API and package links are included only where the corresponding
+ * artifact exists.
+ */
+const bindingLinks = [
+  {
+    id: 'rust',
+    guide: '/docs/integration-rust/',
+    apiReference: '/docs/api-reference/',
+    package: `${repositoryPrefix}releases/tag/v0.7.2`,
+  },
+  { id: 'c', guide: '/docs/integration-c/' },
+  {
+    id: 'wasm',
+    guide: '/docs/integration-wasm/',
+    package: `${repositoryPrefix}releases/tag/cribra-wasm-v0.4.7`,
+  },
+  {
+    id: 'typescript',
+    guide: '/docs/typescript/',
+    apiReference: '/docs/typescript-api-reference/',
+    additionalGuides: [
+      '/docs/typescript-sessions-and-transformations/',
+      '/docs/typescript-runtime-compatibility/',
+    ],
+  },
+  {
+    id: 'cli',
+    guide: '/docs/getting-started/#use-the-cli-from-this-repository',
+  },
+  {
+    id: 'swift',
+    guide: '/docs/integration-swift/',
+    apiReference: '/api/0.7.2/swift/core/documentation/cribra/',
+    package: 'https://github.com/Metalymph/cribra-swift',
+    registry: 'https://swiftpackageindex.com/Metalymph/cribra-swift',
+  },
+  { id: 'python', guide: '/docs/integration-python/' },
+  { id: 'kotlin', guide: '/docs/integration-kotlin/' },
+];
+
+const staleSwiftPackageIndexClaims = [
+  /Swift Package\s+Index registration has not been submitted/i,
+  /Swift Package\s+Index registration remains outstanding/i,
+  /Index registration has not been submitted/i,
+  /no Swift Package\s+Index registration/i,
+  /no SPI entry has been created or submitted/i,
+  /no SPI entry\s+exists/i,
+  /\bSPI registration\b/i,
+];
+
 const failures = [];
 const warnings = [];
 
@@ -610,6 +664,169 @@ function checkTypescriptDocsStatus(docsById) {
   }
 }
 
+async function checkBindingLinkMetadata() {
+  const source = await readText(bindingsDataSourcePath);
+
+  assert(
+    bindingLinks.length === 8,
+    `expected eight implemented bindings, found ${bindingLinks.length}`,
+  );
+
+  for (const binding of bindingLinks) {
+    assert(
+      source.includes(`id: '${binding.id}'`),
+      `bindings data has no ${binding.id} entry`,
+    );
+
+    for (const href of bindingLinkHrefs(binding)) {
+      const expectedSource =
+        href.startsWith(repositoryPrefix) &&
+        !source.includes(`href: '${href}'`)
+          ? `\${repository}/${href.slice(repositoryPrefix.length)}`
+          : `href: '${href}'`;
+      assert(
+        source.includes(expectedSource),
+        `bindings data does not expose the ${binding.id} link ${href}`,
+      );
+    }
+  }
+
+  for (const href of typescriptDocs.values()) {
+    assert(
+      source.includes(`href: '${href}'`),
+      `bindings data does not link the existing TypeScript page ${href}`,
+    );
+  }
+
+  const swiftRegistry = bindingLinks.find(
+    (binding) => binding.id === 'swift',
+  )?.registry;
+  assert(
+    swiftRegistry === 'https://swiftpackageindex.com/Metalymph/cribra-swift',
+    'Swift binding must use the exact Swift Package Index URL',
+  );
+  assert(
+    source.includes('not Cribra compatibility-build evidence'),
+    'bindings data does not limit the Swift Package Index listing to discovery',
+  );
+}
+
+function bindingLinkHrefs(binding) {
+  return [
+    binding.guide,
+    ...(binding.additionalGuides ?? []),
+    ...(binding.apiReference ? [binding.apiReference] : []),
+    ...(binding.package ? [binding.package] : []),
+    ...(binding.registry ? [binding.registry] : []),
+  ];
+}
+
+async function assertResolvedLink(label, href) {
+  const resolved = await resolveInternalLink(href);
+  if (resolved.kind === 'external') return;
+
+  if (resolved.kind === 'missing') {
+    fail(`${label}: internal link does not resolve: ${href}`);
+    return;
+  }
+
+  if (resolved.kind === 'fragment-only') {
+    fail(`${label}: guide link must target a page, not only a fragment: ${href}`);
+    return;
+  }
+
+  if (resolved.kind === 'file' && resolved.fragment) {
+    const contents = await readText(resolved.target).catch(() => '');
+    if (!hasAnchor(contents, resolved.fragment)) {
+      fail(`${label}: link fragment does not exist: ${href}`);
+    }
+  }
+}
+
+async function checkBindingNavigation() {
+  const bindingsHtml = await readText(path.join(distDirectory, 'bindings/index.html')).catch(
+    () => null,
+  );
+  const homeHtml = await readText(path.join(distDirectory, 'index.html')).catch(() => null);
+
+  assert(bindingsHtml !== null, 'bindings page is missing from the built website');
+  assert(homeHtml !== null, 'homepage is missing from the built website');
+  if (bindingsHtml === null || homeHtml === null) return;
+
+  for (const binding of bindingLinks) {
+    assert(
+      bindingsHtml.includes(`id="${binding.id}"`),
+      `bindings page has no ${binding.id} matrix row`,
+    );
+
+    for (const href of bindingLinkHrefs(binding)) {
+      assert(
+        bindingsHtml.includes(`href="${href}"`),
+        `bindings page does not render the ${binding.id} link ${href}`,
+      );
+    }
+
+    assert(
+      homeHtml.includes(`href="${binding.guide}"`),
+      `homepage does not link the ${binding.id} guide ${binding.guide}`,
+    );
+
+    await assertResolvedLink(`bindings page ${binding.id} guide`, binding.guide);
+    for (const href of binding.additionalGuides ?? []) {
+      await assertResolvedLink(
+        `bindings page ${binding.id} additional guide`,
+        href,
+      );
+    }
+    if (binding.apiReference) {
+      await assertResolvedLink(
+        `bindings page ${binding.id} API reference`,
+        binding.apiReference,
+      );
+    }
+  }
+}
+
+async function checkSwiftPackageIndexDisclosure() {
+  const files = [
+    'website/src/content/docs/integration-swift.md',
+    'website/src/content/docs/compatibility-and-distribution.md',
+    'website/src/data/bindings.ts',
+    'docs/COMPATIBILITY.md',
+    'docs/ECOSYSTEM.md',
+    'ROADMAP.md',
+    'bindings/swift/README.md',
+  ];
+
+  for (const file of files) {
+    const contents = await readText(path.join(repositoryRoot, file)).catch(() => null);
+    if (contents === null) {
+      fail(`Swift Package Index disclosure target is missing: ${file}`);
+      continue;
+    }
+    for (const pattern of staleSwiftPackageIndexClaims) {
+      assert(
+        !pattern.test(contents),
+        `${file}: stale Swift Package Index claim (${pattern})`,
+      );
+    }
+  }
+
+  const swiftGuide = await readText(
+    path.join(docsSourceDirectory, 'integration-swift.md'),
+  ).catch(() => '');
+  const swiftIndexLink =
+    /\[Swift Package Index\]\(([^)\s]+)\)/.exec(swiftGuide);
+  assert(
+    swiftIndexLink?.[1] === 'https://swiftpackageindex.com/Metalymph/cribra-swift',
+    'Swift integration guide must link the exact Swift Package Index URL',
+  );
+  assert(
+    /not Cribra compatibility-build evidence/i.test(swiftGuide),
+    'Swift integration guide does not limit the Swift Package Index listing to discovery',
+  );
+}
+
 async function main() {
   const requireSitemap = process.argv.includes('--require-sitemap');
 
@@ -664,6 +881,9 @@ async function main() {
     }
 
     await checkBindingsData();
+    await checkBindingLinkMetadata();
+    await checkBindingNavigation();
+    await checkSwiftPackageIndexDisclosure();
     await checkPackageIdentity();
     await checkForbiddenInstallCommands();
   }
