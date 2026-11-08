@@ -14,5 +14,5 @@
     "forceConsistentCasingInFileNames": true,
     "types": []
   },
-  "include": ["usage.ts"]
+  "include": ["usage.ts", "docs-examples.ts"]
 }

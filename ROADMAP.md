@@ -59,16 +59,16 @@ has not been submitted and remains a separate follow-up. Core and Flow remain
 source-build profiles; only Fuse is distributed as the official public Swift
 package. The following are the next priorities:
 
-1. **Define the TypeScript isomorphic API contract.** Design one shared public
-   TypeScript API that can support both the WebAssembly backend and a future
-   native UniFFI-backed integration. Define the shared API before either runtime
-   implementation, and distinguish common capabilities from runtime-specific
-   capabilities. The native backend does not exist yet.
-2. **Implement the TypeScript/WASM wrapper** against the shared API contract.
-   The primary motivation is integration into Crystal. Prioritize browser
-   compatibility and a straightforward installation experience. Verify the
-   actual WASM adapter surface when defining implementation milestones; do not
-   assume that every Rust-only capability is already available in WASM.
+1. **TypeScript isomorphic API contract — complete.** The shared public API is
+   implemented in [`docs/TYPESCRIPT_API.md`](docs/TYPESCRIPT_API.md) for the
+   WebAssembly backend, with runtime-specific capabilities distinguished from
+   common behavior.
+2. **TypeScript/WebAssembly package — complete and qualified.** The package is
+   implemented as the provisional, unpublished `cribra-typescript@0.1.0`. It is
+   qualified from installed tarballs for Node 22/24/26, TypeScript 5.9.3/7.0.2,
+   selected browsers, Vite and webpack. It remains private with no npm record;
+   `@metalymph/cribra` is the intended future name and is not currently
+   installable. Publication is a separate authorization step.
 3. **Build the native Rust MCP server.** Planned design constraints: an
    ultra-lightweight Rust binary using MCP over stdio, direct reuse of Cribra
    Core, a minimal dependency footprint, no Node.js or Python runtime, no
@@ -429,19 +429,18 @@ features. The status column distinguishes planned work from implemented or
 published packages. The authoritative support policy is in
 [Ecosystem and scope](docs/ECOSYSTEM.md#binding-support-policy).
 
-| Target | Planned integration | Status |
+| Target | Integration | Status |
 | --- | --- | --- |
-| TypeScript shared API | One isomorphic public API usable by the WASM backend and a future native backend | PLANNED — contract first |
-| TypeScript / WebAssembly | Higher-level wrapper over the existing typed WASM exports, implemented against the shared API | PLANNED |
+| TypeScript (WebAssembly) | Higher-level package over the existing typed WASM exports, implemented against the shared public API | IMPLEMENTED AND QUALIFIED — provisional `cribra-typescript@0.1.0`; private and unpublished |
 | TypeScript native backend | Future UniFFI-backed backend for Node.js; React Native remains separately gated | PLANNED, separately gated |
 | MCP server | Native Rust binary over stdio, reusing Cribra Core | PLANNED |
 
-The TypeScript shared API contract must be defined before the WASM wrapper or the
-native backend is implemented. The WASM wrapper is the concrete near-term
-TypeScript target; its primary motivation is Crystal integration. The native
-backend does not exist and is not implied by the WASM adapter. Investigate actual
-Node.js and React Native requirements rather than assuming UniFFI supplies a
-working React Native binding.
+The TypeScript public API contract and WebAssembly package are implemented. The
+package is not published: the working identity is `cribra-typescript`, the
+intended `@metalymph/cribra` name is unavailable, and no npm record exists. The
+native backend does not exist and is not implied by the WebAssembly adapter.
+Investigate actual Node.js and React Native requirements rather than assuming
+UniFFI supplies a working React Native binding.
 
 #### Demand-driven and community bindings
 
@@ -487,12 +486,12 @@ Index registration remains outstanding. The next priorities are recorded in the
 [development priority order](#development-priority-order-forward-looking).
 
 Kotlin/JVM and Python registry mechanics remain separate workstreams. For
-TypeScript, the shared public API contract is distinct from the distribution
-mechanism used by each runtime; package names and publication architecture are
-not decided prematurely. This policy does not apply automatically to the C ABI,
-the raw WebAssembly crate, Rust feature selection or the planned TypeScript
-runtime integrations, which are distinct targets rather than Core/Flow/Fuse
-package variants.
+TypeScript, the implemented WebAssembly package is distinct from the future
+native backend; the working package name and publication state are recorded in
+[the release runbook](docs/TYPESCRIPT_RELEASE.md). This policy does not apply
+automatically to the C ABI, the raw WebAssembly crate, Rust feature selection or
+the TypeScript runtime targets, which are distinct targets rather than
+Core/Flow/Fuse package variants.
 
 ### Native FFI and bindings
 
@@ -519,8 +518,9 @@ package variants.
   claimed.
 - JavaScript/TypeScript browser and supported JavaScript runtime integration
   remains available through `cribra-wasm` within its documented capability
-  surface. React Native is a separate integration target, not an established
-  WASM or UniFFI consumer.
+  surface. The higher-level `cribra-typescript` WebAssembly package is
+  implemented and qualified but unpublished. React Native is a separate
+  integration target, not an established WASM or UniFFI consumer.
 - The existing C ABI is the interoperability foundation for C, C++, Zig, C3,
   PHP FFI and other compatible native consumers. C and C++ have existing
   examples; the presence of an ABI does not qualify every language consumer.

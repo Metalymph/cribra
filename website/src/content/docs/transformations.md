@@ -15,7 +15,7 @@ Flow enables four operations:
 - **Pseudonymize:** use an explicit caller-owned key for reproducible pseudonyms.
 - **Synthesize:** produce deterministic keyed replacements according to Core's documented semantics.
 
-Transformations are enabled by default in Rust. They are absent from a build using `default-features = false`. See [profile and adapter coverage](/bindings/) before assuming an operation exists in another integration.
+Transformations are enabled by default in Rust. They are absent from a build using `default-features = false`. See [profile and adapter coverage](/bindings/) before assuming an operation exists in another integration. For the TypeScript package, the four Flow operations and Share Bundles are documented in [TypeScript sessions and transformations](/docs/typescript-sessions-and-transformations/); candidates are never rewritten.
 
 ## Create a redacted derivative
 

@@ -573,9 +573,8 @@ or platform qualification.
 | Swift | UniFFI Core / Flow / Fuse; published Fuse SwiftPM package | OFFICIAL — published (`cribra-swift` 0.7.2); Core/Flow source-build |
 | Python | UniFFI Core / Flow / Fuse; Fuse PyPI distribution in progress | OFFICIAL — local/CI artifacts; PyPI not published |
 | Kotlin/JVM | UniFFI Core / Flow / Fuse; Fuse Maven distribution in progress | OFFICIAL — local/CI artifacts; Maven Central not published |
-| JavaScript / TypeScript | `wasm-bindgen` adapter and generated TypeScript declarations | OFFICIAL — source and published adapter |
-| TypeScript shared API | Isomorphic public API for WebAssembly and a future native backend | OFFICIAL — planned; contract first |
-| TypeScript / WebAssembly | Higher-level wrapper over the typed WASM exports | OFFICIAL — planned |
+| JavaScript / `wasm-bindgen` | Typed WebAssembly adapter and generated TypeScript declarations | OFFICIAL — source and published adapter |
+| TypeScript (WebAssembly) | Higher-level package over the typed WASM exports | OFFICIAL — implemented and qualified from installed tarballs; `cribra-typescript` 0.1.0 is provisional, private and not published |
 | TypeScript native backend | Future UniFFI-backed backend for Node.js; React Native separately gated | OFFICIAL — planned, not implemented |
 | MCP | Native Rust server over stdio | OFFICIAL — planned, not implemented |
 | C#, Go, PHP, Ruby, Elixir | Potential additional language bindings | PLANNED — demand-driven / community contribution |
@@ -584,13 +583,15 @@ The Fuse-first Swift distribution is published and remotely qualified: SwiftPM
 package [`cribra-swift` 0.7.2](https://github.com/Metalymph/cribra-swift) installs
 the Fuse binding without Rust, Cargo, UniFFI generators or a Cribra checkout; see
 [Swift installation](bindings/swift/README.md#install-fuse-from-swiftpm). Core and
-Flow remain source-build profiles. The next integration priorities are the shared
-TypeScript API contract, the TypeScript/WASM wrapper and the native Rust MCP
-server. The planned TypeScript wrapper is distinct from the existing typed WASM
-exports; define one shared public TypeScript API before implementing either the
-WASM wrapper or the future native backend. The native backend does not exist, and
-React Native requires separate platform-specific investigation. The MCP server is
-planned as an ultra-lightweight Rust binary over stdio, not a broad service.
+Flow remain source-build profiles. The TypeScript shared API and WebAssembly
+package are implemented as the provisional, unpublished
+`cribra-typescript@0.1.0`; the approved future name is `@metalymph/cribra`, but
+no npm registry record exists and authenticated ownership is unverified. The
+next integration priorities are the native Rust MCP server, the Kotlin/JVM and
+Python Fuse distributions, and the future TypeScript native backend. The native
+backend does not exist, and React Native requires separate platform-specific
+investigation. The MCP server is planned as an ultra-lightweight Rust binary over
+stdio, not a broad service.
 
 C#, Go and PHP are planned as demand-driven / community-contribution candidates,
 not actively scheduled work. Ruby, Elixir and other candidates retain the same

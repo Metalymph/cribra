@@ -1,7 +1,7 @@
 ---
 title: Ownership & Transformations
 description: Input ownership, result lifetimes, and explicit share-safe transformations.
-order: 20
+order: 24
 ---
 
 # Ownership & Transformations

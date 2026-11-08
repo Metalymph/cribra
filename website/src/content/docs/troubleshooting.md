@@ -1,7 +1,7 @@
 ---
 title: Troubleshooting
 description: Diagnose scanning admission, UTF-8 edits, resource failures and adapter mismatches.
-order: 23
+order: 27
 ---
 
 # Troubleshooting
@@ -31,6 +31,17 @@ Budgets count intermediate work, not only final visible findings. Streaming can 
 ## An adapter example does not match an installed package
 
 Source implementation, local qualification, CI qualification and package publication are separate states. In particular, current WASM source APIs can differ from the published WASM package, and generated UniFFI artifacts are not evidence of remote package publication. Use the matching binding, native library and build profile, then consult [compatibility and distribution](/docs/compatibility-and-distribution/) and the relevant [integration guide](/docs/).
+
+## A TypeScript scan fails before it starts
+
+`createScanner`, `getCapabilities`, and `getVersion` require `await init()`.
+Calling them before initialization throws `CribraError("not_initialized")`.
+After `scanner.dispose()`, scanning operations throw
+`CribraError("disposed")`; stream and incremental sessions retain their own
+lifetimes. On a Core-profile backend, transformations and Share Bundles throw
+`CribraError("unsupported_capability")`. See the [TypeScript API
+reference](/docs/typescript-api-reference/#errors) and [runtime
+compatibility](/docs/typescript-runtime-compatibility/).
 
 ## A scan succeeds but the output is not safe to share
 

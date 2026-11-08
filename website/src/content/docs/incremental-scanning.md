@@ -1,7 +1,7 @@
 ---
 title: Incremental scanning
 description: Revisioned UTF-8 documents, atomic edits, snapshots, budgets, and failure recovery.
-order: 18
+order: 22
 ---
 
 ## Contract and use cases
@@ -43,3 +43,5 @@ The four independently optional limits cover raw candidate emissions, retained c
 Rust, C ABI, UniFFI and source WASM expose documented incremental interfaces; their ownership and snapshot representations differ. In particular, source WASM revisions use exact `bigint` values, and native adapters have their own lifetime contracts. The CLI does not offer incremental-document commands. Source capability does not prove equivalent functionality in a published WASM package.
 
 See [scanning modes](/docs/scanning-modes/), the [incremental Core contract](https://github.com/Metalymph/cribra/blob/main/docs/incremental.md), [C ABI contract](https://github.com/Metalymph/cribra/blob/main/docs/INTEROP.md), and [compatibility and publication status](https://github.com/Metalymph/cribra/blob/main/docs/COMPATIBILITY.md).
+
+The provisional TypeScript package uses exact `bigint` revisions and UTF-8 byte edits. See [TypeScript sessions and transformations](/docs/typescript-sessions-and-transformations/) for the public signatures and session lifetime.

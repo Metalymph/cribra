@@ -18,6 +18,17 @@ Streaming admits only compatible rulesets; an ordinary default scanner is not
 automatically streamable. Resource budgets are logical limits, not process-wide
 heap guarantees.
 
+## Typed WASM exports versus the TypeScript package
+
+The `cribra-wasm` crate exposes typed `wasm-bindgen` exports. The separate
+`cribra-typescript` package is a higher-level, backend-neutral API over the
+WebAssembly backend; it is provisional, **unpublished**, and currently available
+only from a source checkout or a locally packed tarball. It is not
+`@metalymph/cribra`, and there is no registry installation to recommend. Start
+with the [TypeScript quick start](/docs/typescript/) and consult the
+[TypeScript runtime compatibility guide](/docs/typescript-runtime-compatibility/)
+before choosing a distribution path.
+
 ## Published package versus current source
 
 The published `cribra-wasm` **0.4.7** registry contract depends on Rust Core

@@ -1,7 +1,7 @@
 ---
 title: Streaming scanning
 description: Append-only UTF-8 byte sessions, explicit rule admission, budgets, and terminal errors.
-order: 17
+order: 21
 ---
 
 ## Contract and use cases
@@ -37,3 +37,5 @@ Session execution failures are terminal: there is no partial report to treat as 
 ## Other language surfaces
 
 The source checkout exposes documented streaming interfaces through Rust, C ABI, UniFFI bindings and WASM. The CLI does **not** expose a streaming command. For WASM, source implementation does not establish that the independently published `cribra-wasm` distribution includes the same session APIs. See the [integration guides](/docs/integration-wasm/) and [compatibility record](https://github.com/Metalymph/cribra/blob/main/docs/COMPATIBILITY.md).
+
+The provisional TypeScript package exposes admitted byte sessions through `scanner.stream()`. See [TypeScript sessions and transformations](/docs/typescript-sessions-and-transformations/) for its lifecycle and limits.

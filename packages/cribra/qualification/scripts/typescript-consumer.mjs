@@ -131,9 +131,14 @@ try {
     // The runner may be invoked directly without npm; the fixture still works.
   }
   const usagePath = resolve(consumer.directory, "usage.ts");
+  const examplesPath = resolve(consumer.directory, "docs-examples.ts");
   await copyFixture(
     resolve(qualificationRoot, "apps/typescript/usage.ts"),
     usagePath,
+  );
+  await copyFixture(
+    resolve(qualificationRoot, "apps/typescript/docs-examples.ts"),
+    examplesPath,
   );
   await copyFixture(
     resolve(qualificationRoot, "apps/typescript/tsconfig.nodenext.json"),
@@ -143,27 +148,37 @@ try {
     resolve(qualificationRoot, "apps/typescript/tsconfig.bundler.json"),
     resolve(consumer.directory, "tsconfig.bundler.json"),
   );
+  await copyFixture(
+    resolve(qualificationRoot, "apps/typescript/tsconfig.docs-run.json"),
+    resolve(consumer.directory, "tsconfig.docs-run.json"),
+  );
 
-  const usage = await readFile(usagePath, "utf8");
-  for (const forbidden of [
-    "packages/cribra/src",
-    "packages/cribra/dist",
-    "../src/",
-    "../dist/",
-    "/dist/",
+  for (const [label, fixturePath] of [
+    ["usage", usagePath],
+    ["documentation examples", examplesPath],
   ]) {
-    if (usage.includes(forbidden)) {
-      throw new Error(`usage fixture imports local path ${forbidden}`);
+    const fixture = await readFile(fixturePath, "utf8");
+    for (const forbidden of [
+      "packages/cribra/src",
+      "packages/cribra/dist",
+      "../src/",
+      "../dist/",
+      "/dist/",
+    ]) {
+      if (fixture.includes(forbidden)) {
+        throw new Error(`${label} fixture imports local path ${forbidden}`);
+      }
     }
-  }
-  if (!usage.includes(`from "${consumer.packageName}"`)) {
-    throw new Error(
-      `usage fixture does not import ${consumer.packageName} by name`,
-    );
+    if (!fixture.includes(`from "${consumer.packageName}"`)) {
+      throw new Error(
+        `${label} fixture does not import ${consumer.packageName} by name`,
+      );
+    }
   }
 
   const declarationCount = await checkDeclarations(consumer.installed);
   const results = [];
+  const exampleRuns = [];
   for (const compiler of compilers) {
     for (const mode of ["nodenext", "bundler"]) {
       const { stdout } = await runChild({
@@ -186,6 +201,38 @@ try {
         `typescript ${compiler.version} ${mode}: passed\n`,
       );
     }
+
+    const outputDirectory = resolve(
+      consumer.directory,
+      `docs-out-${compiler.version}`,
+    );
+    const emitted = await runChild({
+      args: [
+        compiler.tsc,
+        "-p",
+        resolve(consumer.directory, "tsconfig.docs-run.json"),
+        "--outDir",
+        outputDirectory,
+      ],
+      cwd: consumer.directory,
+      label: `typescript ${compiler.version} docs emit`,
+      timeout: 120_000,
+    });
+    const executed = await runChild({
+      args: [resolve(outputDirectory, "docs-examples.js")],
+      cwd: consumer.directory,
+      label: `typescript ${compiler.version} docs examples`,
+      timeout: 120_000,
+    });
+    exampleRuns.push({
+      compiler: compiler.version,
+      emitted: emitted.stdout.trim(),
+      stdout: executed.stdout.trim(),
+      passed: true,
+    });
+    process.stdout.write(
+      `typescript ${compiler.version} docs examples: passed\n`,
+    );
   }
 
   const report = {
@@ -194,6 +241,7 @@ try {
     packageVersion: evidence.package.version,
     declarationCount,
     compilers: results,
+    documentationExamples: exampleRuns,
   };
   await mkdir(resolve(targetRoot, "evidence"), { recursive: true });
   await writeJson(

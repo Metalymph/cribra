@@ -118,6 +118,9 @@ jobs:
       - name: Build Astro and Pagefind
         run: just website-build
 
+      - name: Validate website content
+        run: just website-content-check
+
       - name: Validate combined website output
         shell: bash
         run: |

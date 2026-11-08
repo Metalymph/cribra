@@ -25,6 +25,7 @@ this document records evidence, not delivery commitments.
 | Swift | Product/module `Cribra`; Core/Flow/Fuse local packages; published distribution `0.7.2` (Fuse) | Generated Swift/headers/static archives/XCFrameworks; local SwiftPM dependency; [`cribra-swift` 0.7.2](https://github.com/Metalymph/cribra-swift/releases/tag/0.7.2) SwiftPM package with checksum-verified XCFramework asset; clean-room remote consumer passed on macOS ARM64 and compiled/linked for iOS Simulator ARM64; no Swift Package Index registration |
 | Python | Fuse wheel `cribra` 0.7.2+fuse; module `cribra_uniffi` | Local/CI wheels; planned official Fuse PyPI artifact; no PyPI publication established |
 | Kotlin/JVM | Profile JAR/ZIP names use Core 0.7.2; adapter 0.1.0 | Local and CI host ZIPs; planned official Fuse Maven artifact; no Maven Central or other package publication established |
+| TypeScript `cribra-typescript` | 0.1.0; Flow WebAssembly package; Node `>=22` declaration | **Not published.** Provisional private package; no npm registry record. Intended future name `@metalymph/cribra`, with `cribraRelease.state` `pending-ownership`; local source or packed-tarball installation only |
 
 The official binding distribution policy is one Fuse-first package per ecosystem
 (SwiftPM, Maven Central and PyPI); see
@@ -44,10 +45,12 @@ binding outputs are ignored build products; source-controlled packaging does not
 make a checkout immediately usable as a prebuilt binary dependency. CI diagnostic
 artifacts have retention limits and are not permanent release downloads.
 
-The TypeScript isomorphic API contract, TypeScript/WASM wrapper, TypeScript
-native backend and native Rust MCP server are official planned workstreams;
-none is implemented. The shared TypeScript API must be defined before either
-backend, and the native backend does not exist. C#, Go and PHP are planned as
+The TypeScript isomorphic API and WebAssembly package are implemented as the
+provisional, unpublished `cribra-typescript@0.1.0`. The package is private, has no
+npm registry record, and uses `cribraRelease.state` `pending-ownership`; the
+intended `@metalymph/cribra` name is not an available installation instruction.
+The TypeScript native backend and native Rust MCP server remain official planned
+workstreams, and the native backend does not exist. C#, Go and PHP are planned as
 demand-driven / community-contribution candidates and are not actively
 scheduled; Ruby, Elixir and other language candidates retain that status. These
 candidates are not implemented, qualified or published, and no delivery dates
@@ -204,6 +207,19 @@ This is publication, remote-resolution and qualification evidence for the
 recorded host. iOS Simulator runtime, physical-device runtime, Intel Apple
 targets, signing/notarization and toolchains below Swift 6.4 are not qualified.
 Swift Package Index registration has not been submitted.
+
+## W3.2C TypeScript installed-package qualification — 2026-11-07
+
+The provisional `cribra-typescript@0.1.0` Flow tarball and the test-only Core
+artifact were installed into isolated consumers. The recorded matrix covers
+Node 22.22.0, 24.22.2 and 26.13.0 for Flow and Core; TypeScript 5.9.3 and 7.0.2
+with `NodeNext` and `Bundler`; Google Chrome 156.0.8078.74, Playwright Chromium
+156.0.8078.4, Playwright Firefox 157.0 and Playwright WebKit 27.2 for Flow;
+Chrome for Core; and Vite 8.3.6 development/production plus webpack 5.112.2
+production. Install remains local source or packed tarball only. Native Safari
+is unverified, and Playwright WebKit is not Safari evidence. The `engines.node
+>=22` declaration is not evidence for untested Node releases. No npm record,
+staging or publication exists.
 
 ## Qualification and platform limits
 
