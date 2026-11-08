@@ -15,8 +15,7 @@
     "tagline brand"
     "description ."
     "actions .";
-  column-gap: var(--space-8);
-  row-gap: 0;
+  gap: 0 var(--space-8);
   align-items: center;
   padding: var(--space-20) 0 var(--space-16);
 }

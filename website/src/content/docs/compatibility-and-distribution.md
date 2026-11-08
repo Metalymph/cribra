@@ -1,7 +1,7 @@
 ---
 title: Compatibility & Distribution
 description: Feature profiles, source-versus-release boundaries, and qualified platforms.
-order: 22
+order: 26
 ---
 
 # Compatibility & Distribution
@@ -20,6 +20,7 @@ order: 22
 | Swift | Published Fuse SwiftPM package `cribra-swift` 0.7.2; Core/Flow source builds | Remote package and checksum-verified XCFramework asset published; clean-room macOS ARM64 consumer passed; iOS Simulator compile/link only; no Swift Package Index registration. |
 | Python | Fuse wheel `cribra` 0.7.2+fuse | Local/CI wheels; no PyPI publication established. |
 | Kotlin/JVM | Core 0.7.2 profile JARs/ZIPs | Local/CI artifacts; no Maven publication established. |
+| TypeScript `cribra-typescript` | 0.1.0; Flow WebAssembly package; Node `>=22` declaration | **Not published.** Provisional private package; no registry record. Intended future name `@metalymph/cribra`, with `cribraRelease.state` `pending-ownership`. Local source or packed-tarball installation only. |
 
 ## Feature boundaries
 
@@ -43,14 +44,32 @@ These results concern the exercised contracts and local artifacts. They do not
 establish complete API parity, additional published packages, browser session
 qualification or universal operating-system support.
 
+## TypeScript package status
+
+TypeScript is implemented against the WebAssembly backend as
+`cribra-typescript@0.1.0`. The working package is private and unpublished, and
+the intended `@metalymph/cribra` name is not an available installation
+instruction. The package has no npm registry record, and authenticated ownership
+has not been established.
+
+The W3.2C-1 installed-tarball matrix qualified Node 22.22.0, 24.22.2 and 26.13.0
+for Flow and the test-only Core artifact; TypeScript 5.9.3 and 7.0.2 with
+`NodeNext` and `Bundler`; Google Chrome session/task coverage, Playwright
+Chromium, Playwright Firefox 157.0 and Playwright WebKit 27.2 for Flow; Chrome
+for Core; and Vite 8.3.6 plus webpack 5.112.2. Native Safari remains unverified,
+and Playwright WebKit is not Safari evidence. The `>=22` engine declaration is
+not evidence for untested Node releases. See the [TypeScript quick
+start](/docs/typescript/) and [runtime compatibility
+guide](/docs/typescript-runtime-compatibility/).
+
 ## Planned and demand-driven work
 
 The Fuse-first Swift distribution is complete: `cribra-swift` 0.7.2 is published
 and remotely qualified, with Swift Package Index registration still outstanding.
-The next official priorities are the shared TypeScript isomorphic API contract
-(before either backend), the TypeScript/WASM wrapper and a native Rust MCP server
-over stdio. The Kotlin/JVM Fuse distribution, the Python Fuse distribution and a
-future TypeScript native backend remain later planned workstreams.
+The next official priorities are the native Rust MCP server over stdio, the
+Kotlin/JVM and Python Fuse distributions, and a future TypeScript native backend.
+The TypeScript WebAssembly package is implemented but unpublished; the native
+backend remains planned and separately gated.
 
 C#, Go and PHP are planned as **demand-driven / community contribution**
 candidates. Ruby, Elixir and other candidates retain the same status. They are
@@ -73,5 +92,7 @@ Never combine generated binding files with a different native library or profile
 ## Related guides
 
 - [Integration guides](/docs/)
+- [TypeScript quick start](/docs/typescript/)
+- [TypeScript runtime compatibility](/docs/typescript-runtime-compatibility/)
 - [Security model](/docs/security-model/)
 - [Troubleshooting](/docs/troubleshooting/)

@@ -1,7 +1,7 @@
 ---
 title: Resource Limits & Errors
 description: Streaming admission, incremental budgets, failure semantics, and memory caveats.
-order: 21
+order: 25
 ---
 
 # Resource Limits & Errors

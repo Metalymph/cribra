@@ -4,6 +4,10 @@ import { Code } from 'astro-expressive-code/components';
 const cli =
   'cargo build -p cribra-cli\ntarget/debug/cribra scan examples/fixtures/inputs/credentials.env --format json';
 const wasm = 'just wasm-production\nnode examples/wasm-runtime/scan.mjs';
+const typescriptBuild =
+  'cd packages/cribra\nnpm ci\nnpm run build\nnpm pack';
+const typescriptInstall =
+  'npm install --ignore-scripts --no-audit --no-fund \\\n  /path/to/cribra/packages/cribra/cribra-typescript-0.1.0.tgz';
 ---
 
 <DocLayout
@@ -62,6 +66,23 @@ const wasm = 'just wasm-production\nnode examples/wasm-runtime/scan.mjs';
     These repository commands require the documented Rust WASM target, matching wasm-bindgen CLI,
     and Binaryen. The website does not bundle a scanner or build Rust/WASM. Follow each example's
     prerequisites and compare <a href="/bindings/#wasm">source and distribution coverage</a>.
+  </p>
+  <h2 id="typescript">TypeScript</h2>
+  <p>
+    The TypeScript binding is implemented against the WebAssembly backend as the provisional,
+    unpublished <code>cribra-typescript@0.1.0</code> package. The intended future name
+    <code>@metalymph/cribra</code> is not an available installation instruction. Build a local
+    package from the repository and install the packed tarball into your application:
+  </p>
+  <Code code={typescriptBuild} lang="sh" />
+  <Code code={typescriptInstall} lang="sh" />
+  <p>
+    The <a href="/docs/typescript/">TypeScript quick start</a> contains complete initialization,
+    scanning, batch, streaming, incremental, transformation, Share Bundle, offset, error and
+    disposal examples. The <a href="/docs/typescript-runtime-compatibility/">runtime compatibility
+    guide</a> separates installed-package Node execution from browser, bundler and unverified
+    native-Safari claims. The Core tarball produced by qualification is test-only and must not be
+    distributed.
   </p>
   <h2>Built with Cribra</h2>
   <p>

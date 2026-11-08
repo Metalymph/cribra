@@ -35,6 +35,7 @@ npm run check
 npm run lint
 npm run lint:css
 ASTRO_SITE_URL=https://cribra.pages.dev npm run build
+npm run check:content -- --require-sitemap
 npm run preview -- --host 127.0.0.1
 ```
 
@@ -69,17 +70,29 @@ Rust gates. Generated `.astro/`, `dist/`, and `node_modules/` are ignored here.
 - `/docs/core-concepts/` — boundaries, detection/validation, reports/review
 - `/docs/transformations/` — transformations and Share Bundles
 - `/docs/scanning-modes/` — whole-source, streaming, incremental
+- `/docs/typescript/` — provisional TypeScript WebAssembly quick start
+- `/docs/typescript-api-reference/` — public exports, types, errors, and disposal
+- `/docs/typescript-sessions-and-transformations/` — streams, incremental edits, transformations, Share Bundles
+- `/docs/typescript-runtime-compatibility/` — tested environments and claim boundaries
 - `/bindings/` — evidence-backed integration matrix
 - `/api/0.7.2/swift/core/` — published Swift Core API reference (generated Swift-DocC)
 - `/examples/` — existing runnable repository examples and static excerpts
 - `/search/` — Pagefind; excluded from search indexing and sitemap
 - `/404.html` — static error page; excluded from search indexing and sitemap
 
-The four Markdown guides use a typed Astro Content Collection. Detailed technical
+The Markdown guides use a typed Astro Content Collection. Detailed technical
 and qualification contracts remain in the repository docs. `src/data/bindings.ts`
 is the single website source for integration availability, qualification,
 publication, and capability information. The homepage derives its integration
 list from it. Review this dated snapshot whenever the underlying contracts change.
+
+`npm run check:content` validates documentation frontmatter, rendered routes,
+page metadata, internal links and fragments, Pagefind URL coverage, sitemap
+coverage, binding data, package identity, and forbidden install instructions.
+Build with `ASTRO_SITE_URL` and pass `-- --require-sitemap` to make sitemap
+coverage mandatory. The Pagefind check inspects generated fragment metadata for
+each documentation URL; it does not compare the global Pagefind page count with
+the number of Markdown documents.
 
 Current source and `docs/COMPATIBILITY.md` take precedence over stale statements:
 the website uses Core 0.7.2, does not assume CLI registry installation, and does
@@ -129,6 +142,7 @@ just swift-docc-core
 just stage-swift-docc-core
 just website-check
 just website-build
+just website-content-check
 node website/scripts/validate-swift-docc-build.mjs
 ```
 
@@ -177,6 +191,7 @@ just swift-docc-core
 just stage-swift-docc-core
 just website-check
 ASTRO_SITE_URL=https://cribra.pages.dev just website-build
+just website-content-check
 node website/scripts/validate-swift-docc-build.mjs
 ```
 

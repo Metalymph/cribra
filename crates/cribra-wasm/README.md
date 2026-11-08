@@ -108,7 +108,7 @@ particular ruleset: Core still rejects non-streamable scanners with
 `StreamErrorCode.UnsupportedRuleSet`, and the scanner remains usable.
 
 `CapabilityManifest`, `BackendKind` and `ProfileKind` are internal adapter types;
-they are not part of the future TypeScript package's public surface. The
+they are not part of the `cribra-typescript` public surface. The
 manifest is a wasm-bindgen class, so its getters must be copied into a plain
 object and its generated `free()` called even on failure:
 

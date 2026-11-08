@@ -16,6 +16,14 @@ import { withBase } from '../../utils/paths';
     authority, review-only candidates, UTF-8 coordinates, and explicit transformations without
     creating another detection engine.
   </p>
+  <p>
+    <strong>TypeScript:</strong> the WebAssembly package is implemented as the provisional,
+    unpublished <code>cribra-typescript@0.1.0</code>. The intended future name
+    <code>@metalymph/cribra</code> is not an available installation instruction, and no npm
+    registry record exists. Start with the <a href={withBase('/docs/typescript/')}
+      >TypeScript quick start</a
+    >.
+  </p>
   <BindingMatrix />
   <h2>Choose a matching profile</h2>
   <p>
@@ -24,12 +32,17 @@ import { withBase } from '../../utils/paths';
       >Cribra</code
     >. Streaming admission and resource limits remain Core-owned.
   </p>
-  <h2>Published API reference</h2>
+  <h2>API references</h2>
   <p>
     The generated <a href={withBase('/api/0.7.2/swift/core/documentation/cribra/')}
       >Swift Core API reference</a
     > is published for Cribra 0.7.2. It covers the Swift <code>Cribra</code> module for the
     <strong>Core</strong> profile.
+  </p>
+  <p>
+    The <a href={withBase('/docs/typescript-api-reference/')}>TypeScript API reference</a> documents
+    the eight public runtime exports, <code>Scanner</code>, options, DTOs, UTF-8 coordinates, errors,
+    ownership and disposal for the provisional WebAssembly package.
   </p>
   <p>
     Flow and Fuse are capability profiles. Fuse is the published official remote package for Swift;
@@ -45,7 +58,9 @@ import { withBase } from '../../utils/paths';
   <h2>Official planned integrations</h2>
   <p>
     These are official workstreams that are planned or in progress. Except where the matrix above
-    records otherwise, they are not implemented, qualified or published.
+    records otherwise, they are not implemented, qualified or published. The TypeScript WebAssembly
+    package is implemented and qualified from installed tarballs, but remains unpublished and is
+    therefore not listed here as planned.
   </p>
   <ul>
     {

@@ -1,7 +1,7 @@
 ---
 title: Security Model
 description: Trust boundaries, privacy, and limits of Cribra's security guarantees.
-order: 19
+order: 23
 ---
 
 # Security Model

@@ -1,5 +1,5 @@
 /** Repository evidence snapshot, not a live package-registry lookup. */
-export const evidenceDate = '2026-10-25';
+export const evidenceDate = '2026-11-07';
 export const repository = 'https://github.com/Metalymph/cribra';
 
 /** One independently evidenced integration surface. */
@@ -78,6 +78,27 @@ export const bindings: readonly Binding[] = [
         label: 'Earlier WASM CI',
         href: 'https://github.com/Metalymph/cribra/actions/runs/39411373136',
       },
+    ],
+  },
+  {
+    id: 'typescript',
+    name: 'TypeScript',
+    implementation:
+      'Implemented · cribra-typescript 0.1.0 · WebAssembly backend · provisional and unpublished',
+    capabilities:
+      'Scanning, ordered batch scans, admitted byte streaming, incremental documents, structured errors and UTF-8 offset conversion. Flow adds the four scan-coupled transformations and in-memory Share Bundles. No native TypeScript backend, React Native binding or multi-threaded WASM API.',
+    qualification:
+      'W3.2C-1 installed-tarball qualification: Node 22.22.0, 24.22.2 and 26.13.0 for Flow and the test-only Core artifact; TypeScript 5.9.3 and 7.0.2 with NodeNext and Bundler; Google Chrome 156.0.8078.74, Playwright Chromium 156.0.8078.4, Playwright Firefox 157.0 and Playwright WebKit 27.2 for Flow; Chrome for Core; Vite 8.3.6 development/production and webpack 5.112.2 production. Public documentation examples run from the installed Flow tarball under Node.',
+    limits:
+      'Native Safari is unverified. Playwright WebKit is not Safari, Playwright Firefox is not branded Firefox, and Chrome is distinct from Playwright Chromium. The engines.node >=22 declaration is not evidence for untested or odd-numbered releases. Direct Rollup/esbuild consumption, React Native and multi-threaded WASM are not qualified.',
+    distribution:
+      'Working package cribra-typescript@0.1.0 is private and not published; no npm registry record exists. The intended name @metalymph/cribra is unavailable and pending ownership verification. Install only from a source checkout or a locally packed Flow tarball; the Core tarball is test-only.',
+    sources: [
+      compatibility,
+      source('TypeScript API contract', 'docs/TYPESCRIPT_API.md'),
+      source('TypeScript release runbook', 'docs/TYPESCRIPT_RELEASE.md'),
+      source('Package README', 'packages/cribra/README.md'),
+      source('TypeScript quick start', 'website/src/content/docs/typescript.md'),
     ],
   },
   {
@@ -171,16 +192,6 @@ export const bindings: readonly Binding[] = [
 /** Official workstreams that are planned or in progress; none is a published package unless the matrix above says so. */
 export const plannedBindings = [
   {
-    name: 'TypeScript isomorphic API contract',
-    detail:
-      'One shared public API for the WebAssembly backend and a future native backend. Define the contract before either implementation.',
-  },
-  {
-    name: 'TypeScript / WebAssembly wrapper',
-    detail:
-      'Implement against the shared contract. The primary motivation is Crystal integration, with browser compatibility and simple installation first.',
-  },
-  {
     name: 'Native Rust MCP server',
     detail:
       'Planned ultra-lightweight stdio server over Cribra Core, with no Node.js/Python runtime, database or external service and no arbitrary filesystem access by default.',
@@ -198,7 +209,7 @@ export const plannedBindings = [
   {
     name: 'TypeScript native backend',
     detail:
-      'Future UniFFI-backed backend after the shared contract. Node.js and React Native requirements must be investigated; UniFFI does not by itself provide a working React Native binding.',
+      'Future UniFFI-backed backend for Node.js, separate from the implemented WebAssembly package. React Native requirements remain separately gated; UniFFI does not by itself provide a working React Native binding.',
   },
 ] as const;
 

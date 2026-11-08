@@ -88,9 +88,13 @@ Core-backed in-memory Share Bundles.
 ## TypeScript and MCP
 
 The existing WebAssembly adapter provides typed JavaScript/TypeScript exports.
-A higher-level TypeScript/WASM wrapper and a future native TypeScript backend are
-planned; define the shared isomorphic API contract before implementing either.
-Neither the wrapper nor the native backend is implemented.
+The higher-level TypeScript package is implemented as the provisional, private,
+unpublished `cribra-typescript@0.1.0`; it is not available from npm. Its public
+API contract is recorded in [TYPESCRIPT_API.md](TYPESCRIPT_API.md), and the
+installed-package qualification evidence is summarized in
+[COMPATIBILITY.md](COMPATIBILITY.md). A future native TypeScript backend remains
+planned and separately gated. Start with the
+[TypeScript quick start](https://cribra.pages.dev/docs/typescript/).
 
 The native Rust MCP server is planned as an ultra-lightweight binary using MCP
 over stdio and reusing Cribra Core. It is not implemented. See the

@@ -2,9 +2,9 @@
 
 Provisional, unpublished TypeScript package for the Cribra WebAssembly scanner.
 
-> **Status:** W3.2C-2 release readiness. Flow transformations, Share Bundles,
-> Node ESM, browsers, and production bundlers are qualified from actual
-> `npm pack` tarballs installed into isolated consumers.
+> **Status:** W3.2C-3 documentation and release readiness. Flow transformations,
+> Share Bundles, Node ESM, browsers, and production bundlers are qualified from
+> actual `npm pack` tarballs installed into isolated consumers.
 >
 > - The working manifest is `cribra-typescript@0.1.0`, marked
 >   `"private": true`. The approved release name is `@metalymph/cribra`, but the
@@ -15,6 +15,14 @@ Provisional, unpublished TypeScript package for the Cribra WebAssembly scanner.
 >   readiness and staging both fail closed while the identity is provisional;
 >   local dry runs use `--allow-provisional`. Staging additionally requires an
 >   approved identity and explicit, separately protected authorization.
+> - Public usage documentation lives on the website: [quick
+>   start](https://cribra.pages.dev/docs/typescript/), [API
+>   reference](https://cribra.pages.dev/docs/typescript-api-reference/), [sessions
+>   and transformations](https://cribra.pages.dev/docs/typescript-sessions-and-transformations/),
+>   and [runtime
+>   compatibility](https://cribra.pages.dev/docs/typescript-runtime-compatibility/).
+>   Its examples are executed from the installed Flow tarball by the
+>   qualification runner.
 > - `0.1.0` is the initial independent SemVer for this package. It is not tied to
 >   the Core crate or `cribra-wasm` versions.
 > - Transformations are **Flow only** (`scanner.transform`) and Share Bundles are
@@ -126,7 +134,7 @@ npx playwright install chromium firefox webkit
 
 cd ..
 npm run qualify:pack       # Flow + test-only Core tarballs, reproducible build
-npm run qualify:consumers  # Node, TypeScript, browsers, Vite, webpack, Safari
+npm run qualify:consumers  # Node, TypeScript, Playwright browsers, Vite, webpack
 npm run qualify:all        # pack + consumers, including repeat-build check
 ```
 

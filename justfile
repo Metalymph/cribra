@@ -24,6 +24,10 @@ website-build:
 website-check:
     npm --prefix website run check
 
+# Validate built website content, links, Pagefind, sitemap, and publication boundaries.
+website-content-check:
+    npm --prefix website run check:content -- --require-sitemap
+
 # Build and verify the packed TypeScript Flow and test-only Core tarballs.
 typescript-pack:
     npm --prefix packages/cribra run qualify:pack

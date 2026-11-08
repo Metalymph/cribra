@@ -1,7 +1,7 @@
 ---
 title: Whole-source scanning
 description: Complete deterministic scans, ordered source reports, and reference semantics.
-order: 16
+order: 20
 ---
 
 ## When to use it
