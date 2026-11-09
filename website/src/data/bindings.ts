@@ -125,7 +125,7 @@ export const bindings: readonly Binding[] = [
       href: '/docs/typescript-api-reference/',
     },
     implementation:
-      'Implemented · cribra-typescript 0.1.0 · WebAssembly backend · provisional and unpublished',
+      'Implemented · @metalymph/cribra 0.1.0 · WebAssembly backend · approved and unpublished',
     capabilities:
       'Scanning, ordered batch scans, admitted byte streaming, incremental documents, structured errors and UTF-8 offset conversion. Flow adds the four scan-coupled transformations and in-memory Share Bundles. No native TypeScript backend, React Native binding or multi-threaded WASM API.',
     qualification:
@@ -133,7 +133,7 @@ export const bindings: readonly Binding[] = [
     limits:
       'Native Safari is unverified. Playwright WebKit is not Safari, Playwright Firefox is not branded Firefox, and Chrome is distinct from Playwright Chromium. The engines.node >=22 declaration is not evidence for untested or odd-numbered releases. Direct Rollup/esbuild consumption, React Native and multi-threaded WASM are not qualified.',
     distribution:
-      'Working package cribra-typescript@0.1.0 is private and not published; no npm registry record exists. The intended name @metalymph/cribra is unavailable and pending ownership verification. Install only from a source checkout or a locally packed Flow tarball; the Core tarball is test-only.',
+      'The approved package @metalymph/cribra@0.1.0 is not published; no npm registry record exists. Install only from a source checkout or a locally packed Flow tarball until a separately authorized release; the Core tarball is test-only.',
     sources: [
       compatibility,
       source('TypeScript API contract', 'docs/TYPESCRIPT_API.md'),

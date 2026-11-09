@@ -1,12 +1,11 @@
 {
-  "name": "cribra-typescript",
+  "name": "@metalymph/cribra",
   "version": "0.1.0",
   "description": "ESM-only TypeScript bindings for the Cribra WebAssembly scanner",
   "type": "module",
-  "private": true,
   "cribraRelease": {
     "approvedName": "@metalymph/cribra",
-    "state": "pending-ownership",
+    "state": "approved",
     "tagPrefix": "typescript-v",
     "distTag": "latest",
     "registry": "https://registry.npmjs.org/"

@@ -574,7 +574,7 @@ or platform qualification.
 | Python | UniFFI Core / Flow / Fuse; Fuse PyPI distribution in progress | OFFICIAL — local/CI artifacts; PyPI not published |
 | Kotlin/JVM | UniFFI Core / Flow / Fuse; Fuse Maven distribution in progress | OFFICIAL — local/CI artifacts; Maven Central not published |
 | JavaScript / `wasm-bindgen` | Typed WebAssembly adapter and generated TypeScript declarations | OFFICIAL — source and published adapter |
-| TypeScript (WebAssembly) | Higher-level package over the typed WASM exports | OFFICIAL — implemented and qualified from installed tarballs; `cribra-typescript` 0.1.0 is provisional, private and not published |
+| TypeScript (WebAssembly) | Higher-level package over the typed WASM exports | OFFICIAL — implemented and qualified from installed tarballs; `@metalymph/cribra` 0.1.0 is approved and not published |
 | TypeScript native backend | Future UniFFI-backed backend for Node.js; React Native separately gated | OFFICIAL — planned, not implemented |
 | MCP | Native Rust server over stdio | OFFICIAL — planned, not implemented |
 | C#, Go, PHP, Ruby, Elixir | Potential additional language bindings | PLANNED — demand-driven / community contribution |
@@ -584,9 +584,8 @@ package [`cribra-swift` 0.7.2](https://github.com/Metalymph/cribra-swift) instal
 the Fuse binding without Rust, Cargo, UniFFI generators or a Cribra checkout; see
 [Swift installation](bindings/swift/README.md#install-fuse-from-swiftpm). Core and
 Flow remain source-build profiles. The TypeScript shared API and WebAssembly
-package are implemented as the provisional, unpublished
-`cribra-typescript@0.1.0`; the approved future name is `@metalymph/cribra`, but
-no npm registry record exists and authenticated ownership is unverified. The
+package are implemented with the approved identity `@metalymph/cribra@0.1.0`,
+but the package is unpublished and no npm registry record exists yet. The
 next integration priorities are the native Rust MCP server, the Kotlin/JVM and
 Python Fuse distributions, and the future TypeScript native backend. The native
 backend does not exist, and React Native requires separate platform-specific

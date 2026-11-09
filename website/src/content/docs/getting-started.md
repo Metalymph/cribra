@@ -52,6 +52,6 @@ Run these commands from the repository root. On Windows, the executable is `targ
 
 The [bindings matrix](/bindings/) separates source availability, capability coverage, qualification, and distribution. The Swift Fuse 0.7.2 SwiftPM package is published and remotely qualified; Python and Kotlin/JVM consumers are implemented, but their local or CI artifacts do not establish registry publication.
 
-TypeScript is implemented against the WebAssembly backend as the provisional, unpublished `cribra-typescript@0.1.0` package. It is not available from npm; use the [TypeScript quick start](/docs/typescript/) for a local source or tarball installation.
+TypeScript is implemented against the WebAssembly backend as the approved but unpublished `@metalymph/cribra@0.1.0` package. It is not available from npm yet; use the [TypeScript quick start](/docs/typescript/) for a local source or tarball installation.
 
 Continue with [core concepts](/docs/core-concepts/), [transformations](/docs/transformations/), and [scanning modes](/docs/scanning-modes/). Detailed build prerequisites live in the repository's [getting-started guide](https://github.com/Metalymph/cribra/blob/main/docs/GETTING_STARTED.md).

@@ -1,17 +1,17 @@
 ---
 title: "TypeScript runtime compatibility"
-description: "Tested Node, browser, and bundler environments for the provisional cribra-typescript package, with explicit claim boundaries."
+description: "Tested Node, browser, and bundler environments for the approved, unpublished @metalymph/cribra package, with explicit claim boundaries."
 order: 19
 ---
 
 # TypeScript runtime compatibility
 
-The `cribra-typescript` package is an **implemented and locally qualified**
+The `@metalymph/cribra` package is an **implemented and locally qualified**
 binding against the Cribra WebAssembly backend. It is **not published**. The
-working manifest is `cribra-typescript@0.1.0`, marked `"private": true`, with
-`cribraRelease.state` set to `"pending-ownership"`. The project has not
-published the package, no npm registry record exists, and `@metalymph/cribra` is
-not an available installation instruction.
+manifest is `@metalymph/cribra@0.1.0`, not private, with
+`cribraRelease.state` set to `"approved"`. The project has not published the
+package, no npm registry record exists, and `@metalymph/cribra` is not yet an
+available registry installation instruction.
 
 "Implemented", "qualified from an installed package", and "published" are
 separate claims. The evidence below comes from packed tarballs installed into
@@ -69,7 +69,7 @@ With no argument, `init()` resolves the packaged WASM asset relative to the
 package. Consumers may provide explicit bytes or a URL instead:
 
 ```ts
-import { init } from "cribra-typescript";
+import { init } from "@metalymph/cribra";
 
 await init();
 
@@ -93,9 +93,9 @@ never distributed; Core rejects transformations and Share Bundles with
 
 The package is currently available only from a source checkout or a locally
 packed tarball. See the [quick start](/docs/typescript/) for local build and
-install commands. Do not infer registry availability, package ownership, or a
-successful publication from this documentation or from the `cribraRelease`
-configuration.
+install commands. Do not infer registry availability or a successful publication
+from this documentation or from the `cribraRelease` configuration; npm ownership
+was verified separately and the package remains unpublished.
 
 ## Not claimed
 
@@ -105,7 +105,8 @@ configuration.
 - branded Firefox qualification;
 - direct Rollup or esbuild consumption;
 - universal Node-version or browser-version support;
-- npm publication, staging, or authenticated ownership of `@metalymph/cribra`.
+- npm publication or staging of `@metalymph/cribra`; authenticated ownership is
+  verified but a registry release has not happened.
 
 The future native TypeScript backend remains planned and separately gated. It is
 not part of this WebAssembly package.

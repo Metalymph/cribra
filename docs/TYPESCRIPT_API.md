@@ -2,13 +2,14 @@
 
 Status: **implemented for the WebAssembly Flow profile — W3.2B-2 foundation,
 W3.2B-3 streaming/incremental, W3.2B-4 transformations and Share Bundles,
-W3.2C-1 installed-artifact qualification, and W3.2C-2 release readiness. Core
-rejects transformations and Share Bundles with `unsupported_capability`.
+W3.2C-1 installed-artifact qualification, W3.2C-2 release readiness, and
+W3.2C-4 approved npm identity `@metalymph/cribra@0.1.0` (not yet published).
+Core rejects transformations and Share Bundles with `unsupported_capability`.
 Qualified from packed tarballs on Node 22/24/26, Chrome, Chromium, Playwright
 Firefox, Playwright WebKit, Vite, and webpack. Native Safari remains unverified
 because remote automation is not enabled.**
 
-## 0. Distribution qualification (W3.2C-1, release readiness W3.2C-2)
+## 0. Distribution qualification (W3.2C-1, release readiness W3.2C-2, approved identity W3.2C-4)
 
 The public artifact is the Flow package. A separately labeled test-only Core
 tarball is used only to prove capability gating. Qualification installs each
@@ -17,11 +18,11 @@ source, `dist/`, or a workspace alias.
 
 Package identity and version are read from `packages/cribra/package.json`; no
 qualification, packing, type-test, or release script hardcodes them. The
-current working identity is `cribra-typescript@0.1.0`, marked `"private": true`.
-`cribraRelease.approvedName` records `@metalymph/cribra`, but
-`cribraRelease.state` remains `"pending-ownership"` until authenticated npm
-ownership is proven. Release mode fails closed until both the literal rename and
-the state are approved. The TypeScript package follows its own SemVer and
+approved identity is `@metalymph/cribra@0.1.0`: `private` is absent and
+`cribraRelease.state` is `"approved"`. Authenticated npm ownership of the
+`@metalymph` scope was verified in W3.2C-4. The package is **not published**;
+no registry record exists. The legacy `cribra-typescript` name is rejected by
+release gates. The TypeScript package follows its own SemVer and
 `typescript-v*` tag namespace; it is independent of Core and `cribra-wasm`
 versions.
 
@@ -164,10 +165,10 @@ Legend:
   adapter; `Flow only` means available only with the `transform` feature;
   `Absent` means no export exists.
 - **TypeScript implementation** — `None` means specified by this document but
-  not implemented in the private package. W3.2B-2 implemented the foundation,
-  W3.2B-3 streaming and incremental scanning, and W3.2B-4 transformations and
-  Share Bundles. Final qualification covers Node ESM and Chrome for both
-  profiles; bundlers and other browsers remain out of scope.
+  not implemented in the package. W3.2B-2 implemented the foundation, W3.2B-3
+  streaming and incremental scanning, and W3.2B-4 transformations and Share
+  Bundles. W3.2C-1 qualified Node ESM, TypeScript, selected browsers and
+  bundlers from installed tarballs.
 
 | Capability | Rust Core | WASM adapter (existing) | TypeScript contract | TypeScript implementation |
 | --- | --- | --- | --- | --- |
@@ -1277,12 +1278,11 @@ exported signature.
 
 ```json
 {
-  "name": "cribra-typescript",
+  "name": "@metalymph/cribra",
   "version": "0.1.0",
-  "private": true,
   "cribraRelease": {
     "approvedName": "@metalymph/cribra",
-    "state": "pending-ownership",
+    "state": "approved",
     "tagPrefix": "typescript-v",
     "distTag": "latest",
     "registry": "https://registry.npmjs.org/"
@@ -1314,8 +1314,8 @@ exported signature.
   tags. Scripts fail if a generated artifact disagrees with `package.json`.
 - **Release gate.** `cribraRelease.state` must be `"approved"` and
   `cribraRelease.approvedName` must equal `name` before release-mode checks
-  pass. The provisional state fails closed, so the literal rename to
-  `@metalymph/cribra` cannot be skipped by an operational mistake.
+  pass. The legacy `cribra-typescript` name is rejected, so an accidental
+  downgrade of the identity cannot pass staging.
 - **Independent versioning.** The package uses its own SemVer and
   `typescript-v<version>` tags. It is not synchronized with Core or
   `cribra-wasm`.
@@ -1431,7 +1431,7 @@ the answer.
 
 | # | Question | Decision | Status |
 | --- | --- | --- | --- |
-| 1 | Package identity | Working manifest `cribra-typescript@0.1.0` with `private: true`; approved release name is `@metalymph/cribra`. The literal rename and `cribraRelease.state: "approved"` wait for authenticated npm ownership verification | Partially pending: release infrastructure resolved; ownership unverified |
+| 1 | Package identity | Approved manifest `@metalymph/cribra@0.1.0`, not private, with `cribraRelease.state: "approved"`. Authenticated npm ownership of `@metalymph` was verified; the package remains unpublished | Resolved for identity; release not yet authorized |
 | 2 | Module format | ESM-only for v1. CommonJS is out of scope and may be revisited after W3.2C | Resolved |
 | 3 | Minimum runtime | `engines.node` `>=22`; Node 22/24/26, Chrome, Chromium, Playwright Firefox, Playwright WebKit, Vite, and webpack qualified from packed artifacts. Native Safari unverified | Resolved |
 | 4 | Revision type | Keep `bigint`; never narrow to `number` | Resolved |
@@ -1447,13 +1447,11 @@ the answer.
 
 Genuinely pending items:
 
-- Authenticated npm ownership of `@metalymph` (and therefore the literal rename
-  to `@metalymph/cribra`). The release scripts fail closed until this is proven.
 - Approval of an additive `cribra::VERSION` constant, if `getVersion().core`
   should ever be non-optional.
-- The first authorized publication after review. Readiness, staging, provenance,
-  and approval requirements are specified in
-  [the release runbook](TYPESCRIPT_RELEASE.md).
+- The first authorized publication after review. The identity is approved, but
+  the package is not published. Readiness, staging, provenance, and approval
+  requirements are specified in [the release runbook](TYPESCRIPT_RELEASE.md).
 
 ## Appendix: source references
 

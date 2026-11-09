@@ -88,7 +88,7 @@ Cribra provides several independently versioned interfaces:
 | Swift | UniFFI Core, Flow and Fuse source packages and XCFrameworks; official published Fuse SwiftPM package (`cribra-swift` 0.7.2) |
 | Kotlin/JVM | UniFFI Core, Flow and Fuse profile JARs and host bundles; planned official Fuse Maven artifact |
 | Python | UniFFI Core, Flow and Fuse consumers and Fuse wheel packaging; planned official Fuse PyPI package |
-| TypeScript | Implemented WebAssembly package (`cribra-typescript`, provisional and unpublished); future native backend separately gated |
+| TypeScript | Implemented WebAssembly package (`@metalymph/cribra`, approved identity and unpublished); future native backend separately gated |
 | MCP | Planned native Rust binary using MCP over stdio and reusing Cribra Core |
 | CLI | Explicit UTF-8 file or standard-input scanning |
 
@@ -120,7 +120,7 @@ published to a package registry; registry publication is tracked separately in
 | Swift | Official, implemented; Fuse package published | Local Core/Flow/Fuse SwiftPM packages and XCFrameworks, plus the published `cribra-swift` 0.7.2 Fuse SwiftPM package and XCFramework release asset; remotely qualified on macOS ARM64 with iOS Simulator compile/link; listed on the Swift Package Index for discovery, without treating it as Cribra compatibility-build evidence |
 | Kotlin/JVM | Official, implemented; distribution in progress | Local/CI profile JARs and host bundles; planned Fuse Maven artifact; no Maven publication |
 | Python | Official, implemented; distribution in progress | Core/Flow/Fuse source consumers and a local/CI Fuse wheel; planned Fuse PyPI package; no PyPI publication |
-| TypeScript (WebAssembly) | Official, implemented; provisional package unpublished | Higher-level package over typed WASM exports for browsers and compatible JS runtimes. Node 22/24/26, selected browsers and Vite/webpack are qualified from installed tarballs; no npm record or publication exists. |
+| TypeScript (WebAssembly) | Official, implemented; approved package unpublished | Higher-level package over typed WASM exports for browsers and compatible JS runtimes. Node 22/24/26, selected browsers and Vite/webpack are qualified from installed tarballs; no npm record or publication exists. |
 | TypeScript (native) | Official, planned; separately gated | Future UniFFI-backed backend against the established public API; Node.js requirements need investigation, and UniFFI does not by itself provide a working React Native binding |
 | MCP server | Official, planned | Ultra-lightweight native Rust binary over stdio reusing Cribra Core; no Node.js/Python runtime, database or external service; no arbitrary filesystem access by default |
 | C#, Go, PHP, Ruby, Elixir | Planned — demand-driven / community contribution | Not actively scheduled; considered only with demonstrated real-world demand or a viable community contribution |
@@ -189,9 +189,9 @@ distribution. It does not automatically define the packaging architecture of the
 C ABI, the raw WebAssembly crate, Rust feature selection, the MCP server or the
 TypeScript package. For TypeScript, the implemented WebAssembly package is
 distinct from the future native backend; they are separate targets, not
-Core/Flow/Fuse package variants. The working package is `cribra-typescript`; the
-intended `@metalymph/cribra` name is not an available installation instruction
-and remains pending ownership verification and release authorization.
+Core/Flow/Fuse package variants. The approved package identity is
+`@metalymph/cribra`; it is not an available installation instruction until a
+separately authorized release succeeds.
 
 ## Related projects and workflows
 

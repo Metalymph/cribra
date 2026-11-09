@@ -7,7 +7,7 @@ order: 17
 # TypeScript API reference
 
 This reference describes the public declarations shipped by
-`cribra-typescript@0.1.0`. The package is provisional and unpublished; see the
+`@metalymph/cribra@0.1.0`. The package is approved but unpublished; see the
 [quick start](/docs/typescript/) for local installation. No generated
 `wasm-bindgen` class, numeric enum, native handle, or `free()` method appears in
 the public declarations or in returned values.
