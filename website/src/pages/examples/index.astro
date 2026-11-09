@@ -7,7 +7,7 @@ const wasm = 'just wasm-production\nnode examples/wasm-runtime/scan.mjs';
 const typescriptBuild =
   'cd packages/cribra\nnpm ci\nnpm run build\nnpm pack';
 const typescriptInstall =
-  'npm install --ignore-scripts --no-audit --no-fund \\\n  /path/to/cribra/packages/cribra/cribra-typescript-0.1.0.tgz';
+  'npm install --ignore-scripts --no-audit --no-fund \\\n  /path/to/cribra/packages/cribra/metalymph-cribra-0.1.0.tgz';
 ---
 
 <DocLayout
@@ -69,10 +69,10 @@ const typescriptInstall =
   </p>
   <h2 id="typescript">TypeScript</h2>
   <p>
-    The TypeScript binding is implemented against the WebAssembly backend as the provisional,
-    unpublished <code>cribra-typescript@0.1.0</code> package. The intended future name
-    <code>@metalymph/cribra</code> is not an available installation instruction. Build a local
-    package from the repository and install the packed tarball into your application:
+    The TypeScript binding is implemented against the WebAssembly backend as the approved,
+    unpublished <code>@metalymph/cribra@0.1.0</code> package. It is not an available registry
+    installation instruction yet. Build a local package from the repository and install the packed
+    tarball into your application:
   </p>
   <Code code={typescriptBuild} lang="sh" />
   <Code code={typescriptInstall} lang="sh" />

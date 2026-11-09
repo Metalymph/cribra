@@ -18,6 +18,8 @@ Rust Core and `cribra-wasm`. It is not published and has no npm registry record.
 
 - Initial independent SemVer `0.1.0` for the ESM-only TypeScript bindings to
   the Cribra WebAssembly Flow scanner.
+- Approved npm identity `@metalymph/cribra@0.1.0`; the package is not private
+  and `cribraRelease.state` is `approved`. It remains unpublished.
 - Installed-artifact qualification of the packed Flow package and a test-only
   Core package: Node 22/24/26, TypeScript 5.9.3/7.0.2, Chrome, Chromium,
   Playwright Firefox, Playwright WebKit, Vite, and webpack.
@@ -33,7 +35,7 @@ Rust Core and `cribra-wasm`. It is not published and has no npm registry record.
 
 ### Security
 
-- Release mode refuses the provisional `cribra-typescript` identity,
+- Release mode refuses the legacy `cribra-typescript` identity,
   `private: true`, an unapproved release state, a non-npmjs registry, missing
   provenance, an unverified ref/commit, a mismatched tarball digest, or an
   already-published version.

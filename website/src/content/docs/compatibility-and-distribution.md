@@ -20,7 +20,7 @@ order: 26
 | Swift | Published Fuse SwiftPM package `cribra-swift` 0.7.2; Core/Flow source builds | Remote package and checksum-verified XCFramework asset published; clean-room macOS ARM64 consumer passed; iOS Simulator compile/link only; listed on the Swift Package Index for discovery; the listing is not Cribra compatibility-build evidence. |
 | Python | Fuse wheel `cribra` 0.7.2+fuse | Local/CI wheels; no PyPI publication established. |
 | Kotlin/JVM | Core 0.7.2 profile JARs/ZIPs | Local/CI artifacts; no Maven publication established. |
-| TypeScript `cribra-typescript` | 0.1.0; Flow WebAssembly package; Node `>=22` declaration | **Not published.** Provisional private package; no registry record. Intended future name `@metalymph/cribra`, with `cribraRelease.state` `pending-ownership`. Local source or packed-tarball installation only. |
+| TypeScript `@metalymph/cribra` | 0.1.0; Flow WebAssembly package; Node `>=22` declaration | **Not published.** Approved identity (`cribraRelease.state` `approved`); no registry record. Local source or packed-tarball installation only until a separately authorized release. |
 
 ## Feature boundaries
 
@@ -47,10 +47,10 @@ qualification or universal operating-system support.
 ## TypeScript package status
 
 TypeScript is implemented against the WebAssembly backend as
-`cribra-typescript@0.1.0`. The working package is private and unpublished, and
-the intended `@metalymph/cribra` name is not an available installation
-instruction. The package has no npm registry record, and authenticated ownership
-has not been established.
+`@metalymph/cribra@0.1.0`. The package identity is approved but the package is
+unpublished, so the name is not yet an available registry installation
+instruction. The package has no npm registry record; publication remains a
+separately authorized step.
 
 The W3.2C-1 installed-tarball matrix qualified Node 22.22.0, 24.22.2 and 26.13.0
 for Flow and the test-only Core artifact; TypeScript 5.9.3 and 7.0.2 with

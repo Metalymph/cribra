@@ -64,11 +64,10 @@ the official public Swift package. The following are the next priorities:
    WebAssembly backend, with runtime-specific capabilities distinguished from
    common behavior.
 2. **TypeScript/WebAssembly package — complete and qualified.** The package is
-   implemented as the provisional, unpublished `cribra-typescript@0.1.0`. It is
+   implemented as the approved but unpublished `@metalymph/cribra@0.1.0`. It is
    qualified from installed tarballs for Node 22/24/26, TypeScript 5.9.3/7.0.2,
-   selected browsers, Vite and webpack. It remains private with no npm record;
-   `@metalymph/cribra` is the intended future name and is not currently
-   installable. Publication is a separate authorization step.
+   selected browsers, Vite and webpack. It has no npm record and is not currently
+   installable from the registry. Publication is a separate authorization step.
 3. **Build the native Rust MCP server.** Planned design constraints: an
    ultra-lightweight Rust binary using MCP over stdio, direct reuse of Cribra
    Core, a minimal dependency footprint, no Node.js or Python runtime, no
@@ -431,13 +430,13 @@ published packages. The authoritative support policy is in
 
 | Target | Integration | Status |
 | --- | --- | --- |
-| TypeScript (WebAssembly) | Higher-level package over the existing typed WASM exports, implemented against the shared public API | IMPLEMENTED AND QUALIFIED — provisional `cribra-typescript@0.1.0`; private and unpublished |
+| TypeScript (WebAssembly) | Higher-level package over the existing typed WASM exports, implemented against the shared public API | IMPLEMENTED AND QUALIFIED — approved `@metalymph/cribra@0.1.0`; unpublished |
 | TypeScript native backend | Future UniFFI-backed backend for Node.js; React Native remains separately gated | PLANNED, separately gated |
 | MCP server | Native Rust binary over stdio, reusing Cribra Core | PLANNED |
 
 The TypeScript public API contract and WebAssembly package are implemented. The
-package is not published: the working identity is `cribra-typescript`, the
-intended `@metalymph/cribra` name is unavailable, and no npm record exists. The
+package is not published: the approved identity is `@metalymph/cribra`, and no
+npm record exists yet. The
 native backend does not exist and is not implied by the WebAssembly adapter.
 Investigate actual Node.js and React Native requirements rather than assuming
 UniFFI supplies a working React Native binding.
@@ -519,7 +518,7 @@ Core/Flow/Fuse package variants.
   claimed.
 - JavaScript/TypeScript browser and supported JavaScript runtime integration
   remains available through `cribra-wasm` within its documented capability
-  surface. The higher-level `cribra-typescript` WebAssembly package is
+  surface. The higher-level `@metalymph/cribra` WebAssembly package is
   implemented and qualified but unpublished. React Native is a separate
   integration target, not an established WASM or UniFFI consumer.
 - The existing C ABI is the interoperability foundation for C, C++, Zig, C3,

@@ -44,4 +44,4 @@ Rust, C ABI, UniFFI and source WASM expose documented incremental interfaces; th
 
 See [scanning modes](/docs/scanning-modes/), the [incremental Core contract](https://github.com/Metalymph/cribra/blob/main/docs/incremental.md), [C ABI contract](https://github.com/Metalymph/cribra/blob/main/docs/INTEROP.md), and [compatibility and publication status](https://github.com/Metalymph/cribra/blob/main/docs/COMPATIBILITY.md).
 
-The provisional TypeScript package uses exact `bigint` revisions and UTF-8 byte edits. See [TypeScript sessions and transformations](/docs/typescript-sessions-and-transformations/) for the public signatures and session lifetime.
+The `@metalymph/cribra` TypeScript package uses exact `bigint` revisions and UTF-8 byte edits. See [TypeScript sessions and transformations](/docs/typescript-sessions-and-transformations/) for the public signatures and session lifetime.

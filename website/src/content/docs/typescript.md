@@ -1,18 +1,16 @@
 ---
 title: "TypeScript quick start"
-description: "Initialize the provisional cribra-typescript WebAssembly package, scan caller-owned text, and convert UTF-8 byte spans."
+description: "Initialize the @metalymph/cribra WebAssembly package, scan caller-owned text, and convert UTF-8 byte spans."
 order: 16
 ---
 
 # TypeScript quick start
 
 > **Status:** TypeScript is implemented against the Cribra WebAssembly backend as
-> the provisional, **unpublished** package `cribra-typescript@0.1.0`. The working
-> manifest is marked `"private": true` and `cribraRelease.state` is
-> `"pending-ownership"`. The project has not published this package, and no npm
-> registry record exists. `@metalymph/cribra` is the intended future name; it is
-> not currently an available installation instruction, and authenticated npm
-> ownership has not been established.
+> the package `@metalymph/cribra@0.1.0`, which is **not published**. The manifest
+> is not private and `cribraRelease.state` is `"approved"`. No npm registry
+> record exists. It is not currently an available registry installation
+> instruction; a real publication requires a separately authorized release.
 
 The package is ESM-only, has no runtime npm dependencies, and performs no WASM
 work when imported. `await init()` loads the packaged WebAssembly asset; every
@@ -35,9 +33,9 @@ npm run build
 npm pack
 ```
 
-`npm pack` writes `cribra-typescript-0.1.0.tgz` in `packages/cribra/`. To produce
+`npm pack` writes `metalymph-cribra-0.1.0.tgz` in `packages/cribra/`. To produce
 the release-qualified Flow tarball instead, run `npm run qualify:pack`; it writes
-`target/typescript-qualification/artifacts/flow/cribra-typescript-0.1.0.tgz`.
+`target/typescript-qualification/artifacts/flow/metalymph-cribra-0.1.0.tgz`.
 That command requires the Rust WASM target, a matching `wasm-bindgen` CLI, and
 Binaryen. The adjacent Core tarball is test-only and must not be distributed.
 
@@ -45,11 +43,12 @@ Install the local tarball into your application:
 
 ```sh title="application"
 npm install --ignore-scripts --no-audit --no-fund \
-  /path/to/cribra/target/typescript-qualification/artifacts/flow/cribra-typescript-0.1.0.tgz
+  /path/to/cribra/target/typescript-qualification/artifacts/flow/metalymph-cribra-0.1.0.tgz
 ```
 
-Import the package by its provisional name, `cribra-typescript`. Do not replace
-the local path with an `@metalymph/cribra` registry installation.
+Import the package by its approved name, `@metalymph/cribra`. Until a registry
+release succeeds, keep the local tarball path; there is no published registry
+version to install.
 
 ## Initialize the backend
 
@@ -60,7 +59,7 @@ import {
   getVersion,
   init,
   isInitialized,
-} from "cribra-typescript";
+} from "@metalymph/cribra";
 
 console.log(isInitialized()); // false — import performs no WASM work
 
@@ -99,8 +98,8 @@ authoritative classification; a review-only candidate is not a finding and is
 never transformed automatically.
 
 ```ts title="scan.ts"
-import { createScanner, init } from "cribra-typescript";
-import type { RuleSpec } from "cribra-typescript";
+import { createScanner, init } from "@metalymph/cribra";
+import type { RuleSpec } from "@metalymph/cribra";
 
 await init();
 
@@ -153,8 +152,8 @@ decisions.
 summary is Core-owned and is not recalculated in JavaScript.
 
 ```ts title="batch.ts"
-import { createScanner, init } from "cribra-typescript";
-import type { ScanSource } from "cribra-typescript";
+import { createScanner, init } from "@metalymph/cribra";
+import type { ScanSource } from "@metalymph/cribra";
 
 await init();
 
@@ -194,7 +193,7 @@ JavaScript string methods use **UTF-16 code units**. Use
 directly as a string index.
 
 ```ts title="offsets.ts"
-import { byteSpanToTextRange, createScanner, init } from "cribra-typescript";
+import { byteSpanToTextRange, createScanner, init } from "@metalymph/cribra";
 
 await init();
 
@@ -236,7 +235,7 @@ their own state and remain usable after the creating scanner is disposed; dispos
 them separately. Share Bundle data is detached and has no disposal method.
 
 ```ts title="errors-and-disposal.ts"
-import { CribraError, createScanner, init } from "cribra-typescript";
+import { CribraError, createScanner, init } from "@metalymph/cribra";
 
 await init();
 

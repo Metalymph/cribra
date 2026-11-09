@@ -44,9 +44,9 @@ contract.
 `.github/workflows/typescript.yml` is dedicated to the TypeScript package
 artifact and is scoped to `packages/cribra/**`, `crates/cribra-wasm/**`,
 `Cargo.toml`, `Cargo.lock`, and the workflow itself. It is also callable via
-`workflow_call` by the release workflow. The package is currently
-`cribra-typescript@0.1.0` with `private: true`; its manifest is the single
-source of the package name, version, and tarball names.
+`workflow_call` by the release workflow. The package is
+`@metalymph/cribra@0.1.0` (not private, not published); its manifest is the
+single source of the package name, version, and tarball names.
 
 One producer job builds the Flow and test-only Core `npm pack` tarballs and
 uploads them with `actions/upload-artifact`. Independent consumer jobs download
@@ -83,11 +83,10 @@ Ordinary pushes, pull requests, and unreviewed tag creation never reach staging.
    tarball, compare its SHA-256 with the manifest, verify provenance, and approve
    with 2FA. The workflow never approves or promotes the version.
 
-The current manifest remains `private: true` with
-`cribraRelease.state: "pending-ownership"`, so release mode fails closed and no
-staging can occur. The approved release name is `@metalymph/cribra`, but the
-literal rename waits for authenticated npm ownership verification. No npm
-record exists.
+The manifest is `@metalymph/cribra@0.1.0` with `cribraRelease.state: "approved"`,
+so release-mode checks pass. Staging is still impossible without the separately
+protected authorization, and no npm record exists yet. The npm CLI is pinned to
+`12.2.2`, above the required `11.15` minimum for staged publishing.
 
 Trusted Publishing is configured only for the approved package and only
 immediately before an authorized release; npm expires an unused configuration
@@ -95,8 +94,8 @@ after two days. A brand-new package needs a `0.0.0-stage` placeholder published
 only under the `stage` dist-tag before OIDC staging can work. The placeholder is
 never `latest` and is not a release.
 
-See [the TypeScript release runbook](TYPESCRIPT_RELEASE.md) for ownership proof,
-bootstrap, digest verification, approval, and rollback limits. Rollback means a
+See [the TypeScript release runbook](TYPESCRIPT_RELEASE.md) for the verified
+ownership, bootstrap, digest verification, approval, and rollback limits. Rollback means a
 new patch plus `npm deprecate`; published versions cannot be overwritten.
 
 ### Security

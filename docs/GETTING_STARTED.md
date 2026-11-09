@@ -88,8 +88,8 @@ Core-backed in-memory Share Bundles.
 ## TypeScript and MCP
 
 The existing WebAssembly adapter provides typed JavaScript/TypeScript exports.
-The higher-level TypeScript package is implemented as the provisional, private,
-unpublished `cribra-typescript@0.1.0`; it is not available from npm. Its public
+The higher-level TypeScript package is implemented as the approved but
+unpublished `@metalymph/cribra@0.1.0`; it is not available from npm yet. Its public
 API contract is recorded in [TYPESCRIPT_API.md](TYPESCRIPT_API.md), and the
 installed-package qualification evidence is summarized in
 [COMPATIBILITY.md](COMPATIBILITY.md). A future native TypeScript backend remains

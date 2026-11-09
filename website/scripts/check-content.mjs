@@ -418,12 +418,12 @@ async function checkBindingsData() {
   const contents = await readText(bindingsDataSourcePath);
   assert(contents.includes("id: 'typescript'"), 'bindings data has no TypeScript entry');
   assert(
-    contents.includes('cribra-typescript 0.1.0'),
-    'bindings data does not record cribra-typescript 0.1.0',
+    contents.includes('@metalymph/cribra 0.1.0'),
+    'bindings data does not record @metalymph/cribra 0.1.0',
   );
   assert(
-    contents.includes('provisional and unpublished'),
-    'bindings data does not mark the TypeScript package as provisional and unpublished',
+    contents.includes('approved and unpublished'),
+    'bindings data does not mark the TypeScript package as approved and unpublished',
   );
   assert(
     contents.includes('TypeScript native backend'),
@@ -449,16 +449,19 @@ async function checkBindingsData() {
 
 async function checkPackageIdentity() {
   const manifest = JSON.parse(await readText(packageManifestPath));
-  assert(manifest.name === 'cribra-typescript', 'package name must remain cribra-typescript');
-  assert(manifest.version === '0.1.0', 'package version must remain 0.1.0');
-  assert(manifest.private === true, 'package must remain private');
   assert(
-    manifest.cribraRelease?.state === 'pending-ownership',
-    'cribraRelease.state must remain pending-ownership',
+    manifest.name === '@metalymph/cribra',
+    'package name must be @metalymph/cribra',
+  );
+  assert(manifest.version === '0.1.0', 'package version must remain 0.1.0');
+  assert(manifest.private === undefined, 'package must not be private');
+  assert(
+    manifest.cribraRelease?.state === 'approved',
+    'cribraRelease.state must be approved',
   );
   assert(
     manifest.cribraRelease?.approvedName === '@metalymph/cribra',
-    'approved future package name must remain @metalymph/cribra',
+    'approved package name must remain @metalymph/cribra',
   );
   assert(manifest.engines?.node === '>=22', 'engines.node must remain >=22');
 }
@@ -489,7 +492,7 @@ async function checkForbiddenInstallCommands() {
   ];
 
   const installCommand =
-    /(?:npm\s+(?:install|i|add)|pnpm\s+(?:add|install)|yarn\s+add|bun\s+add)[^\n]*@metalymph\/cribra/;
+    /(?:\bnpm\s+(?:install|i|add)\b|\bpnpm\s+(?:add|install)\b|\byarn\s+add\b|\bbun\s+add\b)[^\n]*@metalymph\/cribra/;
 
   for (const root of roots) {
     const kind = await pathKind(root);
@@ -503,7 +506,7 @@ async function checkForbiddenInstallCommands() {
       const match = installCommand.exec(contents);
       if (match) {
         fail(
-          `executable install instruction for the unapproved package name in ${path.relative(repositoryRoot, file)}: ${match[0]}`,
+          `executable registry install instruction for the unpublished package in ${path.relative(repositoryRoot, file)}: ${match[0]}`,
         );
       }
     }
@@ -536,7 +539,6 @@ async function checkTypescriptSnippetCoverage() {
       if (title) titles.add(title);
 
       for (const forbidden of [
-        '@metalymph/cribra',
         'packages/cribra/src',
         'packages/cribra/dist',
         '../src/',
@@ -594,7 +596,7 @@ async function checkTypescriptSnippetCoverage() {
   const importedNames = (source) => {
     const names = new Set();
     for (const match of source.matchAll(
-      /import\s+(?:type\s+)?\{([\s\S]*?)\}\s+from\s+["'](?:cribra-typescript|__CRIBRA_PACKAGE_SPECIFIER__)["']/g,
+      /import\s+(?:type\s+)?\{([\s\S]*?)\}\s+from\s+["'](?:@metalymph\/cribra|cribra-typescript|__CRIBRA_PACKAGE_SPECIFIER__)["']/g,
     )) {
       for (const raw of match[1].split(',')) {
         const name = raw.trim().replace(/^type\s+/, '');
@@ -637,8 +639,10 @@ function checkTypescriptDocsStatus(docsById) {
       'TypeScript quick start must state that the package is not published',
     );
     assert(
-      /pending-ownership/.test(quickStart.contents),
-      'TypeScript quick start must record cribraRelease.state pending-ownership',
+      /cribraRelease\.state[^.]*approved|state[^.]*approved/i.test(
+        quickStart.contents,
+      ),
+      'TypeScript quick start must record cribraRelease.state approved',
     );
   }
 
