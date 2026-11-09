@@ -57,43 +57,64 @@ XCFramework asset is checksum-verified, and a clean-room remote consumer passed
 on macOS ARM64 with iOS Simulator compile/link. The package is listed on the
 Swift Package Index for discovery; the listing is not Cribra compatibility-build
 evidence. Core and Flow remain source-build profiles; only Fuse is distributed as
-the official public Swift package. The following are the next priorities:
+the official public Swift package. The TypeScript isomorphic API contract and
+the WebAssembly package are complete and qualified, but the package is not yet
+published. The following adoption-first priorities therefore focus on release,
+native adoption, and developer distribution:
 
-1. **TypeScript isomorphic API contract — complete.** The shared public API is
-   implemented in [`docs/TYPESCRIPT_API.md`](docs/TYPESCRIPT_API.md) for the
-   WebAssembly backend, with runtime-specific capabilities distinguished from
-   common behavior.
-2. **TypeScript/WebAssembly package — complete and qualified.** The package is
-   implemented as the approved but unpublished `@metalymph/cribra@0.1.0`. It is
-   qualified from installed tarballs for Node 22/24/26, TypeScript 5.9.3/7.0.2,
-   selected browsers, Vite and webpack. It has no npm record and is not currently
-   installable from the registry. Publication is a separate authorization step.
-3. **Build the native Rust MCP server.** Planned design constraints: an
+0. **Complete the official `@metalymph/cribra@0.1.0` npm release.** Release
+   preparation, qualification and staging do not imply publication. The package
+   identity is approved and the Flow tarball is qualified, but no npm registry
+   record exists. A real publication requires explicit release authorization, the
+   `typescript-v0.1.0` tag, verified tarball digest, and the documented bootstrap
+   and Trusted Publishing gates. See
+   [the TypeScript release runbook](docs/TYPESCRIPT_RELEASE.md).
+1. **Native TypeScript / React Native integration.** Build on the existing Rust
+   UniFFI foundation where compatible, with a JSI/Turbo Native Module for iOS and
+   Android. This milestone has three separate gates:
+   - **Gate 1 — compatibility investigation.** Establish whether UniFFI 0.32.2
+     and the React Native JSI/TurboModule toolchain can be used together,
+     including the candidate external generator. Document a concrete fallback if
+     that generator is incompatible; a project-owned binding layer may be
+     required.
+   - **Gate 2 — native TypeScript binding implementation.** Implement the binding
+     while preserving Cribra classification semantics, exact UTF-8 spans,
+     deterministic ordering, documented error contracts, and resource ownership
+     and lifetime rules. The native backend is distinct from the WebAssembly
+     package and must not imply that WASM runs automatically in Hermes.
+   - **Gate 3 — real iOS/Android consumer qualification.** Qualify consuming
+     applications on both platforms, including mobile lifecycle behavior
+     (backgrounding, suspension, teardown) and performance/resource tests.
+
+   React Native is **not implemented**. Neither the existing WebAssembly package
+   nor UniFFI by itself provides a working React Native binding.
+2. **Build the native Rust MCP server.** Planned design constraints: an
    ultra-lightweight Rust binary using MCP over stdio, direct reuse of Cribra
-   Core, a minimal dependency footprint, no Node.js or Python runtime, no
-   database or external service requirement, a small deliberate set of scanning
-   and transformation tools, and no arbitrary filesystem access by default.
-   HTTP transport and a broad service architecture are outside the initial
-   scope. This is planned, not implemented.
-4. **Complete the Kotlin/JVM distribution.** One complete official Fuse
-   artifact targeting Maven Central, with Core and Flow available through source
-   builds, consumer qualification, and accurate integration documentation.
-   Maven Central publication is not established.
-5. **Complete the Python distribution.** One complete official Fuse package
-   targeting PyPI, with Core and Flow available through source builds, consumer
-   qualification, and accurate integration documentation. Python is
-   strategically important for cybersecurity use cases. PyPI publication is not
+   Core, explicit caller-provided input, a minimal dependency footprint, no
+   Node.js or Python runtime, no database or external service requirement, a
+   small deliberate set of scanning and transformation tools, and no arbitrary
+   filesystem access by default. HTTP transport and a broad service architecture
+   are outside the initial scope. This is planned, not implemented.
+3. **Distribute the CLI through Homebrew and Debian/Ubuntu APT.** Publish
+   qualified prebuilt binaries that preserve canonical CLI semantics, version
+   identity, deterministic output, privacy-safe diagnostics and documented exit
+   codes. Optionally evaluate container-friendly OCI artifacts; that evaluation
+   is not a delivery commitment. Homebrew and APT distribution remain planned
+   independently of Core releases.
+4. **Consolidate Python and Kotlin/JVM documentation and developer guidance.**
+   Provide complete, runnable examples and accurate API guidance for the existing
+   implemented bindings without asserting new package registry releases. Maven
+   Central and PyPI publication remain separate, unscheduled gates; neither is
    established.
-6. **Implement the TypeScript native backend** against the established
-   TypeScript API contract. A potential use case is Amon. Investigate the actual
-   requirements for Node.js and React Native integration; UniFFI does not by
-   itself provide a working React Native binding. Preserve the common TypeScript
-   API where technically feasible, and document runtime-specific limitations
-   explicitly.
 
-The relative order of Kotlin/JVM, Python and the TypeScript native backend may be
-revisited when concrete integration requirements emerge. None of these items is
-a guaranteed delivery commitment.
+Amon is a potential real-world, post-beta consumer for optional on-device
+sensitive-data scanning before chat messages, posts, comments and other content
+are shared. Amon is a validation opportunity, not a release dependency, and its
+integration must not block completion of the Cribra SDK itself.
+
+None of these items is a guaranteed delivery commitment. Demand-driven
+possibilities remain explicitly unscheduled and are recorded under
+[demand-driven and community bindings](#demand-driven-and-community-bindings).
 
 ## v0.5.0 — Streaming Core — RELEASED
 
@@ -418,8 +439,11 @@ features are not automatically present in any adapter.
   independently; preserve existing CLI compatibility. Track exact filters,
   sorting, pack selection, transformations, multi-source/parallel applicability
   and explicit failure policy in [CLI parity](docs/CLI_PARITY.md).
-- Homebrew and Debian/Ubuntu APT distribution remain planned independently;
-  packaged binaries must preserve canonical CLI semantics and version identity.
+- Homebrew and Debian/Ubuntu APT distribution are priority 3 in the
+  [development priority order](#development-priority-order-forward-looking).
+  Qualified prebuilt binaries must preserve canonical CLI semantics, version
+  identity and privacy-safe diagnostics. Container-friendly OCI artifacts are an
+  optional evaluation, not a commitment.
 
 ### Planned language integrations
 
@@ -431,23 +455,25 @@ published packages. The authoritative support policy is in
 | Target | Integration | Status |
 | --- | --- | --- |
 | TypeScript (WebAssembly) | Higher-level package over the existing typed WASM exports, implemented against the shared public API | IMPLEMENTED AND QUALIFIED — approved `@metalymph/cribra@0.1.0`; unpublished |
-| TypeScript native backend | Future UniFFI-backed backend for Node.js; React Native remains separately gated | PLANNED, separately gated |
-| MCP server | Native Rust binary over stdio, reusing Cribra Core | PLANNED |
+| TypeScript native backend and React Native | UniFFI-backed native TypeScript for Node.js where compatible, plus a JSI/Turbo Native Module for iOS and Android | PLANNED — three separate gates: compatibility investigation, binding implementation, real iOS/Android consumer qualification |
+| MCP server | Native Rust binary over stdio, reusing Cribra Core with explicit caller-provided input | PLANNED |
 
 The TypeScript public API contract and WebAssembly package are implemented. The
 package is not published: the approved identity is `@metalymph/cribra`, and no
-npm record exists yet. The
-native backend does not exist and is not implied by the WebAssembly adapter.
-Investigate actual Node.js and React Native requirements rather than assuming
-UniFFI supplies a working React Native binding.
+npm record exists yet. The native backend does not exist and is not implied by
+the WebAssembly adapter. Investigate actual Node.js and React Native requirements
+rather than assuming UniFFI supplies a working React Native binding. The
+WebAssembly backend does not run automatically in Hermes.
 
 #### Demand-driven and community bindings
 
-C#, Go and PHP are **Planned — demand-driven / community contribution**. They are
-not actively scheduled. Implementation will be considered only when supported by
-demonstrated real-world demand or a viable community contribution. Ruby, Elixir
-and other previously documented language candidates retain the same status and
-are not removed from consideration.
+C#, Go and PHP are **Planned — demand-driven / community contribution**. So are
+Ruby, Elixir and other previously documented language candidates. Doxygen-generated
+C API documentation and GitHub/GitLab integrations are likewise explicitly
+demand-driven and unscheduled. None of these items is actively scheduled.
+Implementation will be considered only when supported by demonstrated real-world
+demand or a viable community contribution. Previously documented language
+candidates are not removed from consideration.
 
 Community contributions are welcome under the repository
 [contribution guidelines](CONTRIBUTING.md). Official support requires an ongoing
@@ -468,12 +494,15 @@ each exposing the complete **Fuse** profile:
 | Ecosystem | Official distribution target | Default profile | Status |
 | --- | --- | --- | --- |
 | Swift | SwiftPM package, discoverable through Swift Package Index | Fuse | Published and remotely qualified (`cribra-swift` 0.7.2); listed on the Swift Package Index for discovery, without treating it as Cribra compatibility-build evidence |
-| Kotlin/JVM | Maven Central artifact | Fuse | Official priority; local/CI artifacts; Maven Central not published |
-| Python | PyPI package | Fuse | Official priority; local/CI artifacts; PyPI not published |
+| Kotlin/JVM | Maven Central artifact | Fuse | Official priority; local/CI artifacts and documentation consolidation; Maven Central not published |
+| Python | PyPI package | Fuse | Official priority; local/CI artifacts and documentation consolidation; PyPI not published |
 
 These are intended distribution targets, not claims that registry publication
 has occurred. Core and Flow remain supported source-build alternatives and are
-not separate official registry packages.
+not separate official registry packages. For Kotlin/JVM and Python, the current
+priority is consolidating documentation, runnable examples and API guidance
+without asserting new registry releases; publication remains a separate,
+unscheduled gate.
 
 W3.1B records the Swift contract in
 [`bindings/swift/README.md`](bindings/swift/README.md#remote-swiftpm-distribution-contract-fuse).
@@ -496,7 +525,8 @@ Core/Flow/Fuse package variants.
 ### Native FFI and bindings
 
 - Maintain the C ABI and its applicable parity contract, ownership rules,
-  errors, and conformance corpus.
+  errors, and conformance corpus. Doxygen-generated C API documentation is an
+  explicitly demand-driven, unscheduled possibility, not a current deliverable.
 - Binding readiness still requires a versioned Rust-to-C capability matrix,
   explicit gaps/N/A decisions, ABI compatibility guarantees, stable lifetime/error
   contracts and a shared adversarial conformance corpus. Existing C interoperability
@@ -504,18 +534,24 @@ Core/Flow/Fuse package variants.
 - Swift, Python and Kotlin/JVM have implemented UniFFI consumers and locally
   qualified profile-specific artifacts; see [Compatibility](docs/COMPATIBILITY.md).
   Swift Fuse 0.7.2 is published and remotely qualified through `cribra-swift`.
-  Python and Kotlin/JVM Fuse-first public distribution work remains tracked in the
+  Python and Kotlin/JVM documentation and developer-guidance consolidation is
+  tracked in the
   [development priority order](#development-priority-order-forward-looking).
-- C#/.NET and TypeScript native/React Native backends remain future,
-  separately gated integration candidates rather than implemented bindings.
-  C# is a demand-driven / community-contribution candidate and may evaluate
-  [NordSecurity/uniffi-bindgen-cs](https://github.com/NordSecurity/uniffi-bindgen-cs);
-  the TypeScript native backend follows the shared TypeScript API contract and
-  may evaluate
-  [jhugman/uniffi-bindgen-react-native](https://github.com/jhugman/uniffi-bindgen-react-native)
-  for React Native. Both require generator compatibility, ownership/error
-  semantics, native packaging and consumer qualification before support can be
-  claimed.
+- TypeScript native and React Native integration is priority 1, with three
+  separate gates: UniFFI 0.32.2/JSI/TurboModule compatibility investigation
+  (including a documented fallback if the external generator is incompatible),
+  native binding implementation preserving classification semantics and resource
+  ownership, and real iOS/Android consumer qualification with mobile lifecycle
+  and performance tests. It may evaluate
+  [jhugman/uniffi-bindgen-react-native](https://github.com/jhugman/uniffi-bindgen-react-native).
+  React Native is not implemented and is not implied by UniFFI or by the
+  WebAssembly package.
+- C#/.NET and Go remain future, separately gated integration candidates rather
+  than implemented bindings. C# is a demand-driven / community-contribution
+  candidate and may evaluate
+  [NordSecurity/uniffi-bindgen-cs](https://github.com/NordSecurity/uniffi-bindgen-cs).
+  Both require generator compatibility, ownership/error semantics, native
+  packaging and consumer qualification before support can be claimed.
 - JavaScript/TypeScript browser and supported JavaScript runtime integration
   remains available through `cribra-wasm` within its documented capability
   surface. The higher-level `@metalymph/cribra` WebAssembly package is
@@ -526,15 +562,16 @@ Core/Flow/Fuse package variants.
   examples; the presence of an ABI does not qualify every language consumer.
 - No additional Rust adapter is planned solely for another language unless
   demonstrated interoperability limitations justify one.
-- Ruby, Elixir and other community candidates are planned as demand-driven /
-  community contribution, not actively scheduled.
+- Ruby, Elixir, C#/.NET, Go and other community candidates are planned as
+  demand-driven / community contribution, not actively scheduled.
 - Each future integration requires applicable parity, lifetime/ownership and
   error contracts, adversarial conformance, packaging and consumer tests.
 
 ### Developer integrations
 
-- GitHub integration, Astro integration, agent/AI interoperability, and other
-  application ecosystem integrations remain independently scoped.
+- GitHub and GitLab integrations, Astro integration, agent/AI interoperability,
+  and other application ecosystem integrations remain independently scoped and
+  explicitly demand-driven and unscheduled.
 - Repository traversal, application exposure policy, correlation, crawling,
   ownership decisions, and network validation are not core scanner features.
 

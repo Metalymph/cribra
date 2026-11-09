@@ -253,24 +253,24 @@ export const bindings: readonly Binding[] = [
 /** Official workstreams that are planned or in progress; none is a published package unless the matrix above says so. */
 export const plannedBindings = [
   {
+    name: 'TypeScript native backend and React Native integration',
+    detail:
+      'Native TypeScript backend for Node.js where compatible, plus a JSI/Turbo Native Module for iOS and Android. Three separate gates: UniFFI 0.32.2/JSI/TurboModule compatibility investigation with a documented generator fallback; binding implementation preserving Cribra classification semantics and resource ownership; and real iOS/Android consumer qualification including mobile lifecycle and performance tests. React Native is not implemented, and the WebAssembly package does not run automatically in Hermes.',
+  },
+  {
     name: 'Native Rust MCP server',
     detail:
-      'Planned ultra-lightweight stdio server over Cribra Core, with no Node.js/Python runtime, database or external service and no arbitrary filesystem access by default.',
+      'Planned ultra-lightweight stdio server over Cribra Core with explicit caller-provided input, no Node.js/Python runtime, database or external service, and no arbitrary filesystem access by default.',
   },
   {
-    name: 'Kotlin/JVM Fuse distribution',
+    name: 'CLI distribution through Homebrew and Debian/Ubuntu APT',
     detail:
-      'Maven Central is the intended registry. Local/CI artifacts exist; no Maven Central publication is established.',
+      'Qualified prebuilt binaries that preserve canonical CLI semantics, version identity and privacy-safe diagnostics. Container-friendly OCI artifacts are an optional evaluation, not a commitment. No new CLI package publication is established.',
   },
   {
-    name: 'Python Fuse distribution',
+    name: 'Python and Kotlin/JVM developer guidance',
     detail:
-      'PyPI is the intended registry. Local/CI artifacts exist; no PyPI publication is established.',
-  },
-  {
-    name: 'TypeScript native backend',
-    detail:
-      'Future UniFFI-backed backend for Node.js, separate from the implemented WebAssembly package. React Native requirements remain separately gated; UniFFI does not by itself provide a working React Native binding.',
+      'Consolidate documentation, runnable examples and API guidance for the existing implemented bindings without asserting new registry releases. Maven Central and PyPI publication remain separate, unscheduled gates.',
   },
 ] as const;
 

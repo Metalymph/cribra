@@ -575,7 +575,7 @@ or platform qualification.
 | Kotlin/JVM | UniFFI Core / Flow / Fuse; Fuse Maven distribution in progress | OFFICIAL — local/CI artifacts; Maven Central not published |
 | JavaScript / `wasm-bindgen` | Typed WebAssembly adapter and generated TypeScript declarations | OFFICIAL — source and published adapter |
 | TypeScript (WebAssembly) | Higher-level package over the typed WASM exports | OFFICIAL — implemented and qualified from installed tarballs; `@metalymph/cribra` 0.1.0 is approved and not published |
-| TypeScript native backend | Future UniFFI-backed backend for Node.js; React Native separately gated | OFFICIAL — planned, not implemented |
+| TypeScript native backend and React Native | Native TypeScript backend for Node.js where compatible, plus a JSI/Turbo Native Module for iOS and Android; three separately gated milestones | OFFICIAL — planned, not implemented |
 | MCP | Native Rust server over stdio | OFFICIAL — planned, not implemented |
 | C#, Go, PHP, Ruby, Elixir | Potential additional language bindings | PLANNED — demand-driven / community contribution |
 
@@ -586,11 +586,14 @@ the Fuse binding without Rust, Cargo, UniFFI generators or a Cribra checkout; se
 Flow remain source-build profiles. The TypeScript shared API and WebAssembly
 package are implemented with the approved identity `@metalymph/cribra@0.1.0`,
 but the package is unpublished and no npm registry record exists yet. The
-next integration priorities are the native Rust MCP server, the Kotlin/JVM and
-Python Fuse distributions, and the future TypeScript native backend. The native
-backend does not exist, and React Native requires separate platform-specific
-investigation. The MCP server is planned as an ultra-lightweight Rust binary over
-stdio, not a broad service.
+adoption-first priorities are the official npm release, native TypeScript /
+React Native integration through three separate gates, the native Rust MCP
+server, CLI distribution through Homebrew and Debian/Ubuntu APT, and Python and
+Kotlin/JVM documentation consolidation. The native backend does not exist, and
+React Native requires separate platform-specific investigation; the WebAssembly
+backend does not run automatically in Hermes. The MCP server is planned as an
+ultra-lightweight Rust binary over stdio with explicit caller-provided input,
+not a broad service.
 
 C#, Go and PHP are planned as demand-driven / community-contribution candidates,
 not actively scheduled work. Ruby, Elixir and other candidates retain the same

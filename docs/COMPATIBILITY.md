@@ -51,12 +51,16 @@ has no npm registry record, and uses `cribraRelease.state` `approved`; the
 unpublished `@metalymph/cribra` name is not usable as an npm installation
 instruction until a separately authorized release succeeds.
 The TypeScript native backend and native Rust MCP server remain official planned
-workstreams, and the native backend does not exist. C#, Go and PHP are planned as
-demand-driven / community-contribution candidates and are not actively
-scheduled; Ruby, Elixir and other language candidates retain that status. These
-candidates are not implemented, qualified or published, and no delivery dates
-are promised. Community integrations may use the public interoperability
-surfaces without becoming officially maintained. See
+workstreams, and the native backend does not exist. The React Native milestone
+has three separate gates: UniFFI/JSI/TurboModule compatibility investigation,
+native binding implementation preserving classification semantics and resource
+ownership, and real iOS/Android consumer qualification. C#, Go and PHP are planned
+as demand-driven / community-contribution candidates and are not actively
+scheduled; Ruby, Elixir and other language candidates retain that status.
+Doxygen-generated C API documentation and GitHub/GitLab integrations are likewise
+demand-driven and unscheduled. These candidates are not implemented, qualified or
+published, and no delivery dates are promised. Community integrations may use the
+public interoperability surfaces without becoming officially maintained. See
 [Ecosystem and scope](ECOSYSTEM.md#binding-support-policy) for the authoritative
 binding policy and the
 [roadmap priority order](../ROADMAP.md#development-priority-order-forward-looking)
