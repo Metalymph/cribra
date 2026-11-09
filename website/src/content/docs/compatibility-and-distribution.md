@@ -68,16 +68,20 @@ The Fuse-first Swift distribution is complete: `cribra-swift` 0.7.2 is published
 and remotely qualified, and it is listed on the [Swift Package
 Index](https://swiftpackageindex.com/Metalymph/cribra-swift) for discovery. The
 listing is not Cribra compatibility-build evidence for additional platforms.
-The next official priorities are the native Rust MCP server over stdio, the
-Kotlin/JVM and Python Fuse distributions, and a future TypeScript native backend.
-The TypeScript WebAssembly package is implemented but unpublished; the native
-backend remains planned and separately gated.
+The adoption-first priorities are the official `@metalymph/cribra@0.1.0` npm
+release, native TypeScript / React Native integration, the native Rust MCP server
+over stdio, CLI distribution through Homebrew and Debian/Ubuntu APT, and Python
+and Kotlin/JVM documentation consolidation. The TypeScript WebAssembly package is
+implemented but unpublished; the native backend remains planned and has three
+separately gated milestones.
 
 C#, Go and PHP are planned as **demand-driven / community contribution**
-candidates. Ruby, Elixir and other candidates retain the same status. They are
-not actively scheduled and are not implemented, qualified or published. No
-delivery dates are promised; the project will consider them only with
-demonstrated real-world demand or a viable community contribution. See the
+candidates. Ruby, Elixir and other candidates retain the same status.
+Doxygen-generated C API documentation and GitHub/GitLab integrations are likewise
+demand-driven and unscheduled. They are not actively scheduled and are not
+implemented, qualified or published. No delivery dates are promised; the project
+will consider them only with demonstrated real-world demand or a viable community
+contribution. See the
 [contribution guidelines](https://github.com/Metalymph/cribra/blob/main/CONTRIBUTING.md)
 and the [roadmap priority order](https://github.com/Metalymph/cribra/blob/main/ROADMAP.md#development-priority-order-forward-looking).
 

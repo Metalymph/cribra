@@ -121,10 +121,23 @@ published to a package registry; registry publication is tracked separately in
 | Kotlin/JVM | Official, implemented; distribution in progress | Local/CI profile JARs and host bundles; planned Fuse Maven artifact; no Maven publication |
 | Python | Official, implemented; distribution in progress | Core/Flow/Fuse source consumers and a local/CI Fuse wheel; planned Fuse PyPI package; no PyPI publication |
 | TypeScript (WebAssembly) | Official, implemented; approved package unpublished | Higher-level package over typed WASM exports for browsers and compatible JS runtimes. Node 22/24/26, selected browsers and Vite/webpack are qualified from installed tarballs; no npm record or publication exists. |
-| TypeScript (native) | Official, planned; separately gated | Future UniFFI-backed backend against the established public API; Node.js requirements need investigation, and UniFFI does not by itself provide a working React Native binding |
-| MCP server | Official, planned | Ultra-lightweight native Rust binary over stdio reusing Cribra Core; no Node.js/Python runtime, database or external service; no arbitrary filesystem access by default |
+| TypeScript (native) | Official, planned; three separately gated milestones | Native TypeScript backend for Node.js where compatible, plus a JSI/Turbo Native Module for iOS and Android. Gates: UniFFI 0.32.2/JSI/TurboModule compatibility investigation with a documented generator fallback, binding implementation preserving classification semantics and resource ownership, and real iOS/Android consumer qualification. UniFFI does not by itself provide a working React Native binding, and the WebAssembly package does not run automatically in Hermes |
+| MCP server | Official, planned | Ultra-lightweight native Rust binary over stdio reusing Cribra Core with explicit caller-provided input; no Node.js/Python runtime, database or external service; no arbitrary filesystem access by default |
 | C#, Go, PHP, Ruby, Elixir | Planned — demand-driven / community contribution | Not actively scheduled; considered only with demonstrated real-world demand or a viable community contribution |
 | Community integrations | Community-maintained | May use public interoperability surfaces; not officially tested, packaged or supported |
+
+The forward-looking priority order is maintained in the
+[roadmap](../ROADMAP.md#development-priority-order-forward-looking): the official
+`@metalymph/cribra@0.1.0` npm release; native TypeScript / React Native
+integration; the native Rust MCP server; CLI distribution through Homebrew and
+Debian/Ubuntu APT; then Python and Kotlin/JVM documentation consolidation. Amon is
+a potential real-world, post-beta consumer for optional on-device sensitive-data
+scanning before content such as chat messages, posts and comments is shared. Amon
+integration is not a release dependency and must not block completion of the
+Cribra SDK.
+
+Doxygen-generated C API documentation and GitHub/GitLab integrations are likewise
+explicitly demand-driven and unscheduled, alongside C#/.NET and Go bindings.
 
 Demand-driven candidates have no delivery dates and are not implemented,
 qualified or published. Community contributions are welcome under the repository
@@ -156,9 +169,11 @@ Swift is the first completed public distribution: `cribra-swift` 0.7.2 is
 published, its Fuse XCFramework asset is checksum-verified, and a clean-room
 remote consumer passed on macOS ARM64 with iOS Simulator compile/link. The
 package is listed on the Swift Package Index for discovery; the listing is not
-Cribra compatibility-build evidence. Kotlin/JVM and Python remain
-official priorities with local/CI artifacts only; neither has a published public
-package.
+Cribra compatibility-build evidence. Kotlin/JVM and Python remain official
+priorities with local/CI artifacts only; neither has a published public package.
+Their current priority is consolidating documentation, runnable examples and API
+guidance without asserting new registry releases. Maven Central and PyPI
+publication remain separate, unscheduled gates.
 
 The public package must expose the complete functionality implemented by the
 Fuse binding. It does not claim parity with Rust-only APIs that are absent from

@@ -77,10 +77,12 @@ import { withBase } from '../../utils/paths';
   </p>
   <h2>Official planned integrations</h2>
   <p>
-    These are official workstreams that are planned or in progress. Except where the matrix above
-    records otherwise, they are not implemented, qualified or published. The TypeScript WebAssembly
-    package is implemented and qualified from installed tarballs, but remains unpublished and is
-    therefore not listed here as planned.
+    The first adoption priority is completing the official
+    <code>@metalymph/cribra@0.1.0</code> npm release; the package is prepared and qualified but not
+    published. The integrations below follow in order. Except where the matrix above records
+    otherwise, they are not implemented, qualified or published. The TypeScript WebAssembly package
+    is implemented and qualified from installed tarballs, but remains unpublished and is therefore
+    not listed here as planned.
   </p>
   <ul>
     {
@@ -95,8 +97,10 @@ import { withBase } from '../../utils/paths';
   <p>
     C#, Go and PHP are planned as demand-driven / community-contribution candidates. They are not
     actively scheduled, and no package or integration is available. Ruby, Elixir and other
-    candidates retain the same status. The project will consider them only with demonstrated
-    real-world demand or a viable community contribution, and no delivery dates are promised.
+    candidates retain the same status. Doxygen-generated C API documentation and GitHub/GitLab
+    integrations are likewise explicitly demand-driven and unscheduled. The project will consider
+    them only with demonstrated real-world demand or a viable community contribution, and no
+    delivery dates are promised.
   </p>
   <ul>{demandDrivenBindings.map((name) => <li>{name}</li>)}</ul>
   <p>
