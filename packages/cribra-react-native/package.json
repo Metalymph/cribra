@@ -1,0 +1,50 @@
+{
+  "name": "@metalymph/cribra-react-native",
+  "version": "0.0.0",
+  "private": true,
+  "description": "React Native native TurboModule for the Cribra sensitive-data scanner",
+  "license": "MIT",
+  "author": "Cribra contributors",
+  "homepage": "https://github.com/Metalymph/cribra/tree/main/packages/cribra-react-native",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Metalymph/cribra.git",
+    "directory": "packages/cribra-react-native"
+  },
+  "main": "src/index.ts",
+  "react-native": "src/index.ts",
+  "types": "src/index.ts",
+  "files": [
+    "src",
+    "cpp",
+    "ios",
+    "android",
+    "third_party",
+    "scripts",
+    "react-native.config.js",
+    "README.md",
+    "QUALIFICATION.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "typecheck": "node consumer/node_modules/typescript/bin/tsc --noEmit -p tsconfig.json",
+    "test:abi": "clang++ -std=c++17 -I third_party/cribra/include tools/abi-check/main.cpp -o \"${TMPDIR:-/tmp}/cribra-abi-check\" && \"${TMPDIR:-/tmp}/cribra-abi-check\"",
+    "build:native": "bash scripts/build-native.sh"
+  },
+  "codegenConfig": {
+    "name": "CribraReactNativeSpec",
+    "type": "modules",
+    "jsSrcsDir": "src",
+    "android": {
+      "javaPackageName": "com.metalymph.cribra"
+    },
+    "ios": {}
+  },
+  "peerDependencies": {
+    "react": ">=19.0.0",
+    "react-native": ">=0.88.0 <0.90.0"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.3"
+  }
+}
