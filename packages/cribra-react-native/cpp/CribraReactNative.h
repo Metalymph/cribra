@@ -65,6 +65,35 @@ class CribraReactNative final
       double scannerId,
       jsi::Array sources);
 
+  jsi::Value transformRedact(
+      jsi::Runtime& rt,
+      double scannerId,
+      jsi::String text,
+      jsi::String replacement,
+      bool hasReplacement);
+
+  jsi::Value transformTemplate(
+      jsi::Runtime& rt,
+      double scannerId,
+      jsi::String text,
+      jsi::String namespaceName,
+      bool numbered);
+
+  jsi::Value transformPseudonymize(
+      jsi::Runtime& rt,
+      double scannerId,
+      jsi::String text,
+      jsi::ArrayBuffer key,
+      jsi::String prefix,
+      double digestBytes);
+
+  jsi::Value transformSynthesize(
+      jsi::Runtime& rt,
+      double scannerId,
+      jsi::String text,
+      jsi::ArrayBuffer key,
+      jsi::String marker);
+
   jsi::Value disposeScanner(jsi::Runtime& rt, double scannerId);
 
   double getLiveScannerCount(jsi::Runtime& rt);
@@ -75,6 +104,10 @@ class CribraReactNative final
   [[nodiscard]] ScannerPtr findScanner(uint64_t scannerId) const;
   void registerScanner(uint64_t scannerId, ScannerPtr scanner);
   [[nodiscard]] ScannerPtr takeScanner(uint64_t scannerId);
+  jsi::Value runTransform(
+      jsi::Runtime& rt,
+      double scannerId,
+      std::shared_ptr<cribra::rn::TransformInput> input);
 
   mutable std::mutex scannersMutex_;
   std::unordered_map<uint64_t, ScannerPtr> scanners_;

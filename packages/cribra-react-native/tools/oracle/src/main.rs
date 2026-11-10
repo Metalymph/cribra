@@ -4,7 +4,7 @@
 //! be compared against Cribra Core itself. It emits only source-free metadata.
 
 use cribra::{
-    CandidateEvidence, Confidence, DetectionMode, Explanation, Remediation,
+    CandidateEvidence, Confidence, DetectionMode, Explanation, Redaction, Remediation,
     RuleError, RuleKind, ScannerBuildError, SensitiveCandidateKind, Severity,
 };
 use serde_json::{Value, json};
@@ -316,14 +316,137 @@ fn run_config_oracle(path: &str) {
     );
 }
 
+fn transform_error_label(error: &cribra::transform::TransformError) -> &'static str {
+    use cribra::transform::TransformError as Transform;
+    match error {
+        Transform::InvalidSpan { .. } => "transform_invalid_span",
+        Transform::InvalidUtf8Boundary { .. } => "transform_invalid_utf8_boundary",
+        Transform::OverlappingSpans { .. } => "transform_overlapping_spans",
+        _ => "transform_unknown",
+    }
+}
+
+fn transform_key(case: &Value) -> [u8; 32] {
+    let values = case["key"].as_array().expect("32-byte key array");
+    assert_eq!(values.len(), 32, "key must contain exactly 32 bytes");
+    let mut key = [0_u8; 32];
+    for (index, value) in values.iter().enumerate() {
+        key[index] = u8::try_from(value.as_u64().expect("key byte")).expect("u8 key byte");
+    }
+    key
+}
+
+fn apply_transform(
+    source: &str,
+    report: &cribra::ScanReport,
+    case: &Value,
+) -> Result<String, cribra::transform::TransformError> {
+    let request = &case["request"];
+    match request["kind"].as_str().expect("transform kind") {
+        "redact" => match request.get("replacement").and_then(Value::as_str) {
+            Some(replacement) => {
+                cribra::transform::redact_with(source, report, &Redaction::new(replacement))
+            }
+            None => cribra::transform::redact(source, report),
+        },
+        "template" => {
+            let namespace = request["namespace"].as_str().unwrap_or("CRIBRA");
+            let numbered = request["numbered"].as_bool().unwrap_or(false);
+            let options = cribra::transform::TemplateOptions::new()
+                .namespace(namespace)
+                .numbered(numbered);
+            cribra::transform::template_with(source, report, &options)
+        }
+        "pseudonymize" => {
+            let prefix = request["prefix"].as_str().unwrap_or("cribra_pseudo_");
+            let digest_bytes = request["digestBytes"]
+                .as_u64()
+                .map_or(16, |value| value as usize);
+            let options = cribra::transform::PseudonymizationOptions::new(transform_key(case))
+                .prefix(prefix)
+                .digest_bytes(digest_bytes);
+            cribra::transform::pseudonymize(source, report, &options)
+        }
+        "synthesize" => {
+            let marker = request["marker"].as_str().unwrap_or("cribra_synthetic");
+            let options =
+                cribra::transform::SynthesisOptions::new(transform_key(case)).marker(marker);
+            cribra::transform::synthesize(source, report, &options)
+        }
+        other => panic!("unknown transform kind {other}"),
+    }
+}
+
+fn run_transform_oracle(path: &str) {
+    let raw = fs::read_to_string(path)
+        .unwrap_or_else(|error| panic!("read transform cases {path}: {error}"));
+    let cases: Vec<Value> =
+        serde_json::from_str(&raw).expect("transform cases must be a JSON array");
+
+    let mut output = Vec::new();
+    for case in cases {
+        let name = case["name"].as_str().expect("case name").to_owned();
+        let source = case["source"].as_str().expect("case source");
+
+        match build_configured_scanner(&case) {
+            Ok(scanner) => {
+                let results = scanner.scan([("case".to_owned(), source)]);
+                let report = results.single_report().expect("one case report");
+                match apply_transform(source, report, &case) {
+                    Ok(transformed) => {
+                        let scan =
+                            result_json(&scanner, results.iter().next().expect("entry"));
+                        output.push(json!({
+                            "name": name,
+                            "scan": scan,
+                            "output": transformed,
+                        }));
+                    }
+                    Err(error) => {
+                        output.push(json!({
+                            "name": name,
+                            "error": transform_error_label(&error),
+                        }));
+                    }
+                }
+            }
+            Err((code, rule_id)) => {
+                output.push(json!({
+                    "name": name,
+                    "buildError": {"code": code, "ruleId": rule_id},
+                }));
+            }
+        }
+    }
+
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&json!({
+            "abiVersion": {"major": 0, "minor": 3, "patch": 0},
+            "cases": output,
+        }))
+        .expect("serialize transform oracle")
+    );
+}
+
 fn main() {
     let mut args = std::env::args().skip(1);
-    if args.next().as_deref() == Some("--config-cases") {
-        let path = args
-            .next()
-            .unwrap_or_else(|| "fixtures/rn13-config-cases.json".to_owned());
-        run_config_oracle(&path);
-        return;
+    match args.next().as_deref() {
+        Some("--config-cases") => {
+            let path = args
+                .next()
+                .unwrap_or_else(|| "fixtures/rn13-config-cases.json".to_owned());
+            run_config_oracle(&path);
+            return;
+        }
+        Some("--transform-cases") => {
+            let path = args
+                .next()
+                .unwrap_or_else(|| "fixtures/rn15-transform-cases.json".to_owned());
+            run_transform_oracle(&path);
+            return;
+        }
+        _ => {}
     }
 
     let fixture_path = std::env::args()

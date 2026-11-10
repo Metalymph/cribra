@@ -3,7 +3,9 @@
 #include "CribraAbi.h"
 #include "CribraEnums.h"
 
+#include <algorithm>
 #include <cmath>
+#include <limits>
 #include <optional>
 #include <utility>
 
@@ -194,6 +196,85 @@ bool DecodeScannerConfig(
   config.financial = financialBuiltins;
   config.personal = personalBuiltins;
   return DecodeRuleSpecs(rt, rules, config.rules, error);
+}
+
+/// Copies the UTF-8 source on the JS thread. Conversion failures are reported
+/// without forwarding exception text that could contain source fragments.
+bool DecodeTransformText(
+    jsi::Runtime& rt,
+    const jsi::String& text,
+    cribra::rn::TransformInput& input,
+    std::string& error) {
+  try {
+    input.text = text.utf8(rt);
+  } catch (...) {
+    error = "cribra_native_error:invalid_input_string";
+    return false;
+  }
+  return true;
+}
+
+/// Copies a replacement/namespace/prefix/marker on the JS thread. These are
+/// configuration, never scanned source, so failures use `invalid_argument`.
+bool DecodeTransformOption(
+    jsi::Runtime& rt,
+    const jsi::String& option,
+    std::string& output,
+    std::string& error) {
+  try {
+    output = option.utf8(rt);
+  } catch (...) {
+    error = "cribra_native_error:invalid_argument";
+    return false;
+  }
+  return true;
+}
+
+/// Copies exactly 32 key bytes on the JS thread. No JSI object is retained or
+/// touched after this function returns.
+bool DecodeTransformKey(
+    jsi::Runtime& rt,
+    const jsi::ArrayBuffer& key,
+    std::shared_ptr<cribra::rn::KeyBytes>& output,
+    std::string& error) {
+  try {
+    if (key.detached(rt) ||
+        key.size(rt) != cribra::rn::kTransformKeyBytes) {
+      error = "cribra_native_error:invalid_key_length";
+      return false;
+    }
+    const auto* data = key.data(rt);
+    if (data == nullptr) {
+      error = "cribra_native_error:invalid_key_length";
+      return false;
+    }
+    auto bytes = std::make_shared<cribra::rn::KeyBytes>();
+    std::copy(
+        data,
+        data + cribra::rn::kTransformKeyBytes,
+        bytes->bytes.begin());
+    output = std::move(bytes);
+    return true;
+  } catch (...) {
+    error = "cribra_native_error:invalid_key_length";
+    return false;
+  }
+}
+
+/// Validates an already-normalized digest length before narrowing. Core clamps
+/// the effective value to its supported range; this only guarantees the value
+/// crossing the ABI is a finite nonnegative uint32.
+std::optional<uint32_t> DecodeDigestBytes(double value) {
+  constexpr auto kMaxDigest =
+      static_cast<double>(std::numeric_limits<uint32_t>::max());
+  if (!std::isfinite(value) || value < 0.0 || value > kMaxDigest) {
+    return std::nullopt;
+  }
+  const auto converted = static_cast<uint32_t>(value);
+  if (static_cast<double>(converted) != value) {
+    return std::nullopt;
+  }
+  return converted;
 }
 
 }  // namespace
@@ -398,6 +479,131 @@ jsi::Value CribraReactNative::scanBatch(
                 inputs = std::move(inputs)]() mutable {
     try {
       promise.resolve(cribra::rn::ScanBatch(scanner, inputs));
+    } catch (const std::exception& error) {
+      promise.reject(Error(error.what()));
+    } catch (...) {
+      promise.reject(Error("cribra_native_error:unknown"));
+    }
+  });
+  return bridging::toJs(rt, promise, jsInvoker_);
+}
+
+jsi::Value CribraReactNative::transformRedact(
+    jsi::Runtime& rt,
+    double scannerId,
+    jsi::String text,
+    jsi::String replacement,
+    bool hasReplacement) {
+  auto input = std::make_shared<cribra::rn::TransformInput>();
+  input->mode = cribra::rn::TransformMode::Redact;
+  input->hasReplacement = hasReplacement;
+
+  std::string error;
+  if (!DecodeTransformText(rt, text, *input, error)) {
+    return PromiseRejected(rt, error, jsInvoker_);
+  }
+  if (hasReplacement &&
+      !DecodeTransformOption(rt, replacement, input->option, error)) {
+    return PromiseRejected(rt, error, jsInvoker_);
+  }
+  return runTransform(rt, scannerId, std::move(input));
+}
+
+jsi::Value CribraReactNative::transformTemplate(
+    jsi::Runtime& rt,
+    double scannerId,
+    jsi::String text,
+    jsi::String namespaceName,
+    bool numbered) {
+  auto input = std::make_shared<cribra::rn::TransformInput>();
+  input->mode = cribra::rn::TransformMode::Template;
+  input->numbered = numbered;
+
+  std::string error;
+  if (!DecodeTransformText(rt, text, *input, error)) {
+    return PromiseRejected(rt, error, jsInvoker_);
+  }
+  if (!DecodeTransformOption(rt, namespaceName, input->option, error)) {
+    return PromiseRejected(rt, error, jsInvoker_);
+  }
+  return runTransform(rt, scannerId, std::move(input));
+}
+
+jsi::Value CribraReactNative::transformPseudonymize(
+    jsi::Runtime& rt,
+    double scannerId,
+    jsi::String text,
+    jsi::ArrayBuffer key,
+    jsi::String prefix,
+    double digestBytes) {
+  auto input = std::make_shared<cribra::rn::TransformInput>();
+  input->mode = cribra::rn::TransformMode::Pseudonymize;
+
+  std::string error;
+  if (!DecodeTransformKey(rt, key, input->key, error)) {
+    return PromiseRejected(rt, error, jsInvoker_);
+  }
+  const auto digest = DecodeDigestBytes(digestBytes);
+  if (!digest) {
+    return PromiseRejected(rt, "cribra_native_error:invalid_argument", jsInvoker_);
+  }
+  input->digestBytes = *digest;
+
+  if (!DecodeTransformText(rt, text, *input, error)) {
+    return PromiseRejected(rt, error, jsInvoker_);
+  }
+  if (!DecodeTransformOption(rt, prefix, input->option, error)) {
+    return PromiseRejected(rt, error, jsInvoker_);
+  }
+  return runTransform(rt, scannerId, std::move(input));
+}
+
+jsi::Value CribraReactNative::transformSynthesize(
+    jsi::Runtime& rt,
+    double scannerId,
+    jsi::String text,
+    jsi::ArrayBuffer key,
+    jsi::String marker) {
+  auto input = std::make_shared<cribra::rn::TransformInput>();
+  input->mode = cribra::rn::TransformMode::Synthesize;
+
+  std::string error;
+  if (!DecodeTransformKey(rt, key, input->key, error)) {
+    return PromiseRejected(rt, error, jsInvoker_);
+  }
+  if (!DecodeTransformText(rt, text, *input, error)) {
+    return PromiseRejected(rt, error, jsInvoker_);
+  }
+  if (!DecodeTransformOption(rt, marker, input->option, error)) {
+    return PromiseRejected(rt, error, jsInvoker_);
+  }
+  return runTransform(rt, scannerId, std::move(input));
+}
+
+/// Posts exactly one worker job for one fully copied transformation request.
+///
+/// The lambda is copyable because it shares ownership of `TransformInput`; the
+/// sensitive key buffer is still owned exactly once by `KeyBytes`.
+jsi::Value CribraReactNative::runTransform(
+    jsi::Runtime& rt,
+    double scannerId,
+    std::shared_ptr<cribra::rn::TransformInput> input) {
+  const auto id = LiveScannerId(scannerId);
+  if (!id) {
+    return PromiseRejected(rt, "cribra_native_error:scanner_not_found", jsInvoker_);
+  }
+  auto scanner = findScanner(*id);
+  if (!scanner) {
+    return PromiseRejected(rt, "cribra_native_error:scanner_not_found", jsInvoker_);
+  }
+
+  auto promise = AsyncPromise<cribra::rn::TransformResultDto>(rt, jsInvoker_);
+  // Copy, do not move: bridging::toJs below still needs this promise.
+  worker_.post([promise,
+                scanner = std::move(scanner),
+                input = std::move(input)]() mutable {
+    try {
+      promise.resolve(cribra::rn::Transform(scanner, *input));
     } catch (const std::exception& error) {
       promise.reject(Error(error.what()));
     } catch (...) {

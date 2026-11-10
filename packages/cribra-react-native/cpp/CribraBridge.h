@@ -6,6 +6,8 @@
 
 #include "CribraEnums.h"
 
+#include <array>
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <stdexcept>
@@ -69,6 +71,15 @@ using ScanBatchDto = facebook::react::NativeCribraReactNativeScanBatchDto<
     std::vector<ScanReportDto>,
     ScanSummaryDto>;
 
+using TransformResultDto =
+    facebook::react::NativeCribraReactNativeTransformResultDto<
+        double,
+        std::vector<FindingDto>,
+        double,
+        bool,
+        std::vector<CandidateDto>,
+        std::string>;
+
 using RuleSpecDto = facebook::react::NativeCribraReactNativeRuleSpecDto<
     std::string,
     std::string,
@@ -120,6 +131,50 @@ class ScannerHandle final {
 struct ScanInput {
   std::string id;
   std::string source;
+};
+
+/// One native copy of the caller-provided 32-byte transformation key.
+///
+/// Non-copyable. The destructor volatile-zeroes the bytes. A shared pointer to
+/// this object gives the copyable worker job shared ownership without ever
+/// duplicating key material.
+inline constexpr size_t kTransformKeyBytes = 32;
+
+struct KeyBytes {
+  KeyBytes() = default;
+  ~KeyBytes();
+
+  KeyBytes(const KeyBytes&) = delete;
+  KeyBytes& operator=(const KeyBytes&) = delete;
+
+  std::array<uint8_t, kTransformKeyBytes> bytes{};
+};
+
+/// ABI-defined transformation mode for the bridge.
+enum class TransformMode : uint8_t {
+  Redact,
+  Template,
+  Pseudonymize,
+  Synthesize,
+};
+
+/// One fully copied transformation request. Only this plain value crosses the
+/// worker boundary. `key` is null for non-keyed modes.
+struct TransformInput {
+  TransformInput() = default;
+  ~TransformInput();
+
+  TransformInput(const TransformInput&) = delete;
+  TransformInput& operator=(const TransformInput&) = delete;
+
+  TransformMode mode = TransformMode::Redact;
+  std::string text;
+  /// Replacement, namespace, prefix, or marker depending on `mode`.
+  std::string option;
+  bool hasReplacement = false;
+  bool numbered = false;
+  uint32_t digestBytes = 16;
+  std::shared_ptr<KeyBytes> key;
 };
 
 /// One copied custom rule. Strings are owned through every ABI call that
@@ -223,6 +278,15 @@ ScanBatchDto ScanBatch(
     const std::shared_ptr<ScannerHandle>& scanner,
     const std::vector<ScanInput>& inputs);
 
+/// Scans one source and transforms it with the report from that exact scan.
+///
+/// The report, output and error handles are owned by RAII guards. The output
+/// view is copied before `cribra_output_free`. Throws BridgeError on any ABI,
+/// Core or protocol failure; the caller never observes partial output.
+TransformResultDto Transform(
+    const std::shared_ptr<ScannerHandle>& scanner,
+    const TransformInput& input);
+
 AbiVersionDto GetAbiVersion() noexcept;
 
 }  // namespace cribra::rn
@@ -253,6 +317,11 @@ struct Bridging<cribra::rn::ScanSummaryDto>
 template <>
 struct Bridging<cribra::rn::ScanBatchDto>
     : NativeCribraReactNativeScanBatchDtoBridging<cribra::rn::ScanBatchDto> {};
+
+template <>
+struct Bridging<cribra::rn::TransformResultDto>
+    : NativeCribraReactNativeTransformResultDtoBridging<
+          cribra::rn::TransformResultDto> {};
 
 template <>
 struct Bridging<cribra::rn::RuleSpecDto>

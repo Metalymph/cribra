@@ -26,6 +26,7 @@ import {
   type ScanSource,
   type ScannerConfig,
   type Severity,
+  type TransformRequest,
 } from '@metalymph/cribra-react-native';
 // Direct TurboModule access is used only by the deterministic negative cases
 // below (invalid scanner id and malformed arguments) and by the numeric-only
@@ -51,6 +52,11 @@ const oracle = require('./src/fixtures/synthetic-oracle.json') as {
 const configCases = require('./src/fixtures/rn13-config-cases.json') as ConfigCase[];
 const configOracle = require('./src/fixtures/rn13-oracle.json') as {
   cases: OracleConfigCase[];
+};
+
+const transformCases = require('./src/fixtures/rn15-transform-cases.json') as TransformCase[];
+const transformOracle = require('./src/fixtures/rn15-transform-oracle.json') as {
+  cases: OracleTransformCase[];
 };
 
 interface ConfigCaseRule {
@@ -86,9 +92,41 @@ interface OracleConfigCase {
   error?: { code: number; ruleId: string | null };
 }
 
+interface TransformCase {
+  name: string;
+  current?: boolean;
+  financial?: boolean;
+  personal?: boolean;
+  rules?: ConfigCaseRule[];
+  source: string;
+  key?: number[];
+  request: {
+    kind: 'redact' | 'template' | 'pseudonymize' | 'synthesize';
+    replacement?: string;
+    namespace?: string;
+    numbered?: boolean;
+    prefix?: string;
+    digestBytes?: number;
+    marker?: string;
+  };
+}
+
+interface OracleTransformCase {
+  name: string;
+  scan?: unknown;
+  output?: string;
+  error?: string;
+}
+
 const configCaseByName = new Map(configCases.map((entry) => [entry.name, entry]));
 const configOracleByName = new Map(
   configOracle.cases.map((entry) => [entry.name, entry]),
+);
+const transformCaseByName = new Map(
+  transformCases.map((entry) => [entry.name, entry]),
+);
+const transformOracleByName = new Map(
+  transformOracle.cases.map((entry) => [entry.name, entry]),
 );
 
 const BUILD_ERROR_LABELS = [
@@ -261,6 +299,8 @@ function marker(outcome: Outcome): string | undefined {
       'parity=ok',
       'batch=ok',
       'config=ok',
+      'transform=ok',
+      'key=ok',
       'negative=ok',
       'offset=ok',
       `probe=${outcome.probe}`,
@@ -491,6 +531,299 @@ async function runConfigChecks(): Promise<string | null> {
     if (getLiveScannerCount() !== baseline) {
       return `config_error_count:${name}`;
     }
+  }
+
+  return null;
+}
+
+/**
+ * Privacy-safe fragments observed during transformation checks. Only their
+ * absence from the emitted marker is asserted; they are never logged.
+ */
+const transformPrivacyFragments: string[] = [];
+
+function transformRequestFor(testCase: TransformCase): TransformRequest {
+  const key =
+    testCase.key === undefined ? undefined : Uint8Array.from(testCase.key);
+  const request = testCase.request;
+  switch (request.kind) {
+    case 'redact':
+      return request.replacement === undefined
+        ? { kind: 'redact' }
+        : { kind: 'redact', replacement: request.replacement };
+    case 'template':
+      return {
+        kind: 'template',
+        ...(request.namespace === undefined
+          ? {}
+          : { namespace: request.namespace }),
+        ...(request.numbered === undefined
+          ? {}
+          : { numbered: request.numbered }),
+      };
+    case 'pseudonymize':
+      if (key === undefined) {
+        throw new Error('transform fixture key missing');
+      }
+      return {
+        kind: 'pseudonymize',
+        key,
+        ...(request.prefix === undefined ? {} : { prefix: request.prefix }),
+        ...(request.digestBytes === undefined
+          ? {}
+          : { digestBytes: request.digestBytes }),
+      };
+    case 'synthesize':
+      if (key === undefined) {
+        throw new Error('transform fixture key missing');
+      }
+      return {
+        kind: 'synthesize',
+        key,
+        ...(request.marker === undefined ? {} : { marker: request.marker }),
+      };
+  }
+}
+
+/**
+ * RN.1.5 scan-coupled transformation proof. Every success case is compared to
+ * the direct-Core oracle for both the detached scan projection and the exact
+ * transformed output. Overlapping findings must reject in non-redact modes.
+ * Key transport, malformed UTF-16, native key length, in-flight disposal and
+ * deterministic keyed output are checked separately.
+ */
+async function runTransformChecks(): Promise<string | null> {
+  const baseline = getLiveScannerCount();
+  const outputs = new Map<string, string>();
+
+  for (const [name, expected] of transformOracleByName) {
+    const testCase = transformCaseByName.get(name);
+    if (testCase === undefined) {
+      return `transform_fixture:${name}`;
+    }
+
+    const scanner = await createScanner(
+      scannerConfigFor(testCase as unknown as ConfigCase),
+    );
+    if (getLiveScannerCount() !== baseline + 1) {
+      await scanner.dispose();
+      return `transform_count:${name}`;
+    }
+
+    try {
+      if (expected.error !== undefined) {
+        let code: string | undefined;
+        try {
+          await scanner.transform(
+            testCase.source,
+            transformRequestFor(testCase),
+          );
+        } catch (error) {
+          if (error instanceof CribraError) {
+            code = error.code;
+          }
+        }
+        if (code !== expected.error) {
+          return `transform_error:${name}`;
+        }
+      } else {
+        const result = await scanner.transform(
+          testCase.source,
+          transformRequestFor(testCase),
+        );
+        const diff = diffJson(
+          { scan: result.scan, output: result.output },
+          { scan: expected.scan, output: expected.output },
+        );
+        if (diff !== null) {
+          return `transform_parity:${name}:${diff}`;
+        }
+
+        // The transform's report must describe the same source as a detached
+        // scan of that source.
+        const detached = await scanner.scan(testCase.source);
+        const scanDiff = diffJson(detached, result.scan);
+        if (scanDiff !== null) {
+          return `transform_scan_parity:${name}:${scanDiff}`;
+        }
+
+        outputs.set(name, result.output);
+        if (result.output.length >= 4) {
+          transformPrivacyFragments.push(result.output);
+        }
+      }
+    } finally {
+      await scanner.dispose();
+    }
+
+    if (getLiveScannerCount() !== baseline) {
+      return `transform_dispose:${name}`;
+    }
+  }
+
+  if (
+    outputs.get('pseudonymize_default') !==
+    outputs.get('pseudonymize_repeat')
+  ) {
+    return 'transform_pseudonymize_determinism';
+  }
+  if (outputs.get('synthesize_default') !== outputs.get('synthesize_repeat')) {
+    return 'transform_synthesize_determinism';
+  }
+
+  // Native key-length validation happens synchronously on the JS thread and
+  // rejects before any worker job. Only source-free diagnostics are observed.
+  const rawId = await NativeCribraReactNative.createDefaultScanner();
+  if (getLiveScannerCount() !== baseline + 1) {
+    await NativeCribraReactNative.disposeScanner(rawId);
+    return 'transform_key_count';
+  }
+  const clean = 'ordinary synthetic text';
+  let rejected31 = false;
+  let rejected33 = false;
+  let rejectedSynth = false;
+  try {
+    await NativeCribraReactNative.transformPseudonymize(
+      rawId,
+      clean,
+      new ArrayBuffer(31),
+      'p',
+      16,
+    );
+  } catch (error) {
+    rejected31 = isNativePrefix(
+      error,
+      'cribra_native_error:invalid_key_length',
+    );
+  }
+  try {
+    await NativeCribraReactNative.transformPseudonymize(
+      rawId,
+      clean,
+      new ArrayBuffer(33),
+      'p',
+      16,
+    );
+  } catch (error) {
+    rejected33 = isNativePrefix(
+      error,
+      'cribra_native_error:invalid_key_length',
+    );
+  }
+  try {
+    await NativeCribraReactNative.transformSynthesize(
+      rawId,
+      clean,
+      new ArrayBuffer(31),
+      'm',
+    );
+  } catch (error) {
+    rejectedSynth = isNativePrefix(
+      error,
+      'cribra_native_error:invalid_key_length',
+    );
+  }
+  if (!rejected31 || !rejected33 || !rejectedSynth) {
+    await NativeCribraReactNative.disposeScanner(rawId);
+    return 'transform_native_key';
+  }
+
+  const zeroKey = new Uint8Array(32).buffer;
+  const cleanPseudo = await NativeCribraReactNative.transformPseudonymize(
+    rawId,
+    clean,
+    zeroKey,
+    'p',
+    16,
+  );
+  const cleanSynth = await NativeCribraReactNative.transformSynthesize(
+    rawId,
+    clean,
+    zeroKey,
+    'm',
+  );
+  await NativeCribraReactNative.disposeScanner(rawId);
+  if (
+    cleanPseudo.output !== clean ||
+    cleanSynth.output !== clean ||
+    getLiveScannerCount() !== baseline
+  ) {
+    return 'transform_clean_native';
+  }
+
+  // Facade preflight: malformed UTF-16 source/options and invalid key length
+  // are rejected before native work, and the scanner remains usable.
+  const edge = await createScanner();
+  try {
+    let badSource = false;
+    let badReplacement = false;
+    let badPrefix = false;
+    let badMarker = false;
+    let badKey = false;
+    try {
+      await edge.transform('a\uD83Db', { kind: 'redact' });
+    } catch (error) {
+      badSource = isCribraError(error, 'invalid_unicode_string');
+    }
+    try {
+      await edge.transform('ok', {
+        kind: 'redact',
+        replacement: '\uDC00',
+      });
+    } catch (error) {
+      badReplacement = isCribraError(error, 'invalid_unicode_string');
+    }
+    try {
+      await edge.transform('ok', {
+        kind: 'pseudonymize',
+        key: new Uint8Array(32),
+        prefix: 'a\uD83D',
+      });
+    } catch (error) {
+      badPrefix = isCribraError(error, 'invalid_unicode_string');
+    }
+    try {
+      await edge.transform('ok', {
+        kind: 'synthesize',
+        key: new Uint8Array(32),
+        marker: '\uDC00',
+      });
+    } catch (error) {
+      badMarker = isCribraError(error, 'invalid_unicode_string');
+    }
+    try {
+      await edge.transform('ok', {
+        kind: 'pseudonymize',
+        key: new Uint8Array(31),
+      });
+    } catch (error) {
+      badKey = isCribraError(error, 'invalid_key_length');
+    }
+    if (!badSource || !badReplacement || !badPrefix || !badMarker || !badKey) {
+      return 'transform_preflight';
+    }
+  } finally {
+    await edge.dispose();
+  }
+  if (getLiveScannerCount() !== baseline) {
+    return 'transform_edge_dispose';
+  }
+
+  // Disposal while a transformation is in flight: the queued serial job
+  // completes first, then native disposal drains the registry.
+  const inFlight = await createScanner();
+  const pending = inFlight.transform(
+    "GITHUB_TOKEN=ghp_AbCdEf0123456789_AbCdEf0123456789\n",
+    { kind: 'redact' },
+  );
+  const pendingDispose = inFlight.dispose();
+  const [inFlightResult] = await Promise.all([pending, pendingDispose]);
+  if (
+    getLiveScannerCount() !== baseline ||
+    !inFlightResult.output.includes('[REDACTED]') ||
+    inFlightResult.scan.findings.length !== 1
+  ) {
+    return 'transform_inflight_disposal';
   }
 
   return null;
@@ -790,6 +1123,11 @@ async function runHarness(): Promise<Outcome> {
     return { state: 'fail', reason: configFailure };
   }
 
+  const transformFailure = await runTransformChecks();
+  if (transformFailure !== null) {
+    return { state: 'fail', reason: transformFailure };
+  }
+
   const preflightMs = measurePreflightMs();
   if (preflightMs !== null) {
     // Numeric-only observation; never gates the smoke result.
@@ -821,6 +1159,11 @@ async function runHarness(): Promise<Outcome> {
   for (const source of sources) {
     if (source.id.length > 0 && markerText.includes(source.id)) {
       return { state: 'fail', reason: 'privacy_id' };
+    }
+  }
+  for (const fragment of transformPrivacyFragments) {
+    if (markerText.includes(fragment)) {
+      return { state: 'fail', reason: 'privacy_transform' };
     }
   }
 
@@ -857,7 +1200,7 @@ function App() {
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" />
-      <Text style={styles.title}>Cribra RN.1.4 Unicode boundary smoke</Text>
+      <Text style={styles.title}>Cribra RN.1.5 Flow transform smoke</Text>
       <Text style={styles.status} testID="cribra-status">
         {outcome.state.toUpperCase()}
       </Text>
@@ -878,6 +1221,8 @@ function App() {
           <Text style={styles.body}>Parity: ok</Text>
           <Text style={styles.body}>Batch: ok</Text>
           <Text style={styles.body}>Config: ok</Text>
+          <Text style={styles.body}>Transform: ok</Text>
+          <Text style={styles.body}>Key transport: ok</Text>
           <Text style={styles.body}>Negatives: ok</Text>
           <Text style={styles.body}>Privacy: ok</Text>
           <Text style={styles.body}>Lifecycle: ok</Text>

@@ -15,6 +15,10 @@ jest.mock('../../src/NativeCribraReactNative', () => ({
     createScanner: jest.fn(),
     scan: jest.fn(),
     scanBatch: jest.fn(),
+    transformRedact: jest.fn(),
+    transformTemplate: jest.fn(),
+    transformPseudonymize: jest.fn(),
+    transformSynthesize: jest.fn(),
     disposeScanner: jest.fn(),
     getLiveScannerCount: jest.fn(() => 0),
   },
@@ -171,7 +175,7 @@ describe('scanBatch preflight', () => {
         { id: 'b', source: '\uDC00' },
       ]),
     ).rejects.toMatchObject({
-      message: 'The source contains an unpaired UTF-16 surrogate.',
+      message: 'A Cribra string contains an unpaired UTF-16 surrogate.',
     });
     expect(native.scanBatch).not.toHaveBeenCalled();
   });
