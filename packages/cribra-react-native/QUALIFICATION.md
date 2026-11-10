@@ -431,9 +431,9 @@ during construction; no scan path performs a metadata walk.
 - No performance, memory, startup, background/foreground, cancellation, or
   long-running stress measurements were made. Disposal waits behind queued
   scans; cancellation/stress/reload is RN.1.6.
-- No Unicode helper surface (RN.1.4), flow transforms (RN.1.5), streaming,
-  incremental documents, Share Bundles, parallel scanning, key-based
-  transformations, or Amon integration.
+- No Unicode helper surface in RN.1.3 (the UTF-8/UTF-16 boundary layer is
+  RN.1.4), flow transforms (RN.1.5), streaming, incremental documents, Share
+  Bundles, parallel scanning, key-based transformations, or Amon integration.
 - The `needsReview` projection is findings **or** candidates, matching Core.
   Absent remediation is an empty wire string and is converted to `null` by the
   facade; rule metadata follows the same convention.
@@ -458,3 +458,142 @@ Build and runtime logs are ephemeral and intentionally not committed:
 No source text, matcher payload, rule ID, or per-finding data is written to
 logs. The registered marker is aggregate-only and the harness fails if a fixture
 secret, matcher value, rule ID, or source ID appears in it.
+
+# Cribra React Native RN.1.4 — Unicode Boundary Qualification
+
+Status: **RN.1.4 implemented and runtime-validated on the iOS simulator and the
+Android ARM64 emulator.** Not a release-qualification claim and not an npm
+publication. Physical devices and release builds are `not-tested`.
+
+Recorded: 2026-11-10. Package: `@metalymph/cribra-react-native@0.0.0` (private,
+unpublished). ABI: `cribra-capi` 0.3.0 over Cribra Core 0.7.2. Baseline:
+`47dd41a`.
+
+RN.1.4 is TypeScript-only. It does not modify Cribra Core, the C ABI, the
+vendored `third_party/cribra/include/cribra.h`, the TurboModule spec, the C++
+module, or any platform project.
+
+## Result summary
+
+| Check | Result | Evidence |
+| --- | --- | --- |
+| Package and consumer TypeScript | PASS | `npm run typecheck`; `npx tsc --noEmit` |
+| Jest suite, RN.1.1–RN.1.3 preserved | PASS | 6 suites, **184 tests** (89 existing + 95 new) |
+| Deterministic Unicode offsets | PASS | direct expected literals, forward/reverse tables |
+| Round-trip invariants | PASS | every scalar-boundary pair of 9 sample sources |
+| Batch conversion order/duplicates/nesting | PASS | `byteSpansToUtf16Ranges` suite |
+| Error precedence | PASS | malformed source wins over span/range errors in all three entry points |
+| Malformed scan input invokes no native method | PASS | mocked TurboModule; `scan`/`scanBatch` assertions |
+| Direct-Core span correspondence | PASS | every fixture finding and candidate |
+| Host ABI protocol | PASS | 4 `PASS` lines, including scanner configuration |
+| C header matches canonical Core ABI header | PASS | `cmp` identical |
+| iOS simulator runtime | PASS | `offset=ok:probe=3/5` |
+| Android ARM64 emulator runtime | PASS | `offset=ok:probe=3/5` |
+| Hermes malformed-string behavior | RECORDED | numeric probe `3/5` (U+FFFD replacement) |
+| JSC malformed-string behavior | source-derived | not runtime-tested |
+| Runtime log privacy | PASS | `privacy=ok`; no source, matcher, rule ID, or source ID |
+| Release/npm qualification | not-tested | private package |
+
+Runtime markers observed:
+
+```text
+CRIBRA_RN_SMOKE:PASS:abi=0.3.0:entries=5:findings=3:candidates=1:lifecycle=ok:parity=ok:batch=ok:config=ok:negative=ok:offset=ok:probe=3/5:privacy=ok
+```
+
+## API surface
+
+Added to `@metalymph/cribra-react-native`:
+
+- `Utf16Range`
+- `byteSpanToUtf16Range(source, span)`
+- `utf16RangeToByteSpan(source, range)`
+- `byteSpansToUtf16Ranges(source, spans)`
+- `utf8ByteLength(source)`
+- `CribraErrorCode` additions: `invalid_unicode_string`, `invalid_span_value`,
+  `invalid_span_order`, `span_out_of_bounds`, `span_not_utf8_boundary`,
+  `span_not_utf16_boundary`
+
+`ByteSpan`, `Finding`, `Candidate`, `ScanResult`, and `ScanOptions` are
+unchanged. No UTF-16 offsets are stored in native DTOs. There is no persistent
+offset index, no grapheme segmentation, no normalization, and no native Unicode
+operation.
+
+`CribraError` and its messages moved to a native-independent `src/errors.ts`
+verbatim apart from the additive codes; `src/index.ts` re-exports them.
+
+## Preflight behavior
+
+`scanner.scan()` and `scanner.scanBatch()` now reject any unpaired high or low
+surrogate with `invalid_unicode_string` before a native call is made. Every
+batch source is validated before the batch is dispatched. The mocked-TurboModule
+tests assert `native.scan` and `native.scanBatch` are never called for malformed
+input, including when the malformed source is last in a batch. Well-formed
+supplementary characters still scan and report their exact UTF-8 length.
+
+`report.sourceBytes === utf8ByteLength(source)` is documented as a necessary
+consistency check, not proof that the content is unchanged. Consumers must
+retain the exact string passed to the scan and compare it with the current
+editor content. The test suite pins two different strings with the same UTF-8
+byte length (`"é"` and `"Ā"`, both 2 bytes).
+
+## Unicode findings
+
+| Observation | Result |
+| --- | --- |
+| Hermes `"\uD83D"` through native `utf8()` | 3 bytes (U+FFFD replacement) |
+| Hermes `"a\uD83Db"` through native `utf8()` | 5 bytes (U+FFFD replacement) |
+| Public scan of the same malformed sources | rejected before native work |
+| JSC | source-derived: strict conversion truncates at invalid UTF-16; not runtime-tested |
+
+The probe is numeric-only; the synthetic text is never logged. `TextEncoder`
+matches Hermes on unpaired surrogates but does not describe JSC, so it is not
+used as an oracle.
+
+Fixture correspondence is pinned directly: the first synthetic finding
+`28..65` maps to UTF-16 `22..59`, and the slice has exactly 37 UTF-8 bytes.
+
+## Performance
+
+Preflight (`assertWellFormedUtf16`) is `O(n)`, allocation-free, and a
+straightforward scalar walk. Measured with a 1 MiB ASCII source, warm, 5 runs:
+
+| Environment | Preflight per MiB | Relative note |
+| --- | --- | --- |
+| Node 26.13 / V8 (host) | 1.66 ms | ~602 MiB/s |
+| Android ARM64 emulator / Hermes debug | 33.2-33.7 ms | ~31 MiB/s |
+| iOS simulator / Hermes debug | 54.6-60.4 ms | ~17-19 MiB/s |
+
+Host measurements also covered 64 KiB ASCII (0.10 ms), 768 KiB UTF-8 CJK
+(0.42 ms), and a 1.25 MiB mixed source (1.27 ms). Forward conversion of a 1 MiB
+ASCII source costs 3.04 ms, reverse conversion of a 768 KiB UTF-8 CJK source
+0.81 ms, and a 64-span batch over 1 MiB ASCII 3.30 ms on the host.
+
+The preflight runs once per scanned source on the JS thread, before the async
+native call. Large multi-megabyte documents will pay tens of milliseconds in
+Hermes debug builds; typical credential-sized editor sources are in the low
+milliseconds or below.
+
+## Remaining limitations
+
+- JSC is not runtime-tested. Its truncation behavior is derived from
+  `ReactCommon/jsc/JSCRuntime.cpp` and is only relevant when Hermes is disabled.
+- iOS physical devices, Android physical devices, release builds, and the
+  armeabi-v7a/x86/x86_64 runtimes are `not-tested`.
+- Preflight cost is linear and measurable on multi-megabyte sources.
+- Grapheme clusters are intentionally unsupported; a range may split a
+  combining sequence or a ZWJ emoji at a scalar boundary.
+- No automatic redaction, highlighting, or flow transformation API is added.
+- No persistent offset index is provided; batch conversion covers
+  many-findings-per-source workloads.
+
+## Evidence locations
+
+- `/tmp/cribra-rn14-ios.png` — iOS harness `offset=ok:probe=3/5` marker
+- `/tmp/cribra-ios-rn14.log` — iOS `log stream` capture with the numeric
+  preflight observation
+- `/tmp/cribra-metro-rn14.log` — Metro bundle log
+- Android logcat (captured live) — `offset=ok:probe=3/5` and
+  `CRIBRA_RN_PREFLIGHT:ms=33.201:bytes=1048576`
+
+No source text, matcher payload, rule ID, or per-finding data appears in any
+log or marker.

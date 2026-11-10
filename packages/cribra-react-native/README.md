@@ -181,6 +181,12 @@ reports `numeric_overflow`. Both map to `CribraError` with
 `code === 'invalid_native_report'`. JSI string conversion failures are sanitized
 to `invalid_input_string` without forwarding the JavaScript/JSI exception text.
 
+Malformed UTF-16 in a scanned source is rejected locally, before any native
+call, as `CribraError` with `code === 'invalid_unicode_string'`. Offset
+conversions use the additional stable codes `invalid_span_value`,
+`invalid_span_order`, `span_out_of_bounds`, `span_not_utf8_boundary`, and
+`span_not_utf16_boundary`. See [Offsets](#offsets).
+
 An incompatible linked ABI is reported as `CribraError` with
 `code === 'abi_mismatch'` and a detail of the form
 `cribra_native_error:abi_mismatch:expected=0.3.0:actual=X.Y.Z`. This check runs
@@ -208,12 +214,103 @@ in the error message or detail. Matcher, pattern, and source contents are never
 reported. The builder is released on every early error, and a scanner whose
 metadata projection fails is disposed before the projection error is surfaced.
 
+### Offsets
+
+Core reports zero-based half-open UTF-8 byte spans (`finding.span`,
+`candidate.span`). JavaScript strings are indexed in UTF-16 code units, so use
+the pure conversion utilities rather than byte arithmetic:
+
+```ts
+import {
+  byteSpanToUtf16Range,
+  byteSpansToUtf16Ranges,
+  utf16RangeToByteSpan,
+  utf8ByteLength,
+} from '@metalymph/cribra-react-native';
+
+const range = byteSpanToUtf16Range(source, finding.span);
+const matched = source.slice(range.start, range.end);
+
+const ranges = byteSpansToUtf16Ranges(
+  source,
+  findings.map((finding) => finding.span),
+);
+const span = utf16RangeToByteSpan(source, range);
+```
+
+They are pure, synchronous and native-independent: they work without a scanner.
+
+Conversion rules:
+
+- Exact or throw. There is no clamping, rounding, U+FFFD substitution, or
+  selection of half a surrogate pair.
+- Ranges are half-open in both directions. Byte offset `0`, UTF-16 index `0`,
+  and the exclusive end of a non-empty source are valid boundaries.
+- Grapheme clusters are not respected. Combining marks and ZWJ emoji are
+  separate scalars and may be split at any scalar boundary. No Unicode
+  normalization is applied.
+- `byteSpansToUtf16Ranges` converts many spans from one source in a single walk
+  (`O(n + k log k)` time, `O(k)` memory) and preserves input order. Prefer it
+  over converting findings one at a time, which costs `O(k * n)`.
+
+Validation is deterministic and source-free, in this order:
+
+| # | Failure | `CribraError.code` |
+| --- | --- | --- |
+| 1 | source is not a string | `invalid_argument` |
+| 2 | unpaired UTF-16 surrogate in the source | `invalid_unicode_string` |
+| 3 | span/range is not an object, or an endpoint is not a safe non-negative integer | `invalid_span_value` |
+| 4 | `start > end` | `invalid_span_order` |
+| 5 | endpoint beyond the source length | `span_out_of_bounds` |
+| 6 | endpoint inside a UTF-8 scalar (forward) | `span_not_utf8_boundary` |
+| 6 | endpoint inside a surrogate pair (reverse) | `span_not_utf16_boundary` |
+
+Errors never contain source text, matched values, offsets, matchers, or rule
+IDs.
+
+#### Malformed UTF-16 and scan preflight
+
+Hermes replaces an unpaired surrogate with U+FFFD before scanning, and JSC
+silently truncates at it. Either way, native spans could refer to text that is
+not the caller's string. `scan()` and `scanBatch()` therefore reject any
+unpaired high or low surrogate with `invalid_unicode_string` before dispatching
+native work. Every batch source is validated before the batch is sent, so no
+partial or rewritten source reaches Core. Well-formed strings, including
+supplementary characters and emoji, are unaffected. The conversion utilities
+independently reject malformed input.
+
+#### Source drift
+
+Spans are only meaningful for the exact string value passed to the scan. Keep
+that value. JavaScript strings are immutable, so "modified after scanning"
+means the caller substituted a different value. Before applying highlights or
+redactions, compare the retained value with the current editor content:
+
+```ts
+const scanned = source;
+const report = await scanner.scan(scanned, { id });
+if (currentText !== scanned || report.sourceBytes !== utf8ByteLength(scanned)) {
+  // Stale result: rescan. Do not index, highlight, or redact.
+}
+```
+
+The byte-length check is a necessary consistency check but not proof of
+identity: different strings can share a UTF-8 byte length (`"é"` and `"Ā"` are
+both 2 bytes). Never apply redaction or highlighting to a changed source merely
+because the length matches. RN.1.4 provides no automatic redaction API.
+
+The preflight is `O(n)` with no allocation. Measured on the qualification
+matrix: 33-34 ms per MiB on the Android ARM64 emulator and 55-60 ms per MiB on
+the iOS simulator, both Hermes debug builds. Typical editor sources are far
+smaller (about 2-4 ms per 64 KiB). Work happens on the JS thread before the
+async native call.
+
 ## Privacy
 
 The native package does not log, persist, or upload source text, matcher
 payloads, rule identifiers, or findings. The runtime harness logs and displays
 only the aggregate marker
-`CRIBRA_RN_SMOKE:PASS:abi=...:entries=...:findings=...:candidates=...:lifecycle=ok:parity=ok:batch=ok:config=ok:negative=ok:privacy=ok`
+`CRIBRA_RN_SMOKE:PASS:abi=...:entries=...:findings=...:candidates=...:lifecycle=ok:parity=ok:batch=ok:config=ok:negative=ok:offset=ok:probe=...:privacy=ok`
 or a source-free failure reason. Error messages come from the C ABI's
 privacy-safe diagnostic metadata.
 

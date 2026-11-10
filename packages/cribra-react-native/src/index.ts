@@ -19,6 +19,19 @@ import type {
   ScanSummaryDto,
   ScannerCreationDto,
 } from './NativeCribraReactNative';
+import { CribraError } from './errors';
+import type { CribraErrorCode } from './errors';
+import { assertWellFormedUtf16 } from './offset';
+
+export { CribraError } from './errors';
+export type { CribraErrorCode } from './errors';
+export {
+  byteSpanToUtf16Range,
+  byteSpansToUtf16Ranges,
+  utf16RangeToByteSpan,
+  utf8ByteLength,
+} from './offset';
+export type { Utf16Range } from './offset';
 
 export type Severity = 'info' | 'low' | 'medium' | 'high' | 'critical';
 export type Confidence = 'low' | 'medium' | 'high';
@@ -189,72 +202,6 @@ export interface RuleMetadata {
   readonly detectionMode: DetectionMode;
   readonly severity: Severity;
   readonly remediation: Remediation | null;
-}
-
-export type CribraErrorCode =
-  | 'disposed'
-  | 'invalid_argument'
-  | 'invalid_input_string'
-  | 'invalid_utf8'
-  | 'scanner_not_found'
-  | 'scanner_create_failed'
-  | 'abi_mismatch'
-  | 'invalid_native_report'
-  | 'invalid_pattern'
-  | 'pattern_matches_empty'
-  | 'missing_capture_group'
-  | 'empty_rule_id'
-  | 'duplicate_rule_id'
-  | 'empty_matcher'
-  | 'too_many_rules'
-  | 'automaton_build'
-  | 'native_error';
-
-const MESSAGES: Record<CribraErrorCode, string> = {
-  disposed: 'The Cribra scanner has been disposed.',
-  invalid_argument: 'A Cribra argument is invalid.',
-  invalid_input_string: 'The source could not be converted to UTF-8.',
-  invalid_utf8: 'The source is not valid UTF-8.',
-  scanner_not_found: 'The native scanner handle is not available.',
-  scanner_create_failed: 'The native scanner could not be created.',
-  abi_mismatch: 'The linked Cribra native ABI is incompatible with this package.',
-  invalid_native_report: 'The native scanner returned an unsupported value.',
-  invalid_pattern: 'A custom rule pattern is invalid.',
-  pattern_matches_empty: 'A custom rule pattern can match empty input.',
-  missing_capture_group: 'A custom rule capture configuration is invalid.',
-  empty_rule_id: 'A custom rule identifier is empty.',
-  duplicate_rule_id: 'A rule identifier is duplicated.',
-  empty_matcher: 'A custom rule matcher is empty.',
-  too_many_rules: 'The configured rule count exceeds the scanner limit.',
-  automaton_build: 'The scanner matcher could not be compiled.',
-  native_error: 'The Cribra native operation failed.',
-};
-
-/**
- * Structured error with a fixed, source-free message. `detail` carries only the
- * privacy-safe diagnostic metadata returned by the C ABI.
- */
-export class CribraError extends Error {
-  readonly code: CribraErrorCode;
-  readonly detail?: string;
-  /**
-   * Caller-supplied rule identity for a construction failure, or a public
-   * built-in ID for a catalog collision. Never embedded in the message and
-   * never derived from scanned source or matcher contents.
-   */
-  readonly ruleId?: string;
-
-  constructor(code: CribraErrorCode, detail?: string, ruleId?: string) {
-    super(MESSAGES[code]);
-    this.name = 'CribraError';
-    this.code = code;
-    if (detail !== undefined && detail.length > 0) {
-      this.detail = detail;
-    }
-    if (ruleId !== undefined && ruleId.length > 0) {
-      this.ruleId = ruleId;
-    }
-  }
 }
 
 function normalizeError(error: unknown): CribraError {
@@ -1081,6 +1028,11 @@ export class CribraScanner {
     if (typeof source !== 'string') {
       throw new CribraError('invalid_argument');
     }
+    // Preflight: Hermes would silently replace an unpaired surrogate with U+FFFD
+    // and JSC would silently truncate at it, so the native scan text could differ
+    // from the string these offsets are later resolved against. Reject instead of
+    // dispatching native work.
+    assertWellFormedUtf16(source);
     const id = options.id ?? '';
     try {
       const dto = await NativeCribraReactNative.scan(
@@ -1111,9 +1063,12 @@ export class CribraScanner {
     }
 
     // Validate every entry on the JS thread before dispatching any native work.
+    // UTF-16 well-formedness is part of that validation: a malformed source is
+    // reported as `invalid_unicode_string` and the batch is never dispatched.
     const inputs: ScanSourceDto[] = [];
     for (const candidate of sources) {
       const source = requireSource(candidate);
+      assertWellFormedUtf16(source.source);
       inputs.push({ id: source.id, source: source.source });
     }
 

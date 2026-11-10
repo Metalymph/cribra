@@ -1,21 +1,26 @@
 /**
- * Cribra RN.1.3 isolated consumer harness.
+ * Cribra RN.1.4 isolated consumer harness.
  *
  * This screen runs the synthetic-fixture parity check, the atomic batch
  * behaviours, the scanner lifecycle checks, the configured-scanner and detached
- * metadata checks against the direct-Core oracle, and deterministic native
- * negative cases against the native TurboModule. It intentionally displays and
- * logs only aggregate counts and pass/fail markers; no source text, matcher
- * payload, rule ID, or individual finding metadata is logged.
+ * metadata checks against the direct-Core oracle, the exact UTF-8 byte <->
+ * UTF-16 span correspondence checks, the malformed-source preflight checks, and
+ * deterministic native negative cases against the native TurboModule. It
+ * intentionally displays and logs only aggregate counts and pass/fail markers;
+ * no source text, matcher payload, rule ID, or individual finding metadata is
+ * logged.
  */
 
 import { useEffect, useState } from 'react';
 import { StatusBar, StyleSheet, Text, View } from 'react-native';
 import {
   CribraError,
+  byteSpanToUtf16Range,
+  byteSpansToUtf16Ranges,
   createScanner,
   getAbiVersion,
   getLiveScannerCount,
+  utf16RangeToByteSpan,
   type BatchResult,
   type RuleMetadata,
   type ScanSource,
@@ -23,9 +28,11 @@ import {
   type Severity,
 } from '@metalymph/cribra-react-native';
 // Direct TurboModule access is used only by the deterministic negative cases
-// below (invalid scanner id and malformed arguments). The facade remains the
-// public API under test everywhere else.
+// below (invalid scanner id and malformed arguments) and by the numeric-only
+// native encoding probe. The facade remains the public API under test
+// everywhere else.
 import NativeCribraReactNative from '../src/NativeCribraReactNative';
+import { assertWellFormedUtf16 } from '../src/offset';
 
 const fixtureSources = require('./src/fixtures/synthetic-source.json') as {
   id: string;
@@ -157,6 +164,8 @@ type Outcome =
       entries: number;
       findings: number;
       candidates: number;
+      /** Numeric-only native UTF-8 length for the malformed-string probe. */
+      probe: string;
     }
   | { state: 'fail'; reason: string };
 
@@ -253,6 +262,8 @@ function marker(outcome: Outcome): string | undefined {
       'batch=ok',
       'config=ok',
       'negative=ok',
+      'offset=ok',
+      `probe=${outcome.probe}`,
       'privacy=ok',
     ].join(':');
   }
@@ -292,6 +303,63 @@ function isZeroSummary(batch: BatchResult): boolean {
     summary.isClean &&
     !summary.hasCritical
   );
+}
+
+/** True when `index` falls between the two halves of a surrogate pair. */
+function splitsSurrogatePair(text: string, index: number): boolean {
+  if (index <= 0 || index >= text.length) {
+    return false;
+  }
+  const previous = text.charCodeAt(index - 1);
+  const current = text.charCodeAt(index);
+  return (
+    previous >= 0xd800 &&
+    previous <= 0xdbff &&
+    current >= 0xdc00 &&
+    current <= 0xdfff
+  );
+}
+
+/**
+ * Numeric-only observation of the native UTF-8 conversion for malformed UTF-16.
+ * Returns the reported byte length, or -1 if the native call rejected it.
+ * The synthetic source is never logged.
+ */
+async function probeNativeEncoding(
+  scannerId: number,
+  text: string,
+): Promise<number> {
+  try {
+    const report = await NativeCribraReactNative.scan(
+      scannerId,
+      'probe',
+      text,
+    );
+    return report.sourceBytes;
+  } catch {
+    return -1;
+  }
+}
+
+/**
+ * Measures the O(n) preflight over a 1 MiB ASCII source. Reported as a numeric
+ * observation only; it never gates the smoke result.
+ */
+function measurePreflightMs(): number | null {
+  const perf = (
+    globalThis as { performance?: { now(): number } }
+  ).performance;
+  if (perf === undefined) {
+    return null;
+  }
+  const source = 'a'.repeat(1024 * 1024);
+  assertWellFormedUtf16(source);
+  const runs = 5;
+  const started = perf.now();
+  for (let index = 0; index < runs; index += 1) {
+    assertWellFormedUtf16(source);
+  }
+  return Number(((perf.now() - started) / runs).toFixed(3));
 }
 
 /**
@@ -491,6 +559,60 @@ async function runHarness(): Promise<Outcome> {
     return { state: 'fail', reason: 'utf8_total' };
   }
 
+  // 3b. Exact UTF-8 byte <-> UTF-16 correspondence for every reported span.
+  //     Single-span and batch conversions must agree, the reverse conversion
+  //     must round-trip, the sliced text must have the exact byte length, and
+  //     no range may split a surrogate pair.
+  for (let index = 0; index < batch.entries.length; index += 1) {
+    const text = sources[index].source;
+    const result = batch.entries[index].result;
+    const spans = [
+      ...result.findings.map((finding) => finding.span),
+      ...result.candidates.map((candidate) => candidate.span),
+    ];
+    if (spans.length === 0) {
+      continue;
+    }
+    const batchRanges = byteSpansToUtf16Ranges(text, spans);
+    for (let spanIndex = 0; spanIndex < spans.length; spanIndex += 1) {
+      const span = spans[spanIndex];
+      const range = byteSpanToUtf16Range(text, span);
+      if (
+        range.start !== batchRanges[spanIndex].start ||
+        range.end !== batchRanges[spanIndex].end
+      ) {
+        await scanner.dispose();
+        return { state: 'fail', reason: `offset_batch:${index}:${spanIndex}` };
+      }
+      const roundTrip = utf16RangeToByteSpan(text, range);
+      if (roundTrip.start !== span.start || roundTrip.end !== span.end) {
+        await scanner.dispose();
+        return {
+          state: 'fail',
+          reason: `offset_reverse:${index}:${spanIndex}`,
+        };
+      }
+      const slice = text.slice(range.start, range.end);
+      if (utf8ByteLength(slice) !== span.end - span.start) {
+        await scanner.dispose();
+        return {
+          state: 'fail',
+          reason: `offset_length:${index}:${spanIndex}`,
+        };
+      }
+      if (
+        splitsSurrogatePair(text, range.start) ||
+        splitsSurrogatePair(text, range.end)
+      ) {
+        await scanner.dispose();
+        return {
+          state: 'fail',
+          reason: `offset_split:${index}:${spanIndex}`,
+        };
+      }
+    }
+  }
+
   // 4. An empty batch is one native operation with an exact zero summary.
   const empty = await scanner.scanBatch([]);
   if (!isZeroSummary(empty)) {
@@ -527,6 +649,42 @@ async function runHarness(): Promise<Outcome> {
   if (!isZeroSummary(await scanner.scanBatch([]))) {
     await scanner.dispose();
     return { state: 'fail', reason: 'post_invalid_batch' };
+  }
+
+  // 6b. Malformed UTF-16 is rejected by the public scan paths before any native
+  //     work. The scanner stays usable, and a valid supplementary source still
+  //     reports its exact UTF-8 byte length.
+  let malformedScan = false;
+  try {
+    await scanner.scan('a\uD83Db');
+  } catch (error) {
+    malformedScan = isCribraError(error, 'invalid_unicode_string');
+  }
+  if (!malformedScan) {
+    await scanner.dispose();
+    return { state: 'fail', reason: 'preflight_scan' };
+  }
+  let malformedBatch = false;
+  try {
+    await scanner.scanBatch([
+      { id: 'ok', source: 'plain' },
+      { id: 'bad', source: '\uDC00' },
+    ]);
+  } catch (error) {
+    malformedBatch = isCribraError(error, 'invalid_unicode_string');
+  }
+  if (!malformedBatch) {
+    await scanner.dispose();
+    return { state: 'fail', reason: 'preflight_batch' };
+  }
+  const supplementary = await scanner.scan('a🙂b');
+  if (supplementary.sourceBytes !== 6) {
+    await scanner.dispose();
+    return { state: 'fail', reason: 'preflight_valid_supplementary' };
+  }
+  if (!isZeroSummary(await scanner.scanBatch([]))) {
+    await scanner.dispose();
+    return { state: 'fail', reason: 'preflight_after' };
   }
 
   // 7. Concurrent disposal shares one native disposal and resolves after it.
@@ -588,6 +746,12 @@ async function runHarness(): Promise<Outcome> {
     await NativeCribraReactNative.disposeScanner(rawId);
     return { state: 'fail', reason: 'native_after_malformed' };
   }
+  // 10b. Numeric-only probe of the native UTF-8 conversion for malformed UTF-16.
+  //      Hermes replaces with U+FFFD (3 bytes); JSC truncates. Only lengths are
+  //      observed and emitted, never the synthetic text.
+  const probeLone = await probeNativeEncoding(rawId, '\uD83D');
+  const probeMiddle = await probeNativeEncoding(rawId, 'a\uD83Db');
+  const probe = `${probeLone}/${probeMiddle}`;
   await NativeCribraReactNative.disposeScanner(rawId);
   if (getLiveScannerCount() !== 0) {
     return { state: 'fail', reason: 'raw_dispose_count' };
@@ -626,12 +790,21 @@ async function runHarness(): Promise<Outcome> {
     return { state: 'fail', reason: configFailure };
   }
 
+  const preflightMs = measurePreflightMs();
+  if (preflightMs !== null) {
+    // Numeric-only observation; never gates the smoke result.
+    console.log(
+      `CRIBRA_RN_PREFLIGHT:ms=${preflightMs}:bytes=${1024 * 1024}`,
+    );
+  }
+
   const result: Outcome = {
     state: 'pass',
     abi: abiText,
     entries: batch.entries.length,
     findings: batch.summary.totalFindings,
     candidates: batch.summary.totalCandidates,
+    probe,
   };
 
   // 14. Privacy: the emitted marker contains no fixture token, candidate value,
@@ -684,7 +857,7 @@ function App() {
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" />
-      <Text style={styles.title}>Cribra RN.1.3 configured scanner smoke</Text>
+      <Text style={styles.title}>Cribra RN.1.4 Unicode boundary smoke</Text>
       <Text style={styles.status} testID="cribra-status">
         {outcome.state.toUpperCase()}
       </Text>
