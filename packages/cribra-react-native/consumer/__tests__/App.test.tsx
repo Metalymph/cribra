@@ -5,9 +5,9 @@
 import React from 'react';
 import ReactTestRenderer from 'react-test-renderer';
 
-// Jest has no native TurboModule. Replace the facade with a small, coherent
-// fake so the screen can render; the real harness is exercised on a simulator
-// and emulator, not in unit tests.
+// Jest has no native TurboModule. Replace both the facade and the direct native
+// module with small, coherent fakes so the screen can render; the real harness
+// is exercised on a simulator and emulator, not in unit tests.
 jest.mock('@metalymph/cribra-react-native', () => {
   class CribraError extends Error {
     code: string;
@@ -31,6 +31,18 @@ jest.mock('@metalymph/cribra-react-native', () => {
       Promise.reject(new CribraError('scanner_create_failed')),
   };
 });
+
+jest.mock('../../src/NativeCribraReactNative', () => ({
+  __esModule: true,
+  default: {
+    getAbiVersion: () => ({ major: 0, minor: 3, patch: 0 }),
+    createDefaultScanner: () => Promise.reject(new Error('unavailable')),
+    scan: () => Promise.reject(new Error('unavailable')),
+    scanBatch: () => Promise.reject(new Error('unavailable')),
+    disposeScanner: () => Promise.resolve(),
+    getLiveScannerCount: () => 0,
+  },
+}));
 
 import App from '../App';
 

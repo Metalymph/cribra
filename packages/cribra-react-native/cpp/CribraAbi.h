@@ -12,6 +12,14 @@ inline constexpr uint32_t kExpectedAbiMajor = ABI_VERSION_MAJOR;
 inline constexpr uint32_t kExpectedAbiMinor = ABI_VERSION_MINOR;
 inline constexpr uint32_t kExpectedAbiPatch = ABI_VERSION_PATCH;
 
+/// Largest integer representable exactly by an IEEE-754 double and therefore
+/// the largest value JavaScript can address with Number.MAX_SAFE_INTEGER.
+inline constexpr uint64_t kMaxJsSafeInteger = 9007199254740991ull;
+
+constexpr bool FitsJsSafeInteger(uint64_t value) noexcept {
+  return value <= kMaxJsSafeInteger;
+}
+
 /// Major and minor identify the protocol surface. Patch releases are expected
 /// to remain compatible within a minor version, so a patch difference alone is
 /// tolerated; any major or minor difference fails closed before scanner work.

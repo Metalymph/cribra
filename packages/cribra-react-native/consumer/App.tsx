@@ -1,8 +1,9 @@
 /**
- * Cribra RN.1.1 isolated consumer harness.
+ * Cribra RN.1.2 isolated consumer harness.
  *
- * This screen runs the synthetic-fixture parity check and the scanner lifecycle
- * check against the native TurboModule. It intentionally displays and logs only
+ * This screen runs the synthetic-fixture parity check, the atomic batch
+ * behaviours, the scanner lifecycle checks, and deterministic native negative
+ * cases against the native TurboModule. It intentionally displays and logs only
  * aggregate counts and pass/fail markers; no source text or individual finding
  * metadata is logged.
  */
@@ -14,8 +15,13 @@ import {
   createScanner,
   getAbiVersion,
   getLiveScannerCount,
+  type BatchResult,
   type ScanSource,
 } from '@metalymph/cribra-react-native';
+// Direct TurboModule access is used only by the deterministic negative cases
+// below (invalid scanner id and malformed arguments). The facade remains the
+// public API under test everywhere else.
+import NativeCribraReactNative from '../src/NativeCribraReactNative';
 
 const fixtureSources = require('./src/fixtures/synthetic-source.json') as {
   id: string;
@@ -30,6 +36,13 @@ const oracle = require('./src/fixtures/synthetic-oracle.json') as {
   entries: unknown;
   summary: unknown;
 };
+
+// Tokens and candidate-shaped values that must never appear in emitted logs.
+const secretFragments = [
+  'ghp_AbCdEf0123456789_AbCdEf0123456789',
+  'sk_test_AbCdEf0123456789_AbCdEf0123456789',
+  'ABCD-EFGH-IJKL-MNOP',
+];
 
 type Outcome =
   | { state: 'running' }
@@ -94,6 +107,34 @@ function diffJson(a: unknown, b: unknown, path = '$'): string | null {
   return null;
 }
 
+/**
+ * Independent UTF-8 byte length, so source lengths are checked without trusting
+ * either the native result or the oracle. Handles surrogate pairs.
+ */
+function utf8ByteLength(value: string): number {
+  let bytes = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index);
+    if (code < 0x80) {
+      bytes += 1;
+    } else if (code < 0x800) {
+      bytes += 2;
+    } else if (
+      code >= 0xd800 &&
+      code <= 0xdbff &&
+      index + 1 < value.length &&
+      value.charCodeAt(index + 1) >= 0xdc00 &&
+      value.charCodeAt(index + 1) <= 0xdfff
+    ) {
+      bytes += 4;
+      index += 1;
+    } else {
+      bytes += 3;
+    }
+  }
+  return bytes;
+}
+
 function marker(outcome: Outcome): string | undefined {
   if (outcome.state === 'pass') {
     return [
@@ -104,12 +145,47 @@ function marker(outcome: Outcome): string | undefined {
       `candidates=${outcome.candidates}`,
       'lifecycle=ok',
       'parity=ok',
+      'batch=ok',
+      'negative=ok',
+      'privacy=ok',
     ].join(':');
   }
   if (outcome.state === 'fail') {
     return `CRIBRA_RN_SMOKE:FAIL:${outcome.reason}`;
   }
   return undefined;
+}
+
+/** Returns true only for the expected structured error code. */
+function isCribraError(error: unknown, code: string): boolean {
+  return error instanceof CribraError && error.code === code;
+}
+
+/** Returns true only for the expected source-free native error prefix. */
+function isNativePrefix(error: unknown, prefix: string): boolean {
+  return error instanceof Error && error.message.startsWith(prefix);
+}
+
+function isZeroSummary(batch: BatchResult): boolean {
+  const summary = batch.summary;
+  return (
+    batch.entries.length === 0 &&
+    summary.scannedSources === 0 &&
+    summary.scannedBytes === 0 &&
+    summary.reportsWithFindings === 0 &&
+    summary.reportsWithoutFindings === 0 &&
+    summary.totalFindings === 0 &&
+    summary.totalCandidates === 0 &&
+    summary.reportsWithCandidates === 0 &&
+    !summary.hasCandidates &&
+    summary.critical === 0 &&
+    summary.high === 0 &&
+    summary.medium === 0 &&
+    summary.low === 0 &&
+    summary.info === 0 &&
+    summary.isClean &&
+    !summary.hasCritical
+  );
 }
 
 async function runHarness(): Promise<Outcome> {
@@ -133,6 +209,8 @@ async function runHarness(): Promise<Outcome> {
     return { state: 'fail', reason: 'create_count' };
   }
 
+  // 1. Full-fixture parity: empty/duplicate/empty ids, Unicode, multiple
+  //    findings, a candidate, ordering, and every projection field.
   const batch = await scanner.scanBatch(sources);
   const diff = diffJson(
     { entries: batch.entries, summary: batch.summary },
@@ -143,26 +221,154 @@ async function runHarness(): Promise<Outcome> {
     return { state: 'fail', reason: `parity:${diff}` };
   }
 
-  // Concurrent disposal must share one native disposal and resolve after it.
+  // 2. Identifiers and order survive verbatim, including duplicates.
+  if (batch.entries.length !== sources.length) {
+    await scanner.dispose();
+    return { state: 'fail', reason: 'batch_length' };
+  }
+  for (let index = 0; index < sources.length; index += 1) {
+    if (batch.entries[index].id !== sources[index].id) {
+      await scanner.dispose();
+      return { state: 'fail', reason: `batch_id:${index}` };
+    }
+  }
+
+  // 3. Byte lengths are UTF-8, independent of JavaScript string length.
+  let expectedBytes = 0;
+  for (let index = 0; index < sources.length; index += 1) {
+    const expected = utf8ByteLength(sources[index].source);
+    expectedBytes += expected;
+    if (
+      batch.entries[index].sourceBytes !== expected ||
+      batch.entries[index].result.sourceBytes !== expected
+    ) {
+      await scanner.dispose();
+      return { state: 'fail', reason: `utf8_length:${index}` };
+    }
+  }
+  if (batch.summary.scannedBytes !== expectedBytes) {
+    await scanner.dispose();
+    return { state: 'fail', reason: 'utf8_total' };
+  }
+
+  // 4. An empty batch is one native operation with an exact zero summary.
+  const empty = await scanner.scanBatch([]);
+  if (!isZeroSummary(empty)) {
+    await scanner.dispose();
+    return { state: 'fail', reason: 'empty_batch' };
+  }
+
+  // 5. Repeating the same ordered batch is deterministic.
+  const repeated = await scanner.scanBatch(sources);
+  if (
+    diffJson(
+      { entries: repeated.entries, summary: repeated.summary },
+      { entries: batch.entries, summary: batch.summary },
+    ) !== null
+  ) {
+    await scanner.dispose();
+    return { state: 'fail', reason: 'repeat_determinism' };
+  }
+
+  // 6. Invalid JavaScript input is rejected before any native work, and the
+  //    scanner remains usable afterwards.
+  let invalidJs = false;
+  try {
+    await scanner.scanBatch([
+      { id: 1, source: 'unused' },
+    ] as unknown as ScanSource[]);
+  } catch (error) {
+    invalidJs = isCribraError(error, 'invalid_argument');
+  }
+  if (!invalidJs) {
+    await scanner.dispose();
+    return { state: 'fail', reason: 'invalid_js_batch' };
+  }
+  if (!isZeroSummary(await scanner.scanBatch([]))) {
+    await scanner.dispose();
+    return { state: 'fail', reason: 'post_invalid_batch' };
+  }
+
+  // 7. Concurrent disposal shares one native disposal and resolves after it.
   await Promise.all([scanner.dispose(), scanner.dispose()]);
   if (getLiveScannerCount() !== 0) {
     return { state: 'fail', reason: 'dispose_count' };
   }
 
-  // dispose() is contractually idempotent once complete.
+  // 8. dispose() is contractually idempotent once complete.
   await scanner.dispose();
 
+  // 9. A disposed facade rejects batch work without touching the native side.
   let disposed = false;
   try {
-    await scanner.scan('not-scanned');
+    await scanner.scanBatch(sources);
   } catch (error) {
-    disposed = error instanceof CribraError && error.code === 'disposed';
+    disposed = isCribraError(error, 'disposed');
   }
   if (!disposed) {
-    return { state: 'fail', reason: 'post_dispose_scan' };
+    return { state: 'fail', reason: 'post_dispose_batch' };
   }
 
-  // Repeat creation/disposal to prove the registry can be reused.
+  // 10. Deterministic native negatives: an unknown scanner id and malformed
+  //     batch elements fail closed, and the scanner stays alive afterwards.
+  let invalidId = false;
+  try {
+    await NativeCribraReactNative.scanBatch(999999, []);
+  } catch (error) {
+    invalidId = isNativePrefix(error, 'cribra_native_error:scanner_not_found');
+  }
+  if (!invalidId) {
+    return { state: 'fail', reason: 'native_invalid_id' };
+  }
+
+  const rawId = await NativeCribraReactNative.createDefaultScanner();
+  if (getLiveScannerCount() !== 1) {
+    await NativeCribraReactNative.disposeScanner(rawId);
+    return { state: 'fail', reason: 'raw_create_count' };
+  }
+  let malformed = false;
+  try {
+    await NativeCribraReactNative.scanBatch(
+      rawId,
+      [{ id: 1, source: 2 }] as unknown as { id: string; source: string }[],
+    );
+  } catch (error) {
+    malformed = isNativePrefix(error, 'cribra_native_error:invalid_argument');
+  }
+  if (!malformed) {
+    await NativeCribraReactNative.disposeScanner(rawId);
+    return { state: 'fail', reason: 'native_malformed_args' };
+  }
+  const rawEmpty = await NativeCribraReactNative.scanBatch(rawId, []);
+  if (
+    rawEmpty.entries.length !== 0 ||
+    rawEmpty.summary.scannedSources !== 0 ||
+    !rawEmpty.summary.isClean
+  ) {
+    await NativeCribraReactNative.disposeScanner(rawId);
+    return { state: 'fail', reason: 'native_after_malformed' };
+  }
+  await NativeCribraReactNative.disposeScanner(rawId);
+  if (getLiveScannerCount() !== 0) {
+    return { state: 'fail', reason: 'raw_dispose_count' };
+  }
+
+  // 11. Disposal while a batch is in flight: the queued serial job completes
+  //     first, then the native disposal runs and the registry drains.
+  const inFlight = await createScanner();
+  const pendingBatch = inFlight.scanBatch(sources);
+  const pendingDispose = inFlight.dispose();
+  const [inFlightBatch] = await Promise.all([pendingBatch, pendingDispose]);
+  if (
+    inFlightBatch.entries.length !== sources.length ||
+    inFlightBatch.summary.totalFindings !==
+      batch.summary.totalFindings ||
+    getLiveScannerCount() !== 0
+  ) {
+    return { state: 'fail', reason: 'inflight_disposal' };
+  }
+
+  // 12. Repeat creation/disposal to prove the registry can be reused.
   const second = await createScanner();
   if (getLiveScannerCount() !== 1) {
     await second.dispose();
@@ -173,13 +379,29 @@ async function runHarness(): Promise<Outcome> {
     return { state: 'fail', reason: 'second_dispose_count' };
   }
 
-  return {
+  const result: Outcome = {
     state: 'pass',
     abi: abiText,
     entries: batch.entries.length,
     findings: batch.summary.totalFindings,
     candidates: batch.summary.totalCandidates,
   };
+
+  // 13. Privacy: the emitted marker contains no fixture token, candidate value,
+  //     or source identifier.
+  const markerText = marker(result) ?? '';
+  for (const fragment of secretFragments) {
+    if (markerText.includes(fragment)) {
+      return { state: 'fail', reason: 'privacy_secret' };
+    }
+  }
+  for (const source of sources) {
+    if (source.id.length > 0 && markerText.includes(source.id)) {
+      return { state: 'fail', reason: 'privacy_id' };
+    }
+  }
+
+  return result;
 }
 
 function App() {
@@ -212,7 +434,7 @@ function App() {
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" />
-      <Text style={styles.title}>Cribra RN.1.1 native smoke</Text>
+      <Text style={styles.title}>Cribra RN.1.2 native batch smoke</Text>
       <Text style={styles.status} testID="cribra-status">
         {outcome.state.toUpperCase()}
       </Text>
@@ -222,7 +444,7 @@ function App() {
         </Text>
       ) : null}
       {outcome.state === 'running' ? (
-        <Text style={styles.body}>Running native scan proof…</Text>
+        <Text style={styles.body}>Running native batch proof…</Text>
       ) : null}
       {outcome.state === 'pass' ? (
         <View>
@@ -231,6 +453,9 @@ function App() {
           <Text style={styles.body}>Findings: {outcome.findings}</Text>
           <Text style={styles.body}>Candidates: {outcome.candidates}</Text>
           <Text style={styles.body}>Parity: ok</Text>
+          <Text style={styles.body}>Batch: ok</Text>
+          <Text style={styles.body}>Negatives: ok</Text>
+          <Text style={styles.body}>Privacy: ok</Text>
           <Text style={styles.body}>Lifecycle: ok</Text>
         </View>
       ) : null}

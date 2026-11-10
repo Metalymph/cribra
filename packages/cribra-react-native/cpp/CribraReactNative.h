@@ -53,6 +53,11 @@ class CribraReactNative final
       jsi::String sourceId,
       jsi::String text);
 
+  jsi::Value scanBatch(
+      jsi::Runtime& rt,
+      double scannerId,
+      jsi::Array sources);
+
   jsi::Value disposeScanner(jsi::Runtime& rt, double scannerId);
 
   double getLiveScannerCount(jsi::Runtime& rt);
