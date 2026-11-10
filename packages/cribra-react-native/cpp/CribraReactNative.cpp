@@ -1,11 +1,13 @@
 #include "CribraReactNative.h"
 
+#include "CribraAbi.h"
+
+#include <cmath>
+#include <optional>
 #include <utility>
 
 namespace facebook::react {
 namespace {
-
-constexpr uint64_t kMaxJsSafeInteger = 9007199254740991ull;
 
 jsi::Value PromiseRejected(
     jsi::Runtime& rt,
@@ -14,6 +16,75 @@ jsi::Value PromiseRejected(
   auto promise = AsyncPromise<>(rt, jsInvoker);
   promise.reject(Error(message));
   return bridging::toJs(rt, promise, jsInvoker);
+}
+
+/// Rejects NaN, infinities, fractions, zero, negatives, and values outside the
+/// exactly representable JavaScript integer range before any uint64 cast.
+std::optional<uint64_t> LiveScannerId(double value) {
+  if (!std::isfinite(value) || value < 1.0 ||
+      value > static_cast<double>(cribra::rn::kMaxJsSafeInteger)) {
+    return std::nullopt;
+  }
+  const auto id = static_cast<uint64_t>(value);
+  if (static_cast<double>(id) != value) {
+    return std::nullopt;
+  }
+  return id;
+}
+
+/// Copies every batch input on the JS thread. Type errors are reported as
+/// `invalid_argument`; string conversion errors are reported as
+/// `invalid_input_string` without retaining or forwarding the JSI exception
+/// text, which may contain fragments of the source.
+bool DecodeBatchInputs(
+    jsi::Runtime& rt,
+    const jsi::Array& sources,
+    std::vector<cribra::rn::ScanInput>& inputs,
+    std::string& error) {
+  size_t count = 0;
+  try {
+    count = sources.size(rt);
+  } catch (...) {
+    error = "cribra_native_error:invalid_argument";
+    return false;
+  }
+
+  inputs.reserve(count);
+  for (size_t index = 0; index < count; ++index) {
+    std::string id;
+    std::string text;
+    bool conversionFailed = false;
+    try {
+      const auto element = sources.getValueAtIndex(rt, index);
+      if (!element.isObject()) {
+        error = "cribra_native_error:invalid_argument";
+        return false;
+      }
+      const auto object = element.asObject(rt);
+      const auto idValue = object.getProperty(rt, "id");
+      const auto sourceValue = object.getProperty(rt, "source");
+      if (!idValue.isString() || !sourceValue.isString()) {
+        error = "cribra_native_error:invalid_argument";
+        return false;
+      }
+      try {
+        id = idValue.asString(rt).utf8(rt);
+        text = sourceValue.asString(rt).utf8(rt);
+      } catch (...) {
+        conversionFailed = true;
+      }
+    } catch (...) {
+      error = "cribra_native_error:invalid_argument";
+      return false;
+    }
+
+    if (conversionFailed) {
+      error = "cribra_native_error:invalid_input_string";
+      return false;
+    }
+    inputs.push_back({std::move(id), std::move(text)});
+  }
+  return true;
 }
 
 }  // namespace
@@ -85,7 +156,7 @@ jsi::Value CribraReactNative::createDefaultScanner(jsi::Runtime& rt) {
       scannerId = nextScannerId_++;
     }
 
-    if (scannerId > kMaxJsSafeInteger) {
+    if (!cribra::rn::FitsJsSafeInteger(scannerId)) {
       promise.reject(Error("cribra_native_error:scanner_id_exhausted"));
       return;
     }
@@ -106,12 +177,16 @@ jsi::Value CribraReactNative::scan(
   try {
     sourceIdUtf8 = sourceId.utf8(rt);
     textUtf8 = text.utf8(rt);
-  } catch (const std::exception&) {
+  } catch (...) {
     // Never forward the input or a UTF-16 diagnostic that could contain it.
     return PromiseRejected(rt, "cribra_native_error:invalid_input_string", jsInvoker_);
   }
 
-  auto scanner = findScanner(static_cast<uint64_t>(scannerId));
+  const auto id = LiveScannerId(scannerId);
+  if (!id) {
+    return PromiseRejected(rt, "cribra_native_error:scanner_not_found", jsInvoker_);
+  }
+  auto scanner = findScanner(*id);
   if (!scanner) {
     return PromiseRejected(rt, "cribra_native_error:scanner_not_found", jsInvoker_);
   }
@@ -123,8 +198,44 @@ jsi::Value CribraReactNative::scan(
                 sourceId = std::move(sourceIdUtf8),
                 text = std::move(textUtf8)]() mutable {
     try {
-      auto report = cribra::rn::Scan(scanner, sourceId, text);
-      promise.resolve(std::move(report));
+      auto projection = cribra::rn::Scan(scanner, sourceId, text);
+      promise.resolve(std::move(projection.report));
+    } catch (const std::exception& error) {
+      promise.reject(Error(error.what()));
+    } catch (...) {
+      promise.reject(Error("cribra_native_error:unknown"));
+    }
+  });
+  return bridging::toJs(rt, promise, jsInvoker_);
+}
+
+jsi::Value CribraReactNative::scanBatch(
+    jsi::Runtime& rt,
+    double scannerId,
+    jsi::Array sources) {
+  std::vector<cribra::rn::ScanInput> inputs;
+  std::string inputError;
+  if (!DecodeBatchInputs(rt, sources, inputs, inputError)) {
+    return PromiseRejected(rt, inputError, jsInvoker_);
+  }
+
+  const auto id = LiveScannerId(scannerId);
+  if (!id) {
+    return PromiseRejected(rt, "cribra_native_error:scanner_not_found", jsInvoker_);
+  }
+  auto scanner = findScanner(*id);
+  if (!scanner) {
+    return PromiseRejected(rt, "cribra_native_error:scanner_not_found", jsInvoker_);
+  }
+
+  auto promise = AsyncPromise<cribra::rn::ScanBatchDto>(rt, jsInvoker_);
+  // One job for the whole ordered batch. Inputs are owned strings already
+  // copied on the JS thread; only plain C++ values cross the worker boundary.
+  worker_.post([promise,
+                scanner = std::move(scanner),
+                inputs = std::move(inputs)]() mutable {
+    try {
+      promise.resolve(cribra::rn::ScanBatch(scanner, inputs));
     } catch (const std::exception& error) {
       promise.reject(Error(error.what()));
     } catch (...) {
@@ -137,10 +248,15 @@ jsi::Value CribraReactNative::scan(
 jsi::Value CribraReactNative::disposeScanner(
     jsi::Runtime& rt,
     double scannerId) {
+  const auto id = LiveScannerId(scannerId);
+  if (!id) {
+    return PromiseRejected(rt, "cribra_native_error:scanner_not_found", jsInvoker_);
+  }
+
   auto promise = AsyncPromise<>(rt, jsInvoker_);
   // Copy, do not move: bridging::toJs below still needs this promise.
-  worker_.post([this, promise, scannerId]() mutable {
-    auto scanner = takeScanner(static_cast<uint64_t>(scannerId));
+  worker_.post([this, promise, id = *id]() mutable {
+    auto scanner = takeScanner(id);
     if (!scanner) {
       promise.reject(Error("cribra_native_error:scanner_not_found"));
       return;

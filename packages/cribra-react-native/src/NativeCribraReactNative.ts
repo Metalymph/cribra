@@ -39,6 +39,34 @@ export type ScanReportDto = {
   candidates: CandidateDto[];
 };
 
+export type ScanSourceDto = {
+  id: string;
+  source: string;
+};
+
+export type ScanSummaryDto = {
+  scannedSources: number;
+  scannedBytes: number;
+  reportsWithFindings: number;
+  reportsWithoutFindings: number;
+  totalFindings: number;
+  totalCandidates: number;
+  reportsWithCandidates: number;
+  hasCandidates: boolean;
+  critical: number;
+  high: number;
+  medium: number;
+  low: number;
+  info: number;
+  isClean: boolean;
+  hasCritical: boolean;
+};
+
+export type ScanBatchDto = {
+  entries: ScanReportDto[];
+  summary: ScanSummaryDto;
+};
+
 export interface Spec extends TurboModule {
   getAbiVersion(): AbiVersion;
   createDefaultScanner(): Promise<number>;
@@ -47,6 +75,15 @@ export interface Spec extends TurboModule {
     sourceId: string,
     text: string,
   ): Promise<ScanReportDto>;
+  /**
+   * One native batch operation. The native side copies every input on the JS
+   * thread, posts one serial-worker job, runs `cribra_scanner_scan` once per
+   * source in order, and resolves one detached DTO batch.
+   */
+  scanBatch(
+    scannerId: number,
+    sources: ScanSourceDto[],
+  ): Promise<ScanBatchDto>;
   disposeScanner(scannerId: number): Promise<void>;
   getLiveScannerCount(): number;
 }
