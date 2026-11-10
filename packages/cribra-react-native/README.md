@@ -1,9 +1,10 @@
 # @metalymph/cribra-react-native
 
 Private, unpublished native React Native backend for the Cribra sensitive-data
-scanner. This is the RN.1.2 implementation: a direct C ABI TurboModule with a
-small TypeScript facade and one asynchronous native batch operation, validated
-in an isolated React Native 0.88.1 New Architecture/Hermes consumer.
+scanner. This is the RN.1.3 implementation: a direct C ABI TurboModule with a
+small TypeScript facade, asynchronous scanning, and caller-configurable scanner
+construction from Core catalogs and custom rules, validated in an isolated
+React Native 0.88.1 New Architecture/Hermes consumer.
 
 This package is **not** the WebAssembly package `@metalymph/cribra` and is **not
 published to npm**. It does not change the Cribra Core, the released C ABI, or
@@ -22,8 +23,15 @@ TypeScript facade (src/index.ts)
 
 Native work runs on one serial worker thread. JSI values are read or created
 only on the JS thread; the worker only sees plain C++ values. Scanner, report,
-and error handles are owned by RAII guards and never exposed to JavaScript.
-JavaScript receives only numeric scanner IDs and source-free DTOs.
+builder, and error handles are owned by RAII guards and never exposed to
+JavaScript. JavaScript receives only numeric scanner IDs and source-free DTOs.
+
+`createScanner(config?)` copies the entire configuration on the JS thread, then
+runs one worker job that selects Core catalogs, adds custom rules in caller
+order, builds the scanner, and projects detached rule metadata. Omitted
+configuration (or `{}`) uses the released canonical-current fast path;
+`{ builtins: 'none' }` is an explicit empty scanner. Core remains the sole
+authority for rule validation, ordering, and classification.
 
 `scanBatch()` is one TurboModule call and one worker job. The worker runs N
 serial `cribra_scanner_scan()` calls using the existing full finding/candidate
@@ -47,18 +55,18 @@ released.
 | --- | --- |
 | `src/NativeCribraReactNative.ts` | Codegen TurboModule spec and wire DTOs |
 | `src/index.ts` | Public TypeScript facade, DTO projection, lifecycle and errors |
-| `cpp/CribraBridge.h/.cpp` | C ABI ownership, scan projection, native batch aggregation, ABI version |
-| `cpp/CribraEnums.h` | Pure strict ABI enum, explanation, and sentinel mapping |
+| `cpp/CribraBridge.h/.cpp` | C ABI ownership, scanner construction, rule metadata, scan projection, batch aggregation, ABI version |
+| `cpp/CribraEnums.h` | Pure strict ABI enum, rule/build mapping, explanation, and sentinel helpers |
 | `cpp/CribraAbi.h` | Major/minor gate and JavaScript safe-integer helpers |
 | `cpp/CribraReactNative.h/.cpp` | Serial worker, scanner registry, async TurboModule methods |
-| `tools/abi-check/` | Host protocol test for the ABI gate and strict enum mapping |
+| `tools/abi-check/` | Host protocol test for the ABI gate, strict enum mapping, and configuration protocol |
 | `ios/OnLoad.mm` | iOS pure-C++ TurboModule registration |
 | `CribraReactNative.podspec` | CocoaPods integration and xcframework linkage |
 | `android/CMakeLists.txt` | Android target and prebuilt Rust static-library linkage |
 | `third_party/cribra/include/cribra.h` | Vendored copy of the canonical C ABI header |
 | `scripts/build-native.sh` | Builds iOS/Android Rust static libraries |
 | `fixtures/` | Synthetic, non-secret scan fixture |
-| `tools/oracle/` | Test-only direct-Core oracle generator |
+| `tools/oracle/` | Test-only direct-Core oracle generator for scans and configurations |
 | `consumer/` | Isolated RN 0.88.1 runtime/parity harness |
 
 ## API
@@ -74,11 +82,33 @@ import {
   createScanner,
   getAbiVersion,
   type ScanSource,
+  type ScannerConfig,
 } from '@metalymph/cribra-react-native';
 
 const abi = getAbiVersion(); // { major: 0, minor: 3, patch: 0 }
 
-const scanner = await createScanner();
+const config: ScannerConfig = {
+  builtins: 'current',
+  financialBuiltins: true,
+  personalBuiltins: false,
+  rules: [
+    {
+      kind: 'prefix',
+      id: 'acme.internal-token',
+      value: 'acme_pat_',
+      severity: 'high',
+      remediation: 'revoke_and_rotate_credential',
+    },
+    {
+      kind: 'pattern',
+      id: 'acme.ticket',
+      pattern: '\\bACME-[0-9]{4}\\b',
+      severity: 'medium',
+    },
+  ],
+};
+
+const scanner = await createScanner(config);
 try {
   const one = await scanner.scan('source text', { id: 'one' });
   const batch = await scanner.scanBatch([
@@ -86,15 +116,45 @@ try {
     { id: 'b', source: 'second' },
   ] satisfies ScanSource[]);
 
-  console.log(batch.summary.totalFindings, one.findings.length);
+  console.log(scanner.rulesCount, batch.summary.totalFindings);
+  console.log(one.findings.length);
 } finally {
   await scanner.dispose();
 }
 ```
 
+### Scanner configuration
+
+`createScanner(config?)` accepts:
+
+| Field | Default | Meaning |
+| --- | --- | --- |
+| `builtins` | `'current'` | `'current'` selects the canonical catalog; `'none'` disables it |
+| `financialBuiltins` | `false` | Opt-in financial catalog |
+| `personalBuiltins` | `false` | Opt-in personal-identifier catalog |
+| `rules` | `[]` | Custom rules in caller order |
+
+Omitting the argument or passing `{}` selects the canonical current catalog,
+exactly like the previous default factory. An explicit empty scanner is
+`{ builtins: 'none' }`. Custom rules are placed before selected catalogs by
+Core, and catalogs are submitted current, financial, then personal.
+
+Each custom rule has `id`, `severity`, optional `remediation`, and one of
+`literal`/`prefix`/`suffix` (`value`) or `pattern` (`pattern`, Rust `regex`
+syntax). Rule semantics are not reimplemented in TypeScript or C++: empty IDs,
+empty matchers, invalid patterns, zero-length patterns, duplicate IDs, and
+catalog collisions all come from Core. `remediation: null`/`undefined` means no
+remediation; the output-only `'unknown'` label is rejected as input.
+
+`scanner.rules` is a frozen, detached snapshot of `RuleMetadata` and
+`scanner.rulesCount` its length. Both remain readable after `dispose()`. The
+snapshot never contains matcher, pattern, or source contents.
+
 ### Async differences from the WebAssembly package
 
 - `createScanner()` is a promise, not a synchronous factory after `init()`.
+- `createScanner(config?)` is the only public factory. Omitted configuration
+  preserves the canonical-current default.
 - `scan()` and `scanBatch()` are promises. `scanBatch()` is one TurboModule
   call and one native worker job that runs N serial C ABI scans; the batch
   resolves or rejects atomically with no partial result.
@@ -105,7 +165,7 @@ try {
   native disposal. A batch dispatched before disposal still completes, and any
   scan after disposal throws `CribraError` with `code === 'disposed'`.
 - Findings and candidate explanations are always materialized. There is no
-  `includeExplanations` option and no rule-metadata surface in RN.1.2.
+  `includeExplanations` option. Detached rule metadata is available in RN.1.3.
 
 ### Errors
 
@@ -124,14 +184,36 @@ to `invalid_input_string` without forwarding the JavaScript/JSI exception text.
 An incompatible linked ABI is reported as `CribraError` with
 `code === 'abi_mismatch'` and a detail of the form
 `cribra_native_error:abi_mismatch:expected=0.3.0:actual=X.Y.Z`. This check runs
-before `cribra_scanner_new_current` and before every `cribra_scanner_scan`, so
-an incompatible library cannot reach scanner code.
+before scanner construction and before every `cribra_scanner_scan`, so an
+incompatible library cannot reach scanner code.
+
+Core scanner-build failures are reported through structured
+`cribra_error_build_info` metadata, never by parsing human-readable messages:
+
+| Code | `CribraError.code` |
+| --- | --- |
+| 1 | `invalid_pattern` |
+| 2 | `pattern_matches_empty` |
+| 3 | `missing_capture_group` |
+| 4 | `empty_rule_id` |
+| 5 | `duplicate_rule_id` |
+| 6 | `empty_matcher` |
+| 7 | `too_many_rules` |
+| 8 | `automaton_build` |
+
+An unknown future code fails closed as `scanner_create_failed`. When Core
+reports one, `CribraError.ruleId` carries the caller's rule identifier (or a
+public built-in ID for a catalog collision). The identifier is never embedded
+in the error message or detail. Matcher, pattern, and source contents are never
+reported. The builder is released on every early error, and a scanner whose
+metadata projection fails is disposed before the projection error is surfaced.
 
 ## Privacy
 
-The native package does not log, persist, or upload source text or findings. The
-runtime harness logs and displays only the aggregate marker
-`CRIBRA_RN_SMOKE:PASS:abi=...:entries=...:findings=...:candidates=...:lifecycle=ok:parity=ok:batch=ok:negative=ok:privacy=ok`
+The native package does not log, persist, or upload source text, matcher
+payloads, rule identifiers, or findings. The runtime harness logs and displays
+only the aggregate marker
+`CRIBRA_RN_SMOKE:PASS:abi=...:entries=...:findings=...:candidates=...:lifecycle=ok:parity=ok:batch=ok:config=ok:negative=ok:privacy=ok`
 or a source-free failure reason. Error messages come from the C ABI's
 privacy-safe diagnostic metadata.
 
@@ -192,8 +274,15 @@ the complete native result tree against a direct-Core oracle generated by
 order preservation, independent UTF-8 byte lengths, repeat determinism), the
 scanner lifecycle (counts, idempotent disposal, post-disposal rejection,
 in-flight disposal), deterministic native negative cases (invalid scanner ID
-and malformed batch elements), and that emitted markers contain no fixture
-secret, candidate value, or source ID.
+and malformed batch elements), and the RN.1.3 configuration surface.
+
+The configuration checks build default, explicit-empty, financial, personal,
+combined, and custom-rule scanners; compare their detached `scanner.rules`
+metadata (and scan output where present) against the direct-Core config oracle;
+exercise every Core-reachable build-error code and its structured `ruleId`; and
+confirm the live-scanner count returns to baseline after every failure. They
+also verify that emitted markers contain no fixture secret, candidate value,
+matcher payload, rule ID, or source ID.
 
 ```sh
 # Terminal 1
@@ -211,7 +300,7 @@ adb shell am start -n com.cribraconsumer/.MainActivity
 adb logcat | grep CRIBRA_RN_SMOKE
 ```
 
-Regenerate the oracle after changing the fixture or Core:
+Regenerate the scan oracle after changing the fixture or Core:
 
 ```sh
 cd tools/oracle
@@ -219,32 +308,42 @@ cargo run --release -- ../../fixtures/synthetic-source.json \
   > ../../consumer/src/fixtures/synthetic-oracle.json
 ```
 
+Regenerate the configuration oracle after changing the configuration fixture
+or Core:
+
+```sh
+cd tools/oracle
+cargo run --release -- --config-cases \
+  ../../consumer/src/fixtures/rn13-config-cases.json \
+  > ../../consumer/src/fixtures/rn13-oracle.json
+```
+
 Checks:
 
 ```sh
 npm run typecheck          # package facade (uses the consumer's TypeScript)
 npm run test:abi           # host test for the ABI gate, safe-integer boundary,
-                           # and strict enum/explanation mapping
+                           # strict enum/explanation mapping, and config protocol
 cd consumer
 npx tsc --noEmit           # consumer harness types
-npm test                   # Jest facade batch contract plus App render mock
+npm test                   # Jest facade batch/config contracts plus App render
 ```
 
 `npm run typecheck` reads React Native's generated types from the consumer's
 `node_modules`, so install the consumer first. Jest mocks the native
 TurboModule because unit tests have no native binary; it pins the JavaScript
-contract (one native call, copied inputs, strict DTO/summary validation, and
-source-free error normalisation). The real native path is the
-simulator/emulator harness above.
+contract (one native call, copied inputs, strict DTO/summary/metadata
+validation, structured build errors, scanner cleanup, and source-free error
+normalisation). The real native path is the simulator/emulator harness above.
 
 ## Scope
 
-RN.1.2 deliberately excludes config/rule metadata (RN.1.3), Unicode helper
-surfaces (RN.1.4), flow transforms (RN.1.5), cancellation/stress/reload
-(RN.1.6), streaming, incremental documents, Share Bundles, parallel scanning,
-and npm publication. It does not link `cribra-uniffi`, does not introduce a
-second scanner engine, and does not modify the WebAssembly API, Core, or the
-released C ABI protocol.
+RN.1.3 exposes scanner-builder configuration and detached rule metadata. It
+deliberately excludes Unicode helper surfaces (RN.1.4), flow transforms
+(RN.1.5), cancellation/stress/reload (RN.1.6), streaming, incremental
+documents, Share Bundles, parallel scanning, and npm publication. It does not
+link `cribra-uniffi`, does not introduce a second scanner engine, and does not
+modify the WebAssembly API, Core, or the released C ABI protocol.
 
 See [QUALIFICATION.md](./QUALIFICATION.md) for the build, ABI, parity,
 lifecycle, size, and limitation record.

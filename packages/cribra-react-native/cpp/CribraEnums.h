@@ -125,6 +125,143 @@ inline std::optional<std::string_view> MapCandidateKind(uint32_t code) {
   }
 }
 
+// Rule metadata uses the same Core matching families as the C ABI. There is no
+// sentinel: an unrecognized kind fails the metadata projection closed.
+inline std::optional<std::string_view> MapRuleKind(uint32_t code) {
+  switch (code) {
+    case CRIBRA_RULE_KIND_LITERAL:
+      return "literal";
+    case CRIBRA_RULE_KIND_PREFIX:
+      return "prefix";
+    case CRIBRA_RULE_KIND_SUFFIX:
+      return "suffix";
+    case CRIBRA_RULE_KIND_PATTERN:
+      return "pattern";
+    default:
+      return std::nullopt;
+  }
+}
+
+// An active rule always has a concrete detection authority. The NONE and
+// UNKNOWN sentinels belong to explanation payloads, not rule metadata.
+inline std::optional<std::string_view> MapRuleDetectionMode(uint32_t code) {
+  switch (code) {
+    case CRIBRA_DETECTION_MODE_MATCHER_ONLY:
+      return "matcher_only";
+    case CRIBRA_DETECTION_MODE_DETERMINISTIC:
+      return "deterministic";
+    case CRIBRA_DETECTION_MODE_CONTEXTUAL:
+      return "contextual";
+    default:
+      return std::nullopt;
+  }
+}
+
+// Input-direction mappings for the public configuration vocabulary. Unknown
+// labels return std::nullopt so the bridge can reject them before Core work.
+inline std::optional<uint32_t> MapRuleKindCode(std::string_view label) {
+  if (label == "literal") {
+    return CRIBRA_RULE_KIND_LITERAL;
+  }
+  if (label == "prefix") {
+    return CRIBRA_RULE_KIND_PREFIX;
+  }
+  if (label == "suffix") {
+    return CRIBRA_RULE_KIND_SUFFIX;
+  }
+  if (label == "pattern") {
+    return CRIBRA_RULE_KIND_PATTERN;
+  }
+  return std::nullopt;
+}
+
+inline std::optional<uint32_t> MapSeverityCode(std::string_view label) {
+  if (label == "info") {
+    return CRIBRA_SEVERITY_INFO;
+  }
+  if (label == "low") {
+    return CRIBRA_SEVERITY_LOW;
+  }
+  if (label == "medium") {
+    return CRIBRA_SEVERITY_MEDIUM;
+  }
+  if (label == "high") {
+    return CRIBRA_SEVERITY_HIGH;
+  }
+  if (label == "critical") {
+    return CRIBRA_SEVERITY_CRITICAL;
+  }
+  return std::nullopt;
+}
+
+// An empty label is the configuration form of CRIBRA_REMEDIATION_NONE.
+inline std::optional<uint32_t> MapRemediationCode(std::string_view label) {
+  if (label.empty()) {
+    return CRIBRA_REMEDIATION_NONE;
+  }
+  if (label == "revoke_and_rotate_credential") {
+    return CRIBRA_REMEDIATION_REVOKE_AND_ROTATE_CREDENTIAL;
+  }
+  if (label == "rotate_credential") {
+    return CRIBRA_REMEDIATION_ROTATE_CREDENTIAL;
+  }
+  if (label == "rotate_password") {
+    return CRIBRA_REMEDIATION_ROTATE_PASSWORD;
+  }
+  if (label == "replace_private_key") {
+    return CRIBRA_REMEDIATION_REPLACE_PRIVATE_KEY;
+  }
+  if (label == "remove_sensitive_value") {
+    return CRIBRA_REMEDIATION_REMOVE_SENSITIVE_VALUE;
+  }
+  if (label == "review_sensitive_hash") {
+    return CRIBRA_REMEDIATION_REVIEW_SENSITIVE_HASH;
+  }
+  if (label == "review_password_verifier") {
+    return CRIBRA_REMEDIATION_REVIEW_PASSWORD_VERIFIER;
+  }
+  // CRIBRA_REMEDIATION_UNKNOWN is an output sentinel only; Core rejects it as
+  // an input remediation.
+  return std::nullopt;
+}
+
+// Diagnostic names for the stable build-error categories. Used by the host
+// protocol check to pin the numeric ABI contract.
+inline std::optional<std::string_view> MapBuildErrorCode(uint32_t code) {
+  switch (code) {
+    case CRIBRA_BUILD_CODE_NONE:
+      return "none";
+    case CRIBRA_BUILD_CODE_INVALID_PATTERN:
+      return "invalid_pattern";
+    case CRIBRA_BUILD_CODE_PATTERN_MATCHES_EMPTY:
+      return "pattern_matches_empty";
+    case CRIBRA_BUILD_CODE_MISSING_CAPTURE_GROUP:
+      return "missing_capture_group";
+    case CRIBRA_BUILD_CODE_EMPTY_RULE_ID:
+      return "empty_rule_id";
+    case CRIBRA_BUILD_CODE_DUPLICATE_RULE_ID:
+      return "duplicate_rule_id";
+    case CRIBRA_BUILD_CODE_EMPTY_MATCHER:
+      return "empty_matcher";
+    case CRIBRA_BUILD_CODE_TOO_MANY_RULES:
+      return "too_many_rules";
+    case CRIBRA_BUILD_CODE_AUTOMATON_BUILD:
+      return "automaton_build";
+    default:
+      return std::nullopt;
+  }
+}
+
+/// True only for the configuration whose Core result is identical to
+/// `Scanner::default()`: the canonical catalog and no other rule source.
+constexpr bool IsCanonicalDefaultConfig(
+    bool current,
+    bool financial,
+    bool personal,
+    bool hasRules) noexcept {
+  return current && !financial && !personal && !hasRules;
+}
+
 struct ExplanationMapping {
   std::string_view kind;
   std::string_view value;

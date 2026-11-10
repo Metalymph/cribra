@@ -1,11 +1,12 @@
 /**
- * Cribra RN.1.2 isolated consumer harness.
+ * Cribra RN.1.3 isolated consumer harness.
  *
  * This screen runs the synthetic-fixture parity check, the atomic batch
- * behaviours, the scanner lifecycle checks, and deterministic native negative
- * cases against the native TurboModule. It intentionally displays and logs only
- * aggregate counts and pass/fail markers; no source text or individual finding
- * metadata is logged.
+ * behaviours, the scanner lifecycle checks, the configured-scanner and detached
+ * metadata checks against the direct-Core oracle, and deterministic native
+ * negative cases against the native TurboModule. It intentionally displays and
+ * logs only aggregate counts and pass/fail markers; no source text, matcher
+ * payload, rule ID, or individual finding metadata is logged.
  */
 
 import { useEffect, useState } from 'react';
@@ -16,7 +17,10 @@ import {
   getAbiVersion,
   getLiveScannerCount,
   type BatchResult,
+  type RuleMetadata,
   type ScanSource,
+  type ScannerConfig,
+  type Severity,
 } from '@metalymph/cribra-react-native';
 // Direct TurboModule access is used only by the deterministic negative cases
 // below (invalid scanner id and malformed arguments). The facade remains the
@@ -37,11 +41,112 @@ const oracle = require('./src/fixtures/synthetic-oracle.json') as {
   summary: unknown;
 };
 
+const configCases = require('./src/fixtures/rn13-config-cases.json') as ConfigCase[];
+const configOracle = require('./src/fixtures/rn13-oracle.json') as {
+  cases: OracleConfigCase[];
+};
+
+interface ConfigCaseRule {
+  kind: 'literal' | 'prefix' | 'suffix' | 'pattern';
+  id: string;
+  value: string;
+  severity: string;
+  remediation?: string | null;
+}
+
+interface ConfigCase {
+  name: string;
+  current?: boolean;
+  financial?: boolean;
+  personal?: boolean;
+  rules?: ConfigCaseRule[];
+  scan?: { id: string; text: string }[];
+}
+
+interface OracleRule {
+  ruleId: string;
+  kind: string;
+  detectionMode: string;
+  severity: string;
+  remediation: string | null;
+}
+
+interface OracleConfigCase {
+  name: string;
+  rules?: OracleRule[];
+  entries?: unknown;
+  summary?: unknown;
+  error?: { code: number; ruleId: string | null };
+}
+
+const configCaseByName = new Map(configCases.map((entry) => [entry.name, entry]));
+const configOracleByName = new Map(
+  configOracle.cases.map((entry) => [entry.name, entry]),
+);
+
+const BUILD_ERROR_LABELS = [
+  'invalid_pattern',
+  'pattern_matches_empty',
+  'missing_capture_group',
+  'empty_rule_id',
+  'duplicate_rule_id',
+  'empty_matcher',
+  'too_many_rules',
+  'automaton_build',
+] as const;
+
+function scannerConfigFor(testCase: ConfigCase): ScannerConfig {
+  return {
+    builtins: testCase.current === false ? 'none' : 'current',
+    financialBuiltins: testCase.financial === true,
+    personalBuiltins: testCase.personal === true,
+    rules: (testCase.rules ?? []).map((rule) => {
+      const remediation =
+        rule.remediation === undefined || rule.remediation === null
+          ? undefined
+          : (rule.remediation as NonNullable<RuleMetadata['remediation']>);
+      return rule.kind === 'pattern'
+        ? {
+            kind: 'pattern' as const,
+            id: rule.id,
+            pattern: rule.value,
+            severity: rule.severity as Severity,
+            remediation,
+          }
+        : {
+            kind: rule.kind,
+            id: rule.id,
+            value: rule.value,
+            severity: rule.severity as Severity,
+            remediation,
+          };
+    }),
+  };
+}
+
+function oracleMetadata(testCase: OracleConfigCase): RuleMetadata[] {
+  return (testCase.rules ?? []).map((rule) => ({
+    ruleId: rule.ruleId,
+    kind: rule.kind as RuleMetadata['kind'],
+    detectionMode: rule.detectionMode as RuleMetadata['detectionMode'],
+    severity: rule.severity as Severity,
+    remediation: rule.remediation as RuleMetadata['remediation'],
+  }));
+}
+
 // Tokens and candidate-shaped values that must never appear in emitted logs.
 const secretFragments = [
   'ghp_AbCdEf0123456789_AbCdEf0123456789',
   'sk_test_AbCdEf0123456789_AbCdEf0123456789',
   'ABCD-EFGH-IJKL-MNOP',
+  // Custom-rule matcher payloads must never reach emitted logs or the marker.
+  'LITERAL_SECRET',
+  'PATTERN-42',
+  'ACME_CATALOG_TOKEN',
+  'ACME-1234-XY',
+  'acme_pat_',
+  'FIRST_VALUE',
+  'SECOND_VALUE',
 ];
 
 type Outcome =
@@ -146,6 +251,7 @@ function marker(outcome: Outcome): string | undefined {
       'lifecycle=ok',
       'parity=ok',
       'batch=ok',
+      'config=ok',
       'negative=ok',
       'privacy=ok',
     ].join(':');
@@ -186,6 +292,140 @@ function isZeroSummary(batch: BatchResult): boolean {
     summary.isClean &&
     !summary.hasCritical
   );
+}
+
+/**
+ * RN.1.3 configuration proof. Every success case is compared against the
+ * direct-Core oracle for both rule metadata and, where present, scan output.
+ * Every Core build failure is checked for its structured code and rule ID.
+ * No matcher value or rule ID is emitted, and the registry returns to baseline.
+ */
+async function runConfigChecks(): Promise<string | null> {
+  const baseline = getLiveScannerCount();
+
+  // Explicit empty configuration: no catalogs, no rules.
+  const empty = await createScanner({ builtins: 'none' });
+  if (
+    empty.rulesCount !== 0 ||
+    empty.rules.length !== 0 ||
+    !Object.isFrozen(empty.rules) ||
+    getLiveScannerCount() !== baseline + 1
+  ) {
+    await empty.dispose();
+    return 'config_empty';
+  }
+  await empty.dispose();
+  if (empty.rulesCount !== 0 || !Object.isFrozen(empty.rules)) {
+    return 'config_empty_after';
+  }
+  if (getLiveScannerCount() !== baseline) {
+    return 'config_empty_dispose';
+  }
+
+  const successNames = [
+    'default',
+    'explicit_empty',
+    'financial_only',
+    'personal_only',
+    'all_catalogs',
+    'custom_literal',
+    'custom_prefix',
+    'custom_suffix',
+    'custom_pattern',
+    'custom_all_kinds',
+    'custom_before_catalog',
+  ];
+  for (const name of successNames) {
+    const testCase = configCaseByName.get(name);
+    const expected = configOracleByName.get(name);
+    if (testCase === undefined || expected === undefined || expected.error) {
+      return `config_fixture:${name}`;
+    }
+
+    const scanner = await createScanner(scannerConfigFor(testCase));
+    if (getLiveScannerCount() !== baseline + 1) {
+      await scanner.dispose();
+      return `config_count:${name}`;
+    }
+
+    const metadataDiff = diffJson(scanner.rules, oracleMetadata(expected));
+    if (metadataDiff !== null) {
+      await scanner.dispose();
+      return `config_metadata:${name}:${metadataDiff}`;
+    }
+
+    if (testCase.scan !== undefined && testCase.scan.length > 0) {
+      const batch = await scanner.scanBatch(
+        testCase.scan.map(({ id, text }) => ({ id, source: text })),
+      );
+      const scanDiff = diffJson(
+        { entries: batch.entries, summary: batch.summary },
+        { entries: expected.entries, summary: expected.summary },
+      );
+      if (scanDiff !== null) {
+        await scanner.dispose();
+        return `config_scan:${name}:${scanDiff}`;
+      }
+    }
+
+    await scanner.dispose();
+    if (getLiveScannerCount() !== baseline) {
+      return `config_dispose:${name}`;
+    }
+    if (
+      scanner.rulesCount !== (expected.rules ?? []).length ||
+      !Object.isFrozen(scanner.rules)
+    ) {
+      return `config_after:${name}`;
+    }
+  }
+
+  for (const [name, expected] of configOracleByName) {
+    if (expected.error === undefined) {
+      continue;
+    }
+    const testCase = configCaseByName.get(name);
+    if (testCase === undefined) {
+      return `config_fixture:${name}`;
+    }
+
+    let code: string | undefined;
+    let ruleId: string | undefined;
+    let message = '';
+    try {
+      const scanner = await createScanner(scannerConfigFor(testCase));
+      await scanner.dispose();
+      return `config_expected_error:${name}`;
+    } catch (error) {
+      if (!(error instanceof CribraError)) {
+        return `config_error_type:${name}`;
+      }
+      code = error.code;
+      ruleId = error.ruleId;
+      message = error.message;
+    }
+
+    const expectedCode = BUILD_ERROR_LABELS[expected.error.code - 1];
+    if (code !== expectedCode) {
+      return `config_error_code:${name}`;
+    }
+    if ((ruleId ?? '') !== (expected.error.ruleId ?? '')) {
+      return `config_error_rule:${name}`;
+    }
+    const expectedRuleId = expected.error.ruleId;
+    if (
+      expectedRuleId !== null &&
+      expectedRuleId !== '' &&
+      message.includes(expectedRuleId)
+    ) {
+      return `config_error_leak:${name}`;
+    }
+    if (getLiveScannerCount() !== baseline) {
+      return `config_error_count:${name}`;
+    }
+  }
+
+  return null;
 }
 
 async function runHarness(): Promise<Outcome> {
@@ -379,6 +619,13 @@ async function runHarness(): Promise<Outcome> {
     return { state: 'fail', reason: 'second_dispose_count' };
   }
 
+  // 13. Configured construction, detached metadata, and structured build
+  //     failures against the direct-Core oracle.
+  const configFailure = await runConfigChecks();
+  if (configFailure !== null) {
+    return { state: 'fail', reason: configFailure };
+  }
+
   const result: Outcome = {
     state: 'pass',
     abi: abiText,
@@ -387,13 +634,16 @@ async function runHarness(): Promise<Outcome> {
     candidates: batch.summary.totalCandidates,
   };
 
-  // 13. Privacy: the emitted marker contains no fixture token, candidate value,
-  //     or source identifier.
+  // 14. Privacy: the emitted marker contains no fixture token, candidate value,
+  //     matcher payload, rule ID, or source identifier.
   const markerText = marker(result) ?? '';
   for (const fragment of secretFragments) {
     if (markerText.includes(fragment)) {
       return { state: 'fail', reason: 'privacy_secret' };
     }
+  }
+  if (markerText.includes('custom.')) {
+    return { state: 'fail', reason: 'privacy_rule_id' };
   }
   for (const source of sources) {
     if (source.id.length > 0 && markerText.includes(source.id)) {
@@ -434,7 +684,7 @@ function App() {
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" />
-      <Text style={styles.title}>Cribra RN.1.2 native batch smoke</Text>
+      <Text style={styles.title}>Cribra RN.1.3 configured scanner smoke</Text>
       <Text style={styles.status} testID="cribra-status">
         {outcome.state.toUpperCase()}
       </Text>
@@ -444,7 +694,7 @@ function App() {
         </Text>
       ) : null}
       {outcome.state === 'running' ? (
-        <Text style={styles.body}>Running native batch proof…</Text>
+        <Text style={styles.body}>Running native scanner proof…</Text>
       ) : null}
       {outcome.state === 'pass' ? (
         <View>
@@ -454,6 +704,7 @@ function App() {
           <Text style={styles.body}>Candidates: {outcome.candidates}</Text>
           <Text style={styles.body}>Parity: ok</Text>
           <Text style={styles.body}>Batch: ok</Text>
+          <Text style={styles.body}>Config: ok</Text>
           <Text style={styles.body}>Negatives: ok</Text>
           <Text style={styles.body}>Privacy: ok</Text>
           <Text style={styles.body}>Lifecycle: ok</Text>
