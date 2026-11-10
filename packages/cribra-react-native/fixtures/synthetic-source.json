@@ -1,0 +1,7 @@
+[
+  {"id": "文書/é🙂é", "text": "前\r\né🙂é GITHUB_TOKEN=ghp_AbCdEf0123456789_AbCdEf0123456789\n"},
+  {"id": "empty", "text": ""},
+  {"id": "", "text": "ordinary text: é🙂"},
+  {"id": "review/候補", "text": "ABCD-EFGH-IJKL-MNOP"},
+  {"id": "文書/é🙂é", "text": "GITHUB_TOKEN=ghp_AbCdEf0123456789_AbCdEf0123456789\nSTRIPE_SECRET_KEY=sk_test_AbCdEf0123456789_AbCdEf0123456789\n"}
+]
