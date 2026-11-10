@@ -45,6 +45,28 @@ using ScanReportDto = facebook::react::NativeCribraReactNativeScanReportDto<
     bool,
     std::vector<CandidateDto>>;
 
+using ScanSummaryDto =
+    facebook::react::NativeCribraReactNativeScanSummaryDto<
+        double,
+        double,
+        double,
+        double,
+        double,
+        double,
+        double,
+        bool,
+        double,
+        double,
+        double,
+        double,
+        double,
+        bool,
+        bool>;
+
+using ScanBatchDto = facebook::react::NativeCribraReactNativeScanBatchDto<
+    std::vector<ScanReportDto>,
+    ScanSummaryDto>;
+
 /// Raised by the synchronous bridge for ABI failures. The message is derived
 /// from Cribra's privacy-safe status metadata and never includes source text.
 class BridgeError : public std::runtime_error {
@@ -69,16 +91,51 @@ class ScannerHandle final {
   CribraScanner* scanner_;
 };
 
+/// One copied batch input. Both strings are owned for the whole native call.
+struct ScanInput {
+  std::string id;
+  std::string source;
+};
+
+struct SeverityCounts {
+  uint64_t info = 0;
+  uint64_t low = 0;
+  uint64_t medium = 0;
+  uint64_t high = 0;
+  uint64_t critical = 0;
+};
+
+/// One projected report plus the Core metadata needed for native aggregation.
+struct ScanProjection {
+  ScanReportDto report;
+  uint64_t sourceBytes = 0;
+  uint64_t findingCount = 0;
+  uint64_t candidateCount = 0;
+  SeverityCounts severity;
+};
+
+struct ScanBatchOutput {
+  std::vector<ScanReportDto> entries;
+  ScanSummaryDto summary;
+};
+
 /// Checks the linked C ABI against the vendored header, then returns nullptr
 /// and fills `errorMessage` when the ABI or scanner construction fails.
 std::shared_ptr<ScannerHandle> CreateDefaultScanner(std::string& errorMessage);
 
 /// Rechecks the linked C ABI, runs one synthetic scan, and materialises the
-/// source-free DTO. Throws BridgeError on any ABI failure.
-ScanReportDto Scan(
+/// source-free projection. Throws BridgeError on any ABI failure.
+ScanProjection Scan(
     const std::shared_ptr<ScannerHandle>& scanner,
     const std::string& sourceId,
     const std::string& text);
+
+/// Runs the ordered inputs through serial `cribra_scanner_scan` calls and
+/// aggregates the source-free summary. Throws on the first failure; the caller
+/// never observes a partial batch.
+ScanBatchOutput ScanBatch(
+    const std::shared_ptr<ScannerHandle>& scanner,
+    const std::vector<ScanInput>& inputs);
 
 AbiVersionDto GetAbiVersion() noexcept;
 
