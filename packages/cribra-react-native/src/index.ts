@@ -11,15 +11,19 @@ import NativeCribraReactNative from './NativeCribraReactNative';
 import type {
   CandidateDto,
   FindingDto,
+  RuleMetadataDto,
+  RuleSpecDto,
   ScanBatchDto,
   ScanReportDto,
   ScanSourceDto,
   ScanSummaryDto,
+  ScannerCreationDto,
 } from './NativeCribraReactNative';
 
 export type Severity = 'info' | 'low' | 'medium' | 'high' | 'critical';
 export type Confidence = 'low' | 'medium' | 'high';
 export type DetectionMode = 'matcher_only' | 'deterministic' | 'contextual';
+export type RuleKind = 'literal' | 'prefix' | 'suffix' | 'pattern';
 export type CandidateKind = 'recovery_like_code' | 'unknown';
 export type CandidateEvidence = 'structural' | 'unknown';
 
@@ -124,6 +128,69 @@ export interface ScanOptions {
   readonly id?: string;
 }
 
+/**
+ * Scanner construction configuration.
+ *
+ * Omitted or `{}` selects the canonical current catalog, exactly like the
+ * previous default factory. All catalogs disabled and no rules is an explicit
+ * empty scanner. Custom rules are placed before selected catalogs by Core.
+ */
+export interface ScannerConfig {
+  /** Defaults to 'current'. 'none' disables the canonical catalog. */
+  readonly builtins?: 'none' | 'current';
+  /** Opt-in financial catalog. Defaults to false. */
+  readonly financialBuiltins?: boolean;
+  /** Opt-in personal catalog. Defaults to false. */
+  readonly personalBuiltins?: boolean;
+  /** Custom rules in caller order. Defaults to []. */
+  readonly rules?: readonly RuleSpec[];
+}
+
+interface RuleSpecBase {
+  /** May be empty; Core rejects it with `empty_rule_id`. */
+  readonly id: string;
+  readonly severity: Severity;
+  /** undefined/null means no explicit remediation. */
+  readonly remediation?: Remediation | null;
+}
+
+export interface LiteralRuleSpec extends RuleSpecBase {
+  readonly kind: 'literal';
+  /** May be empty; Core rejects it with `empty_matcher`. */
+  readonly value: string;
+}
+
+export interface PrefixRuleSpec extends RuleSpecBase {
+  readonly kind: 'prefix';
+  readonly value: string;
+}
+
+export interface SuffixRuleSpec extends RuleSpecBase {
+  readonly kind: 'suffix';
+  readonly value: string;
+}
+
+export interface PatternRuleSpec extends RuleSpecBase {
+  readonly kind: 'pattern';
+  /** Rust `regex` syntax; Core validates and classifies it. */
+  readonly pattern: string;
+}
+
+export type RuleSpec =
+  | LiteralRuleSpec
+  | PrefixRuleSpec
+  | SuffixRuleSpec
+  | PatternRuleSpec;
+
+/** Detached snapshot of one active Core rule. Contains no matcher payload. */
+export interface RuleMetadata {
+  readonly ruleId: string;
+  readonly kind: RuleKind;
+  readonly detectionMode: DetectionMode;
+  readonly severity: Severity;
+  readonly remediation: Remediation | null;
+}
+
 export type CribraErrorCode =
   | 'disposed'
   | 'invalid_argument'
@@ -133,6 +200,14 @@ export type CribraErrorCode =
   | 'scanner_create_failed'
   | 'abi_mismatch'
   | 'invalid_native_report'
+  | 'invalid_pattern'
+  | 'pattern_matches_empty'
+  | 'missing_capture_group'
+  | 'empty_rule_id'
+  | 'duplicate_rule_id'
+  | 'empty_matcher'
+  | 'too_many_rules'
+  | 'automaton_build'
   | 'native_error';
 
 const MESSAGES: Record<CribraErrorCode, string> = {
@@ -144,6 +219,14 @@ const MESSAGES: Record<CribraErrorCode, string> = {
   scanner_create_failed: 'The native scanner could not be created.',
   abi_mismatch: 'The linked Cribra native ABI is incompatible with this package.',
   invalid_native_report: 'The native scanner returned an unsupported value.',
+  invalid_pattern: 'A custom rule pattern is invalid.',
+  pattern_matches_empty: 'A custom rule pattern can match empty input.',
+  missing_capture_group: 'A custom rule capture configuration is invalid.',
+  empty_rule_id: 'A custom rule identifier is empty.',
+  duplicate_rule_id: 'A rule identifier is duplicated.',
+  empty_matcher: 'A custom rule matcher is empty.',
+  too_many_rules: 'The configured rule count exceeds the scanner limit.',
+  automaton_build: 'The scanner matcher could not be compiled.',
   native_error: 'The Cribra native operation failed.',
 };
 
@@ -154,13 +237,22 @@ const MESSAGES: Record<CribraErrorCode, string> = {
 export class CribraError extends Error {
   readonly code: CribraErrorCode;
   readonly detail?: string;
+  /**
+   * Caller-supplied rule identity for a construction failure, or a public
+   * built-in ID for a catalog collision. Never embedded in the message and
+   * never derived from scanned source or matcher contents.
+   */
+  readonly ruleId?: string;
 
-  constructor(code: CribraErrorCode, detail?: string) {
+  constructor(code: CribraErrorCode, detail?: string, ruleId?: string) {
     super(MESSAGES[code]);
     this.name = 'CribraError';
     this.code = code;
     if (detail !== undefined && detail.length > 0) {
       this.detail = detail;
+    }
+    if (ruleId !== undefined && ruleId.length > 0) {
+      this.ruleId = ruleId;
     }
   }
 }
@@ -229,7 +321,10 @@ function safeSpan(start: number, end: number, field: string): ByteSpan {
   return Object.freeze({ start: safeStart, end: safeEnd });
 }
 
-function severityFromNative(value: string): Severity {
+function severityFromNative(
+  value: string,
+  field = 'finding.severity',
+): Severity {
   switch (value) {
     case 'info':
     case 'low':
@@ -238,7 +333,7 @@ function severityFromNative(value: string): Severity {
     case 'critical':
       return value;
     default:
-      throw invalidNativeReport('finding.severity');
+      throw invalidNativeReport(field);
   }
 }
 
@@ -253,7 +348,10 @@ function confidenceFromNative(value: string): Confidence {
   }
 }
 
-function remediationFromNative(value: string): Remediation | null {
+function remediationFromNative(
+  value: string,
+  field = 'finding.remediation',
+): Remediation | null {
   if (value === '') {
     return null;
   }
@@ -268,7 +366,7 @@ function remediationFromNative(value: string): Remediation | null {
     case 'unknown':
       return value;
     default:
-      throw invalidNativeReport('finding.remediation');
+      throw invalidNativeReport(field);
   }
 }
 
@@ -311,6 +409,51 @@ function kindFromNative(value: string): CandidateKind {
     default:
       throw invalidNativeReport('candidate.kind');
   }
+}
+
+function ruleKindFromNative(value: string): RuleKind {
+  switch (value) {
+    case 'literal':
+    case 'prefix':
+    case 'suffix':
+    case 'pattern':
+      return value;
+    default:
+      throw invalidNativeReport('rule.kind');
+  }
+}
+
+function ruleDetectionModeFromNative(value: string): DetectionMode {
+  switch (value) {
+    case 'matcher_only':
+    case 'deterministic':
+    case 'contextual':
+      return value;
+    default:
+      throw invalidNativeReport('rule.detectionMode');
+  }
+}
+
+function projectRuleMetadata(dto: RuleMetadataDto): RuleMetadata {
+  if (typeof dto !== 'object' || dto === null) {
+    throw invalidNativeReport('rule');
+  }
+  if (typeof dto.ruleId !== 'string' || dto.ruleId.length === 0) {
+    throw invalidNativeReport('rule.ruleId');
+  }
+  return Object.freeze({
+    ruleId: dto.ruleId,
+    kind: ruleKindFromNative(dto.kind),
+    detectionMode: ruleDetectionModeFromNative(dto.detectionMode),
+    severity: severityFromNative(dto.severity, 'rule.severity'),
+    remediation: remediationFromNative(dto.remediation, 'rule.remediation'),
+  });
+}
+
+function projectRuleMetadataList(
+  dtos: readonly RuleMetadataDto[],
+): readonly RuleMetadata[] {
+  return Object.freeze(requireArray(dtos, 'rules').map(projectRuleMetadata));
 }
 
 function explanationFromNative(
@@ -592,6 +735,245 @@ function requireSource(source: unknown): ScanSource {
   return source as ScanSource;
 }
 
+function invalidArgument(): CribraError {
+  return new CribraError('invalid_argument');
+}
+
+function isSeverity(value: unknown): value is Severity {
+  return (
+    value === 'info' ||
+    value === 'low' ||
+    value === 'medium' ||
+    value === 'high' ||
+    value === 'critical'
+  );
+}
+
+function isRemediation(value: unknown): value is Remediation {
+  return (
+    value === 'revoke_and_rotate_credential' ||
+    value === 'rotate_credential' ||
+    value === 'rotate_password' ||
+    value === 'replace_private_key' ||
+    value === 'remove_sensitive_value' ||
+    value === 'review_sensitive_hash' ||
+    value === 'review_password_verifier' ||
+    value === 'unknown'
+  );
+}
+
+/**
+ * `'unknown'` is an ABI output sentinel for findings/metadata; Core rejects it
+ * as an input remediation. Only concrete actions are accepted in config.
+ */
+function isRuleRemediation(value: unknown): value is Remediation {
+  return isRemediation(value) && value !== 'unknown';
+}
+
+interface NormalizedScannerConfig {
+  readonly builtins: 'none' | 'current';
+  readonly financialBuiltins: boolean;
+  readonly personalBuiltins: boolean;
+  readonly rules: RuleSpecDto[];
+}
+
+/**
+ * Runtime validation only. Rule semantics (empty IDs/matchers, regex validity,
+ * duplicates, collisions) are deliberately left to Core.
+ */
+function normalizeRuleSpec(rule: RuleSpec): RuleSpecDto {
+  if (rule === null || typeof rule !== 'object' || Array.isArray(rule)) {
+    throw invalidArgument();
+  }
+  const candidate = rule as unknown as Record<string, unknown>;
+  const kind = candidate.kind;
+  if (
+    kind !== 'literal' &&
+    kind !== 'prefix' &&
+    kind !== 'suffix' &&
+    kind !== 'pattern'
+  ) {
+    throw invalidArgument();
+  }
+  if (typeof candidate.id !== 'string') {
+    throw invalidArgument();
+  }
+  if (!isSeverity(candidate.severity)) {
+    throw invalidArgument();
+  }
+  if (candidate.captureGroup !== undefined) {
+    // The C ABI exposes no capture-aware rule construction.
+    throw invalidArgument();
+  }
+
+  let remediation = '';
+  const rawRemediation = candidate.remediation;
+  if (rawRemediation !== undefined && rawRemediation !== null) {
+    if (!isRuleRemediation(rawRemediation)) {
+      throw invalidArgument();
+    }
+    remediation = rawRemediation;
+  }
+
+  if (kind === 'pattern') {
+    if (typeof candidate.pattern !== 'string') {
+      throw invalidArgument();
+    }
+    return {
+      kind,
+      id: candidate.id,
+      value: candidate.pattern,
+      severity: candidate.severity,
+      remediation,
+    };
+  }
+
+  if (typeof candidate.value !== 'string') {
+    throw invalidArgument();
+  }
+  return {
+    kind,
+    id: candidate.id,
+    value: candidate.value,
+    severity: candidate.severity,
+    remediation,
+  };
+}
+
+function normalizeScannerConfig(
+  config: ScannerConfig | undefined,
+): NormalizedScannerConfig {
+  if (config === undefined) {
+    return {
+      builtins: 'current',
+      financialBuiltins: false,
+      personalBuiltins: false,
+      rules: [],
+    };
+  }
+  if (config === null || typeof config !== 'object' || Array.isArray(config)) {
+    throw invalidArgument();
+  }
+
+  const builtins = config.builtins ?? 'current';
+  if (builtins !== 'current' && builtins !== 'none') {
+    throw invalidArgument();
+  }
+  const financialBuiltins = config.financialBuiltins ?? false;
+  if (typeof financialBuiltins !== 'boolean') {
+    throw invalidArgument();
+  }
+  const personalBuiltins = config.personalBuiltins ?? false;
+  if (typeof personalBuiltins !== 'boolean') {
+    throw invalidArgument();
+  }
+  const rules = config.rules ?? [];
+  if (!Array.isArray(rules)) {
+    throw invalidArgument();
+  }
+
+  return {
+    builtins,
+    financialBuiltins,
+    personalBuiltins,
+    rules: rules.map(normalizeRuleSpec),
+  };
+}
+
+const BUILD_ERROR_CODES: readonly CribraErrorCode[] = [
+  'invalid_pattern',
+  'pattern_matches_empty',
+  'missing_capture_group',
+  'empty_rule_id',
+  'duplicate_rule_id',
+  'empty_matcher',
+  'too_many_rules',
+  'automaton_build',
+];
+
+function buildErrorCode(code: number): CribraErrorCode | undefined {
+  if (!Number.isSafeInteger(code) || code < 1 || code > BUILD_ERROR_CODES.length) {
+    return undefined;
+  }
+  return BUILD_ERROR_CODES[code - 1];
+}
+
+interface CreationSuccess {
+  readonly scannerId: number;
+  readonly rules: readonly RuleMetadata[];
+}
+
+/**
+ * Validates the native creation DTO. Core build failures become structured
+ * `CribraError`s; impossible protocol values fail closed.
+ */
+function projectScannerCreation(dto: ScannerCreationDto): CreationSuccess {
+  if (typeof dto !== 'object' || dto === null) {
+    throw invalidNativeReport('creation');
+  }
+  if (
+    typeof dto.failure !== 'string' ||
+    typeof dto.ruleId !== 'string' ||
+    typeof dto.detail !== 'string'
+  ) {
+    throw invalidNativeReport('creation');
+  }
+  if (!Number.isSafeInteger(dto.buildCode) || dto.buildCode < 0) {
+    throw invalidNativeReport('creation.buildCode');
+  }
+
+  if (dto.failure === '') {
+    const scannerId = positiveInteger(dto.scannerId, 'creation.scannerId');
+    invariant(dto.buildCode === 0, 'creation.buildCode');
+    invariant(dto.ruleId === '', 'creation.ruleId');
+    return { scannerId, rules: projectRuleMetadataList(dto.rules) };
+  }
+
+  // A failed construction never owns a scanner or metadata.
+  invariant(dto.scannerId === 0, 'creation.scannerId');
+
+  switch (dto.failure) {
+    case 'abi_mismatch':
+      throw new CribraError('abi_mismatch', dto.detail);
+    case 'rule_error':
+    case 'build_error': {
+      const code = buildErrorCode(dto.buildCode);
+      if (code === undefined) {
+        // Tolerate a build code added by a compatible patch release.
+        throw new CribraError('scanner_create_failed', dto.detail || undefined);
+      }
+      throw new CribraError(
+        code,
+        dto.detail || undefined,
+        dto.ruleId.length > 0 ? dto.ruleId : undefined,
+      );
+    }
+    case 'invalid_native_report':
+      throw invalidNativeReport('creation');
+    default:
+      throw new CribraError('scanner_create_failed', dto.detail || undefined);
+  }
+}
+
+/**
+ * Extracts a plausible live scanner ID without validating the rest of the DTO.
+ * Used only to release a scanner whose metadata projection failed.
+ */
+function recoverableScannerId(dto: ScannerCreationDto): number | undefined {
+  if (typeof dto !== 'object' || dto === null) {
+    return undefined;
+  }
+  const value = (dto as { scannerId?: unknown }).scannerId;
+  if (
+    typeof value === 'number' &&
+    Number.isSafeInteger(value) &&
+    value >= 1
+  ) {
+    return value;
+  }
+  return undefined;
+}
+
 /**
  * Reads the released Cribra C ABI version synchronously.
  */
@@ -607,39 +989,87 @@ export function getLiveScannerCount(): number {
 }
 
 /**
- * Creates one native scanner over Cribra's current built-in catalog.
- * Construction is asynchronous because it runs on the native worker.
+ * Creates one native scanner.
+ *
+ * Omitted configuration selects Cribra's current built-in catalog, preserving
+ * the previous default factory. Configuration is validated and copied before
+ * any native work; Core remains the sole authority for rule validation,
+ * ordering and classification. Construction is asynchronous because it runs on
+ * the native worker.
  */
-export async function createScanner(): Promise<CribraScanner> {
-  return CribraScanner.create();
+export async function createScanner(
+  config?: ScannerConfig,
+): Promise<CribraScanner> {
+  return CribraScanner.create(config);
 }
 
 export class CribraScanner {
   readonly #nativeId: number;
+  readonly #rules: readonly RuleMetadata[];
   #disposed = false;
   #disposePromise: Promise<void> | undefined;
 
-  private constructor(nativeId: number) {
+  private constructor(
+    nativeId: number,
+    rules: readonly RuleMetadata[],
+  ) {
     this.#nativeId = nativeId;
+    this.#rules = rules;
   }
 
-  static async create(): Promise<CribraScanner> {
+  static async create(config?: ScannerConfig): Promise<CribraScanner> {
+    const normalized = normalizeScannerConfig(config);
+
+    let dto: ScannerCreationDto;
     try {
-      const nativeId = await NativeCribraReactNative.createDefaultScanner();
-      return new CribraScanner(nativeId);
+      dto = await NativeCribraReactNative.createScanner(
+        normalized.builtins,
+        normalized.financialBuiltins,
+        normalized.personalBuiltins,
+        normalized.rules,
+      );
     } catch (error) {
-      const normalized = normalizeError(error);
+      const normalizedError = normalizeError(error);
       // An incompatible native ABI must fail closed with its own code, not be
       // folded into the generic scanner-construction failure.
-      if (normalized.code === 'abi_mismatch') {
-        throw normalized;
+      if (normalizedError.code === 'abi_mismatch') {
+        throw normalizedError;
       }
-      throw new CribraError('scanner_create_failed', normalized.detail);
+      throw new CribraError('scanner_create_failed', normalizedError.detail);
     }
+
+    let projected: CreationSuccess;
+    try {
+      projected = projectScannerCreation(dto);
+    } catch (error) {
+      // Native metadata validation precedes registration. If a scanable ID is
+      // present here, the scanner exists and must be released before the
+      // projection failure is propagated. Cleanup failures never mask it.
+      const scannerId = recoverableScannerId(dto);
+      if (scannerId !== undefined) {
+        try {
+          await NativeCribraReactNative.disposeScanner(scannerId);
+        } catch {
+          // Keep the original projection error.
+        }
+      }
+      throw error;
+    }
+
+    return new CribraScanner(projected.scannerId, projected.rules);
   }
 
   get disposed(): boolean {
     return this.#disposed;
+  }
+
+  /** Detached, immutable Core rule metadata; remains readable after dispose. */
+  get rules(): readonly RuleMetadata[] {
+    return this.#rules;
+  }
+
+  get rulesCount(): number {
+    return this.#rules.length;
   }
 
   /**

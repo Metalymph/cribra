@@ -18,14 +18,21 @@
 namespace {
 
 using cribra::rn::FitsJsSafeInteger;
+using cribra::rn::IsCanonicalDefaultConfig;
 using cribra::rn::kMaxJsSafeInteger;
+using cribra::rn::MapBuildErrorCode;
 using cribra::rn::MapCandidateEvidence;
 using cribra::rn::MapCandidateKind;
 using cribra::rn::MapConfidence;
 using cribra::rn::MapDetectionMode;
 using cribra::rn::MapExplanation;
 using cribra::rn::MapRemediation;
+using cribra::rn::MapRemediationCode;
+using cribra::rn::MapRuleDetectionMode;
+using cribra::rn::MapRuleKind;
+using cribra::rn::MapRuleKindCode;
 using cribra::rn::MapSeverity;
+using cribra::rn::MapSeverityCode;
 using cribra::rn::SeverityRank;
 
 bool Has(const std::optional<cribra::rn::SeverityMapping>& mapping,
@@ -258,6 +265,105 @@ void CheckExplanationMapping() {
   assert(!MapExplanation(CRIBRA_EXPLANATION_AMBIGUOUS, kNone, 2));
 }
 
+void CheckConfigurationProtocol() {
+  // Rule metadata has no sentinel: all four documented families map, and any
+  // other value fails closed.
+  assert(Has(MapRuleKind(CRIBRA_RULE_KIND_LITERAL), "literal"));
+  assert(Has(MapRuleKind(CRIBRA_RULE_KIND_PREFIX), "prefix"));
+  assert(Has(MapRuleKind(CRIBRA_RULE_KIND_SUFFIX), "suffix"));
+  assert(Has(MapRuleKind(CRIBRA_RULE_KIND_PATTERN), "pattern"));
+  assert(!MapRuleKind(4));
+  assert(!MapRuleKind(0xFFFFFFFFu));
+
+  // Active rules carry a concrete authority. Explanation sentinels are not
+  // valid metadata.
+  assert(Has(
+      MapRuleDetectionMode(CRIBRA_DETECTION_MODE_MATCHER_ONLY),
+      "matcher_only"));
+  assert(Has(
+      MapRuleDetectionMode(CRIBRA_DETECTION_MODE_DETERMINISTIC),
+      "deterministic"));
+  assert(Has(
+      MapRuleDetectionMode(CRIBRA_DETECTION_MODE_CONTEXTUAL), "contextual"));
+  assert(!MapRuleDetectionMode(CRIBRA_DETECTION_MODE_NONE));
+  assert(!MapRuleDetectionMode(CRIBRA_DETECTION_MODE_UNKNOWN));
+  assert(!MapRuleDetectionMode(4));
+
+  // Input vocabulary.
+  assert(MapRuleKindCode("literal") == CRIBRA_RULE_KIND_LITERAL);
+  assert(MapRuleKindCode("prefix") == CRIBRA_RULE_KIND_PREFIX);
+  assert(MapRuleKindCode("suffix") == CRIBRA_RULE_KIND_SUFFIX);
+  assert(MapRuleKindCode("pattern") == CRIBRA_RULE_KIND_PATTERN);
+  assert(!MapRuleKindCode("regex"));
+  assert(!MapRuleKindCode(""));
+
+  assert(MapSeverityCode("info") == CRIBRA_SEVERITY_INFO);
+  assert(MapSeverityCode("low") == CRIBRA_SEVERITY_LOW);
+  assert(MapSeverityCode("medium") == CRIBRA_SEVERITY_MEDIUM);
+  assert(MapSeverityCode("high") == CRIBRA_SEVERITY_HIGH);
+  assert(MapSeverityCode("critical") == CRIBRA_SEVERITY_CRITICAL);
+  assert(!MapSeverityCode("severe"));
+  assert(!MapSeverityCode(""));
+
+  assert(MapRemediationCode("") == CRIBRA_REMEDIATION_NONE);
+  assert(
+      MapRemediationCode("revoke_and_rotate_credential") ==
+      CRIBRA_REMEDIATION_REVOKE_AND_ROTATE_CREDENTIAL);
+  assert(
+      MapRemediationCode("rotate_credential") ==
+      CRIBRA_REMEDIATION_ROTATE_CREDENTIAL);
+  assert(
+      MapRemediationCode("rotate_password") ==
+      CRIBRA_REMEDIATION_ROTATE_PASSWORD);
+  assert(
+      MapRemediationCode("replace_private_key") ==
+      CRIBRA_REMEDIATION_REPLACE_PRIVATE_KEY);
+  assert(
+      MapRemediationCode("remove_sensitive_value") ==
+      CRIBRA_REMEDIATION_REMOVE_SENSITIVE_VALUE);
+  assert(
+      MapRemediationCode("review_sensitive_hash") ==
+      CRIBRA_REMEDIATION_REVIEW_SENSITIVE_HASH);
+  assert(
+      MapRemediationCode("review_password_verifier") ==
+      CRIBRA_REMEDIATION_REVIEW_PASSWORD_VERIFIER);
+  // UNKNOWN is an output sentinel; Core rejects it as an input remediation.
+  assert(!MapRemediationCode("unknown"));
+  assert(!MapRemediationCode("none"));
+  assert(!MapRemediationCode("delete"));
+
+  // Numeric build codes are a stable ABI contract.
+  static_assert(CRIBRA_BUILD_CODE_NONE == 0);
+  static_assert(CRIBRA_BUILD_CODE_INVALID_PATTERN == 1);
+  static_assert(CRIBRA_BUILD_CODE_PATTERN_MATCHES_EMPTY == 2);
+  static_assert(CRIBRA_BUILD_CODE_MISSING_CAPTURE_GROUP == 3);
+  static_assert(CRIBRA_BUILD_CODE_EMPTY_RULE_ID == 4);
+  static_assert(CRIBRA_BUILD_CODE_DUPLICATE_RULE_ID == 5);
+  static_assert(CRIBRA_BUILD_CODE_EMPTY_MATCHER == 6);
+  static_assert(CRIBRA_BUILD_CODE_TOO_MANY_RULES == 7);
+  static_assert(CRIBRA_BUILD_CODE_AUTOMATON_BUILD == 8);
+  assert(Has(MapBuildErrorCode(0), "none"));
+  assert(Has(MapBuildErrorCode(1), "invalid_pattern"));
+  assert(Has(MapBuildErrorCode(2), "pattern_matches_empty"));
+  assert(Has(MapBuildErrorCode(3), "missing_capture_group"));
+  assert(Has(MapBuildErrorCode(4), "empty_rule_id"));
+  assert(Has(MapBuildErrorCode(5), "duplicate_rule_id"));
+  assert(Has(MapBuildErrorCode(6), "empty_matcher"));
+  assert(Has(MapBuildErrorCode(7), "too_many_rules"));
+  assert(Has(MapBuildErrorCode(8), "automaton_build"));
+  assert(!MapBuildErrorCode(9));
+  assert(!MapBuildErrorCode(0xFFFFFFFFu));
+
+  // Only the canonical catalog with no other source takes the default fast
+  // path and therefore matches `Scanner::default()`.
+  assert(IsCanonicalDefaultConfig(true, false, false, false));
+  assert(!IsCanonicalDefaultConfig(false, false, false, false));
+  assert(!IsCanonicalDefaultConfig(true, true, false, false));
+  assert(!IsCanonicalDefaultConfig(true, false, true, false));
+  assert(!IsCanonicalDefaultConfig(true, false, false, true));
+  assert(!IsCanonicalDefaultConfig(false, true, true, true));
+}
+
 }  // namespace
 
 int main() {
@@ -266,9 +372,11 @@ int main() {
   CheckFindingEnums();
   CheckCandidateEnums();
   CheckExplanationMapping();
+  CheckConfigurationProtocol();
 
   std::puts("ABI compatibility gate: PASS");
   std::puts("JS safe-integer boundary: PASS");
   std::puts("Strict enum/explanation projection: PASS");
+  std::puts("Scanner configuration protocol: PASS");
   return 0;
 }

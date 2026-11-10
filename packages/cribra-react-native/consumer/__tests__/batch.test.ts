@@ -12,6 +12,7 @@ jest.mock('../../src/NativeCribraReactNative', () => ({
   default: {
     getAbiVersion: jest.fn(() => ({ major: 0, minor: 3, patch: 0 })),
     createDefaultScanner: jest.fn(),
+    createScanner: jest.fn(),
     scan: jest.fn(),
     scanBatch: jest.fn(),
     disposeScanner: jest.fn(),
@@ -32,15 +33,27 @@ import type {
   ScanReportDto,
   ScanSourceDto,
   ScanSummaryDto,
+  ScannerCreationDto,
 } from '../../src/NativeCribraReactNative';
 
 const native = NativeCribraReactNative as unknown as {
-  createDefaultScanner: jest.Mock;
+  createScanner: jest.Mock;
   scanBatch: jest.Mock;
   disposeScanner: jest.Mock;
 };
 
 const scannerId = 7;
+
+function creationDto(): ScannerCreationDto {
+  return {
+    scannerId,
+    rules: [],
+    failure: '',
+    buildCode: 0,
+    ruleId: '',
+    detail: '',
+  };
+}
 
 function finding(overrides: Partial<FindingDto> = {}): FindingDto {
   return {
@@ -166,7 +179,7 @@ async function expectCode(
 
 beforeEach(() => {
   jest.clearAllMocks();
-  native.createDefaultScanner.mockResolvedValue(scannerId);
+  native.createScanner.mockResolvedValue(creationDto());
   native.disposeScanner.mockResolvedValue(undefined);
 });
 

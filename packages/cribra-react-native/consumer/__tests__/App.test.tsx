@@ -37,6 +37,7 @@ jest.mock('../../src/NativeCribraReactNative', () => ({
   default: {
     getAbiVersion: () => ({ major: 0, minor: 3, patch: 0 }),
     createDefaultScanner: () => Promise.reject(new Error('unavailable')),
+    createScanner: () => Promise.reject(new Error('unavailable')),
     scan: () => Promise.reject(new Error('unavailable')),
     scanBatch: () => Promise.reject(new Error('unavailable')),
     disposeScanner: () => Promise.resolve(),

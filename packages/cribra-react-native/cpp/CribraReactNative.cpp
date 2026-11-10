@@ -1,6 +1,7 @@
 #include "CribraReactNative.h"
 
 #include "CribraAbi.h"
+#include "CribraEnums.h"
 
 #include <cmath>
 #include <optional>
@@ -87,6 +88,114 @@ bool DecodeBatchInputs(
   return true;
 }
 
+/// Copies every custom rule on the JS thread. All values are validated before
+/// any worker job exists; configuration is never treated as scanned source, so
+/// conversion failures use `invalid_argument` and never forward exception text.
+bool DecodeRuleSpecs(
+    jsi::Runtime& rt,
+    const jsi::Array& rules,
+    std::vector<cribra::rn::RuleSpecInput>& output,
+    std::string& error) {
+  size_t count = 0;
+  try {
+    count = rules.size(rt);
+  } catch (...) {
+    error = "cribra_native_error:invalid_argument";
+    return false;
+  }
+
+  output.reserve(count);
+  for (size_t index = 0; index < count; ++index) {
+    std::string kind;
+    std::string id;
+    std::string value;
+    std::string severity;
+    std::string remediation;
+    bool conversionFailed = false;
+    try {
+      const auto element = rules.getValueAtIndex(rt, index);
+      if (!element.isObject()) {
+        error = "cribra_native_error:invalid_argument";
+        return false;
+      }
+      const auto object = element.asObject(rt);
+      const auto kindValue = object.getProperty(rt, "kind");
+      const auto idValue = object.getProperty(rt, "id");
+      const auto valueValue = object.getProperty(rt, "value");
+      const auto severityValue = object.getProperty(rt, "severity");
+      const auto remediationValue = object.getProperty(rt, "remediation");
+      if (!kindValue.isString() || !idValue.isString() ||
+          !valueValue.isString() || !severityValue.isString() ||
+          !remediationValue.isString()) {
+        error = "cribra_native_error:invalid_argument";
+        return false;
+      }
+      try {
+        kind = kindValue.asString(rt).utf8(rt);
+        id = idValue.asString(rt).utf8(rt);
+        value = valueValue.asString(rt).utf8(rt);
+        severity = severityValue.asString(rt).utf8(rt);
+        remediation = remediationValue.asString(rt).utf8(rt);
+      } catch (...) {
+        conversionFailed = true;
+      }
+    } catch (...) {
+      error = "cribra_native_error:invalid_argument";
+      return false;
+    }
+
+    if (conversionFailed) {
+      error = "cribra_native_error:invalid_argument";
+      return false;
+    }
+
+    const auto kindCode = cribra::rn::MapRuleKindCode(kind);
+    const auto severityCode = cribra::rn::MapSeverityCode(severity);
+    const auto remediationCode =
+        cribra::rn::MapRemediationCode(remediation);
+    if (!kindCode || !severityCode || !remediationCode) {
+      error = "cribra_native_error:invalid_argument";
+      return false;
+    }
+
+    output.push_back(
+        {*kindCode,
+         std::move(id),
+         std::move(value),
+         *severityCode,
+         *remediationCode});
+  }
+  return true;
+}
+
+bool DecodeScannerConfig(
+    jsi::Runtime& rt,
+    const jsi::String& builtins,
+    bool financialBuiltins,
+    bool personalBuiltins,
+    const jsi::Array& rules,
+    cribra::rn::ScannerConfigInput& config,
+    std::string& error) {
+  std::string label;
+  try {
+    label = builtins.utf8(rt);
+  } catch (...) {
+    error = "cribra_native_error:invalid_argument";
+    return false;
+  }
+  if (label == "current") {
+    config.current = true;
+  } else if (label == "none") {
+    config.current = false;
+  } else {
+    error = "cribra_native_error:invalid_argument";
+    return false;
+  }
+  config.financial = financialBuiltins;
+  config.personal = personalBuiltins;
+  return DecodeRuleSpecs(rt, rules, config.rules, error);
+}
+
 }  // namespace
 
 CribraSerialWorker::CribraSerialWorker()
@@ -163,6 +272,59 @@ jsi::Value CribraReactNative::createDefaultScanner(jsi::Runtime& rt) {
 
     registerScanner(scannerId, std::move(scanner));
     promise.resolve(static_cast<double>(scannerId));
+  });
+  return bridging::toJs(rt, promise, jsInvoker_);
+}
+
+jsi::Value CribraReactNative::createScanner(
+    jsi::Runtime& rt,
+    jsi::String builtins,
+    bool financialBuiltins,
+    bool personalBuiltins,
+    jsi::Array rules) {
+  cribra::rn::ScannerConfigInput config;
+  std::string inputError;
+  if (!DecodeScannerConfig(
+          rt,
+          builtins,
+          financialBuiltins,
+          personalBuiltins,
+          rules,
+          config,
+          inputError)) {
+    return PromiseRejected(rt, inputError, jsInvoker_);
+  }
+
+  auto promise = AsyncPromise<cribra::rn::ScannerCreationDto>(rt, jsInvoker_);
+  // Copy, do not move: bridging::toJs below still needs this promise.
+  worker_.post([this, promise, config = std::move(config)]() mutable {
+    try {
+      auto creation = cribra::rn::CreateScanner(config);
+      if (!creation.scanner) {
+        promise.resolve(cribra::rn::ToDto(creation.failure));
+        return;
+      }
+
+      uint64_t scannerId = 0;
+      {
+        std::lock_guard<std::mutex> lock(scannersMutex_);
+        scannerId = nextScannerId_++;
+      }
+
+      if (!cribra::rn::FitsJsSafeInteger(scannerId)) {
+        // `creation.scanner` is released here and was never registered.
+        promise.reject(Error("cribra_native_error:scanner_id_exhausted"));
+        return;
+      }
+
+      registerScanner(scannerId, std::move(creation.scanner));
+      promise.resolve(
+          cribra::rn::ToDto(scannerId, std::move(creation.rules)));
+    } catch (const std::exception& error) {
+      promise.reject(Error(error.what()));
+    } catch (...) {
+      promise.reject(Error("cribra_native_error:unknown"));
+    }
   });
   return bridging::toJs(rt, promise, jsInvoker_);
 }

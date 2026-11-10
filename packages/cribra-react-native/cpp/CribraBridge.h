@@ -4,6 +4,8 @@
 
 #include <cribra.h>
 
+#include "CribraEnums.h"
+
 #include <cstdint>
 #include <memory>
 #include <stdexcept>
@@ -67,6 +69,29 @@ using ScanBatchDto = facebook::react::NativeCribraReactNativeScanBatchDto<
     std::vector<ScanReportDto>,
     ScanSummaryDto>;
 
+using RuleSpecDto = facebook::react::NativeCribraReactNativeRuleSpecDto<
+    std::string,
+    std::string,
+    std::string,
+    std::string,
+    std::string>;
+
+using RuleMetadataDto = facebook::react::NativeCribraReactNativeRuleMetadataDto<
+    std::string,
+    std::string,
+    std::string,
+    std::string,
+    std::string>;
+
+using ScannerCreationDto =
+    facebook::react::NativeCribraReactNativeScannerCreationDto<
+        double,
+        std::vector<RuleMetadataDto>,
+        std::string,
+        double,
+        std::string,
+        std::string>;
+
 /// Raised by the synchronous bridge for ABI failures. The message is derived
 /// from Cribra's privacy-safe status metadata and never includes source text.
 class BridgeError : public std::runtime_error {
@@ -97,6 +122,56 @@ struct ScanInput {
   std::string source;
 };
 
+/// One copied custom rule. Strings are owned through every ABI call that
+/// borrows them and are never retained by Core.
+struct RuleSpecInput {
+  uint32_t kind = CRIBRA_RULE_KIND_LITERAL;
+  std::string id;
+  std::string value;
+  uint32_t severity = CRIBRA_SEVERITY_MEDIUM;
+  uint32_t remediation = CRIBRA_REMEDIATION_NONE;
+};
+
+/// Fully copied scanner configuration. Only this plain value crosses the
+/// worker boundary; no JSI object is ever touched off the JS thread.
+struct ScannerConfigInput {
+  bool current = true;
+  bool financial = false;
+  bool personal = false;
+  std::vector<RuleSpecInput> rules;
+
+  /// The configuration whose Core result is identical to `Scanner::default()`.
+  [[nodiscard]] bool IsCanonicalDefault() const noexcept {
+    return IsCanonicalDefaultConfig(
+        current, financial, personal, !rules.empty());
+  }
+};
+
+/// One already-validated, detached rule metadata projection. Strings are
+/// copied out of the scanner before its handle can be released.
+struct RuleMetadataEntry {
+  std::string ruleId;
+  std::string kind;
+  std::string detectionMode;
+  std::string severity;
+  std::string remediation;
+};
+
+/// Structured, source-free construction failure. `buildCode` and `ruleId` come
+/// only from `cribra_error_build_info`; `detail` is never parsed.
+struct CreationFailure {
+  std::string category;
+  uint32_t buildCode = CRIBRA_BUILD_CODE_NONE;
+  std::string ruleId;
+  std::string detail;
+};
+
+struct ScannerCreation {
+  std::shared_ptr<ScannerHandle> scanner;
+  std::vector<RuleMetadataEntry> rules;
+  CreationFailure failure;
+};
+
 struct SeverityCounts {
   uint64_t info = 0;
   uint64_t low = 0;
@@ -117,6 +192,22 @@ struct ScanProjection {
 /// Checks the linked C ABI against the vendored header, then returns nullptr
 /// and fills `errorMessage` when the ABI or scanner construction fails.
 std::shared_ptr<ScannerHandle> CreateDefaultScanner(std::string& errorMessage);
+
+/// Builds one scanner from a fully copied configuration.
+///
+/// Ownership: the builder is owned by a scope guard until
+/// `cribra_builder_build` consumes it. The guard never frees a consumed
+/// builder. Core build errors are captured structurally and returned; metadata
+/// protocol violations throw `BridgeError` after the new scanner is released.
+ScannerCreation CreateScanner(const ScannerConfigInput& config);
+
+/// Projects one successful creation into its generated DTO.
+ScannerCreationDto ToDto(
+    uint64_t scannerId,
+    std::vector<RuleMetadataEntry> rules);
+
+/// Projects one structured failure into its generated DTO.
+ScannerCreationDto ToDto(const CreationFailure& failure);
 
 /// Rechecks the linked C ABI, runs one synthetic scan, and materialises the
 /// source-free projection. Throws BridgeError on any ABI failure.
@@ -162,5 +253,19 @@ struct Bridging<cribra::rn::ScanSummaryDto>
 template <>
 struct Bridging<cribra::rn::ScanBatchDto>
     : NativeCribraReactNativeScanBatchDtoBridging<cribra::rn::ScanBatchDto> {};
+
+template <>
+struct Bridging<cribra::rn::RuleSpecDto>
+    : NativeCribraReactNativeRuleSpecDtoBridging<cribra::rn::RuleSpecDto> {};
+
+template <>
+struct Bridging<cribra::rn::RuleMetadataDto>
+    : NativeCribraReactNativeRuleMetadataDtoBridging<
+          cribra::rn::RuleMetadataDto> {};
+
+template <>
+struct Bridging<cribra::rn::ScannerCreationDto>
+    : NativeCribraReactNativeScannerCreationDtoBridging<
+          cribra::rn::ScannerCreationDto> {};
 
 }  // namespace facebook::react

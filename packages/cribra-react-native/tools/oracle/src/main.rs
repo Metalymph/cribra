@@ -5,7 +5,7 @@
 
 use cribra::{
     CandidateEvidence, Confidence, DetectionMode, Explanation, Remediation,
-    SensitiveCandidateKind,
+    RuleError, RuleKind, ScannerBuildError, SensitiveCandidateKind, Severity,
 };
 use serde_json::{Value, json};
 use std::fs;
@@ -29,6 +29,39 @@ fn detection_mode_label(value: DetectionMode) -> &'static str {
         DetectionMode::Deterministic => "deterministic",
         DetectionMode::Contextual => "contextual",
     }
+}
+
+fn rule_kind_label(value: RuleKind) -> &'static str {
+    match value {
+        RuleKind::Literal => "literal",
+        RuleKind::Prefix => "prefix",
+        RuleKind::Suffix => "suffix",
+        RuleKind::Pattern => "pattern",
+    }
+}
+
+fn severity_from_label(value: &str) -> Severity {
+    match value {
+        "info" => Severity::Info,
+        "low" => Severity::Low,
+        "medium" => Severity::Medium,
+        "high" => Severity::High,
+        "critical" => Severity::Critical,
+        other => panic!("unknown severity label {other}"),
+    }
+}
+
+fn remediation_from_label(value: Option<&str>) -> Option<Remediation> {
+    value.map(|label| match label {
+        "revoke_and_rotate_credential" => Remediation::RevokeAndRotateCredential,
+        "rotate_credential" => Remediation::RotateCredential,
+        "rotate_password" => Remediation::RotatePassword,
+        "replace_private_key" => Remediation::ReplacePrivateKey,
+        "remove_sensitive_value" => Remediation::RemoveSensitiveValue,
+        "review_sensitive_hash" => Remediation::ReviewSensitiveHash,
+        "review_password_verifier" => Remediation::ReviewPasswordVerifier,
+        other => panic!("unknown remediation label {other}"),
+    })
 }
 
 fn candidate_kind_label(value: SensitiveCandidateKind) -> &'static str {
@@ -144,7 +177,155 @@ fn summary_json(results: &cribra::ScanResults<String>) -> Value {
     })
 }
 
+fn rule_error_code(error: &RuleError, rule_id: Option<&str>) -> (u32, Option<String>) {
+    let code = match error {
+        RuleError::InvalidPattern(_) => 1,
+        RuleError::PatternMatchesEmpty => 2,
+        RuleError::MissingCaptureGroup { .. } => 3,
+    };
+    (code, rule_id.map(str::to_owned))
+}
+
+fn build_error_code(error: ScannerBuildError) -> (u32, Option<String>) {
+    use ScannerBuildError as Build;
+    match error {
+        Build::Rule(error) => rule_error_code(&error, None),
+        Build::EmptyRuleId => (4, None),
+        Build::DuplicateRuleId { rule_id } => (5, Some(rule_id.as_str().to_owned())),
+        Build::EmptyMatcher { rule_id } => (6, Some(rule_id.as_str().to_owned())),
+        Build::TooManyRules => (7, None),
+        Build::AutomatonBuild(_) => (8, None),
+    }
+}
+
+fn build_configured_scanner(
+    case: &Value,
+) -> Result<cribra::Scanner, (u32, Option<String>)> {
+    let current = case["current"].as_bool().unwrap_or(true);
+    let financial = case["financial"].as_bool().unwrap_or(false);
+    let personal = case["personal"].as_bool().unwrap_or(false);
+
+    let mut builder = cribra::Scanner::builder();
+    if current {
+        builder = builder.builtins(cribra::builtins::CURRENT);
+    }
+    if financial {
+        builder = builder.builtins(cribra::builtins::financial::CURRENT);
+    }
+    if personal {
+        builder = builder.builtins(cribra::builtins::personal::CURRENT);
+    }
+
+    if let Some(rules) = case["rules"].as_array() {
+        for rule in rules {
+            let id = rule["id"].as_str().expect("rule id");
+            let value = rule["value"].as_str().expect("rule value");
+            let severity =
+                severity_from_label(rule["severity"].as_str().expect("rule severity"));
+            let remediation = remediation_from_label(rule["remediation"].as_str());
+            let configured = match rule["kind"].as_str().expect("rule kind") {
+                "literal" => cribra::Rule::literal(id, value, severity),
+                "prefix" => cribra::Rule::prefix(id, value, severity),
+                "suffix" => cribra::Rule::suffix(id, value, severity),
+                "pattern" => cribra::Rule::pattern(id, value, severity)
+                    .map_err(|error| rule_error_code(&error, Some(id)))?,
+                other => panic!("unknown rule kind {other}"),
+            };
+            builder = builder.rule(match remediation {
+                Some(remediation) => configured.with_remediation(remediation),
+                None => configured,
+            });
+        }
+    }
+
+    builder.build().map_err(build_error_code)
+}
+
+fn rule_metadata_json(metadata: &cribra::RuleMetadata<'_>) -> Value {
+    json!({
+        "ruleId": metadata.id(),
+        "kind": rule_kind_label(metadata.kind()),
+        "detectionMode": detection_mode_label(metadata.detection_mode()),
+        "severity": metadata.severity().to_string(),
+        "remediation": metadata.remediation().map(remediation_label),
+    })
+}
+
+fn run_config_oracle(path: &str) {
+    let raw = fs::read_to_string(path)
+        .unwrap_or_else(|error| panic!("read config cases {path}: {error}"));
+    let cases: Vec<Value> =
+        serde_json::from_str(&raw).expect("config cases must be a JSON array");
+
+    let mut output = Vec::new();
+    for case in cases {
+        let name = case["name"].as_str().expect("case name").to_owned();
+        match build_configured_scanner(&case) {
+            Ok(scanner) => {
+                let rules: Vec<Value> =
+                    scanner.rule_metadata().map(|rule| rule_metadata_json(&rule)).collect();
+                let mut entry = json!({"name": name, "rules": rules});
+
+                if let Some(sources) = case["scan"].as_array() {
+                    let inputs: Vec<(String, String)> = sources
+                        .iter()
+                        .map(|source| {
+                            (
+                                source["id"].as_str().expect("source id").to_owned(),
+                                source["text"].as_str().expect("source text").to_owned(),
+                            )
+                        })
+                        .collect();
+                    let results = scanner.scan(
+                        inputs
+                            .iter()
+                            .map(|(id, text)| (id.clone(), text.as_str())),
+                    );
+                    let entries: Vec<Value> = results
+                        .iter()
+                        .map(|entry| {
+                            json!({
+                                "id": entry.key(),
+                                "sourceBytes": entry.source_bytes(),
+                                "result": result_json(&scanner, entry),
+                            })
+                        })
+                        .collect();
+                    entry["entries"] = json!(entries);
+                    entry["summary"] = summary_json(&results);
+                }
+
+                output.push(entry);
+            }
+            Err((code, rule_id)) => {
+                output.push(json!({
+                    "name": name,
+                    "error": {"code": code, "ruleId": rule_id},
+                }));
+            }
+        }
+    }
+
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&json!({
+            "abiVersion": {"major": 0, "minor": 3, "patch": 0},
+            "cases": output,
+        }))
+        .expect("serialize config oracle")
+    );
+}
+
 fn main() {
+    let mut args = std::env::args().skip(1);
+    if args.next().as_deref() == Some("--config-cases") {
+        let path = args
+            .next()
+            .unwrap_or_else(|| "fixtures/rn13-config-cases.json".to_owned());
+        run_config_oracle(&path);
+        return;
+    }
+
     let fixture_path = std::env::args()
         .nth(1)
         .unwrap_or_else(|| "fixtures/synthetic-source.json".to_owned());

@@ -47,6 +47,13 @@ class CribraReactNative final
 
   jsi::Value createDefaultScanner(jsi::Runtime& rt);
 
+  jsi::Value createScanner(
+      jsi::Runtime& rt,
+      jsi::String builtins,
+      bool financialBuiltins,
+      bool personalBuiltins,
+      jsi::Array rules);
+
   jsi::Value scan(
       jsi::Runtime& rt,
       double scannerId,

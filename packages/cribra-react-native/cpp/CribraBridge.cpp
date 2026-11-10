@@ -16,6 +16,10 @@ std::string StatusLabel(CribraStatus status) {
       return "invalid_argument";
     case CRIBRA_INVALID_UTF8:
       return "invalid_utf8";
+    case CRIBRA_RULE_ERROR:
+      return "rule_error";
+    case CRIBRA_BUILD_ERROR:
+      return "build_error";
     case CRIBRA_INTERNAL_ERROR:
       return "internal_error";
     default:
@@ -82,12 +86,14 @@ std::string BorrowedString(const CribraStringView& view) {
 class OwnedError final {
  public:
   OwnedError() = default;
+  explicit OwnedError(CribraError* error) noexcept : error_(error) {}
   ~OwnedError() { cribra_error_free(error_); }
 
   OwnedError(const OwnedError&) = delete;
   OwnedError& operator=(const OwnedError&) = delete;
 
   [[nodiscard]] CribraError** out() noexcept { return &error_; }
+  [[nodiscard]] CribraError* get() const noexcept { return error_; }
 
   [[nodiscard]] std::string describe(
       CribraStatus fallback,
@@ -132,6 +138,125 @@ class OwnedReport final {
  private:
   CribraReport* report_;
 };
+
+/// Owns an unconsumed builder. `cribra_builder_build` takes ownership of the
+/// handle even when construction fails, so the bridge marks consumption before
+/// any later return path. A consumed builder is never freed again.
+class BuilderHandle final {
+ public:
+  explicit BuilderHandle(CribraBuilder* builder) noexcept : builder_(builder) {}
+  ~BuilderHandle() {
+    if (!consumed_) {
+      cribra_builder_free(builder_);
+    }
+  }
+
+  BuilderHandle(const BuilderHandle&) = delete;
+  BuilderHandle& operator=(const BuilderHandle&) = delete;
+
+  [[nodiscard]] CribraBuilder* get() const noexcept { return builder_; }
+  void MarkConsumed() noexcept { consumed_ = true; }
+
+ private:
+  CribraBuilder* builder_;
+  bool consumed_ = false;
+};
+
+/// A failure from a call without an error handle (builder creation or catalog
+/// addition). The message carries only a status label and operation name.
+CreationFailure StatusFailure(const char* operation, CribraStatus status) {
+  CreationFailure failure;
+  failure.category = StatusLabel(status);
+  failure.detail = Failure(operation, status);
+  return failure;
+}
+
+/// Copies structured construction metadata out of one owned error before the
+/// error handle is released. The rule ID view is borrowed, so it is copied
+/// synchronously here; the pattern/matcher value is never available.
+CreationFailure ErrorFailure(
+    const char* operation,
+    CribraStatus status,
+    const CribraError* error) {
+  CreationFailure failure;
+  failure.category = StatusLabel(status);
+
+  if (error != nullptr) {
+    CribraBuildErrorView info{};
+    if (cribra_error_build_info(error, &info) == CRIBRA_OK) {
+      failure.buildCode = info.code;
+      failure.ruleId = BorrowedString(info.rule_id);
+    }
+
+    CribraStringView message{};
+    if (cribra_error_message(error, &message) == CRIBRA_OK) {
+      failure.detail = BorrowedString(message);
+    }
+  }
+
+  if (failure.detail.empty()) {
+    failure.detail = Failure(operation, status);
+  }
+  return failure;
+}
+
+/// Copies every active rule's metadata into detached, source-free values.
+/// Borrowed views are read while the scanner is alive; failures throw and let
+/// the caller release the newly created scanner.
+std::vector<RuleMetadataEntry> ProjectRuleMetadata(
+    const ScannerHandle& scanner) {
+  size_t count = 0;
+  const auto countStatus = cribra_scanner_rule_count(scanner.get(), &count);
+  if (countStatus != CRIBRA_OK) {
+    throw BridgeError(Failure("rule_count", countStatus));
+  }
+  if (!FitsJsSafeInteger(static_cast<uint64_t>(count))) {
+    throw BridgeError("cribra_native_error:numeric_overflow:rules");
+  }
+
+  std::vector<RuleMetadataEntry> entries;
+  entries.reserve(count);
+  for (size_t index = 0; index < count; ++index) {
+    CribraRuleMetadataView view{};
+    const auto status = cribra_scanner_rule_at(scanner.get(), index, &view);
+    if (status != CRIBRA_OK) {
+      throw BridgeError(Failure("rule_at", status));
+    }
+
+    const auto kind = MapRuleKind(view.kind);
+    if (!kind) {
+      ProtocolError("rule.kind", view.kind);
+    }
+    const auto detectionMode = MapRuleDetectionMode(view.detection_mode);
+    if (!detectionMode) {
+      ProtocolError("rule.detection_mode", view.detection_mode);
+    }
+    const auto severity = MapSeverity(view.severity);
+    if (!severity) {
+      ProtocolError("rule.severity", view.severity);
+    }
+    const auto remediation = MapRemediation(view.remediation);
+    if (!remediation) {
+      ProtocolError("rule.remediation", view.remediation);
+    }
+
+    RuleMetadataEntry entry;
+    entry.ruleId = BorrowedString(view.rule_id);
+    // Core rejects empty identifiers at build time, so an active rule with an
+    // empty ID is a protocol violation, not a valid projection.
+    if (entry.ruleId.empty()) {
+      throw BridgeError(
+          "cribra_native_error:invalid_native_report:rule.rule_id");
+    }
+    entry.kind = std::string(*kind);
+    entry.detectionMode = std::string(*detectionMode);
+    entry.severity = std::string(severity->label);
+    entry.remediation = std::string(*remediation);
+    entries.push_back(std::move(entry));
+  }
+
+  return entries;
+}
 
 void AssignExplanation(
     const CribraExplanationView& explanation,
@@ -286,6 +411,142 @@ std::shared_ptr<ScannerHandle> CreateDefaultScanner(std::string& errorMessage) {
     return nullptr;
   }
   return std::make_shared<ScannerHandle>(scanner);
+}
+
+ScannerCreation CreateScanner(const ScannerConfigInput& config) {
+  ScannerCreation creation;
+
+  const auto abiFailure = AbiCompatibilityFailure();
+  if (!abiFailure.empty()) {
+    creation.failure.category = "abi_mismatch";
+    creation.failure.detail = abiFailure;
+    return creation;
+  }
+
+  std::shared_ptr<ScannerHandle> scanner;
+
+  if (config.IsCanonicalDefault()) {
+    // Preserve the released default path exactly: Core reuses the already
+    // compiled canonical catalog instead of recompiling it per scanner.
+    CribraScanner* rawScanner = nullptr;
+    const auto status = cribra_scanner_new_current(&rawScanner);
+    if (status != CRIBRA_OK || rawScanner == nullptr) {
+      creation.failure = StatusFailure("scanner_new_current", status);
+      return creation;
+    }
+    scanner = std::make_shared<ScannerHandle>(rawScanner);
+  } else {
+    CribraBuilder* rawBuilder = nullptr;
+    const auto newStatus = cribra_builder_new(&rawBuilder);
+    if (newStatus != CRIBRA_OK || rawBuilder == nullptr) {
+      creation.failure = StatusFailure("builder_new", newStatus);
+      return creation;
+    }
+    // Any return below this point frees the builder unless it has been
+    // consumed by cribra_builder_build.
+    BuilderHandle builder(rawBuilder);
+
+    struct CatalogStep {
+      bool enabled;
+      const char* operation;
+      CribraStatus (*add)(CribraBuilder*);
+    };
+    const CatalogStep catalogs[] = {
+        {config.current,
+         "add_current_builtins",
+         cribra_builder_add_current_builtins},
+        {config.financial,
+         "add_financial_builtins",
+         cribra_builder_add_financial_builtins},
+        {config.personal,
+         "add_personal_builtins",
+         cribra_builder_add_personal_builtins},
+    };
+    for (const auto& catalog : catalogs) {
+      if (!catalog.enabled) {
+        continue;
+      }
+      const auto status = catalog.add(builder.get());
+      if (status != CRIBRA_OK) {
+        creation.failure = StatusFailure(catalog.operation, status);
+        return creation;
+      }
+    }
+
+    for (const auto& rule : config.rules) {
+      // Views borrow the owned strings for exactly this ABI call. The C ABI
+      // copies both values before returning.
+      CribraRuleConfig ruleConfig{};
+      ruleConfig.kind = rule.kind;
+      ruleConfig.id = CribraStringView{
+          reinterpret_cast<const uint8_t*>(rule.id.data()), rule.id.size()};
+      ruleConfig.value = CribraStringView{
+          reinterpret_cast<const uint8_t*>(rule.value.data()), rule.value.size()};
+      ruleConfig.severity = rule.severity;
+      ruleConfig.remediation = rule.remediation;
+
+      CribraError* rawError = nullptr;
+      const auto status =
+          cribra_builder_add_rule(builder.get(), &ruleConfig, &rawError);
+      OwnedError error(rawError);
+      if (status != CRIBRA_OK) {
+        creation.failure = ErrorFailure("add_rule", status, error.get());
+        return creation;
+      }
+    }
+
+    CribraScanner* rawScanner = nullptr;
+    OwnedError buildError;
+    const auto buildStatus =
+        cribra_builder_build(builder.get(), &rawScanner, buildError.out());
+    // The C ABI consumes every valid builder when out_scanner is writable, on
+    // success and on failure. This call always supplies a writable slot, so the
+    // handle is dead here regardless of the returned status.
+    builder.MarkConsumed();
+    if (buildStatus != CRIBRA_OK || rawScanner == nullptr) {
+      creation.failure = ErrorFailure("build", buildStatus, buildError.get());
+      return creation;
+    }
+    scanner = std::make_shared<ScannerHandle>(rawScanner);
+  }
+
+  // Metadata is validated and copied before the scanner can be registered by
+  // the caller. A projection failure releases the new scanner through RAII.
+  creation.rules = ProjectRuleMetadata(*scanner);
+  creation.scanner = std::move(scanner);
+  return creation;
+}
+
+ScannerCreationDto ToDto(
+    uint64_t scannerId,
+    std::vector<RuleMetadataEntry> rules) {
+  ScannerCreationDto dto{};
+  dto.scannerId = static_cast<double>(scannerId);
+  dto.failure = "";
+  dto.buildCode = 0.0;
+  dto.ruleId = "";
+  dto.detail = "";
+  dto.rules.reserve(rules.size());
+  for (auto& rule : rules) {
+    RuleMetadataDto ruleDto{};
+    ruleDto.ruleId = std::move(rule.ruleId);
+    ruleDto.kind = std::move(rule.kind);
+    ruleDto.detectionMode = std::move(rule.detectionMode);
+    ruleDto.severity = std::move(rule.severity);
+    ruleDto.remediation = std::move(rule.remediation);
+    dto.rules.push_back(std::move(ruleDto));
+  }
+  return dto;
+}
+
+ScannerCreationDto ToDto(const CreationFailure& failure) {
+  ScannerCreationDto dto{};
+  dto.scannerId = 0.0;
+  dto.failure = failure.category;
+  dto.buildCode = static_cast<double>(failure.buildCode);
+  dto.ruleId = failure.ruleId;
+  dto.detail = failure.detail;
+  return dto;
 }
 
 ScanProjection Scan(
