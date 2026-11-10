@@ -5,11 +5,11 @@ Isolated React Native 0.88.1 New Architecture/Hermes consumer for
 from Amon and from any existing Cribra workspace alias.
 
 `App.tsx` runs the synthetic-fixture parity, RN.1.2 batch, lifecycle,
-deterministic native negative, and RN.1.3 configured-scanner/metadata harness.
-On success it logs and displays:
+deterministic native negative, RN.1.3 configured-scanner/metadata, and RN.1.4
+UTF-8/UTF-16 offset and preflight harness. On success it logs and displays:
 
 ```text
-CRIBRA_RN_SMOKE:PASS:abi=0.3.0:entries=5:findings=3:candidates=1:lifecycle=ok:parity=ok:batch=ok:config=ok:negative=ok:privacy=ok
+CRIBRA_RN_SMOKE:PASS:abi=0.3.0:entries=5:findings=3:candidates=1:lifecycle=ok:parity=ok:batch=ok:config=ok:negative=ok:offset=ok:probe=3/5:privacy=ok
 ```
 
 It logs only aggregate counts and pass/fail data, never source text, matcher
