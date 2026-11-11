@@ -1,0 +1,828 @@
+{
+  "abiVersion": {
+    "major": 0,
+    "minor": 3,
+    "patch": 0
+  },
+  "cases": [
+    {
+      "name": "redact_default",
+      "output": "前\r\né🙂é GITHUB_TOKEN=[REDACTED]\n",
+      "scan": {
+        "candidateCount": 0,
+        "candidates": [],
+        "findingCount": 1,
+        "findings": [
+          {
+            "column": 19,
+            "confidence": "high",
+            "explanation": {
+              "detectionMode": "deterministic",
+              "kind": "classified"
+            },
+            "line": 2,
+            "remediation": "revoke_and_rotate_credential",
+            "ruleId": "github.classic-pat",
+            "severity": "critical",
+            "span": {
+              "end": 65,
+              "start": 28
+            }
+          }
+        ],
+        "hasCritical": true,
+        "needsReview": true,
+        "sourceBytes": 66
+      }
+    },
+    {
+      "name": "redact_empty_replacement",
+      "output": "前\r\né🙂é GITHUB_TOKEN=\n",
+      "scan": {
+        "candidateCount": 0,
+        "candidates": [],
+        "findingCount": 1,
+        "findings": [
+          {
+            "column": 19,
+            "confidence": "high",
+            "explanation": {
+              "detectionMode": "deterministic",
+              "kind": "classified"
+            },
+            "line": 2,
+            "remediation": "revoke_and_rotate_credential",
+            "ruleId": "github.classic-pat",
+            "severity": "critical",
+            "span": {
+              "end": 65,
+              "start": 28
+            }
+          }
+        ],
+        "hasCritical": true,
+        "needsReview": true,
+        "sourceBytes": 66
+      }
+    },
+    {
+      "name": "redact_multibyte_replacement",
+      "output": "前\r\né🙂é GITHUB_TOKEN=⟨已隐藏⟩\n",
+      "scan": {
+        "candidateCount": 0,
+        "candidates": [],
+        "findingCount": 1,
+        "findings": [
+          {
+            "column": 19,
+            "confidence": "high",
+            "explanation": {
+              "detectionMode": "deterministic",
+              "kind": "classified"
+            },
+            "line": 2,
+            "remediation": "revoke_and_rotate_credential",
+            "ruleId": "github.classic-pat",
+            "severity": "critical",
+            "span": {
+              "end": 65,
+              "start": 28
+            }
+          }
+        ],
+        "hasCritical": true,
+        "needsReview": true,
+        "sourceBytes": 66
+      }
+    },
+    {
+      "name": "redact_clean",
+      "output": "ordinary text: é🙂",
+      "scan": {
+        "candidateCount": 0,
+        "candidates": [],
+        "findingCount": 0,
+        "findings": [],
+        "hasCritical": false,
+        "needsReview": false,
+        "sourceBytes": 21
+      }
+    },
+    {
+      "name": "redact_candidate_only",
+      "output": "ABCD-EFGH-IJKL-MNOP",
+      "scan": {
+        "candidateCount": 1,
+        "candidates": [
+          {
+            "column": 1,
+            "evidence": "structural",
+            "explanation": {
+              "evidence": "structural",
+              "kind": "ambiguous"
+            },
+            "kind": "recovery_like_code",
+            "line": 1,
+            "span": {
+              "end": 19,
+              "start": 0
+            }
+          }
+        ],
+        "findingCount": 0,
+        "findings": [],
+        "hasCritical": false,
+        "needsReview": true,
+        "sourceBytes": 19
+      }
+    },
+    {
+      "name": "redact_overlap_merged",
+      "output": "[REDACTED]",
+      "scan": {
+        "candidateCount": 0,
+        "candidates": [],
+        "findingCount": 2,
+        "findings": [
+          {
+            "column": 1,
+            "confidence": "high",
+            "explanation": {
+              "detectionMode": "matcher_only",
+              "kind": "classified"
+            },
+            "line": 1,
+            "remediation": null,
+            "ruleId": "custom.part",
+            "severity": "medium",
+            "span": {
+              "end": 6,
+              "start": 0
+            }
+          },
+          {
+            "column": 1,
+            "confidence": "high",
+            "explanation": {
+              "detectionMode": "matcher_only",
+              "kind": "classified"
+            },
+            "line": 1,
+            "remediation": null,
+            "ruleId": "custom.whole",
+            "severity": "high",
+            "span": {
+              "end": 12,
+              "start": 0
+            }
+          }
+        ],
+        "hasCritical": false,
+        "needsReview": true,
+        "sourceBytes": 12
+      }
+    },
+    {
+      "name": "template_default",
+      "output": "前\r\né🙂é GITHUB_TOKEN=<CRIBRA:github.classic-pat>\n",
+      "scan": {
+        "candidateCount": 0,
+        "candidates": [],
+        "findingCount": 1,
+        "findings": [
+          {
+            "column": 19,
+            "confidence": "high",
+            "explanation": {
+              "detectionMode": "deterministic",
+              "kind": "classified"
+            },
+            "line": 2,
+            "remediation": "revoke_and_rotate_credential",
+            "ruleId": "github.classic-pat",
+            "severity": "critical",
+            "span": {
+              "end": 65,
+              "start": 28
+            }
+          }
+        ],
+        "hasCritical": true,
+        "needsReview": true,
+        "sourceBytes": 66
+      }
+    },
+    {
+      "name": "template_custom_numbered",
+      "output": "GITHUB_TOKEN=<ACME_SYNTH:github.classic-pat:1>\nGITHUB_TOKEN=<ACME_SYNTH:github.classic-pat:2>\n",
+      "scan": {
+        "candidateCount": 0,
+        "candidates": [],
+        "findingCount": 2,
+        "findings": [
+          {
+            "column": 14,
+            "confidence": "high",
+            "explanation": {
+              "detectionMode": "deterministic",
+              "kind": "classified"
+            },
+            "line": 1,
+            "remediation": "revoke_and_rotate_credential",
+            "ruleId": "github.classic-pat",
+            "severity": "critical",
+            "span": {
+              "end": 50,
+              "start": 13
+            }
+          },
+          {
+            "column": 14,
+            "confidence": "high",
+            "explanation": {
+              "detectionMode": "deterministic",
+              "kind": "classified"
+            },
+            "line": 2,
+            "remediation": "revoke_and_rotate_credential",
+            "ruleId": "github.classic-pat",
+            "severity": "critical",
+            "span": {
+              "end": 101,
+              "start": 64
+            }
+          }
+        ],
+        "hasCritical": true,
+        "needsReview": true,
+        "sourceBytes": 102
+      }
+    },
+    {
+      "name": "template_multibyte_namespace",
+      "output": "前\r\né🙂é GITHUB_TOKEN=<CRIBRA:github.classic-pat>\n",
+      "scan": {
+        "candidateCount": 0,
+        "candidates": [],
+        "findingCount": 1,
+        "findings": [
+          {
+            "column": 19,
+            "confidence": "high",
+            "explanation": {
+              "detectionMode": "deterministic",
+              "kind": "classified"
+            },
+            "line": 2,
+            "remediation": "revoke_and_rotate_credential",
+            "ruleId": "github.classic-pat",
+            "severity": "critical",
+            "span": {
+              "end": 65,
+              "start": 28
+            }
+          }
+        ],
+        "hasCritical": true,
+        "needsReview": true,
+        "sourceBytes": 66
+      }
+    },
+    {
+      "name": "template_candidate_only",
+      "output": "ABCD-EFGH-IJKL-MNOP",
+      "scan": {
+        "candidateCount": 1,
+        "candidates": [
+          {
+            "column": 1,
+            "evidence": "structural",
+            "explanation": {
+              "evidence": "structural",
+              "kind": "ambiguous"
+            },
+            "kind": "recovery_like_code",
+            "line": 1,
+            "span": {
+              "end": 19,
+              "start": 0
+            }
+          }
+        ],
+        "findingCount": 0,
+        "findings": [],
+        "hasCritical": false,
+        "needsReview": true,
+        "sourceBytes": 19
+      }
+    },
+    {
+      "error": "transform_overlapping_spans",
+      "name": "template_overlap_error"
+    },
+    {
+      "name": "pseudonymize_default",
+      "output": "GITHUB_TOKEN=cribra_pseudo_59f01186b98cfb59378157359063c4d6\nSTRIPE_SECRET_KEY=cribra_pseudo_f9a09dc1c299c31beb47260ec2933cc6\n",
+      "scan": {
+        "candidateCount": 0,
+        "candidates": [],
+        "findingCount": 2,
+        "findings": [
+          {
+            "column": 14,
+            "confidence": "high",
+            "explanation": {
+              "detectionMode": "deterministic",
+              "kind": "classified"
+            },
+            "line": 1,
+            "remediation": "revoke_and_rotate_credential",
+            "ruleId": "github.classic-pat",
+            "severity": "critical",
+            "span": {
+              "end": 50,
+              "start": 13
+            }
+          },
+          {
+            "column": 19,
+            "confidence": "high",
+            "explanation": {
+              "detectionMode": "deterministic",
+              "kind": "classified"
+            },
+            "line": 2,
+            "remediation": "revoke_and_rotate_credential",
+            "ruleId": "stripe.test-secret-key",
+            "severity": "high",
+            "span": {
+              "end": 110,
+              "start": 69
+            }
+          }
+        ],
+        "hasCritical": true,
+        "needsReview": true,
+        "sourceBytes": 111
+      }
+    },
+    {
+      "name": "pseudonymize_repeat",
+      "output": "GITHUB_TOKEN=cribra_pseudo_59f01186b98cfb59378157359063c4d6\nSTRIPE_SECRET_KEY=cribra_pseudo_f9a09dc1c299c31beb47260ec2933cc6\n",
+      "scan": {
+        "candidateCount": 0,
+        "candidates": [],
+        "findingCount": 2,
+        "findings": [
+          {
+            "column": 14,
+            "confidence": "high",
+            "explanation": {
+              "detectionMode": "deterministic",
+              "kind": "classified"
+            },
+            "line": 1,
+            "remediation": "revoke_and_rotate_credential",
+            "ruleId": "github.classic-pat",
+            "severity": "critical",
+            "span": {
+              "end": 50,
+              "start": 13
+            }
+          },
+          {
+            "column": 19,
+            "confidence": "high",
+            "explanation": {
+              "detectionMode": "deterministic",
+              "kind": "classified"
+            },
+            "line": 2,
+            "remediation": "revoke_and_rotate_credential",
+            "ruleId": "stripe.test-secret-key",
+            "severity": "high",
+            "span": {
+              "end": 110,
+              "start": 69
+            }
+          }
+        ],
+        "hasCritical": true,
+        "needsReview": true,
+        "sourceBytes": 111
+      }
+    },
+    {
+      "name": "pseudonymize_custom",
+      "output": "GITHUB_TOKEN=acme_pseudo_ec5557fcad5e0792\nSTRIPE_SECRET_KEY=acme_pseudo_c48d4afb9a8a9983\n",
+      "scan": {
+        "candidateCount": 0,
+        "candidates": [],
+        "findingCount": 2,
+        "findings": [
+          {
+            "column": 14,
+            "confidence": "high",
+            "explanation": {
+              "detectionMode": "deterministic",
+              "kind": "classified"
+            },
+            "line": 1,
+            "remediation": "revoke_and_rotate_credential",
+            "ruleId": "github.classic-pat",
+            "severity": "critical",
+            "span": {
+              "end": 50,
+              "start": 13
+            }
+          },
+          {
+            "column": 19,
+            "confidence": "high",
+            "explanation": {
+              "detectionMode": "deterministic",
+              "kind": "classified"
+            },
+            "line": 2,
+            "remediation": "revoke_and_rotate_credential",
+            "ruleId": "stripe.test-secret-key",
+            "severity": "high",
+            "span": {
+              "end": 110,
+              "start": 69
+            }
+          }
+        ],
+        "hasCritical": true,
+        "needsReview": true,
+        "sourceBytes": 111
+      }
+    },
+    {
+      "name": "pseudonymize_digest_clamped_low",
+      "output": "GITHUB_TOKEN=cribra_pseudo_59f01186b98cfb59\n",
+      "scan": {
+        "candidateCount": 0,
+        "candidates": [],
+        "findingCount": 1,
+        "findings": [
+          {
+            "column": 14,
+            "confidence": "high",
+            "explanation": {
+              "detectionMode": "deterministic",
+              "kind": "classified"
+            },
+            "line": 1,
+            "remediation": "revoke_and_rotate_credential",
+            "ruleId": "github.classic-pat",
+            "severity": "critical",
+            "span": {
+              "end": 50,
+              "start": 13
+            }
+          }
+        ],
+        "hasCritical": true,
+        "needsReview": true,
+        "sourceBytes": 51
+      }
+    },
+    {
+      "name": "pseudonymize_digest_clamped_high",
+      "output": "GITHUB_TOKEN=cribra_pseudo_59f01186b98cfb59378157359063c4d6bafacd6d39f8ce5f1cdbe10e869fe512\n",
+      "scan": {
+        "candidateCount": 0,
+        "candidates": [],
+        "findingCount": 1,
+        "findings": [
+          {
+            "column": 14,
+            "confidence": "high",
+            "explanation": {
+              "detectionMode": "deterministic",
+              "kind": "classified"
+            },
+            "line": 1,
+            "remediation": "revoke_and_rotate_credential",
+            "ruleId": "github.classic-pat",
+            "severity": "critical",
+            "span": {
+              "end": 50,
+              "start": 13
+            }
+          }
+        ],
+        "hasCritical": true,
+        "needsReview": true,
+        "sourceBytes": 51
+      }
+    },
+    {
+      "name": "pseudonymize_empty_prefix",
+      "output": "GITHUB_TOKEN=59f01186b98cfb59378157359063c4d6\n",
+      "scan": {
+        "candidateCount": 0,
+        "candidates": [],
+        "findingCount": 1,
+        "findings": [
+          {
+            "column": 14,
+            "confidence": "high",
+            "explanation": {
+              "detectionMode": "deterministic",
+              "kind": "classified"
+            },
+            "line": 1,
+            "remediation": "revoke_and_rotate_credential",
+            "ruleId": "github.classic-pat",
+            "severity": "critical",
+            "span": {
+              "end": 50,
+              "start": 13
+            }
+          }
+        ],
+        "hasCritical": true,
+        "needsReview": true,
+        "sourceBytes": 51
+      }
+    },
+    {
+      "name": "pseudonymize_multibyte_prefix",
+      "output": "GITHUB_TOKEN=匿名_59f01186b98cfb59378157359063c4d6\n",
+      "scan": {
+        "candidateCount": 0,
+        "candidates": [],
+        "findingCount": 1,
+        "findings": [
+          {
+            "column": 14,
+            "confidence": "high",
+            "explanation": {
+              "detectionMode": "deterministic",
+              "kind": "classified"
+            },
+            "line": 1,
+            "remediation": "revoke_and_rotate_credential",
+            "ruleId": "github.classic-pat",
+            "severity": "critical",
+            "span": {
+              "end": 50,
+              "start": 13
+            }
+          }
+        ],
+        "hasCritical": true,
+        "needsReview": true,
+        "sourceBytes": 51
+      }
+    },
+    {
+      "name": "pseudonymize_candidate_only",
+      "output": "ABCD-EFGH-IJKL-MNOP",
+      "scan": {
+        "candidateCount": 1,
+        "candidates": [
+          {
+            "column": 1,
+            "evidence": "structural",
+            "explanation": {
+              "evidence": "structural",
+              "kind": "ambiguous"
+            },
+            "kind": "recovery_like_code",
+            "line": 1,
+            "span": {
+              "end": 19,
+              "start": 0
+            }
+          }
+        ],
+        "findingCount": 0,
+        "findings": [],
+        "hasCritical": false,
+        "needsReview": true,
+        "sourceBytes": 19
+      }
+    },
+    {
+      "error": "transform_overlapping_spans",
+      "name": "pseudonymize_overlap_error"
+    },
+    {
+      "name": "synthesize_default",
+      "output": "前\r\né🙂é GITHUB_TOKEN=ghp_!dSJLDhtHX3gN4BeXD7dooBBhLjMnZqmg\nSTRIPE_SECRET_KEY=sk_test_!3QSxAzydSgPX_2sQwCyCG7t8v1yBLmr_\n",
+      "scan": {
+        "candidateCount": 0,
+        "candidates": [],
+        "findingCount": 2,
+        "findings": [
+          {
+            "column": 19,
+            "confidence": "high",
+            "explanation": {
+              "detectionMode": "deterministic",
+              "kind": "classified"
+            },
+            "line": 2,
+            "remediation": "revoke_and_rotate_credential",
+            "ruleId": "github.classic-pat",
+            "severity": "critical",
+            "span": {
+              "end": 65,
+              "start": 28
+            }
+          },
+          {
+            "column": 19,
+            "confidence": "high",
+            "explanation": {
+              "detectionMode": "deterministic",
+              "kind": "classified"
+            },
+            "line": 3,
+            "remediation": "revoke_and_rotate_credential",
+            "ruleId": "stripe.test-secret-key",
+            "severity": "high",
+            "span": {
+              "end": 125,
+              "start": 84
+            }
+          }
+        ],
+        "hasCritical": true,
+        "needsReview": true,
+        "sourceBytes": 126
+      }
+    },
+    {
+      "name": "synthesize_repeat",
+      "output": "前\r\né🙂é GITHUB_TOKEN=ghp_!dSJLDhtHX3gN4BeXD7dooBBhLjMnZqmg\nSTRIPE_SECRET_KEY=sk_test_!3QSxAzydSgPX_2sQwCyCG7t8v1yBLmr_\n",
+      "scan": {
+        "candidateCount": 0,
+        "candidates": [],
+        "findingCount": 2,
+        "findings": [
+          {
+            "column": 19,
+            "confidence": "high",
+            "explanation": {
+              "detectionMode": "deterministic",
+              "kind": "classified"
+            },
+            "line": 2,
+            "remediation": "revoke_and_rotate_credential",
+            "ruleId": "github.classic-pat",
+            "severity": "critical",
+            "span": {
+              "end": 65,
+              "start": 28
+            }
+          },
+          {
+            "column": 19,
+            "confidence": "high",
+            "explanation": {
+              "detectionMode": "deterministic",
+              "kind": "classified"
+            },
+            "line": 3,
+            "remediation": "revoke_and_rotate_credential",
+            "ruleId": "stripe.test-secret-key",
+            "severity": "high",
+            "span": {
+              "end": 125,
+              "start": 84
+            }
+          }
+        ],
+        "hasCritical": true,
+        "needsReview": true,
+        "sourceBytes": 126
+      }
+    },
+    {
+      "name": "synthesize_custom_marker",
+      "output": "GITHUB_TOKEN=ghp_!ruumOeNl9HWZHlj1EPSCTib5WtLX1zpH\n",
+      "scan": {
+        "candidateCount": 0,
+        "candidates": [],
+        "findingCount": 1,
+        "findings": [
+          {
+            "column": 14,
+            "confidence": "high",
+            "explanation": {
+              "detectionMode": "deterministic",
+              "kind": "classified"
+            },
+            "line": 1,
+            "remediation": "revoke_and_rotate_credential",
+            "ruleId": "github.classic-pat",
+            "severity": "critical",
+            "span": {
+              "end": 50,
+              "start": 13
+            }
+          }
+        ],
+        "hasCritical": true,
+        "needsReview": true,
+        "sourceBytes": 51
+      }
+    },
+    {
+      "name": "synthesize_empty_marker",
+      "output": "GITHUB_TOKEN=ghp_!gFvACevxZCbapO4XRiz8hVJj8z0Ii9Xh\n",
+      "scan": {
+        "candidateCount": 0,
+        "candidates": [],
+        "findingCount": 1,
+        "findings": [
+          {
+            "column": 14,
+            "confidence": "high",
+            "explanation": {
+              "detectionMode": "deterministic",
+              "kind": "classified"
+            },
+            "line": 1,
+            "remediation": "revoke_and_rotate_credential",
+            "ruleId": "github.classic-pat",
+            "severity": "critical",
+            "span": {
+              "end": 50,
+              "start": 13
+            }
+          }
+        ],
+        "hasCritical": true,
+        "needsReview": true,
+        "sourceBytes": 51
+      }
+    },
+    {
+      "name": "synthesize_multibyte_marker",
+      "output": "GITHUB_TOKEN=ghp_!gFvACevxZCbapO4XRiz8hVJj8z0Ii9Xh\n",
+      "scan": {
+        "candidateCount": 0,
+        "candidates": [],
+        "findingCount": 1,
+        "findings": [
+          {
+            "column": 14,
+            "confidence": "high",
+            "explanation": {
+              "detectionMode": "deterministic",
+              "kind": "classified"
+            },
+            "line": 1,
+            "remediation": "revoke_and_rotate_credential",
+            "ruleId": "github.classic-pat",
+            "severity": "critical",
+            "span": {
+              "end": 50,
+              "start": 13
+            }
+          }
+        ],
+        "hasCritical": true,
+        "needsReview": true,
+        "sourceBytes": 51
+      }
+    },
+    {
+      "name": "synthesize_candidate_only",
+      "output": "ABCD-EFGH-IJKL-MNOP",
+      "scan": {
+        "candidateCount": 1,
+        "candidates": [
+          {
+            "column": 1,
+            "evidence": "structural",
+            "explanation": {
+              "evidence": "structural",
+              "kind": "ambiguous"
+            },
+            "kind": "recovery_like_code",
+            "line": 1,
+            "span": {
+              "end": 19,
+              "start": 0
+            }
+          }
+        ],
+        "findingCount": 0,
+        "findings": [],
+        "hasCritical": false,
+        "needsReview": true,
+        "sourceBytes": 19
+      }
+    },
+    {
+      "error": "transform_overlapping_spans",
+      "name": "synthesize_overlap_error"
+    }
+  ]
+}

@@ -597,3 +597,237 @@ milliseconds or below.
 
 No source text, matcher payload, rule ID, or per-finding data appears in any
 log or marker.
+
+# Cribra React Native RN.1.5 — Flow Transformation Qualification
+
+Status: **RN.1.5 implemented and runtime-validated on the iOS simulator and the
+Android ARM64 emulator.** Not a release-qualification claim and not an npm
+publication. Physical devices and release builds are `not-tested`.
+
+Recorded: 2026-11-11. Package: `@metalymph/cribra-react-native@0.0.0` (private,
+unpublished). ABI: `cribra-capi` 0.3.0 over Cribra Core 0.7.2. Branch:
+`feat/react-native-rn1-5`. Baseline: `cafd6e3`.
+
+RN.1.5 adds the four scan-coupled Core transformations to the native package.
+It does not modify Cribra Core, the public C ABI, the vendored
+`third_party/cribra/include/cribra.h`, the Swift/Kotlin/Python bindings, the
+WebAssembly package, or CI. Transformations are delegated to the existing C ABI
+entry points; neither TypeScript nor C++ contains replacement logic.
+
+## Result summary
+
+| Check | Result | Evidence |
+| --- | --- | --- |
+| Package and consumer TypeScript | PASS | `npm run typecheck`; `npx tsc --noEmit` |
+| Jest suite, RN.1.1–RN.1.4 preserved | PASS | 8 suites, **263 tests** (184 baseline + 79 new) |
+| Facade request validation and Core defaults | PASS | `transform.test.ts` |
+| Key copying, caller immutability, JS temporary zeroization | PASS | `transform.test.ts` (success and rejection paths) |
+| Malformed UTF-16 source and option preflight | PASS | `transform.test.ts`, `preflight.test.ts` |
+| Exact fixed-diagnostic error classification | PASS | `transform.test.ts` |
+| Direct-Core transform oracle integrity | PASS | `transform-oracle.test.ts`, 27 cases |
+| Host ABI and transform signature protocol | PASS | `npm run test:abi`; five `PASS` lines |
+| Vendored header matches canonical Core header | PASS | `cmp` identical |
+| iOS simulator build and runtime | PASS | `transform=ok:key=ok` marker |
+| Android ARM64 emulator build and runtime | PASS | `transform=ok:key=ok` marker |
+| Android four-ABI build | PASS | all four `libappmodules.so` contain the transform path |
+| Android non-ARM64 runtimes | build-only | armeabi-v7a/x86/x86_64 not executed |
+| Runtime log privacy | PASS | `privacy=ok`; no output, key, source, matcher, or rule ID |
+| Release/npm qualification | not-tested | private package |
+
+Runtime markers observed (identical on both platforms):
+
+```text
+CRIBRA_RN_SMOKE:PASS:abi=0.3.0:entries=5:findings=3:candidates=1:lifecycle=ok:parity=ok:batch=ok:config=ok:transform=ok:key=ok:negative=ok:offset=ok:probe=3/5:privacy=ok
+```
+
+## API surface
+
+Added to `@metalymph/cribra-react-native`:
+
+- `scanner.transform(source, request): Promise<TransformResult>`
+- `TransformResult` — `{ scan: ScanResult; output: string }`, frozen
+- Request types: `RedactRequest`, `TemplateRequest`, `PseudonymizeRequest`,
+  `SynthesizeRequest`, `TransformRequest`
+- `CribraErrorCode` additions: `invalid_key_length`, `transform_invalid_span`,
+  `transform_invalid_utf8_boundary`, `transform_overlapping_spans`,
+  `transform_unknown`
+
+Defaults match the WebAssembly adapter: `"[REDACTED]"`, `"CRIBRA"`, `false`,
+`"cribra_pseudo_"`, `16`, `"cribra_synthetic"`. Omitted and explicit-empty
+`replacement`, `prefix`, and `marker` are distinct; a supplied namespace is
+forwarded verbatim. `digestBytes` accepts any nonnegative safe integer up to
+`0xFFFFFFFF`; Core clamps it.
+
+No Share Bundle, streaming, incremental, editor, or cancellation API is added.
+The public signature intentionally differs from `@metalymph/cribra` only in
+being asynchronous.
+
+## Native execution and ownership
+
+One `transform()` call performs one TurboModule call and one serial worker job:
+
+1. The facade validates the request, resolves defaults, preflights the source
+   and every option string for unpaired surrogates, and validates the key.
+2. Keyed modes copy the 32 key bytes into a fresh JavaScript
+   `Uint8Array`/`ArrayBuffer`; the caller's array and backing store are never
+   mutated. The temporary is zeroed in a `finally` block after the promise
+   settles, on both success and rejection.
+3. The JS thread decodes the source and options to UTF-8, validates the native
+   `jsi::ArrayBuffer` (`detached`, size exactly 32, non-null data), and copies
+   the key into one `std::shared_ptr<KeyBytes>`. No JSI object is retained.
+4. `TransformInput` is non-copyable and owns the text and that single key
+   owner. The worker lambda captures `std::shared_ptr<TransformInput>`, so the
+   job is copyable without duplicating key material. `KeyBytes` volatile-zeroes
+   its 32 bytes on destruction; the input destructor best-effort wipes its
+   copied source.
+5. The worker calls `cribra_scanner_scan()` once for the exact source, projects
+   the complete report, then calls exactly one `cribra_transform_*()` against
+   that same live `CribraReport`. The report remains alive through the call.
+6. The owned `CribraOutput` is wrapped in RAII, its UTF-8 view is copied into
+   the DTO, and the handle is freed exactly once. Empty output is supported.
+
+The C ABI configuration structs borrow the key pointer/prefix/marker for only
+the synchronous transformation call. Only one native key buffer exists per
+request. Zeroization is mandatory for the facade temporary and the native key
+buffer, and best-effort for the native copied transformation source. It cannot
+erase the caller's array, Hermes/JSC string representations, immutable JSI
+strings, or Core's transient buffers. Option strings are not wiped; like rule
+specs they are treated as caller configuration, not scanned content.
+
+Redaction merges overlapping finding spans; template, pseudonymize, and
+synthesize reject them. Ambiguous candidates are never transformed. The
+returned `scan` is the full Core-derived projection of the transformed source,
+identical to a detached `scan()` of that string, and contains no `sourceId`.
+
+## Error classification
+
+The C ABI reports every Core transformation failure as
+`CRIBRA_TRANSFORM_ERROR` (5) with a fixed privacy-safe diagnostic. The bridge
+maps status 5 to the `transform_failed` token and emits
+`cribra_native_error:transform_failed:<operation>:<isolated diagnostic>`. The
+facade requires that exact token, captures the diagnostic with
+`^cribra_native_error:transform_failed:[a-z_]+:(.*)$/s`, and classifies only an
+exact `===` match:
+
+| Diagnostic | Code |
+| --- | --- |
+| `transform report contains an invalid source span` | `transform_invalid_span` |
+| `transform report span is not aligned to UTF-8 boundaries` | `transform_invalid_utf8_boundary` |
+| `transform requires non-overlapping finding spans` | `transform_overlapping_spans` |
+| `transform source length does not match report` | `transform_unknown` |
+| `source transformation could not be applied safely` | `transform_unknown` |
+
+Prefixes, suffixes, whitespace, different casing, a missing diagnostic, a
+reworded diagnostic, or a different native status all fall back to
+`transform_unknown`. No substring parsing exists. Native key-length failures use
+`cribra_native_error:invalid_key_length`, which maps to `invalid_key_length` and
+is raised before any worker job. Tests cover all five diagnostics, adversarial
+variants, both fallbacks, the key token, and an unrelated native failure.
+
+## Direct-Core parity
+
+`tools/oracle` was extended with `--transform-cases`, which uses Cribra Core
+directly (no C ABI, no TurboModule) to produce
+`consumer/src/fixtures/rn15-transform-oracle.json` from 27 synthetic cases:
+
+- every mode with default options and with custom options;
+- empty and multibyte replacement, prefix, marker, and namespace values;
+- clean sources and candidate-only sources (candidates preserved verbatim);
+- deterministic keyed repeats for pseudonymization and synthesis;
+- digest lengths below and above Core's clamp (`1` and `64`);
+- real overlapping findings (`secret-value` + `secret`), merged by redaction and
+  rejected by the other three modes;
+- exact full scan projections and exact output strings.
+
+The runtime harness runs all 27 cases on device: the 24 successes compare the
+entire `scan` tree and the exact `output` against the oracle, then compare the
+embedded scan with a detached scan of the same source; the 3 overlap cases must
+reject with `transform_overlapping_spans`. Deterministic repeats are compared
+pairwise. No fixture source, finding, candidate, output, or key is logged.
+
+## Jest and host checks
+
+- `npx jest --ci`: 8 suites, 263 tests, 0 failures.
+- `npm run test:abi`: `ABI compatibility gate: PASS`,
+  `JS safe-integer boundary: PASS`, `Strict enum/explanation projection: PASS`,
+  `Transformation ABI signatures: PASS`, `Scanner configuration protocol: PASS`.
+  The new check pins all six transform entry-point signatures, status 5, the
+  three config struct layouts, and the output view/free contract.
+- `cmp include/cribra.h third_party/cribra/include/cribra.h`: identical.
+- Package `npm run typecheck` and consumer `npx tsc --noEmit`: clean.
+
+## Builds and runtime
+
+Environment: macOS with Xcode 27.2 (iOS 27.0 simulator), JDK 17, Gradle 9.4.1,
+NDK 27.1.12297006, Rust 1.99.1, Node 26.13.0.
+
+iOS:
+
+- `xcodebuild -workspace ios/CribraConsumer.xcworkspace -scheme CribraConsumer
+  -configuration Debug -destination 'platform=iOS Simulator,name=iPhone 18 Pro
+  Max' -derivedDataPath /tmp/cribra-rn15-ios build` succeeded.
+- Generated Codegen confirms `jsi::ArrayBuffer` arguments and the flat
+  `TransformResultDto` bridging with six properties.
+- Installed and launched on the booted simulator; the screen showed `PASS` and
+  the marker above. Screenshot: `/tmp/cribra-rn15-ios.png`. Build log:
+  `/tmp/rn15-ios-build.log`.
+
+Android:
+
+- `./gradlew assembleDebug` succeeded and produced all four ABIs; the APK
+  contains `libappmodules.so` for `armeabi-v7a`, `arm64-v8a`, `x86`, and
+  `x86_64`.
+- All four libraries contain the fixed transform diagnostics, the
+  `invalid_key_length` token, and the compiled C++ transform methods, proving
+  the transform path is linked into each ABI.
+- Runtime: `emulator-5554`, `arm64-v8a`, Android 16. Installed the APK,
+  reversed Metro port 8081, launched `com.cribraconsumer/.MainActivity`, and
+  observed the marker in logcat. Screenshot: `/tmp/cribra-rn15-android.png`.
+  Build log: `/tmp/rn15-android-build.log`.
+
+Android ABI matrix:
+
+| ABI | Build | Runtime-qualified | Evidence |
+| --- | --- | --- | --- |
+| `arm64-v8a` | PASS | PASS | emulator marker `transform=ok:key=ok` |
+| `armeabi-v7a` | PASS | build-only | transform diagnostics present in `libappmodules.so` |
+| `x86` | PASS | build-only | transform diagnostics present in `libappmodules.so` |
+| `x86_64` | PASS | build-only | transform diagnostics present in `libappmodules.so` |
+
+## Privacy evidence
+
+The harness asserts that the emitted marker contains no transformed output
+fragment, fixture secret, candidate value, matcher payload, rule ID, or source
+ID; it passes `privacy=ok` on both platforms. Only aggregate counts and fixed
+pass/fail reasons are logged. The new C++ code adds no logging. Native
+transform diagnostics are fixed strings and never include source text, matched
+values, keys, or per-finding metadata.
+
+## Limitations and not-claimed items
+
+- Private, unpublished package; no release or npm qualification.
+- iOS/Android physical devices and release builds are `not-tested`.
+- Only `arm64-v8a` is runtime-qualified on Android; the other three ABIs are
+  build-only for this record.
+- JSC behavior is not runtime-tested (the harness runs Hermes debug builds).
+- Zeroization is best-effort beyond the two mandatory buffers; no claim is made
+  about the JavaScript engine, JSI, Core, or caller memory.
+- Error classification is a compatibility mapping over fixed C ABI strings; any
+  future rewording intentionally degrades to `transform_unknown`.
+- Transformations are scan-coupled and one-shot. Streaming, incremental
+  documents, Share Bundles, editor integration, cancellation, RN.1.6 work, and
+  Amon are out of scope.
+- Keys are raw 32 bytes; no KDF, key storage, or KMS integration is provided.
+- Preflight remains `O(n)` on the JS thread for the source plus each option.
+
+## Evidence locations
+
+- `/tmp/cribra-rn15-ios.png` — iOS harness PASS marker
+- `/tmp/rn15-ios-build.log` — iOS build log
+- `/tmp/cribra-rn15-android.png` — Android harness PASS marker
+- `/tmp/rn15-android-build.log` — Android Gradle build log
+- `/tmp/cribra-rn15-ios/` — iOS derived data containing generated Codegen
+- `consumer/src/fixtures/rn15-transform-cases.json` — 27 synthetic cases
+- `consumer/src/fixtures/rn15-transform-oracle.json` — direct-Core oracle
+
+No commit, push, merge, tag, or publication was performed.

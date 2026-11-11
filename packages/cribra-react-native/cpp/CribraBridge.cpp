@@ -22,8 +22,21 @@ std::string StatusLabel(CribraStatus status) {
       return "build_error";
     case CRIBRA_INTERNAL_ERROR:
       return "internal_error";
+    case CRIBRA_TRANSFORM_ERROR:
+      return "transform_failed";
     default:
       return "status_" + std::to_string(status);
+  }
+}
+
+/// Best-effort wipe that the compiler cannot elide as a dead store.
+void SecureZero(void* data, size_t size) noexcept {
+  if (data == nullptr || size == 0) {
+    return;
+  }
+  volatile auto* bytes = static_cast<volatile uint8_t*>(data);
+  for (size_t index = 0; index < size; ++index) {
+    bytes[index] = 0;
   }
 }
 
@@ -138,6 +151,101 @@ class OwnedReport final {
  private:
   CribraReport* report_;
 };
+
+/// Owns a CribraOutput for the duration of one transformation.
+class OwnedOutput final {
+ public:
+  explicit OwnedOutput(CribraOutput* output) noexcept : output_(output) {}
+  ~OwnedOutput() { cribra_output_free(output_); }
+
+  OwnedOutput(const OwnedOutput&) = delete;
+  OwnedOutput& operator=(const OwnedOutput&) = delete;
+
+  [[nodiscard]] const CribraOutput* get() const noexcept { return output_; }
+  [[nodiscard]] explicit operator bool() const noexcept {
+    return output_ != nullptr;
+  }
+
+ private:
+  CribraOutput* output_;
+};
+
+/// Null for an empty string so the C ABI sees the documented empty-view form.
+const uint8_t* Bytes(const std::string& value) noexcept {
+  return value.empty()
+      ? nullptr
+      : reinterpret_cast<const uint8_t*>(value.data());
+}
+
+/// Source-free operation name used only in transform diagnostics.
+const char* OperationName(TransformMode mode) noexcept {
+  switch (mode) {
+    case TransformMode::Redact:
+      return "redact";
+    case TransformMode::Template:
+      return "template";
+    case TransformMode::Pseudonymize:
+      return "pseudonymize";
+    case TransformMode::Synthesize:
+      return "synthesize";
+  }
+  return "transform";
+}
+
+/// Dispatches exactly one C ABI transformation against the live report.
+CribraStatus ApplyTransform(
+    const TransformInput& input,
+    const std::string& text,
+    const CribraReport* report,
+    CribraOutput** out_output,
+    CribraError** out_error) {
+  const auto* source = Bytes(text);
+  const auto sourceLen = text.size();
+
+  switch (input.mode) {
+    case TransformMode::Redact:
+      if (!input.hasReplacement) {
+        return cribra_transform_redact(
+            source, sourceLen, report, out_output, out_error);
+      }
+      return cribra_transform_redact_with(
+          source,
+          sourceLen,
+          report,
+          Bytes(input.option),
+          input.option.size(),
+          out_output,
+          out_error);
+    case TransformMode::Template: {
+      CribraTemplateConfig config{};
+      config.namespace_ =
+          CribraStringView{Bytes(input.option), input.option.size()};
+      config.numbered = input.numbered ? 1 : 0;
+      return cribra_transform_template_with(
+          source, sourceLen, report, &config, out_output, out_error);
+    }
+    case TransformMode::Pseudonymize: {
+      CribraPseudonymizeConfig config{};
+      config.key = input.key ? input.key->bytes.data() : nullptr;
+      config.key_len = input.key ? input.key->bytes.size() : 0;
+      config.prefix =
+          CribraStringView{Bytes(input.option), input.option.size()};
+      config.digest_bytes = input.digestBytes;
+      return cribra_transform_pseudonymize(
+          source, sourceLen, report, &config, out_output, out_error);
+    }
+    case TransformMode::Synthesize: {
+      CribraSynthesizeConfig config{};
+      config.key = input.key ? input.key->bytes.data() : nullptr;
+      config.key_len = input.key ? input.key->bytes.size() : 0;
+      config.marker =
+          CribraStringView{Bytes(input.option), input.option.size()};
+      return cribra_transform_synthesize(
+          source, sourceLen, report, &config, out_output, out_error);
+    }
+  }
+  return CRIBRA_INVALID_ARGUMENT;
+}
 
 /// Owns an unconsumed builder. `cribra_builder_build` takes ownership of the
 /// handle even when construction fails, so the bridge marks consumption before
@@ -397,6 +505,16 @@ std::vector<CandidateDto> ProjectCandidates(
 
 ScannerHandle::~ScannerHandle() { cribra_scanner_free(scanner_); }
 
+KeyBytes::~KeyBytes() { SecureZero(bytes.data(), bytes.size()); }
+
+TransformInput::~TransformInput() {
+  // Best-effort wipe of the copied source. The caller's original string and
+  // any JavaScript/Hermes copies cannot be reached from here.
+  if (!text.empty()) {
+    SecureZero(text.data(), text.size());
+  }
+}
+
 std::shared_ptr<ScannerHandle> CreateDefaultScanner(std::string& errorMessage) {
   const auto abiFailure = AbiCompatibilityFailure();
   if (!abiFailure.empty()) {
@@ -549,6 +667,50 @@ ScannerCreationDto ToDto(const CreationFailure& failure) {
   return dto;
 }
 
+namespace {
+
+/// Projects one live report into the shared scan DTO. Shared by scan and
+/// transform so both paths expose byte-for-byte identical Core-derived fields.
+ScanProjection ProjectReport(
+    const ScannerHandle& scanner,
+    const CribraReport* report,
+    const std::string& sourceId,
+    uint64_t sourceBytes) {
+  size_t findingCount = 0;
+  const auto findingCountStatus =
+      cribra_report_finding_count(report, &findingCount);
+  if (findingCountStatus != CRIBRA_OK) {
+    throw BridgeError(Failure("finding_count", findingCountStatus));
+  }
+
+  size_t candidateCount = 0;
+  const auto candidateCountStatus =
+      cribra_report_candidate_count(report, &candidateCount);
+  if (candidateCountStatus != CRIBRA_OK) {
+    throw BridgeError(Failure("candidate_count", candidateCountStatus));
+  }
+
+  ScanProjection projection;
+  projection.sourceBytes = sourceBytes;
+  projection.findingCount = static_cast<uint64_t>(findingCount);
+  projection.candidateCount = static_cast<uint64_t>(candidateCount);
+
+  ScanReportDto dto{};
+  dto.sourceId = sourceId;
+  dto.sourceBytes = ToJsNumber(projection.sourceBytes, "source_bytes");
+  dto.findings =
+      ProjectFindings(scanner, report, findingCount, projection.severity);
+  dto.candidateCount =
+      ToJsNumber(projection.candidateCount, "candidate_count");
+  // Core's report.needs_review() is true for findings or candidates.
+  dto.needsReview = findingCount > 0 || candidateCount > 0;
+  dto.candidates = ProjectCandidates(report, candidateCount);
+  projection.report = std::move(dto);
+  return projection;
+}
+
+}  // namespace
+
 ScanProjection Scan(
     const std::shared_ptr<ScannerHandle>& scanner,
     const std::string& sourceId,
@@ -561,45 +723,18 @@ ScanProjection Scan(
   CribraReport* rawReport = nullptr;
   OwnedError scanError;
 
-  const auto* bytes =
-      reinterpret_cast<const uint8_t*>(text.empty() ? nullptr : text.data());
   const auto scanStatus = cribra_scanner_scan(
-      scanner->get(), bytes, text.size(), &rawReport, scanError.out());
+      scanner->get(), Bytes(text), text.size(), &rawReport, scanError.out());
   if (scanStatus != CRIBRA_OK || rawReport == nullptr) {
     throw BridgeError(scanError.describe(scanStatus, "scan"));
   }
   OwnedReport report(rawReport);
 
-  size_t findingCount = 0;
-  const auto findingCountStatus =
-      cribra_report_finding_count(report.get(), &findingCount);
-  if (findingCountStatus != CRIBRA_OK) {
-    throw BridgeError(Failure("finding_count", findingCountStatus));
-  }
-
-  size_t candidateCount = 0;
-  const auto candidateCountStatus =
-      cribra_report_candidate_count(report.get(), &candidateCount);
-  if (candidateCountStatus != CRIBRA_OK) {
-    throw BridgeError(Failure("candidate_count", candidateCountStatus));
-  }
-
-  ScanProjection projection;
-  projection.sourceBytes = static_cast<uint64_t>(text.size());
-  projection.findingCount = static_cast<uint64_t>(findingCount);
-  projection.candidateCount = static_cast<uint64_t>(candidateCount);
-
-  ScanReportDto dto{};
-  dto.sourceId = sourceId;
-  dto.sourceBytes = ToJsNumber(projection.sourceBytes, "source_bytes");
-  dto.findings = ProjectFindings(
-      *scanner, report.get(), findingCount, projection.severity);
-  dto.candidateCount = ToJsNumber(projection.candidateCount, "candidate_count");
-  // Core's report.needs_review() is true for findings or candidates.
-  dto.needsReview = findingCount > 0 || candidateCount > 0;
-  dto.candidates = ProjectCandidates(report.get(), candidateCount);
-  projection.report = std::move(dto);
-  return projection;
+  return ProjectReport(
+      *scanner,
+      report.get(),
+      sourceId,
+      static_cast<uint64_t>(text.size()));
 }
 
 ScanBatchDto ScanBatch(
@@ -664,6 +799,70 @@ ScanBatchDto ScanBatch(
   summary.hasCritical = severity.critical != 0;
   output.summary = std::move(summary);
   return output;
+}
+
+TransformResultDto Transform(
+    const std::shared_ptr<ScannerHandle>& scanner,
+    const TransformInput& input) {
+  const auto abiFailure = AbiCompatibilityFailure();
+  if (!abiFailure.empty()) {
+    throw BridgeError(abiFailure);
+  }
+
+  CribraReport* rawReport = nullptr;
+  OwnedError scanError;
+  // Exactly one scan of the same UTF-8 source that will be transformed.
+  const auto scanStatus = cribra_scanner_scan(
+      scanner->get(),
+      Bytes(input.text),
+      input.text.size(),
+      &rawReport,
+      scanError.out());
+  if (scanStatus != CRIBRA_OK || rawReport == nullptr) {
+    throw BridgeError(scanError.describe(scanStatus, "scan"));
+  }
+  OwnedReport report(rawReport);
+
+  auto projection = ProjectReport(
+      *scanner,
+      report.get(),
+      std::string(),
+      static_cast<uint64_t>(input.text.size()));
+
+  CribraOutput* rawOutput = nullptr;
+  OwnedError transformError;
+  const auto transformStatus = ApplyTransform(
+      input, input.text, report.get(), &rawOutput, transformError.out());
+  if (transformStatus != CRIBRA_OK) {
+    // describe() reads cribra_error_status first, so the `transform_failed`
+    // token and the borrowed fixed diagnostic are emitted only when the C ABI
+    // actually reported CRIBRA_TRANSFORM_ERROR. All other statuses keep the
+    // existing status-first mapping.
+    throw BridgeError(
+        transformError.describe(transformStatus, OperationName(input.mode)));
+  }
+  OwnedOutput output(rawOutput);
+  if (!output) {
+    // Success must always produce a live output handle.
+    throw BridgeError(
+        "cribra_native_error:invalid_native_report:transform.output");
+  }
+
+  CribraStringView view{};
+  const auto viewStatus = cribra_output_view(output.get(), &view);
+  if (viewStatus != CRIBRA_OK) {
+    throw BridgeError(Failure("output_view", viewStatus));
+  }
+
+  // Copy the UTF-8 output before the OwnedOutput guard frees it.
+  TransformResultDto dto{};
+  dto.sourceBytes = projection.report.sourceBytes;
+  dto.findings = std::move(projection.report.findings);
+  dto.candidateCount = projection.report.candidateCount;
+  dto.needsReview = projection.report.needsReview;
+  dto.candidates = std::move(projection.report.candidates);
+  dto.output = BorrowedString(view);
+  return dto;
 }
 
 AbiVersionDto GetAbiVersion() noexcept {

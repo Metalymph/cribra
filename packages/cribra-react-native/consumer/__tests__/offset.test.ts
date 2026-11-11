@@ -400,7 +400,7 @@ describe('privacy', () => {
       'invalid_unicode_string',
     );
     expect(error.message).toBe(
-      'The source contains an unpaired UTF-16 surrogate.',
+      'A Cribra string contains an unpaired UTF-16 surrogate.',
     );
     const serialized = `${error.message}${error.detail ?? ''}${error.ruleId ?? ''}`;
     expect(serialized).not.toContain('sk_live');

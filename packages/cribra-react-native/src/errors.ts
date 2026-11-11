@@ -31,6 +31,11 @@ export type CribraErrorCode =
   | 'empty_matcher'
   | 'too_many_rules'
   | 'automaton_build'
+  | 'invalid_key_length'
+  | 'transform_invalid_span'
+  | 'transform_invalid_utf8_boundary'
+  | 'transform_overlapping_spans'
+  | 'transform_unknown'
   | 'native_error';
 
 const MESSAGES: Record<CribraErrorCode, string> = {
@@ -38,7 +43,7 @@ const MESSAGES: Record<CribraErrorCode, string> = {
   invalid_argument: 'A Cribra argument is invalid.',
   invalid_input_string: 'The source could not be converted to UTF-8.',
   invalid_utf8: 'The source is not valid UTF-8.',
-  invalid_unicode_string: 'The source contains an unpaired UTF-16 surrogate.',
+  invalid_unicode_string: 'A Cribra string contains an unpaired UTF-16 surrogate.',
   invalid_span_value: 'A span endpoint is not a safe non-negative integer.',
   invalid_span_order: 'The span start is after its end.',
   span_out_of_bounds: 'The span end exceeds the source length.',
@@ -56,6 +61,15 @@ const MESSAGES: Record<CribraErrorCode, string> = {
   empty_matcher: 'A custom rule matcher is empty.',
   too_many_rules: 'The configured rule count exceeds the scanner limit.',
   automaton_build: 'The scanner matcher could not be compiled.',
+  invalid_key_length: 'A transformation key must contain exactly 32 bytes.',
+  transform_invalid_span:
+    'A finding span is invalid for the transformation source.',
+  transform_invalid_utf8_boundary:
+    'A finding span is not aligned to UTF-8 character boundaries.',
+  transform_overlapping_spans:
+    'The transformation requires non-overlapping findings.',
+  transform_unknown:
+    'The transformation failed with an unknown backend error.',
   native_error: 'The Cribra native operation failed.',
 };
 
