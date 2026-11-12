@@ -1,41 +1,16 @@
 #pragma once
 
 #include "CribraBridge.h"
+#include "CribraSerialWorker.h"
 
 #include <jsi/jsi.h>
 
-#include <condition_variable>
 #include <cstdint>
-#include <deque>
-#include <functional>
 #include <memory>
 #include <mutex>
-#include <thread>
 #include <unordered_map>
 
 namespace facebook::react {
-
-/// Serial native worker. All Cribra ABI calls happen here; only plain C++
-/// values cross into and out of the queue. JSI objects never do.
-class CribraSerialWorker final {
- public:
-  CribraSerialWorker();
-  ~CribraSerialWorker();
-
-  CribraSerialWorker(const CribraSerialWorker&) = delete;
-  CribraSerialWorker& operator=(const CribraSerialWorker&) = delete;
-
-  void post(std::function<void()> job);
-
- private:
-  void run();
-
-  std::mutex mutex_;
-  std::condition_variable condition_;
-  std::deque<std::function<void()>> queue_;
-  bool stopping_ = false;
-  std::thread thread_;
-};
 
 class CribraReactNative final
     : public NativeCribraReactNativeCxxSpec<CribraReactNative> {
@@ -104,6 +79,7 @@ class CribraReactNative final
   [[nodiscard]] ScannerPtr findScanner(uint64_t scannerId) const;
   void registerScanner(uint64_t scannerId, ScannerPtr scanner);
   [[nodiscard]] ScannerPtr takeScanner(uint64_t scannerId);
+  void ClearScanners() noexcept;
   jsi::Value runTransform(
       jsi::Runtime& rt,
       double scannerId,
@@ -112,6 +88,10 @@ class CribraReactNative final
   mutable std::mutex scannersMutex_;
   std::unordered_map<uint64_t, ScannerPtr> scanners_;
   uint64_t nextScannerId_ = 1;
+
+  /// Closes before the worker stops so no new JS settlement is scheduled during
+  /// module teardown. Declared before the worker so it outlives every job.
+  std::shared_ptr<SettlementGate> settlementGate_;
 
   // Declared last so the worker is joined before the registry and this object
   // are torn down.

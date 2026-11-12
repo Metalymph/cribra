@@ -279,80 +279,84 @@ std::optional<uint32_t> DecodeDigestBytes(double value) {
 
 }  // namespace
 
-CribraSerialWorker::CribraSerialWorker()
-    : thread_(&CribraSerialWorker::run, this) {}
-
-CribraSerialWorker::~CribraSerialWorker() {
-  {
-    std::lock_guard<std::mutex> lock(mutex_);
-    stopping_ = true;
-  }
-  condition_.notify_all();
-  if (thread_.joinable()) {
-    thread_.join();
-  }
-}
-
-void CribraSerialWorker::post(std::function<void()> job) {
-  {
-    std::lock_guard<std::mutex> lock(mutex_);
-    if (stopping_) {
-      return;
-    }
-    queue_.push_back(std::move(job));
-  }
-  condition_.notify_one();
-}
-
-void CribraSerialWorker::run() {
-  for (;;) {
-    std::function<void()> job;
-    {
-      std::unique_lock<std::mutex> lock(mutex_);
-      condition_.wait(lock, [this] { return stopping_ || !queue_.empty(); });
-      if (queue_.empty()) {
-        return;
-      }
-      job = std::move(queue_.front());
-      queue_.pop_front();
-    }
-    job();
-  }
-}
-
 CribraReactNative::CribraReactNative(std::shared_ptr<CallInvoker> jsInvoker)
-    : NativeCribraReactNativeCxxSpec(std::move(jsInvoker)) {}
+    : NativeCribraReactNativeCxxSpec(std::move(jsInvoker)),
+      settlementGate_(std::make_shared<SettlementGate>()) {}
 
-CribraReactNative::~CribraReactNative() = default;
+CribraReactNative::~CribraReactNative() {
+  // Close the settlement gate first: a running job may finish its native work,
+  // but it must not begin scheduling another JavaScript callback.
+  if (settlementGate_) {
+    try {
+      std::lock_guard<std::mutex> lock(settlementGate_->mutex);
+      settlementGate_->closed = true;
+    } catch (...) {
+    }
+  }
+  // Discard queued jobs and free every remaining scanner on the worker before
+  // the thread is joined. The queue and registry are still alive here because
+  // member destruction has not started.
+  worker_.stop(CribraSerialWorker::ShutdownHook{
+      [](void* context) noexcept {
+        static_cast<CribraReactNative*>(context)->ClearScanners();
+      },
+      this});
+}
+
+void CribraReactNative::ClearScanners() noexcept {
+  try {
+    std::unordered_map<uint64_t, ScannerPtr> dropped;
+    {
+      std::lock_guard<std::mutex> lock(scannersMutex_);
+      dropped.swap(scanners_);
+    }
+    // The last references, including any held by discarded jobs, are released
+    // here on the worker thread.
+    dropped.clear();
+  } catch (...) {
+  }
+}
 
 jsi::Object CribraReactNative::getAbiVersion(jsi::Runtime& rt) {
   return bridging::toJs(rt, cribra::rn::GetAbiVersion(), jsInvoker_);
 }
 
 jsi::Value CribraReactNative::createDefaultScanner(jsi::Runtime& rt) {
+  auto gate = settlementGate_;
   auto promise = AsyncPromise<double>(rt, jsInvoker_);
   // Copy, do not move: bridging::toJs below still needs this promise.
-  worker_.post([this, promise]() mutable {
-    std::string errorMessage;
-    auto scanner = cribra::rn::CreateDefaultScanner(errorMessage);
-    if (!scanner) {
-      promise.reject(Error(errorMessage));
-      return;
-    }
+  const auto enqueued = worker_.post([this, promise, gate]() mutable {
+    try {
+      std::string errorMessage;
+      auto scanner = cribra::rn::CreateDefaultScanner(errorMessage);
+      if (!scanner) {
+        Settle(gate, [&] { promise.reject(Error(errorMessage)); });
+        return;
+      }
 
-    uint64_t scannerId = 0;
-    {
-      std::lock_guard<std::mutex> lock(scannersMutex_);
-      scannerId = nextScannerId_++;
-    }
+      uint64_t scannerId = 0;
+      {
+        std::lock_guard<std::mutex> lock(scannersMutex_);
+        scannerId = nextScannerId_++;
+      }
 
-    if (!cribra::rn::FitsJsSafeInteger(scannerId)) {
-      promise.reject(Error("cribra_native_error:scanner_id_exhausted"));
-      return;
-    }
+      if (!cribra::rn::FitsJsSafeInteger(scannerId)) {
+        Settle(gate, [&] {
+          promise.reject(Error("cribra_native_error:scanner_id_exhausted"));
+        });
+        return;
+      }
 
-    registerScanner(scannerId, std::move(scanner));
-    promise.resolve(static_cast<double>(scannerId));
+      registerScanner(scannerId, std::move(scanner));
+      Settle(gate, [&] { promise.resolve(static_cast<double>(scannerId)); });
+    } catch (const std::exception& error) {
+      Settle(gate, [&] { promise.reject(Error(error.what())); });
+    } catch (...) {
+      Settle(gate, [&] { promise.reject(Error("cribra_native_error:unknown")); });
+    }
+  });
+  RejectNotAccepted(enqueued, [&](const char* message) {
+    promise.reject(Error(message));
   });
   return bridging::toJs(rt, promise, jsInvoker_);
 }
@@ -376,13 +380,17 @@ jsi::Value CribraReactNative::createScanner(
     return PromiseRejected(rt, inputError, jsInvoker_);
   }
 
+  auto gate = settlementGate_;
   auto promise = AsyncPromise<cribra::rn::ScannerCreationDto>(rt, jsInvoker_);
   // Copy, do not move: bridging::toJs below still needs this promise.
-  worker_.post([this, promise, config = std::move(config)]() mutable {
+  const auto enqueued = worker_.post([this,
+                                      promise,
+                                      gate,
+                                      config = std::move(config)]() mutable {
     try {
       auto creation = cribra::rn::CreateScanner(config);
       if (!creation.scanner) {
-        promise.resolve(cribra::rn::ToDto(creation.failure));
+        Settle(gate, [&] { promise.resolve(cribra::rn::ToDto(creation.failure)); });
         return;
       }
 
@@ -394,18 +402,24 @@ jsi::Value CribraReactNative::createScanner(
 
       if (!cribra::rn::FitsJsSafeInteger(scannerId)) {
         // `creation.scanner` is released here and was never registered.
-        promise.reject(Error("cribra_native_error:scanner_id_exhausted"));
+        Settle(gate, [&] {
+          promise.reject(Error("cribra_native_error:scanner_id_exhausted"));
+        });
         return;
       }
 
       registerScanner(scannerId, std::move(creation.scanner));
-      promise.resolve(
-          cribra::rn::ToDto(scannerId, std::move(creation.rules)));
+      Settle(gate, [&] {
+        promise.resolve(cribra::rn::ToDto(scannerId, std::move(creation.rules)));
+      });
     } catch (const std::exception& error) {
-      promise.reject(Error(error.what()));
+      Settle(gate, [&] { promise.reject(Error(error.what())); });
     } catch (...) {
-      promise.reject(Error("cribra_native_error:unknown"));
+      Settle(gate, [&] { promise.reject(Error("cribra_native_error:unknown")); });
     }
+  });
+  RejectNotAccepted(enqueued, [&](const char* message) {
+    promise.reject(Error(message));
   });
   return bridging::toJs(rt, promise, jsInvoker_);
 }
@@ -434,20 +448,25 @@ jsi::Value CribraReactNative::scan(
     return PromiseRejected(rt, "cribra_native_error:scanner_not_found", jsInvoker_);
   }
 
+  auto gate = settlementGate_;
   auto promise = AsyncPromise<cribra::rn::ScanReportDto>(rt, jsInvoker_);
   // Copy, do not move: bridging::toJs below still needs this promise.
-  worker_.post([promise,
-                scanner = std::move(scanner),
-                sourceId = std::move(sourceIdUtf8),
-                text = std::move(textUtf8)]() mutable {
+  const auto enqueued = worker_.post([promise,
+                                      gate,
+                                      scanner = std::move(scanner),
+                                      sourceId = std::move(sourceIdUtf8),
+                                      text = std::move(textUtf8)]() mutable {
     try {
       auto projection = cribra::rn::Scan(scanner, sourceId, text);
-      promise.resolve(std::move(projection.report));
+      Settle(gate, [&] { promise.resolve(std::move(projection.report)); });
     } catch (const std::exception& error) {
-      promise.reject(Error(error.what()));
+      Settle(gate, [&] { promise.reject(Error(error.what())); });
     } catch (...) {
-      promise.reject(Error("cribra_native_error:unknown"));
+      Settle(gate, [&] { promise.reject(Error("cribra_native_error:unknown")); });
     }
+  });
+  RejectNotAccepted(enqueued, [&](const char* message) {
+    promise.reject(Error(message));
   });
   return bridging::toJs(rt, promise, jsInvoker_);
 }
@@ -471,19 +490,25 @@ jsi::Value CribraReactNative::scanBatch(
     return PromiseRejected(rt, "cribra_native_error:scanner_not_found", jsInvoker_);
   }
 
+  auto gate = settlementGate_;
   auto promise = AsyncPromise<cribra::rn::ScanBatchDto>(rt, jsInvoker_);
   // One job for the whole ordered batch. Inputs are owned strings already
   // copied on the JS thread; only plain C++ values cross the worker boundary.
-  worker_.post([promise,
-                scanner = std::move(scanner),
-                inputs = std::move(inputs)]() mutable {
+  const auto enqueued = worker_.post([promise,
+                                      gate,
+                                      scanner = std::move(scanner),
+                                      inputs = std::move(inputs)]() mutable {
     try {
-      promise.resolve(cribra::rn::ScanBatch(scanner, inputs));
+      auto batch = cribra::rn::ScanBatch(scanner, inputs);
+      Settle(gate, [&] { promise.resolve(std::move(batch)); });
     } catch (const std::exception& error) {
-      promise.reject(Error(error.what()));
+      Settle(gate, [&] { promise.reject(Error(error.what())); });
     } catch (...) {
-      promise.reject(Error("cribra_native_error:unknown"));
+      Settle(gate, [&] { promise.reject(Error("cribra_native_error:unknown")); });
     }
+  });
+  RejectNotAccepted(enqueued, [&](const char* message) {
+    promise.reject(Error(message));
   });
   return bridging::toJs(rt, promise, jsInvoker_);
 }
@@ -597,18 +622,28 @@ jsi::Value CribraReactNative::runTransform(
     return PromiseRejected(rt, "cribra_native_error:scanner_not_found", jsInvoker_);
   }
 
+  auto gate = settlementGate_;
   auto promise = AsyncPromise<cribra::rn::TransformResultDto>(rt, jsInvoker_);
   // Copy, do not move: bridging::toJs below still needs this promise.
-  worker_.post([promise,
-                scanner = std::move(scanner),
-                input = std::move(input)]() mutable {
+  const auto enqueued = worker_.post([promise,
+                                      gate,
+                                      scanner = std::move(scanner),
+                                      input = std::move(input)]() mutable {
     try {
-      promise.resolve(cribra::rn::Transform(scanner, *input));
+      auto result = cribra::rn::Transform(scanner, *input);
+      Settle(gate, [&] { promise.resolve(std::move(result)); });
     } catch (const std::exception& error) {
-      promise.reject(Error(error.what()));
+      Settle(gate, [&] { promise.reject(Error(error.what())); });
     } catch (...) {
-      promise.reject(Error("cribra_native_error:unknown"));
+      Settle(gate, [&] { promise.reject(Error("cribra_native_error:unknown")); });
     }
+  });
+  RejectNotAccepted(enqueued, [&](const char* message) {
+    // The job never ran. Releasing the lambda released the shared
+    // `TransformInput`, which zeroizes its copied key bytes here on the JS
+    // thread before the promise is rejected. The caller's ArrayBuffer was never
+    // referenced by the job.
+    promise.reject(Error(message));
   });
   return bridging::toJs(rt, promise, jsInvoker_);
 }
@@ -621,18 +656,30 @@ jsi::Value CribraReactNative::disposeScanner(
     return PromiseRejected(rt, "cribra_native_error:scanner_not_found", jsInvoker_);
   }
 
+  auto gate = settlementGate_;
   auto promise = AsyncPromise<>(rt, jsInvoker_);
   // Copy, do not move: bridging::toJs below still needs this promise.
-  worker_.post([this, promise, id = *id]() mutable {
-    auto scanner = takeScanner(id);
-    if (!scanner) {
-      promise.reject(Error("cribra_native_error:scanner_not_found"));
-      return;
+  const auto enqueued = worker_.post([this, promise, gate, id = *id]() mutable {
+    try {
+      auto scanner = takeScanner(id);
+      if (!scanner) {
+        Settle(gate, [&] {
+          promise.reject(Error("cribra_native_error:scanner_not_found"));
+        });
+        return;
+      }
+      // The handle is released on the worker after any in-flight scan that
+      // still holds a shared reference has completed.
+      scanner.reset();
+      Settle(gate, [&] { promise.resolve(); });
+    } catch (const std::exception& error) {
+      Settle(gate, [&] { promise.reject(Error(error.what())); });
+    } catch (...) {
+      Settle(gate, [&] { promise.reject(Error("cribra_native_error:unknown")); });
     }
-    // The handle is released on the worker after any in-flight scan that still
-    // holds a shared reference has completed.
-    scanner.reset();
-    promise.resolve();
+  });
+  RejectNotAccepted(enqueued, [&](const char* message) {
+    promise.reject(Error(message));
   });
   return bridging::toJs(rt, promise, jsInvoker_);
 }

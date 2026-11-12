@@ -29,17 +29,6 @@ std::string StatusLabel(CribraStatus status) {
   }
 }
 
-/// Best-effort wipe that the compiler cannot elide as a dead store.
-void SecureZero(void* data, size_t size) noexcept {
-  if (data == nullptr || size == 0) {
-    return;
-  }
-  volatile auto* bytes = static_cast<volatile uint8_t*>(data);
-  for (size_t index = 0; index < size; ++index) {
-    bytes[index] = 0;
-  }
-}
-
 /// Status-first error text so the facade's stable `cribra_native_error:PREFIX`
 /// parser preserves the real failure category. The operation is diagnostic
 /// context only and never includes source text.
@@ -502,18 +491,6 @@ std::vector<CandidateDto> ProjectCandidates(
 }
 
 }  // namespace
-
-ScannerHandle::~ScannerHandle() { cribra_scanner_free(scanner_); }
-
-KeyBytes::~KeyBytes() { SecureZero(bytes.data(), bytes.size()); }
-
-TransformInput::~TransformInput() {
-  // Best-effort wipe of the copied source. The caller's original string and
-  // any JavaScript/Hermes copies cannot be reached from here.
-  if (!text.empty()) {
-    SecureZero(text.data(), text.size());
-  }
-}
 
 std::shared_ptr<ScannerHandle> CreateDefaultScanner(std::string& errorMessage) {
   const auto abiFailure = AbiCompatibilityFailure();

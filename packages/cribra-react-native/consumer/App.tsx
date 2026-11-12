@@ -1,18 +1,26 @@
 /**
- * Cribra RN.1.4 isolated consumer harness.
+ * Cribra RN.1.6 isolated consumer harness.
  *
  * This screen runs the synthetic-fixture parity check, the atomic batch
  * behaviours, the scanner lifecycle checks, the configured-scanner and detached
  * metadata checks against the direct-Core oracle, the exact UTF-8 byte <->
- * UTF-16 span correspondence checks, the malformed-source preflight checks, and
- * deterministic native negative cases against the native TurboModule. It
+ * UTF-16 span correspondence checks, the malformed-source preflight checks,
+ * deterministic native negative cases, the lifecycle stress/recovery phases,
+ * and the Flow transformation checks against the native TurboModule. It
  * intentionally displays and logs only aggregate counts and pass/fail markers;
  * no source text, matcher payload, rule ID, or individual finding metadata is
  * logged.
  */
 
 import { useEffect, useState } from 'react';
-import { StatusBar, StyleSheet, Text, View } from 'react-native';
+import {
+  DevSettings,
+  Pressable,
+  StatusBar,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import {
   CribraError,
   byteSpanToUtf16Range,
@@ -305,6 +313,8 @@ function marker(outcome: Outcome): string | undefined {
       'offset=ok',
       `probe=${outcome.probe}`,
       'privacy=ok',
+      'stress=ok',
+      'recovery=ok',
     ].join(':');
   }
   if (outcome.state === 'fail') {
@@ -1128,6 +1138,16 @@ async function runHarness(): Promise<Outcome> {
     return { state: 'fail', reason: transformFailure };
   }
 
+  const stressFailure = await runStressChecks();
+  if (stressFailure !== null) {
+    return { state: 'fail', reason: stressFailure };
+  }
+
+  const recoveryFailure = await runRecoveryChecks();
+  if (recoveryFailure !== null) {
+    return { state: 'fail', reason: recoveryFailure };
+  }
+
   const preflightMs = measurePreflightMs();
   if (preflightMs !== null) {
     // Numeric-only observation; never gates the smoke result.
@@ -1170,6 +1190,171 @@ async function runHarness(): Promise<Outcome> {
   return result;
 }
 
+// ---------------------------------------------------------------------------
+// RN.1.6 lifecycle stress: one thousand concurrent short/Unicode/empty scans,
+// one ordered batch, all four transformation modes, and repeated keyed
+// transforms. Only counts and durations are emitted.
+// ---------------------------------------------------------------------------
+const kStressScans = 1000;
+const kStressKeyedTransforms = 200;
+
+const stressTexts = [
+  '',
+  'short message',
+  'contact a@b.co',
+  'a🙂b',
+  'line\nbreak',
+  '0123456789',
+];
+
+async function runStressChecks(): Promise<string | null> {
+  const stress = await createScanner();
+  const key = new Uint8Array(32);
+  for (let index = 0; index < key.length; index += 1) {
+    key[index] = (index * 7 + 1) & 0xff;
+  }
+  const keySnapshot = [...key];
+
+  try {
+    const started = Date.now();
+    const results = await Promise.all(
+      Array.from({ length: kStressScans }, (_value, index) =>
+        stress.scan(stressTexts[index % stressTexts.length], {
+          id: `stress-${index % 8}`,
+        }),
+      ),
+    );
+    const elapsed = Date.now() - started;
+
+    for (let index = 0; index < results.length; index += 1) {
+      const text = stressTexts[index % stressTexts.length];
+      if (results[index].sourceBytes !== utf8ByteLength(text)) {
+        await stress.dispose();
+        return `stress_scan:${index % stressTexts.length}`;
+      }
+    }
+    console.log(`CRIBRA_RN_STRESS:scans=${kStressScans}:ms=${elapsed}`);
+
+    const stressBatch = await stress.scanBatch(
+      stressTexts.map((source, index) => ({
+        id: `stress-batch-${index}`,
+        source,
+      })),
+    );
+    if (
+      stressBatch.entries.length !== stressTexts.length ||
+      stressBatch.summary.scannedSources !== stressTexts.length
+    ) {
+      await stress.dispose();
+      return 'stress_batch';
+    }
+
+    const modes: TransformRequest[] = [
+      { kind: 'redact' },
+      { kind: 'template', namespace: 'STRESS' },
+      { kind: 'pseudonymize', key, digestBytes: 8 },
+      { kind: 'synthesize', key },
+    ];
+    for (const request of modes) {
+      const transformed = await stress.transform('stress message', request);
+      if (typeof transformed.output !== 'string') {
+        await stress.dispose();
+        return `stress_transform:${request.kind}`;
+      }
+    }
+
+    const keyedStarted = Date.now();
+    await Promise.all(
+      Array.from({ length: kStressKeyedTransforms }, (_value, index) =>
+        stress.transform(
+          `keyed-${index % 4}`,
+          index % 2 === 0
+            ? { kind: 'pseudonymize', key, digestBytes: 8 }
+            : { kind: 'synthesize', key },
+        ),
+      ),
+    );
+    const keyedElapsed = Date.now() - keyedStarted;
+    console.log(
+      `CRIBRA_RN_STRESS:keyed=${kStressKeyedTransforms}:ms=${keyedElapsed}`,
+    );
+
+    if (key.some((value, index) => value !== keySnapshot[index])) {
+      await stress.dispose();
+      return 'stress_key_mutation';
+    }
+    if (getLiveScannerCount() !== 1) {
+      await stress.dispose();
+      return 'stress_count';
+    }
+    await stress.dispose();
+    if (getLiveScannerCount() !== 0) {
+      return 'stress_dispose';
+    }
+    return null;
+  } catch (error) {
+    return error instanceof CribraError
+      ? `stress:${error.code}`
+      : 'stress:exception';
+  }
+}
+
+// ---------------------------------------------------------------------------
+// RN.1.6 recovery: an isolated rejected native job must not disturb later FIFO
+// work, and the registry must still drain afterwards.
+// ---------------------------------------------------------------------------
+const kRecoveryRounds = 8;
+const missingScannerId = 987654321;
+
+async function runRecoveryChecks(): Promise<string | null> {
+  const scanner = await createScanner();
+  const probeText = 'recovery probe';
+  try {
+    const baseline = await scanner.scan(probeText);
+
+    for (let round = 0; round < kRecoveryRounds; round += 1) {
+      let sawFailure = false;
+      try {
+        await NativeCribraReactNative.disposeScanner(missingScannerId);
+      } catch (error) {
+        sawFailure = isNativePrefix(
+          error,
+          'cribra_native_error:scanner_not_found',
+        );
+      }
+      if (!sawFailure) {
+        await scanner.dispose();
+        return `recovery_failure:${round}`;
+      }
+
+      const after = await scanner.scan(probeText);
+      if (after.sourceBytes !== baseline.sourceBytes) {
+        await scanner.dispose();
+        return `recovery_after:${round}`;
+      }
+    }
+
+    const finalBatch = await scanner.scanBatch([
+      { id: 'recovery', source: 'after isolated failures' },
+      { id: 'recovery-empty', source: '' },
+    ]);
+    if (finalBatch.entries.length !== 2) {
+      await scanner.dispose();
+      return 'recovery_batch';
+    }
+
+    await scanner.dispose();
+    if (getLiveScannerCount() !== 0) {
+      return 'recovery_count';
+    }
+    return null;
+  } catch (error) {
+    return error instanceof CribraError
+      ? `recovery:${error.code}`
+      : 'recovery:exception';
+  }
+}
+
 function App() {
   const [outcome, setOutcome] = useState<Outcome>({ state: 'running' });
   const markerText = marker(outcome);
@@ -1200,7 +1385,7 @@ function App() {
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" />
-      <Text style={styles.title}>Cribra RN.1.5 Flow transform smoke</Text>
+      <Text style={styles.title}>Cribra RN.1.6 lifecycle smoke</Text>
       <Text style={styles.status} testID="cribra-status">
         {outcome.state.toUpperCase()}
       </Text>
@@ -1226,10 +1411,21 @@ function App() {
           <Text style={styles.body}>Negatives: ok</Text>
           <Text style={styles.body}>Privacy: ok</Text>
           <Text style={styles.body}>Lifecycle: ok</Text>
+          <Text style={styles.body}>Stress: ok</Text>
+          <Text style={styles.body}>Recovery: ok</Text>
         </View>
       ) : null}
       {outcome.state === 'fail' ? (
         <Text style={styles.body}>Reason: {outcome.reason}</Text>
+      ) : null}
+      {__DEV__ ? (
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => DevSettings.reload()}
+          style={styles.reloadButton}
+        >
+          <Text style={styles.reloadText}>Reload JS</Text>
+        </Pressable>
       ) : null}
     </View>
   );
@@ -1262,6 +1458,18 @@ const styles = StyleSheet.create({
   body: {
     fontSize: 16,
     marginBottom: 4,
+  },
+  reloadButton: {
+    marginTop: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: '#1f6feb',
+  },
+  reloadText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '600',
   },
 });
 
