@@ -831,3 +831,383 @@ values, keys, or per-finding metadata.
 - `consumer/src/fixtures/rn15-transform-oracle.json` — direct-Core oracle
 
 No commit, push, merge, tag, or publication was performed.
+
+# Cribra React Native RN.1.6 — Lifecycle and Stress Hardening Qualification
+
+Status: **RN.1.6 implemented and runtime-validated on the iOS Simulator
+(Debug and Release) and the Android ARM64 emulator (Debug and Release).** Not
+a release-qualification claim and not an npm publication. Physical devices,
+iOS device builds, and sanitizer-instrumented app builds are `not-tested`;
+sanitizer leak detection on macOS is `not-tested`.
+
+Recorded: 2026-11-12. Package: `@metalymph/cribra-react-native@0.0.0`
+(private, unpublished). ABI: `cribra-capi` 0.3.0 over Cribra Core 0.7.2.
+Branch: `feat/react-native-rn1-6`. Baseline: `e1d77f6` (merged RN.1.5).
+
+RN.1.6 hardens the existing native worker, module teardown, and host-side
+qualification. It does not modify Cribra Core, the released C ABI, the
+vendored `third_party/cribra/include/cribra.h`, the Swift/Kotlin/Python
+bindings, the WebAssembly package, CI, dependencies, or publication metadata.
+It adds no scanner feature, cancellation API, streaming, Share Bundle, editor
+integration, or Amon surface.
+
+## Result summary
+
+| Check | Result | Evidence |
+| --- | --- | --- |
+| Package and consumer TypeScript | PASS | `npm run typecheck`; `npx tsc --noEmit` |
+| Jest suite, RN.1.1–RN.1.5 preserved | PASS | 10 suites, **281 tests** (263 baseline + 18 new) |
+| JSI-free host lifecycle suite | PASS | 15,736 checks, 0 failures |
+| Host ASan / UBSan / TSan | PASS | ASan, UBSan and TSan runs, 0 failures |
+| Host 10,000-job burst | PASS | 10,000 FIFO jobs, 0 lost, ~1 ms plain |
+| Host queue discard | PASS | 5,000 queued transform jobs, 0 executed, ~6.8 ms plain |
+| Concurrent post/stop | PASS | Four posters × 500 jobs; TSan reports no data race |
+| ABI gate and transform/config protocol | PASS | `npm run test:abi`; five `PASS` lines |
+| Vendored header identity | PASS | `cmp include/cribra.h third_party/.../cribra.h` |
+| Direct-Core oracle fixtures | PASS | scan, configuration and transform oracles byte-identical |
+| iOS Debug runtime marker | PASS | `…:stress=ok:recovery=ok` |
+| iOS three full JS reloads | PASS | Same PID, live scanners 1 → 0, probe cleared |
+| iOS Release Simulator build and runtime | PASS | `BUILD SUCCEEDED`; release marker PASS |
+| Android Debug ARM64 runtime marker | PASS | `…:stress=ok:recovery=ok` from logcat |
+| Android three full JS reloads | PASS | Same PID, live scanners 1 → 0, probe cleared |
+| Android four-ABI Debug APK | PASS | `armeabi-v7a`, `arm64-v8a`, `x86`, `x86_64` |
+| Android four-ABI Release APK | PASS | `assembleRelease`; standalone release runtime marker PASS |
+| ASan leak detection | not-tested | macOS ASan reports `detect_leaks` unsupported |
+
+## Shutdown contract
+
+The implemented native contract is `Running → Stopping → Stopped`:
+
+1. the module destructor closes the settlement gate **before** stopping the
+   worker, so no new JavaScript settlement can be scheduled;
+2. `stop()` marks the worker stopping under the queue mutex and notifies it;
+3. the worker finishes the job that is already running, including its native
+   ABI work;
+4. every queued job is destroyed on the worker without executing Core work;
+5. the shutdown hook runs on the worker and clears the scanner registry, so
+   the last scanner handles and discarded-job captures are released there;
+6. the worker thread is joined. It is never detached, and the hook is never
+   re-run on the caller's thread.
+
+`CribraSerialWorker` is a plain header with no JSI or React Native dependency;
+`CribraOwnership.h` is likewise JSI-free. The production module and the host
+tests share `PostResult`, `PostFailureMessage`, `Settle`, `RejectNotAccepted`,
+`CribraSerialWorker` and the ownership primitives, so the tests exercise the
+same code the TurboModule ships.
+
+`Settle` holds the gate mutex only across React Native's non-blocking
+`invokeAsync` scheduling call. It never runs JavaScript under the mutex. This
+is not a proof of runtime safety: React Native owns invalidation of callbacks
+that were already scheduled when a runtime is destroyed.
+
+### Refusal and enqueue failure
+
+`post()` distinguishes three outcomes:
+
+| Outcome | Meaning | Promise settlement |
+| --- | --- | --- |
+| `Accepted` | Stored in the queue; runs before shutdown completes | Job settles itself |
+| `Refused` | Worker is stopping or stopped; job destroyed without running | Rejected on the JS thread |
+| `EnqueueFailed` | The job could not be stored (allocation/synchronization) | Rejected on the JS thread |
+
+All six production job methods (`createDefaultScanner`, `createScanner`,
+`scan`, `scanBatch`, `runTransform` via the four transform entry points, and
+`disposeScanner`) use the shared `RejectNotAccepted` helper. The fixed details
+are `cribra_native_error:worker_stopped` and
+`cribra_native_error:worker_unavailable`; both map to the existing public
+`native_error` code. No new public error code was added.
+
+The rejected lambda is destroyed before the caller rejects, so its scanner
+reference or `TransformInput` (and therefore its key copy) is released first.
+A job whose enqueue fails is never executed, and an accepted job is never
+silently discarded unless shutdown has begun. Accepted jobs queued behind a
+shutdown are discarded by design; their pending promises are abandoned (see
+limitations).
+
+## Findings fixed during RN.1.6
+
+- **Shutdown hook could run on the caller thread.** An earlier `stop()`
+  fallback re-ran the hook when a second call found the worker already
+  stopping. That would have cleared the scanner registry off the worker.
+  The fallback was removed: only the first caller stores the hook, and only the
+  worker executes it. `TestDoubleStop` proves one call and no caller-thread run.
+- **Enqueue failure was indistinguishable from shutdown refusal and could
+  leave the promise unsettled.** `post()` now returns `Refused` or
+  `EnqueueFailed`; every caller rejects through `RejectNotAccepted` with the
+  fixed message before returning to JavaScript.
+- **A null settlement gate could be dereferenced.** `Settle` now returns
+  without action when the gate is absent; the destructor closes the gate under
+  a contained lock.
+- **Queue discard and registry cleanup were not provably on the worker.**
+  `ClearScanners()` was moved into the worker shutdown hook, is `noexcept`,
+  and swaps the registry under its mutex before releasing handles on the
+  worker.
+- **Compile failure in the hook aggregate.** `ShutdownHook` now has explicit
+  `constexpr` constructors, fixing the complete-class-context default member
+  initializer error without changing the allocation-free layout.
+- **Host test probe counted a destroyed temporary.** The queue-discard probe
+  originally copied a non-copyable guard into a shared pointer, incrementing
+  the discard counter before shutdown. It now owns one heap probe per job.
+- **Harness recovery check compared different strings.** The recovery phase
+  compared the byte length of two different probe strings, producing a false
+  failure. It now scans the same `recovery probe` string before and after each
+  isolated native rejection.
+- **Queued-key test kept an extra strong reference.** The test now drops its
+  own `shared_ptr` and observes expiry, proving the queued job owned the last
+  reference when the worker discarded it.
+- **Host burst and creation/disposal waits could lose the final notification.**
+  A worker job notified its completion condition variable without holding the
+  waiter's mutex, so the last transition could be missed between the predicate
+  check and the sleep. Both waits now notify under that mutex. The product code
+  was unaffected; only the test synchronization was wrong.
+- **The "no JSI crosses the worker" claim was imprecise.** The queue does hold
+  the `AsyncPromise` settlement handle. Documentation now states the real
+  guarantee: no raw JSI value is dereferenced on the worker, and settlement is
+  scheduled through the `CallInvoker` with RN's weak callback wrappers.
+
+## Thread and ownership analysis
+
+- **JS thread** reads JSI values, copies configuration/strings/keys into plain
+  C++ values, constructs `AsyncPromise`, and returns the JS promise. It never
+  runs Core work and never holds a raw C ABI handle.
+- **One serial worker thread** is created when the TurboModule is constructed.
+  Every Core and C ABI call runs there. No job spawns a thread. The host suite
+  asserts each job runs on the captured worker thread.
+- **Queue ownership**: each `std::function` owns plain inputs, a
+  `shared_ptr<ScannerHandle>`, and (for transforms) a shared
+  `shared_ptr<TransformInput>` whose `KeyBytes` owner is unique. It also holds
+  the `AsyncPromise` settlement handle. No raw JSI value is dereferenced on the
+  worker: `AsyncPromise` keeps only weak callback wrappers and schedules
+  settlement through the `CallInvoker`.
+- **Registry ownership**: `scanners_` is guarded by `scannersMutex_`.
+  Registration and disposal happen on the worker; lookup copies a
+  `shared_ptr` on the JS thread. The module destructor's hook swaps and clears
+  the map on the worker, so the final frees occur there. The host registry test
+  creates and frees 200 real scanners on the worker with `offThreadFrees == 0`.
+- **Hook allocation**: the shutdown hook is a plain function pointer plus a
+  `void*` context, so shutdown cannot fail on `std::function` allocation.
+- **Ordering**: `settlementGate_` is declared before `worker_`, and the worker
+  is declared last, so the worker is joined during the destructor body before
+  the gate and registry members are destroyed. A second `stop()` (from
+  `~CribraSerialWorker`) only joins an already-finished thread.
+- **No JSI in teardown**: the destructor and worker only touch the gate,
+  queue, registry, and C ABI handles. They never read or create a JSI value.
+
+## Key evidence and limitations
+
+Key semantics preserved from RN.1.5:
+
+| Path | Evidence |
+| --- | --- |
+| Caller's `Uint8Array` never mutated | Jest 1,000 keyed transforms; runtime probes report `keyIntact: true` |
+| JS temporary zeroed after normal settle | Jest `transform.test.ts` and 1,000-transform stress |
+| JS temporary zeroed after native rejection/refusal | Jest lifecycle and refused-transform stress tests |
+| Native `KeyBytes` zeroed after run, throw, or queue discard | Host slab test and custom-deleter discard test |
+| Copied source text wiped when `TransformInput` dies | Host allocation-watch test |
+| No duplicate native key copies | One non-copyable `KeyBytes` per job, shared by the copyable lambda |
+| Discard happens on the worker | Host queued-key discard test checks the worker thread ID |
+
+Limitations, stated without over-claiming:
+
+- On a full JavaScript reload, the old runtime is destroyed without running
+  promise continuations or `finally` blocks. A JavaScript key temporary and
+  any in-flight promise are abandoned; they cannot be explicitly zeroed or
+  settled from the SDK. Native queue discard and key zeroization still run on
+  the worker, but the process-level runtime teardown is outside SDK control.
+- Zeroization is best effort. Compiler reordering is prevented with a volatile
+  loop, but Core, Hermes and the operating system may retain copies outside
+  the buffers this package owns.
+- `TransformInput` wipes the copied source and the key; `option` strings
+  (replacement, namespace, prefix, marker) are not wiped because they are
+  caller-supplied, source-free transform metadata.
+- Accepted work queued behind a shutdown is deliberately discarded (D1); a
+  caller awaiting that promise after a reload will never observe a settlement.
+- Queue discard is O(N). A very large queued backlog lengthens the destructor
+  call. There is no hard latency bound.
+
+## Sanitizer results
+
+`bash tools/host-tests/run.sh` supports `plain`, `asan`, `ubsan` and `tsan`.
+All four completed on the qualification host:
+
+| Mode | Result | Checks | Burst | Shutdown measurement |
+| --- | --- | --- | --- | --- |
+| plain | PASS | 15,736 / 0 failures | 10,000 jobs in 0.5 ms | idle 0.010 ms; in-flight + 5,000 queued in 6.161 ms |
+| asan | PASS | 15,736 / 0 failures | 10,000 jobs in 2.3 ms | in-flight + 5,000 queued in 13.461 ms |
+| ubsan | PASS | 15,736 / 0 failures | 10,000 jobs in 0.9 ms | in-flight + 5,000 queued in 8.721 ms |
+| tsan | PASS | 15,736 / 0 failures | 10,000 jobs in 14.5 ms | in-flight + 5,000 queued in 243.444 ms |
+
+- The Rust `libcribra_capi.a` is not instrumented; only the C++ test binary,
+  `CribraSerialWorker.h` and `CribraOwnership.h` are.
+- macOS ASan prints `detect_leaks is not supported on this platform`; leak
+  detection is therefore `not-tested`, not passed. The run uses
+  `abort_on_error=1`.
+- The simulator and emulator applications are not sanitizer builds.
+
+## Regression evidence
+
+| Check | Result |
+| --- | --- |
+| Jest | 10 suites, **281 tests**, 0 failures |
+| Preserved baseline tests | 263 tests from RN.1.1–RN.1.5 |
+| New lifecycle tests | `lifecycle.test.ts`, 11 tests |
+| New stress tests | `stress.test.ts`, 7 tests |
+| Package typecheck | PASS |
+| Consumer typecheck | PASS |
+| ABI host gate | 5 × PASS |
+| Vendored header | byte-identical |
+| Oracle fixtures | scan, config, transform byte-identical after regeneration |
+
+The new host suite groups:
+
+1. shutdown ordering and hook observation;
+2. post-after-stop refusal and fixed message;
+3. enqueue copy failure, fixed message and worker recovery;
+4. per-job exception recovery;
+5. registry cleanup on the worker with 200 real scanners;
+6. `SecureZero` and `KeyBytes` destruction;
+7. queued key discard zeroization on the worker;
+8. transformation-source wipe via allocation watch;
+9. 10,000-job burst in FIFO order with no off-thread execution;
+10. 200 real scanner create/dispose rounds;
+11. concurrent post/stop with four posters;
+12. double stop idempotence;
+13. idle and loaded shutdown latency.
+
+## Runtime and reload evidence
+
+iOS:
+
+- Debug build installed on the booted iPhone 18 Pro Max simulator; PID 9067.
+- Harness marker:
+  `CRIBRA_RN_SMOKE:PASS:abi=0.3.0:entries=5:findings=3:candidates=1:lifecycle=ok:parity=ok:batch=ok:config=ok:transform=ok:key=ok:negative=ok:offset=ok:probe=3/5:privacy=ok:stress=ok:recovery=ok`
+- Three full `Page.reload` cycles through the Metro inspector. Each created a
+  scanner (id 49), submitted an in-flight scan and a queued batch without
+  awaiting them, then reloaded. After each reload the same process remained,
+  `getLiveScannerCount()` returned 0 and the `globalThis` probe was undefined.
+- Release Simulator build succeeded and the installed release app reached the
+  same PASS marker. Screenshot: `/tmp/cribra-rn16-ios-release.png`.
+
+Android:
+
+- The ARM64 emulator (`Pixel_10_clean`) ran the four-ABI debug APK and logged
+  the same marker with `stress=ok:recovery=ok`.
+- Three inspector `Page.reload` cycles with the same abandoned scanner id 49,
+  in-flight scan and queued batch. Each reload kept the process (PID 19141),
+  returned live count 0 and cleared the probe. Screenshots:
+  `/tmp/cribra-rn16-android-reload-1.png` … `-3.png`.
+- The release APK built successfully with the embedded JavaScript bundle and
+  all four ABIs, and the installed release app reached the same PASS marker
+  standalone (no Metro): `CRIBRA_RN_STRESS:scans=1000:ms=17`,
+  `keyed=200:ms=2`, then `…:stress=ok:recovery=ok`. Screenshot:
+  `/tmp/cribra-rn16-android-release.png`.
+- During an ad-hoc inspector probe, calling the **raw** TurboModule
+  `transformPseudonymize` with a `Uint8Array` instead of an `ArrayBuffer`
+  tripped React Native codegen's debug assertion
+  (`runtime.isArrayBuffer(*this)` failed). The documented public facade always
+  passes an `ArrayBuffer`; Jest and the runtime harness exercised that path
+  thousands of times. This probe mistake is recorded as a remaining risk of
+  calling the private TurboModule directly, not as an RN.1.6 product failure.
+
+## Measurements
+
+Runtime counts and latency (Debug builds; values are indicative):
+
+| Platform | Submitted | Settled | Failed | Elapsed |
+| --- | --- | --- | --- | --- |
+| Android, 20,000 `scan()` | 20,000 | 20,000 | 0 | 3,533 ms |
+| Android, 3,000 keyed transforms | 3,000 | 3,000 | 0 | 140 ms |
+| iOS, 20,000 `scan()` | 20,000 | 20,000 | 0 | 18,682 ms |
+| iOS, 3,000 keyed transforms | 3,000 | 3,000 | 0 | 194 ms |
+
+- Every run ended with live scanner count 0.
+- The harness's own stress phase logged
+  `CRIBRA_RN_STRESS:scans=1000:ms=34` and
+  `CRIBRA_RN_STRESS:keyed=200:ms=5` on the Android Debug build, and
+  `scans=1000:ms=17`, `keyed=200:ms=2` on the Android Release build.
+
+Memory (sampled every 250 ms, so the peak is a lower bound):
+
+| Platform / phase | Before | High-water | After | Threads |
+| --- | --- | --- | --- | --- |
+| Android, 20,000 scans | PSS 311,883 KB | PSS 321,093 KB | PSS 320,714 KB | 44 → 42 |
+| Android, 3,000 keyed | PSS 320,175 KB | PSS 319,673 KB | PSS 318,371 KB | 41 → 42 |
+| iOS, 20,000 scans + 3,000 keyed | RSS 34,128 KB | RSS 145,696 KB | RSS 46,000 KB | 15 → 15 |
+
+- The Android figures are `dumpsys meminfo` total PSS for
+  `com.cribraconsumer`; iOS figures are host `RSS` for the simulator process,
+  not device memory.
+- Thread count did not grow with 20,000 submitted jobs. The Android count
+  includes transient React Native, network and OkHttp threads; the native
+  worker is one persistent thread.
+- The 10% / 8 MB guidance was not used as a pass criterion. The observed
+  Android PSS increase during the 20,000-scan burst is about 9.2 MB at the
+  sampled peak and does not return fully to baseline in the same process;
+  the keyed phase shows no growth. The iOS simulator RSS rises sharply during
+  the concurrent burst (promise/queue backlog in the debug runtime) and falls
+  after settlement.
+- Across the three Android reloads, PSS moved from 296–322 MB without process
+  replacement; this is debug-runtime churn, not a native queue leak: live
+  scanner count and abandoned work returned to 0 every time.
+
+## Environments and not-tested items
+
+- iOS Simulator: iPhone 18 Pro Max, Xcode release corresponding to the
+  simulator runtime; Debug and Release Simulator builds.
+- Android: `Pixel_10_clean`, API 36, ARM64; Debug runtime and four-ABI Debug
+  and Release builds with the debug keystore.
+- `not-tested`: physical iOS/Android devices; iOS device builds;
+  sanitizer-instrumented app builds; ASan leak detection on macOS; long-duration
+  soak beyond 20,000 submitted jobs; cancellation/drain (intentionally
+  unsupported); Rust static-library instrumentation.
+
+## Remaining risks
+
+1. A full JS reload abandons in-flight promises and the JS key temporary; the
+   SDK cannot settle or zero memory owned by a destroyed runtime.
+2. Shutdown is O(N) in queued jobs and blocks the calling thread while the
+   worker discards the queue and joins. No hard latency bound exists.
+3. The settlement gate prevents new scheduling but cannot revoke a callback
+   already handed to React Native; RN's weak callback invalidation is part of
+   the contract and was not instrumented.
+4. Direct calls to the private TurboModule with the wrong JavaScript argument
+   type can trip React Native codegen assertions before package code runs. The
+   public TypeScript facade is the supported boundary.
+5. `CribraSerialWorker` construction can throw if the OS rejects thread
+   creation; this path is not handled and is `not-tested`.
+6. `stop()` must not be called from the worker thread (it joins) and is not
+   designed for concurrent callers; production calls it once from the module
+   destructor, followed by the worker's own destructor on the same thread.
+7. Zeroization is best effort; Core, Hermes and the OS may retain copies
+   outside package-owned buffers.
+8. No production lifecycle logging or metrics were added (D8); diagnosis on a
+   physical device relies on host tests, memory/thread deltas and reload
+   behavior.
+9. Settlement marshalling is owned by React Native: `AsyncCallback::call` is
+   `noexcept` and allocates for its argument tuple, so an allocation failure
+   there can terminate the process regardless of the SDK's `Settle` catch.
+   The SDK's catch covers its own pre-scheduling work only.
+
+## Readiness
+
+RN.1.6 is implemented and qualified within the scope above, with the stated
+`not-tested` items and remaining risks. It is not a release qualification and
+not a publication. No commit, push, merge, tag, or publication was performed.
+
+## Evidence locations (RN.1.6)
+
+- `/tmp/cribra-rn16-ios-1.png`, `-2.png` — iOS Debug PASS markers
+- `/tmp/cribra-rn16-ios-reload-1.png` … `-reload-3.png`,
+  `/tmp/cribra-rn16-ios-abandon-running.png`,
+  `/tmp/cribra-rn16-ios-reload-probe.png` — iOS reload evidence
+- `/tmp/cribra-rn16-ios-release.png` — iOS Release Simulator runtime marker
+- `/tmp/rn16-ios-release-build.log` — iOS Release build log
+- `/tmp/cribra-rn16-android-1.png` — Android Debug PASS marker
+- `/tmp/cribra-rn16-android-reload-1.png` … `-3.png` — Android reload evidence
+- `/tmp/cribra-rn16-android-release.png` — Android Release runtime marker
+- `/tmp/rn16-android-release-build.log` — Android Release build log
+- `tools/host-tests/run.sh` — plain/ASan/UBSan/TSan host runner
+- `tools/host-tests/main.cpp` — 13 host lifecycle/stress groups
+- `consumer/__tests__/lifecycle.test.ts`, `stress.test.ts` — RN.1.6 Jest suites
+- `/tmp/cribra-android-pss.txt`, `/tmp/cribra-android-keyed-pss.txt`,
+  `/tmp/cribra-ios-rss.txt` — sampled PSS/RSS traces
