@@ -88,7 +88,7 @@ Cribra provides several independently versioned interfaces:
 | Swift | UniFFI Core, Flow and Fuse source packages and XCFrameworks; official published Fuse SwiftPM package (`cribra-swift` 0.7.2) |
 | Kotlin/JVM | UniFFI Core, Flow and Fuse profile JARs and host bundles; planned official Fuse Maven artifact |
 | Python | UniFFI Core, Flow and Fuse consumers and Fuse wheel packaging; planned official Fuse PyPI package |
-| TypeScript | Implemented WebAssembly package (`@metalymph/cribra`, approved identity and unpublished); future native backend separately gated |
+| TypeScript | Implemented WebAssembly package (`@metalymph/cribra`, approved identity and unpublished); future native Node.js backend separately gated. React Native has a separate implemented native package |
 | MCP | Planned native Rust binary using MCP over stdio and reusing Cribra Core |
 | CLI | Explicit UTF-8 file or standard-input scanning |
 
@@ -121,16 +121,19 @@ published to a package registry; registry publication is tracked separately in
 | Kotlin/JVM | Official, implemented; distribution in progress | Local/CI profile JARs and host bundles; planned Fuse Maven artifact; no Maven publication |
 | Python | Official, implemented; distribution in progress | Core/Flow/Fuse source consumers and a local/CI Fuse wheel; planned Fuse PyPI package; no PyPI publication |
 | TypeScript (WebAssembly) | Official, implemented; approved package unpublished | Higher-level package over typed WASM exports for browsers and compatible JS runtimes. Node 22/24/26, selected browsers and Vite/webpack are qualified from installed tarballs; no npm record or publication exists. |
-| TypeScript (native) | Official, planned; three separately gated milestones | Native TypeScript backend for Node.js where compatible, plus a JSI/Turbo Native Module for iOS and Android. Gates: UniFFI 0.32.2/JSI/TurboModule compatibility investigation with a documented generator fallback, binding implementation preserving classification semantics and resource ownership, and real iOS/Android consumer qualification. UniFFI does not by itself provide a working React Native binding, and the WebAssembly package does not run automatically in Hermes |
+| React Native | Official, implemented and qualified; private, unpublished package | Native New Architecture TurboModule over the C ABI: TypeScript facade, Codegen spec, C++ bridge, `cribra-capi` 0.3.0 and Core 0.7.2. RN.1.6 evidence covers host plain/ASan/UBSan/TSan, iOS Simulator Debug/Release, Android ARM64 emulator Debug/Release, Android four-ABI builds and three JS reload cycles per platform; physical devices and iOS device builds are not tested. No npm publication or Expo Go claim |
+| TypeScript (native Node.js) | Official, planned; three separately gated milestones | Standalone native TypeScript backend for Node.js where compatible, separate from the completed React Native package. Gates: compatibility investigation with a documented fallback, binding implementation preserving classification semantics and resource ownership, and real Node.js consumer qualification. Not implemented and not implied by UniFFI, the WebAssembly package or React Native |
 | MCP server | Official, planned | Ultra-lightweight native Rust binary over stdio reusing Cribra Core with explicit caller-provided input; no Node.js/Python runtime, database or external service; no arbitrary filesystem access by default |
 | C#, Go, PHP, Ruby, Elixir | Planned — demand-driven / community contribution | Not actively scheduled; considered only with demonstrated real-world demand or a viable community contribution |
 | Community integrations | Community-maintained | May use public interoperability surfaces; not officially tested, packaged or supported |
 
 The forward-looking priority order is maintained in the
 [roadmap](../ROADMAP.md#development-priority-order-forward-looking): the official
-`@metalymph/cribra@0.1.0` npm release; native TypeScript / React Native
-integration; the native Rust MCP server; CLI distribution through Homebrew and
-Debian/Ubuntu APT; then Python and Kotlin/JVM documentation consolidation. Amon is
+`@metalymph/cribra@0.1.0` npm release; the separate native Node.js TypeScript
+backend (not implemented); the native Rust MCP server; CLI distribution through
+Homebrew and Debian/Ubuntu APT; then Python and Kotlin/JVM documentation
+consolidation. The React Native package is implemented and qualified but private
+and unpublished; it is not the native Node.js backend. Amon is
 a potential real-world, post-beta consumer for optional on-device sensitive-data
 scanning before content such as chat messages, posts and comments is shared. Amon
 integration is not a release dependency and must not block completion of the
@@ -203,8 +206,9 @@ This one-package, Fuse-first policy applies to Swift, Kotlin/JVM and Python
 distribution. It does not automatically define the packaging architecture of the
 C ABI, the raw WebAssembly crate, Rust feature selection, the MCP server or the
 TypeScript package. For TypeScript, the implemented WebAssembly package is
-distinct from the future native backend; they are separate targets, not
-Core/Flow/Fuse package variants. The approved package identity is
+distinct from the future native Node.js backend; they are separate targets, not
+Core/Flow/Fuse package variants. React Native likewise has its own native package
+and is not the Node.js backend. The approved package identity is
 `@metalymph/cribra`; it is not an available installation instruction until a
 separately authorized release succeeds.
 

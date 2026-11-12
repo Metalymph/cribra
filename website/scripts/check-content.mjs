@@ -71,6 +71,11 @@ const bindingLinks = [
     guide: '/docs/getting-started/#use-the-cli-from-this-repository',
   },
   {
+    id: 'react-native',
+    guide: '/docs/integration-react-native/',
+    package: `${repositoryPrefix}tree/main/packages/cribra-react-native`,
+  },
+  {
     id: 'swift',
     guide: '/docs/integration-swift/',
     apiReference: '/api/0.7.2/swift/core/documentation/cribra/',
@@ -430,6 +435,22 @@ async function checkBindingsData() {
     'bindings data no longer retains the planned native TypeScript backend',
   );
   assert(
+    contents.includes("id: 'react-native'"),
+    'bindings data has no React Native entry',
+  );
+  assert(
+    contents.includes('@metalymph/cribra-react-native 0.0.0'),
+    'bindings data does not record @metalymph/cribra-react-native 0.0.0',
+  );
+  assert(
+    contents.includes('private and unpublished'),
+    'bindings data does not mark the React Native package as private and unpublished',
+  );
+  assert(
+    !/React Native is not implemented/i.test(contents),
+    'bindings data still says React Native is not implemented',
+  );
+  assert(
     !contents.includes('TypeScript isomorphic API contract'),
     'bindings data still lists the completed TypeScript API contract as planned',
   );
@@ -672,8 +693,8 @@ async function checkBindingLinkMetadata() {
   const source = await readText(bindingsDataSourcePath);
 
   assert(
-    bindingLinks.length === 8,
-    `expected eight implemented bindings, found ${bindingLinks.length}`,
+    bindingLinks.length === 9,
+    `expected nine implemented bindings, found ${bindingLinks.length}`,
   );
 
   for (const binding of bindingLinks) {

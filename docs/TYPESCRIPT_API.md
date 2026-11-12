@@ -65,7 +65,7 @@ changing host settings.
 Revision: W3.2A-1R review corrections applied.
 
 Scope: W3.2A contract for one public TypeScript API shared by a
-WebAssembly backend (initial) and a future native backend. This document
+WebAssembly backend (initial) and a future native Node.js backend. This document
 contains no implementation and requires no Core, binding, or release change.
 
 Related contracts:
@@ -89,7 +89,7 @@ This document defines one isomorphic TypeScript contract that:
 - returns serializable data instead of native handles;
 - keeps UTF-8 byte offsets explicit;
 - reports real, backend-specific capabilities instead of assumed parity;
-- can later be satisfied by a native backend without changing public types.
+- can later be satisfied by a native Node.js backend without changing public types.
 
 ### Evidence conventions
 
@@ -191,7 +191,7 @@ Legend:
 | Core/adapter versions | Crate metadata only | Adapter version exported; Core version absent | `getVersion` | Implemented (adapter version only) |
 | Capability probing | No | Exported | `getCapabilities` | Implemented (W3.2B-2) |
 | Transform an already-stored result | Yes, with `&ScanReport` | Live native result only | Not offered | None (deferred) |
-| Native backend | n/a | n/a | Same contract | None (future) |
+| Native Node.js backend | n/a | n/a | Same contract | None (future) |
 
 The capability taxonomy and its separation from streaming admission are defined
 in section 8.
@@ -771,7 +771,9 @@ Loading requirements:
   qualified with the package imported by name and the conditional browser entry
   selected. Rollup directly and esbuild directly are **not** claimed; those
   callers can pass explicit `InitOptions.wasm` bytes or URLs.
-- React Native is **not** claimed. It is a separate qualification target.
+- React Native through this WebAssembly package is **not** claimed. The separate
+  native `@metalymph/cribra-react-native` package has its own qualification; see
+  `website/src/content/docs/integration-react-native.md`.
 
 ### 4.2 Repeated and concurrent initialization
 
@@ -1361,14 +1363,15 @@ dynamic import. Vite and webpack rewrite `new URL(..., import.meta.url)` into an
 emitted hashed asset and are qualified. Rollup directly and esbuild directly
 are not assumed; those callers can always pass explicit bytes to `init()`.
 
-### 9.4 Future native backend
+### 9.4 Future native Node.js backend
 
 - The public `index.ts` types stay identical.
 - `init({ backend: "native" })` or a separate `/native` subpath on the approved
   package name selects an implementation that maps the same DTOs.
 - Backend-specific capability fields may differ; no field may be added to the
   common contract without a versioned minor release.
-- No native backend exists today.
+- No native Node.js backend exists today. React Native has a separate native
+  package and does not implement this API.
 
 ## 10. Compatibility and limitations
 
@@ -1387,7 +1390,7 @@ are not assumed; those callers can always pass explicit bytes to `init()`.
 | `usize` width | Offsets/limits must fit 32-bit `usize` on `wasm32` | Verified |
 | Published WASM artifact lag | `cribra-wasm 0.4.7` predates batch and Share Bundle work | Release dependency |
 | No CJS build | CommonJS consumers cannot `require()` the package | Out of v1 scope |
-| No React Native qualification | Not supported or claimed | Out of scope |
+| No React Native support in this WASM package | Use the separate native React Native package | Out of scope for this package |
 
 The published-artifact lag is recorded in `docs/ECOSYSTEM.md:95-99` and
 `docs/COMPATIBILITY.md:47-50`. W3.2B must target either a new adapter release
@@ -1396,7 +1399,7 @@ published package.
 
 ### 10.2 Explicitly out of scope
 
-- React Native support.
+- React Native support in this WebAssembly package.
 - Filesystem discovery, repository walking, or network acquisition.
 - Persistence, caching, or telemetry.
 - Reimplementing detection, validation, normalization, or transformation in

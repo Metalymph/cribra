@@ -99,7 +99,8 @@ was verified separately and the package remains unpublished.
 
 ## Not claimed
 
-- React Native or a native TypeScript backend;
+- React Native through this WebAssembly package, or a native Node.js TypeScript
+  backend;
 - multi-threaded or parallel WebAssembly;
 - native Safari execution;
 - branded Firefox qualification;
@@ -108,8 +109,10 @@ was verified separately and the package remains unpublished.
 - npm publication or staging of `@metalymph/cribra`; authenticated ownership is
   verified but a registry release has not happened.
 
-The future native TypeScript backend remains planned and separately gated. It is
-not part of this WebAssembly package.
+The future native Node.js TypeScript backend remains planned and separately
+gated. It is not part of this WebAssembly package. React Native has its own
+native package and qualification; see the [React Native integration
+guide](/docs/integration-react-native/).
 
 ## Related guides
 
@@ -117,5 +120,6 @@ not part of this WebAssembly package.
 - [API reference](/docs/typescript-api-reference/)
 - [Sessions and transformations](/docs/typescript-sessions-and-transformations/)
 - [WebAssembly integration](/docs/integration-wasm/)
+- [React Native integration](/docs/integration-react-native/)
 - [Compatibility and distribution](/docs/compatibility-and-distribution/)
 - [Language integrations](/bindings/)
