@@ -59,7 +59,11 @@ Swift Package Index for discovery; the listing is not Cribra compatibility-build
 evidence. Core and Flow remain source-build profiles; only Fuse is distributed as
 the official public Swift package. The TypeScript isomorphic API contract and
 the WebAssembly package are complete and qualified, but the package is not yet
-published. The following adoption-first priorities therefore focus on release,
+published. The native React Native integration is complete through RN.1.6:
+`@metalymph/cribra-react-native@0.0.0` is implemented, merged and qualified, but
+it is private and unpublished. It is a direct C ABI TurboModule over the New
+Architecture, not a UniFFI or WebAssembly consumer. The following adoption-first
+priorities therefore focus on release, the separate native Node.js backend,
 native adoption, and developer distribution:
 
 0. **Complete the official `@metalymph/cribra@0.1.0` npm release.** Release
@@ -69,25 +73,20 @@ native adoption, and developer distribution:
    `typescript-v0.1.0` tag, verified tarball digest, and the documented bootstrap
    and Trusted Publishing gates. See
    [the TypeScript release runbook](docs/TYPESCRIPT_RELEASE.md).
-1. **Native TypeScript / React Native integration.** Build on the existing Rust
-   UniFFI foundation where compatible, with a JSI/Turbo Native Module for iOS and
-   Android. This milestone has three separate gates:
+1. **Native TypeScript backend for Node.js.** This is a separate workstream from
+   the completed React Native package and is **not implemented**. Gates:
    - **Gate 1 — compatibility investigation.** Establish whether UniFFI 0.32.2
-     and the React Native JSI/TurboModule toolchain can be used together,
-     including the candidate external generator. Document a concrete fallback if
-     that generator is incompatible; a project-owned binding layer may be
-     required.
-   - **Gate 2 — native TypeScript binding implementation.** Implement the binding
-     while preserving Cribra classification semantics, exact UTF-8 spans,
-     deterministic ordering, documented error contracts, and resource ownership
-     and lifetime rules. The native backend is distinct from the WebAssembly
-     package and must not imply that WASM runs automatically in Hermes.
-   - **Gate 3 — real iOS/Android consumer qualification.** Qualify consuming
-     applications on both platforms, including mobile lifecycle behavior
-     (backgrounding, suspension, teardown) and performance/resource tests.
+     or a direct C ABI layer is appropriate for Node.js, including a documented
+     fallback if a candidate generator is incompatible.
+   - **Gate 2 — native binding implementation.** Preserve Cribra classification
+     semantics, exact UTF-8 spans, deterministic ordering, documented error
+     contracts, and resource ownership and lifetime rules. The native backend is
+     distinct from the WebAssembly package and must not imply that WASM runs
+     automatically in Node.js.
+   - **Gate 3 — real Node.js consumer qualification.** Qualify consuming
+     applications, including lifecycle, packaging and resource behavior.
 
-   React Native is **not implemented**. Neither the existing WebAssembly package
-   nor UniFFI by itself provides a working React Native binding.
+   The completed React Native work does not establish this backend.
 2. **Build the native Rust MCP server.** Planned design constraints: an
    ultra-lightweight Rust binary using MCP over stdio, direct reuse of Cribra
    Core, explicit caller-provided input, a minimal dependency footprint, no
@@ -455,15 +454,19 @@ published packages. The authoritative support policy is in
 | Target | Integration | Status |
 | --- | --- | --- |
 | TypeScript (WebAssembly) | Higher-level package over the existing typed WASM exports, implemented against the shared public API | IMPLEMENTED AND QUALIFIED — approved `@metalymph/cribra@0.1.0`; unpublished |
-| TypeScript native backend and React Native | UniFFI-backed native TypeScript for Node.js where compatible, plus a JSI/Turbo Native Module for iOS and Android | PLANNED — three separate gates: compatibility investigation, binding implementation, real iOS/Android consumer qualification |
+| React Native | Native New Architecture TurboModule over the C ABI: TypeScript facade, Codegen spec, C++ bridge, `cribra-capi` 0.3.0, Core 0.7.2 | IMPLEMENTED, MERGED AND QUALIFIED — RN.1.1–RN.1.6; private and unpublished `@metalymph/cribra-react-native@0.0.0` |
+| TypeScript native backend (Node.js) | Standalone native TypeScript backend for Node.js where compatible | PLANNED — three separate gates: compatibility investigation, binding implementation, real Node.js consumer qualification |
 | MCP server | Native Rust binary over stdio, reusing Cribra Core with explicit caller-provided input | PLANNED |
 
 The TypeScript public API contract and WebAssembly package are implemented. The
 package is not published: the approved identity is `@metalymph/cribra`, and no
-npm record exists yet. The native backend does not exist and is not implied by
-the WebAssembly adapter. Investigate actual Node.js and React Native requirements
-rather than assuming UniFFI supplies a working React Native binding. The
-WebAssembly backend does not run automatically in Hermes.
+npm record exists yet. The React Native package is implemented, merged and
+qualified through RN.1.6, but it is private and unpublished; its RN.1.6 evidence
+covers iOS Simulator Debug/Release, Android ARM64 emulator Debug/Release,
+Android four-ABI builds and host sanitizer runs, not physical devices. The
+separate native Node.js backend does not exist and is not implied by either the
+WebAssembly adapter or the React Native package. The WebAssembly backend does
+not run automatically in Hermes; React Native uses the native package.
 
 #### Demand-driven and community bindings
 
@@ -516,7 +519,8 @@ Cribra compatibility-build evidence. The next priorities are recorded in the
 
 Kotlin/JVM and Python registry mechanics remain separate workstreams. For
 TypeScript, the implemented WebAssembly package is distinct from the future
-native backend; the working package name and publication state are recorded in
+native Node.js backend; React Native has its own implemented native package. The
+working package name and publication state are recorded in
 [the release runbook](docs/TYPESCRIPT_RELEASE.md). This policy does not apply
 automatically to the C ABI, the raw WebAssembly crate, Rust feature selection or
 the TypeScript runtime targets, which are distinct targets rather than
@@ -537,15 +541,17 @@ Core/Flow/Fuse package variants.
   Python and Kotlin/JVM documentation and developer-guidance consolidation is
   tracked in the
   [development priority order](#development-priority-order-forward-looking).
-- TypeScript native and React Native integration is priority 1, with three
-  separate gates: UniFFI 0.32.2/JSI/TurboModule compatibility investigation
-  (including a documented fallback if the external generator is incompatible),
-  native binding implementation preserving classification semantics and resource
-  ownership, and real iOS/Android consumer qualification with mobile lifecycle
-  and performance tests. It may evaluate
-  [jhugman/uniffi-bindgen-react-native](https://github.com/jhugman/uniffi-bindgen-react-native).
-  React Native is not implemented and is not implied by UniFFI or by the
-  WebAssembly package.
+- React Native integration is implemented, merged and qualified through RN.1.6 as
+  the private, unpublished `@metalymph/cribra-react-native@0.0.0`. It is a direct
+  C ABI TurboModule, not a UniFFI or WebAssembly consumer. RN.1.6 evidence covers
+  host plain/ASan/UBSan/TSan, iOS Simulator Debug/Release, Android ARM64 emulator
+  Debug/Release, Android four-ABI builds and three JS reload cycles per platform;
+  physical devices and iOS device builds are not tested.
+- The separate native TypeScript backend for Node.js remains planned, with three
+  gates: compatibility investigation, binding implementation preserving
+  classification semantics and resource ownership, and real Node.js consumer
+  qualification. It is not implemented and is not implied by the React Native
+  package or by UniFFI.
 - C#/.NET and Go remain future, separately gated integration candidates rather
   than implemented bindings. C# is a demand-driven / community-contribution
   candidate and may evaluate
@@ -556,7 +562,8 @@ Core/Flow/Fuse package variants.
   remains available through `cribra-wasm` within its documented capability
   surface. The higher-level `@metalymph/cribra` WebAssembly package is
   implemented and qualified but unpublished. React Native is a separate
-  integration target, not an established WASM or UniFFI consumer.
+  implemented integration through its own native package, not a WASM or UniFFI
+  consumer.
 - The existing C ABI is the interoperability foundation for C, C++, Zig, C3,
   PHP FFI and other compatible native consumers. C and C++ have existing
   examples; the presence of an ABI does not qualify every language consumer.

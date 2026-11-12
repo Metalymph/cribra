@@ -21,6 +21,7 @@ order: 26
 | Python | Fuse wheel `cribra` 0.7.2+fuse | Local/CI wheels; no PyPI publication established. |
 | Kotlin/JVM | Core 0.7.2 profile JARs/ZIPs | Local/CI artifacts; no Maven publication established. |
 | TypeScript `@metalymph/cribra` | 0.1.0; Flow WebAssembly package; Node `>=22` declaration | **Not published.** Approved identity (`cribraRelease.state` `approved`); no registry record. Local source or packed-tarball installation only until a separately authorized release. |
+| React Native `@metalymph/cribra-react-native` | 0.0.0; native New Architecture TurboModule; C ABI 0.3.0 over Core 0.7.2 | **Private and unpublished.** No registry record or npm installation instruction. Local source checkout with a `file:` dependency only. |
 
 ## Feature boundaries
 
@@ -62,6 +63,23 @@ not evidence for untested Node releases. See the [TypeScript quick
 start](/docs/typescript/) and [runtime compatibility
 guide](/docs/typescript-runtime-compatibility/).
 
+## React Native package status
+
+The native React Native package is implemented and qualified through RN.1.6 as
+`@metalymph/cribra-react-native@0.0.0`. It is **private and unpublished**: there
+is no npm registry record, no public installation instruction and no publication
+claim. It is a direct C ABI TurboModule over `cribra-capi` 0.3.0 and Core 0.7.2,
+not a mode of the WebAssembly package and not a UniFFI generator experiment.
+
+RN.1.6, recorded on 2026-11-12, verified 10 Jest suites and 281 tests, 15,736
+host checks with 0 failures, host plain/ASan/UBSan/TSan runs, iOS Simulator
+Debug and Release runtime, Android ARM64 emulator Debug and Release runtime,
+Android four-ABI Debug and Release builds, and three full JS reload cycles per
+platform. Physical devices, iOS device builds and macOS ASan leak detection are
+not tested. Only the recorded RN 0.88.1 / React 19.3.0 / New Architecture /
+Hermes consumer was qualified. See the [React Native integration
+guide](/docs/integration-react-native/).
+
 ## Planned and demand-driven work
 
 The Fuse-first Swift distribution is complete: `cribra-swift` 0.7.2 is published
@@ -69,11 +87,12 @@ and remotely qualified, and it is listed on the [Swift Package
 Index](https://swiftpackageindex.com/Metalymph/cribra-swift) for discovery. The
 listing is not Cribra compatibility-build evidence for additional platforms.
 The adoption-first priorities are the official `@metalymph/cribra@0.1.0` npm
-release, native TypeScript / React Native integration, the native Rust MCP server
-over stdio, CLI distribution through Homebrew and Debian/Ubuntu APT, and Python
-and Kotlin/JVM documentation consolidation. The TypeScript WebAssembly package is
-implemented but unpublished; the native backend remains planned and has three
-separately gated milestones.
+release, the separate native Node.js TypeScript backend, the native Rust MCP
+server over stdio, CLI distribution through Homebrew and Debian/Ubuntu APT, and
+Python and Kotlin/JVM documentation consolidation. The TypeScript WebAssembly
+package is implemented but unpublished. The React Native package is implemented
+and qualified but private and unpublished. The native Node.js backend is not
+implemented and remains separately gated; it is not the React Native package.
 
 C#, Go and PHP are planned as **demand-driven / community contribution**
 candidates. Ruby, Elixir and other candidates retain the same status.
@@ -101,5 +120,6 @@ Never combine generated binding files with a different native library or profile
 - [Integration guides](/docs/)
 - [TypeScript quick start](/docs/typescript/)
 - [TypeScript runtime compatibility](/docs/typescript-runtime-compatibility/)
+- [React Native integration](/docs/integration-react-native/)
 - [Security model](/docs/security-model/)
 - [Troubleshooting](/docs/troubleshooting/)

@@ -575,7 +575,8 @@ or platform qualification.
 | Kotlin/JVM | UniFFI Core / Flow / Fuse; Fuse Maven distribution in progress | OFFICIAL — local/CI artifacts; Maven Central not published |
 | JavaScript / `wasm-bindgen` | Typed WebAssembly adapter and generated TypeScript declarations | OFFICIAL — source and published adapter |
 | TypeScript (WebAssembly) | Higher-level package over the typed WASM exports | OFFICIAL — implemented and qualified from installed tarballs; `@metalymph/cribra` 0.1.0 is approved and not published |
-| TypeScript native backend and React Native | Native TypeScript backend for Node.js where compatible, plus a JSI/Turbo Native Module for iOS and Android; three separately gated milestones | OFFICIAL — planned, not implemented |
+| React Native | Native New Architecture TurboModule over the C ABI: TypeScript facade, Codegen spec, C++ bridge, `cribra-capi` 0.3.0, Core 0.7.2 | OFFICIAL — implemented and qualified (RN.1.6); private and unpublished `@metalymph/cribra-react-native` 0.0.0 |
+| TypeScript native backend (Node.js) | Standalone native TypeScript backend for Node.js where compatible; separate from React Native | OFFICIAL — planned, not implemented |
 | MCP | Native Rust server over stdio | OFFICIAL — planned, not implemented |
 | C#, Go, PHP, Ruby, Elixir | Potential additional language bindings | PLANNED — demand-driven / community contribution |
 
@@ -586,14 +587,16 @@ the Fuse binding without Rust, Cargo, UniFFI generators or a Cribra checkout; se
 Flow remain source-build profiles. The TypeScript shared API and WebAssembly
 package are implemented with the approved identity `@metalymph/cribra@0.1.0`,
 but the package is unpublished and no npm registry record exists yet. The
-adoption-first priorities are the official npm release, native TypeScript /
-React Native integration through three separate gates, the native Rust MCP
-server, CLI distribution through Homebrew and Debian/Ubuntu APT, and Python and
-Kotlin/JVM documentation consolidation. The native backend does not exist, and
-React Native requires separate platform-specific investigation; the WebAssembly
-backend does not run automatically in Hermes. The MCP server is planned as an
-ultra-lightweight Rust binary over stdio with explicit caller-provided input,
-not a broad service.
+native React Native package `@metalymph/cribra-react-native@0.0.0` is implemented
+and qualified through RN.1.6, but it is private and unpublished; it is a direct
+C ABI TurboModule over the New Architecture, not a WebAssembly or UniFFI
+consumer. The adoption-first priorities are the official npm release, the
+separate native Node.js TypeScript backend (not implemented), the native Rust
+MCP server, CLI distribution through Homebrew and Debian/Ubuntu APT, and Python
+and Kotlin/JVM documentation consolidation. The WebAssembly backend does not run
+automatically in Hermes; React Native applications use the native package. The
+MCP server is planned as an ultra-lightweight Rust binary over stdio with
+explicit caller-provided input, not a broad service.
 
 C#, Go and PHP are planned as demand-driven / community-contribution candidates,
 not actively scheduled work. Ruby, Elixir and other candidates retain the same

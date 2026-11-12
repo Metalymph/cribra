@@ -1,5 +1,5 @@
 /** Repository evidence snapshot, not a live package-registry lookup. */
-export const evidenceDate = '2026-11-07';
+export const evidenceDate = '2026-11-12';
 export const repository = 'https://github.com/Metalymph/cribra';
 
 /** A labeled destination that is safe to render as a link. */
@@ -127,11 +127,11 @@ export const bindings: readonly Binding[] = [
     implementation:
       'Implemented · @metalymph/cribra 0.1.0 · WebAssembly backend · approved and unpublished',
     capabilities:
-      'Scanning, ordered batch scans, admitted byte streaming, incremental documents, structured errors and UTF-8 offset conversion. Flow adds the four scan-coupled transformations and in-memory Share Bundles. No native TypeScript backend, React Native binding or multi-threaded WASM API.',
+      'Scanning, ordered batch scans, admitted byte streaming, incremental documents, structured errors and UTF-8 offset conversion. Flow adds the four scan-coupled transformations and in-memory Share Bundles. No native Node.js TypeScript backend or multi-threaded WASM API; React Native uses the separate @metalymph/cribra-react-native native package.',
     qualification:
       'W3.2C-1 installed-tarball qualification: Node 22.22.0, 24.22.2 and 26.13.0 for Flow and the test-only Core artifact; TypeScript 5.9.3 and 7.0.2 with NodeNext and Bundler; Google Chrome 156.0.8078.74, Playwright Chromium 156.0.8078.4, Playwright Firefox 157.0 and Playwright WebKit 27.2 for Flow; Chrome for Core; Vite 8.3.6 development/production and webpack 5.112.2 production. Public documentation examples run from the installed Flow tarball under Node.',
     limits:
-      'Native Safari is unverified. Playwright WebKit is not Safari, Playwright Firefox is not branded Firefox, and Chrome is distinct from Playwright Chromium. The engines.node >=22 declaration is not evidence for untested or odd-numbered releases. Direct Rollup/esbuild consumption, React Native and multi-threaded WASM are not qualified.',
+      'Native Safari is unverified. Playwright WebKit is not Safari, Playwright Firefox is not branded Firefox, and Chrome is distinct from Playwright Chromium. The engines.node >=22 declaration is not evidence for untested or odd-numbered releases. Direct Rollup/esbuild consumption, React Native through this WebAssembly package, and multi-threaded WASM are not qualified.',
     distribution:
       'The approved package @metalymph/cribra@0.1.0 is not published; no npm registry record exists. Install only from a source checkout or a locally packed Flow tarball until a separately authorized release; the Core tarball is test-only.',
     sources: [
@@ -140,6 +140,37 @@ export const bindings: readonly Binding[] = [
       source('TypeScript release runbook', 'docs/TYPESCRIPT_RELEASE.md'),
       source('Package README', 'packages/cribra/README.md'),
       source('TypeScript quick start', 'website/src/content/docs/typescript.md'),
+    ],
+  },
+  {
+    id: 'react-native',
+    name: 'React Native',
+    guide: {
+      label: 'React Native integration guide',
+      href: '/docs/integration-react-native/',
+    },
+    package: {
+      label: 'Private React Native package source',
+      href: `${repository}/tree/main/packages/cribra-react-native`,
+    },
+    implementation:
+      'Implemented · @metalymph/cribra-react-native 0.0.0 · private and unpublished · C ABI TurboModule over Core 0.7.2',
+    capabilities:
+      'TypeScript facade → React Native Codegen TurboModule → C++ bridge → C ABI 0.3.0 → Rust Core. Asynchronous serial native worker; React Native New Architecture and Hermes. Scanning and ordered batch scans, caller-configured scanners with catalogs and custom rules, detached rule metadata, UTF-8/UTF-16 offset conversion, and the four scan-coupled transformations. Flow profile without Rayon parallelism. No streaming, Share Bundles, incremental documents, cancellation, or parallel scanning.',
+    qualification:
+      'RN.1.6, recorded 2026-11-12: 10 Jest suites and 281 tests; host suite 15,736 checks with 0 failures; host plain, ASan, UBSan and TSan runs passed. iOS Simulator Debug and Release runtime verified; Android ARM64 emulator Debug and Release runtime verified; Android armeabi-v7a, arm64-v8a, x86 and x86_64 Debug and Release builds verified; three full JS reload cycles per platform. Physical devices and iOS device builds are not tested; macOS ASan leak detection is not tested.',
+    limits:
+      'Qualification covers only the recorded Simulator/emulator matrix and the Android build ABIs. No physical-device, universal-platform, production-publication or performance-guarantee claim. No Expo Go or arbitrary Expo SDK support claim. Scanner creation, scanning, batch scanning, transformation and disposal are asynchronous. No streaming, Share Bundles, incremental documents, cancellation, editor integration or parallel scanning.',
+    distribution:
+      'Private, unpublished package @metalymph/cribra-react-native@0.0.0; install from a local checkout or file: dependency. No npm registry record, npm installation command or publication claim. Uses cribra-capi 0.3.0 static libraries built from this repository; the C ABI remains publish = false.',
+    sources: [
+      compatibility,
+      source('React Native package README', 'packages/cribra-react-native/README.md'),
+      source(
+        'React Native qualification record',
+        'packages/cribra-react-native/QUALIFICATION.md',
+      ),
+      source('C ABI contract', 'docs/INTEROP.md'),
     ],
   },
   {
@@ -253,9 +284,9 @@ export const bindings: readonly Binding[] = [
 /** Official workstreams that are planned or in progress; none is a published package unless the matrix above says so. */
 export const plannedBindings = [
   {
-    name: 'TypeScript native backend and React Native integration',
+    name: 'TypeScript native backend for Node.js',
     detail:
-      'Native TypeScript backend for Node.js where compatible, plus a JSI/Turbo Native Module for iOS and Android. Three separate gates: UniFFI 0.32.2/JSI/TurboModule compatibility investigation with a documented generator fallback; binding implementation preserving Cribra classification semantics and resource ownership; and real iOS/Android consumer qualification including mobile lifecycle and performance tests. React Native is not implemented, and the WebAssembly package does not run automatically in Hermes.',
+      'Standalone native Node.js backend where compatible. This is a separate workstream from the implemented and qualified React Native package and is not implemented. Gates: a UniFFI 0.32.2 or direct C ABI compatibility investigation with a documented fallback; binding implementation preserving Cribra classification semantics and resource ownership; and real Node.js consumer qualification. No native Node.js package or publication is established.',
   },
   {
     name: 'Native Rust MCP server',

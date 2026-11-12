@@ -9,6 +9,32 @@ history.
 
 ## [Unreleased]
 
+### Added
+
+- React Native integration RN.1.1–RN.1.6: the private, unpublished
+  `@metalymph/cribra-react-native@0.0.0` native New Architecture TurboModule
+  over `cribra-capi` 0.3.0 and Core 0.7.2. TypeScript facade → Codegen spec →
+  C++ bridge → C ABI → Rust Core, with an asynchronous serial native worker.
+- Async scanner creation and disposal, single and ordered batch scanning,
+  caller-configured built-in catalogs and custom rules, detached rule metadata,
+  exact UTF-8/UTF-16 offset conversion, and the four scan-coupled
+  transformations.
+- Lifecycle hardening: explicit `Running → Stopping → Stopped` teardown,
+  serial-worker shutdown/discard contract, fixed source-free refusal errors,
+  and key-buffer zeroization on the controlled JavaScript and native copies.
+
+### Qualification
+
+- RN.1.6, recorded 2026-11-12: 10 Jest suites and 281 tests; 15,736 host checks
+  with 0 failures; host plain, ASan, UBSan and TSan runs; iOS Simulator Debug and
+  Release runtime; Android ARM64 emulator Debug and Release runtime; Android
+  `armeabi-v7a`, `arm64-v8a`, `x86` and `x86_64` Debug and Release builds; three
+  full JS reload cycles per platform.
+- Not tested: physical iOS/Android devices, iOS device builds, and macOS ASan
+  leak detection. No universal-platform, performance-guarantee, Expo Go,
+  arbitrary Expo SDK or npm-publication claim. The separate native Node.js
+  TypeScript backend remains planned and is not implemented.
+
 ## [TypeScript 0.1.0] — unreleased
 
 The TypeScript package at `packages/cribra` is independently versioned from the

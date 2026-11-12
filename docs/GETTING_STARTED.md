@@ -92,8 +92,9 @@ The higher-level TypeScript package is implemented as the approved but
 unpublished `@metalymph/cribra@0.1.0`; it is not available from npm yet. Its public
 API contract is recorded in [TYPESCRIPT_API.md](TYPESCRIPT_API.md), and the
 installed-package qualification evidence is summarized in
-[COMPATIBILITY.md](COMPATIBILITY.md). A future native TypeScript backend remains
-planned and separately gated. Start with the
+[COMPATIBILITY.md](COMPATIBILITY.md). A future native Node.js TypeScript backend
+remains planned and separately gated; React Native has a separate implemented
+native package. Start with the
 [TypeScript quick start](https://cribra.pages.dev/docs/typescript/).
 
 The native Rust MCP server is planned as an ultra-lightweight binary using MCP

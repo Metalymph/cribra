@@ -50,13 +50,17 @@ approved but unpublished `@metalymph/cribra@0.1.0`. The package is not private,
 has no npm registry record, and uses `cribraRelease.state` `approved`; the
 unpublished `@metalymph/cribra` name is not usable as an npm installation
 instruction until a separately authorized release succeeds.
-The TypeScript native backend and native Rust MCP server remain official planned
-workstreams, and the native backend does not exist. The React Native milestone
-has three separate gates: UniFFI/JSI/TurboModule compatibility investigation,
-native binding implementation preserving classification semantics and resource
-ownership, and real iOS/Android consumer qualification. C#, Go and PHP are planned
-as demand-driven / community-contribution candidates and are not actively
-scheduled; Ruby, Elixir and other language candidates retain that status.
+The React Native package is implemented, merged and qualified through RN.1.6 as
+the private, unpublished `@metalymph/cribra-react-native@0.0.0`. It is a direct
+C ABI TurboModule over Core 0.7.2 and `cribra-capi` 0.3.0, not a UniFFI or
+WebAssembly consumer. RN.1.6 evidence covers host plain/ASan/UBSan/TSan tests,
+iOS Simulator Debug/Release, Android ARM64 emulator Debug/Release, Android
+four-ABI builds and three JS reload cycles per platform; physical devices and iOS
+device builds are not tested. The separate native Node.js TypeScript backend and
+the native Rust MCP server remain official planned workstreams, and the native
+Node.js backend does not exist. C#, Go and PHP are planned as demand-driven /
+community-contribution candidates and are not actively scheduled; Ruby, Elixir
+and other language candidates retain that status.
 Doxygen-generated C API documentation and GitHub/GitLab integrations are likewise
 demand-driven and unscheduled. These candidates are not implemented, qualified or
 published, and no delivery dates are promised. Community integrations may use the
