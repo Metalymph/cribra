@@ -1,0 +1,93 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cribra.dev/schemas/mcp/cribra_transform.input.json",
+  "title": "cribra_transform input",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["source", "mode"],
+  "properties": {
+    "source": {
+      "type": "string",
+      "maxLength": 1048576,
+      "description": "UTF-8 text to scan and transform. The server enforces a 1 MiB UTF-8 byte limit."
+    },
+    "rules": {
+      "type": "array",
+      "maxItems": 32,
+      "description": "Optional custom regular-expression rules added to the built-in ruleset.",
+      "items": { "$ref": "#/$defs/customRule" }
+    },
+    "mode": {
+      "type": "string",
+      "enum": ["redact", "template"],
+      "description": "M1 advertises the non-keyed modes. Keyed modes are intentionally deferred to M2 and must be enabled explicitly with process-owned key material."
+    },
+    "options": { "type": "object" }
+  },
+  "oneOf": [
+    {
+      "properties": {
+        "mode": { "const": "redact" },
+        "options": { "$ref": "#/$defs/redactOptions" }
+      },
+      "required": ["mode"]
+    },
+    {
+      "properties": {
+        "mode": { "const": "template" },
+        "options": { "$ref": "#/$defs/templateOptions" }
+      },
+      "required": ["mode"]
+    }
+  ],
+  "$defs": {
+    "customRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "pattern", "severity"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9._-]+$"
+        },
+        "pattern": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        },
+        "severity": {
+          "type": "string",
+          "enum": ["info", "low", "medium", "high", "critical"]
+        }
+      }
+    },
+    "redactOptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "replacement": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "default": "[REDACTED]"
+        }
+      }
+    },
+    "templateOptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "namespace": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9._-]+$",
+          "default": "CRIBRA"
+        },
+        "numbered": { "type": "boolean", "default": false }
+      }
+    }
+  }
+}

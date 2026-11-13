@@ -63,6 +63,7 @@ members = [
     "crates/cribra-capi",
     "crates/cribra-wasm",
     "crates/cribra-cli",
+    "crates/cribra-mcp",
     "crates/cribra-uniffi"
 ]
 resolver = "3"

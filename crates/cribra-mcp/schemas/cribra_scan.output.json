@@ -1,0 +1,140 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cribra.dev/schemas/mcp/cribra_scan.output.json",
+  "title": "cribra_scan structuredContent",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["status"],
+  "properties": {
+    "status": { "type": "string", "enum": ["ok", "error"] },
+    "findings": {
+      "type": "array",
+      "maxItems": 4096,
+      "items": { "$ref": "#/$defs/finding" }
+    },
+    "candidates": {
+      "type": "array",
+      "maxItems": 4096,
+      "items": { "$ref": "#/$defs/candidate" }
+    },
+    "summary": { "$ref": "#/$defs/summary" },
+    "error": { "$ref": "#/$defs/toolError" }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "status": { "const": "ok" } },
+        "required": ["status"]
+      },
+      "then": { "required": ["findings", "candidates", "summary"] }
+    },
+    {
+      "if": {
+        "properties": { "status": { "const": "error" } },
+        "required": ["status"]
+      },
+      "then": { "required": ["error"] }
+    }
+  ],
+  "$defs": {
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ruleId", "start", "end", "line", "column", "severity", "confidence"],
+      "properties": {
+        "ruleId": { "type": "string", "maxLength": 128 },
+        "start": { "type": "integer", "minimum": 0 },
+        "end": { "type": "integer", "minimum": 0 },
+        "line": { "type": "integer", "minimum": 1 },
+        "column": { "type": "integer", "minimum": 1 },
+        "severity": {
+          "type": "string",
+          "enum": ["info", "low", "medium", "high", "critical"]
+        },
+        "confidence": {
+          "type": "string",
+          "enum": ["low", "medium", "high"]
+        },
+        "remediation": {
+          "type": "string",
+          "enum": [
+            "revoke_and_rotate_credential",
+            "rotate_credential",
+            "rotate_password",
+            "replace_private_key",
+            "remove_sensitive_value",
+            "review_sensitive_hash",
+            "review_password_verifier"
+          ]
+        }
+      }
+    },
+    "candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "evidence", "start", "end", "line", "column"],
+      "properties": {
+        "kind": { "type": "string", "enum": ["recovery_like_code"] },
+        "evidence": { "type": "string", "enum": ["structural"] },
+        "start": { "type": "integer", "minimum": 0 },
+        "end": { "type": "integer", "minimum": 0 },
+        "line": { "type": "integer", "minimum": 1 },
+        "column": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scannedSources",
+        "scannedBytes",
+        "reportsWithFindings",
+        "reportsWithoutFindings",
+        "totalFindings",
+        "totalCandidates",
+        "reportsWithCandidates",
+        "critical",
+        "high",
+        "medium",
+        "low",
+        "info"
+      ],
+      "properties": {
+        "scannedSources": { "type": "integer", "minimum": 0 },
+        "scannedBytes": { "type": "integer", "minimum": 0 },
+        "reportsWithFindings": { "type": "integer", "minimum": 0 },
+        "reportsWithoutFindings": { "type": "integer", "minimum": 0 },
+        "totalFindings": { "type": "integer", "minimum": 0 },
+        "totalCandidates": { "type": "integer", "minimum": 0 },
+        "reportsWithCandidates": { "type": "integer", "minimum": 0 },
+        "critical": { "type": "integer", "minimum": 0 },
+        "high": { "type": "integer", "minimum": 0 },
+        "medium": { "type": "integer", "minimum": 0 },
+        "low": { "type": "integer", "minimum": 0 },
+        "info": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "toolError": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "message"],
+      "properties": {
+        "code": {
+          "type": "string",
+          "enum": [
+            "invalid_arguments",
+            "invalid_rule_configuration",
+            "invalid_rule_pattern",
+            "unsupported_mode",
+            "missing_key",
+            "overlapping_spans",
+            "result_limit_exceeded",
+            "response_too_large",
+            "internal_error"
+          ]
+        },
+        "message": { "type": "string", "maxLength": 256 }
+      }
+    }
+  }
+}

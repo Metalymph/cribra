@@ -1,0 +1,3 @@
+{"id":1,"jsonrpc":"2.0","result":{"capabilities":{"tools":{}},"protocolVersion":"2025-11-25","serverInfo":{"name":"cribra-mcp","version":"0.1.0"}}}
+{"id":2,"jsonrpc":"2.0","result":{}}
+{"error":{"code":-32600,"message":"Initialize already completed"},"id":3,"jsonrpc":"2.0"}
