@@ -1,0 +1,5 @@
+{"id":1,"jsonrpc":"2.0","result":{"_meta":{"io.modelcontextprotocol/serverInfo":{"name":"cribra-mcp","version":"0.1.0"}},"cacheScope":"private","capabilities":{"tools":{}},"resultType":"complete","supportedVersions":["2026-07-28"],"ttlMs":0}}
+{"error":{"code":-32601,"message":"Method not found"},"id":2,"jsonrpc":"2.0"}
+{"error":{"code":-32602,"message":"Missing required _meta fields"},"id":3,"jsonrpc":"2.0"}
+{"error":{"code":-32022,"data":{"requested":"1900-01-01","supported":["2026-07-28"]},"message":"Unsupported protocol version"},"id":4,"jsonrpc":"2.0"}
+{"error":{"code":-32601,"message":"Method not found"},"id":5,"jsonrpc":"2.0"}

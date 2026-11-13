@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cribra.dev/schemas/mcp/cribra_transform.output.json",
+  "title": "cribra_transform structuredContent",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["status"],
+  "properties": {
+    "status": { "type": "string", "enum": ["ok", "error"] },
+    "mode": { "type": "string", "enum": ["redact", "template"] },
+    "output": {
+      "type": "string",
+      "description": "Core-produced transformed source. In M2, the same value is also returned as the first text content block. Unchanged source parts remain visible; this is not a fully anonymized document."
+    },
+    "bytesIn": { "type": "integer", "minimum": 0 },
+    "bytesOut": { "type": "integer", "minimum": 0 },
+    "findingCount": { "type": "integer", "minimum": 0, "maximum": 4096 },
+    "error": { "$ref": "#/$defs/toolError" }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "status": { "const": "ok" } },
+        "required": ["status"]
+      },
+      "then": { "required": ["mode", "output", "bytesIn", "bytesOut", "findingCount"] }
+    },
+    {
+      "if": {
+        "properties": { "status": { "const": "error" } },
+        "required": ["status"]
+      },
+      "then": { "required": ["error"] }
+    }
+  ],
+  "$defs": {
+    "toolError": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "message"],
+      "properties": {
+        "code": {
+          "type": "string",
+          "enum": [
+            "invalid_arguments",
+            "invalid_rule_configuration",
+            "invalid_rule_pattern",
+            "unsupported_mode",
+            "missing_key",
+            "overlapping_spans",
+            "result_limit_exceeded",
+            "response_too_large",
+            "internal_error"
+          ]
+        },
+        "message": { "type": "string", "maxLength": 256 }
+      }
+    }
+  }
+}
