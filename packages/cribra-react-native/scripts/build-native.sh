@@ -19,16 +19,19 @@ build_ios() {
   echo "==> Building Cribra C ABI for iOS"
   cargo build \
     --manifest-path "${REPO_ROOT}/Cargo.toml" \
+    --locked \
     --package cribra-capi \
     --release \
     --target aarch64-apple-ios
   cargo build \
     --manifest-path "${REPO_ROOT}/Cargo.toml" \
+    --locked \
     --package cribra-capi \
     --release \
     --target aarch64-apple-ios-sim
   cargo build \
     --manifest-path "${REPO_ROOT}/Cargo.toml" \
+    --locked \
     --package cribra-capi \
     --release \
     --target x86_64-apple-ios
@@ -70,7 +73,7 @@ build_android() {
       --manifest-path "${REPO_ROOT}/Cargo.toml" \
       --platform 24 \
       --target "${abi}" \
-      build --package cribra-capi --release
+      build --locked --package cribra-capi --release
 
     mkdir -p "${ANDROID_PREBUILT}/${abi}"
     cp "${TARGET_DIR}/${triple}/release/libcribra_capi.a" \
