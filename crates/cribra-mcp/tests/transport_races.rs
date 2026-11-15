@@ -102,6 +102,96 @@ fn closed_stdout_is_reported_as_broken_pipe_and_shuts_down_cleanly() {
 }
 
 #[test]
+fn eof_discards_queued_real_tool_work_and_exits_zero() {
+    // Real Core scans replace the M1 stubs. Closing stdin while scans are
+    // queued or running must still discard work cleanly and never emit a
+    // truncated or partially written line.
+    use support::ServerProcess;
+
+    let mut server = ServerProcess::spawn();
+    let source = "a".repeat(1024 * 1024);
+    for id in 1..=3 {
+        server.send(&json!({
+            "jsonrpc": "2.0",
+            "id": id,
+            "method": "tools/call",
+            "params": {
+                "_meta": {
+                    "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+                    "io.modelcontextprotocol/clientCapabilities": {},
+                },
+                "name": "cribra_scan",
+                "arguments": {"source": source.as_str()},
+            }
+        }));
+    }
+    server.close_stdin();
+
+    let status = server.wait(Duration::from_secs(10)).expect("exit");
+    assert!(status.success());
+    assert_eq!(server.stderr_text(), "");
+
+    let mut responses = 0;
+    while let Some(line) = server.next_line(Duration::from_secs(5)) {
+        let response: serde_json::Value = serde_json::from_str(&line).expect("stdout line is JSON");
+        support::validate_official("2026-07-28", &response);
+        assert_eq!(response["result"]["resultType"], "complete");
+        assert_eq!(response["result"]["structuredContent"]["status"], "ok");
+        responses += 1;
+    }
+    assert!(
+        responses <= 3,
+        "shutdown must not invent responses for discarded work"
+    );
+}
+
+#[test]
+fn cancellation_after_real_scan_is_well_formed_or_silent() {
+    // Cancellation is not preemptible while Core is scanning. The result may be
+    // emitted just before the cancellation is observed or discarded at the
+    // writer boundary; either outcome is valid, but output must stay well formed.
+    use support::ServerProcess;
+
+    let mut server = ServerProcess::spawn();
+    let source = "a".repeat(1024 * 1024);
+    server.send(&json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "tools/call",
+        "params": {
+            "_meta": {
+                "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+                "io.modelcontextprotocol/clientCapabilities": {},
+            },
+            "name": "cribra_scan",
+            "arguments": {"source": source},
+        }
+    }));
+    server.send(&json!({
+        "jsonrpc": "2.0",
+        "method": "notifications/cancelled",
+        "params": {"requestId": 1},
+    }));
+    server.close_stdin();
+
+    let status = server.wait(Duration::from_secs(10)).expect("exit");
+    assert!(status.success());
+    assert_eq!(server.stderr_text(), "");
+
+    let mut responses = 0;
+    while let Some(line) = server.next_line(Duration::from_secs(5)) {
+        let response: serde_json::Value = serde_json::from_str(&line).expect("stdout line is JSON");
+        support::validate_official("2026-07-28", &response);
+        assert_eq!(response["id"], 1);
+        responses += 1;
+    }
+    assert!(
+        responses <= 1,
+        "a single call may produce at most one response"
+    );
+}
+
+#[test]
 fn eof_discards_queued_work_and_exits_zero() {
     // Responses that were already written before stdin closed remain valid.
     // Anything still queued is deliberately discarded by the writer, so this

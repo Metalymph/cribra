@@ -15,11 +15,18 @@ use wait_timeout::ChildExt;
 
 static MODERN_SCHEMA: &str = include_str!("../schemas/2026-07-28.json");
 static LEGACY_SCHEMA: &str = include_str!("../schemas/2025-11-25.json");
+static SCAN_OUTPUT_SCHEMA: &str = include_str!("../../schemas/cribra_scan.output.json");
+static TRANSFORM_OUTPUT_SCHEMA: &str = include_str!("../../schemas/cribra_transform.output.json");
 
 static MODERN_VALIDATOR: LazyLock<jsonschema::Validator> =
     LazyLock::new(|| message_validator(MODERN_SCHEMA).expect("modern schema compiles"));
 static LEGACY_VALIDATOR: LazyLock<jsonschema::Validator> =
     LazyLock::new(|| message_validator(LEGACY_SCHEMA).expect("legacy schema compiles"));
+static SCAN_OUTPUT_VALIDATOR: LazyLock<jsonschema::Validator> =
+    LazyLock::new(|| tool_validator(SCAN_OUTPUT_SCHEMA).expect("scan output schema compiles"));
+static TRANSFORM_OUTPUT_VALIDATOR: LazyLock<jsonschema::Validator> = LazyLock::new(|| {
+    tool_validator(TRANSFORM_OUTPUT_SCHEMA).expect("transform output schema compiles")
+});
 
 fn message_validator(source: &str) -> Result<jsonschema::Validator, String> {
     let mut schema: Value = serde_json::from_str(source).map_err(|error| error.to_string())?;
@@ -44,6 +51,28 @@ pub fn validate_official(version: &str, value: &Value) {
         details.push_str(&format!("\n  {error} at {}", error.instance_path()));
     }
     panic!("message violates {version} schema: {value}{details}");
+}
+
+fn tool_validator(source: &str) -> Result<jsonschema::Validator, String> {
+    let schema: Value = serde_json::from_str(source).map_err(|error| error.to_string())?;
+    jsonschema::validator_for(&schema).map_err(|error| error.to_string())
+}
+
+/// Validates one `structuredContent` value against the advertised tool schema.
+pub fn validate_tool_output(tool: &str, structured: &Value) {
+    let validator = match tool {
+        "cribra_scan" => &*SCAN_OUTPUT_VALIDATOR,
+        "cribra_transform" => &*TRANSFORM_OUTPUT_VALIDATOR,
+        other => panic!("unknown tool {other}"),
+    };
+    if validator.is_valid(structured) {
+        return;
+    }
+    let mut details = String::new();
+    for error in validator.iter_errors(structured) {
+        details.push_str(&format!("\n  {error} at {}", error.instance_path()));
+    }
+    panic!("{tool} structuredContent violates its output schema: {structured}{details}");
 }
 
 pub struct ServerProcess {
