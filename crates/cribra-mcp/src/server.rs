@@ -4,7 +4,8 @@
 //!
 //! * the reader owns stdin, lifecycle classification, cancellation, and the
 //!   bounded worker queue;
-//! * the worker executes the M1 tool stubs and submits responses;
+//! * the worker executes validated tool calls against Cribra Core and submits
+//!   responses;
 //! * the writer owns stdout and performs the final cancellation claim.
 //!
 //! The reader never waits on the writer. On sustained output backpressure the
@@ -28,7 +29,7 @@ use crate::limits::{
     EXIT_BACKPRESSURE, EXIT_INTERNAL, MAX_MESSAGE_BYTES, MAX_RESPONSE_BYTES,
     REQUEST_QUEUE_CAPACITY, WRITER_QUEUE_CAPACITY,
 };
-use crate::protocol::{Dispatch, Era, Reply, ReplyOutcome, Session, ToolCall, shape_success};
+use crate::protocol::{Dispatch, Reply, ReplyOutcome, Session, ToolCall, shape_success};
 use crate::registry::{AcceptError, EmitDecision, Registry, StartDecision};
 use crate::tooling;
 use crate::transport::{
@@ -284,8 +285,8 @@ fn worker_loop(
     writer_tx: SyncSender<Outbound>,
     shared: Arc<Shared>,
 ) {
-    worker_loop_with(request_rx, writer_tx, shared, |_| {
-        tooling::stub_tool_result()
+    worker_loop_with(request_rx, writer_tx, shared, |call| {
+        tooling::execute(&call.name, &call.arguments)
     });
 }
 
@@ -329,12 +330,28 @@ fn worker_loop_with<F>(
         let reply = catch_unwind(AssertUnwindSafe(|| {
             let mut result = handler(&call);
             shape_success(call.era, &mut result);
+
+            // Check the complete encoded response after era shaping. If the
+            // result would not fit, replace it with the fixed, bounded tool
+            // error. The check is exact and does not allocate a serialized copy.
+            if !tooling::response_fits(&call.id, &result) {
+                result = tooling::response_too_large_result();
+                shape_success(call.era, &mut result);
+            }
+
             Reply {
                 id: Some(call.id.clone()),
                 outcome: ReplyOutcome::Success(result),
             }
         }))
-        .unwrap_or_else(|_| Reply::error(Some(call.id.clone()), INTERNAL_ERROR));
+        .unwrap_or_else(|_| {
+            let mut result = tooling::internal_error_result();
+            shape_success(call.era, &mut result);
+            Reply {
+                id: Some(call.id.clone()),
+                outcome: ReplyOutcome::Success(result),
+            }
+        });
 
         // The call we just finished is the only one allowed to complete. If
         // input closed while it ran, discard its result rather than retaining
@@ -530,18 +547,12 @@ fn mark_terminal(shared: &Shared, code: i32, message: &'static str) {
     }
 }
 
-/// Shapes a tool stub result for tests and future M2 reuse.
-#[must_use]
-pub fn stub_result(era: Era) -> Value {
-    let mut result = tooling::stub_tool_result();
-    shape_success(era, &mut result);
-    result
-}
-
 #[cfg(test)]
 mod tests {
     use std::sync::atomic::AtomicUsize;
     use std::sync::mpsc::{TryRecvError, channel, sync_channel};
+
+    use crate::protocol::Era;
 
     use super::*;
 
@@ -579,7 +590,7 @@ mod tests {
                 worker_calls.fetch_add(1, Ordering::SeqCst);
                 started_tx.send(()).expect("signal start");
                 release_rx.recv().expect("wait for release");
-                tooling::stub_tool_result()
+                serde_json::json!({"ok": true})
             });
         });
 

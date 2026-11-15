@@ -20,7 +20,7 @@
     "mode": {
       "type": "string",
       "enum": ["redact", "template"],
-      "description": "M1 advertises the non-keyed modes. Keyed modes are intentionally deferred to M2 and must be enabled explicitly with process-owned key material."
+      "description": "Transformation to apply after scanning. Only the non-keyed redact and template modes are advertised; keyed pseudonymization and synthesis are not available through MCP."
     },
     "options": { "type": "object" }
   },

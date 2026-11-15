@@ -358,6 +358,7 @@ dependencies = [
 name = "cribra-mcp"
 version = "0.1.0"
 dependencies = [
+ "cribra",
  "jsonschema",
  "libc",
  "serde",

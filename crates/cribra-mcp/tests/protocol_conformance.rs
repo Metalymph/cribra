@@ -49,7 +49,7 @@ fn dispatch(session: &mut Session, request: Value) -> Option<Value> {
     match session.dispatch(parsed) {
         Dispatch::Reply(reply) => Some(reply.to_value()),
         Dispatch::ToolCall(call) => {
-            let mut result = tooling::stub_tool_result();
+            let mut result = tooling::execute(&call.name, &call.arguments);
             shape_success(call.era, &mut result);
             Some(
                 Reply {
@@ -217,7 +217,14 @@ fn modern_tools_surface_is_two_static_contracts() {
     assert_eq!(list["result"]["cacheScope"], "private");
     assert_eq!(tool_names(&list["result"]), tooling::TOOL_NAMES);
 
-    for (id, name) in [(2, "cribra_scan"), (3, "cribra_transform")] {
+    for (id, name, arguments) in [
+        (2, "cribra_scan", json!({"source": "hello"})),
+        (
+            3,
+            "cribra_transform",
+            json!({"source": "hello", "mode": "redact"}),
+        ),
+    ] {
         let call = dispatch(
             &mut session,
             modern_request(
@@ -226,19 +233,15 @@ fn modern_tools_surface_is_two_static_contracts() {
                 json!({
                     "_meta": meta(MODERN_VERSION),
                     "name": name,
-                    "arguments": {"source": "not implemented"},
+                    "arguments": arguments,
                 }),
             ),
         )
         .expect("tool call");
         validate(MODERN_VERSION, &call);
         assert_eq!(call["result"]["resultType"], "complete");
-        assert_eq!(call["result"]["isError"], true);
-        assert_eq!(call["result"]["structuredContent"]["status"], "error");
-        assert_eq!(
-            call["result"]["structuredContent"]["error"]["code"],
-            "internal_error"
-        );
+        assert_eq!(call["result"]["isError"], false);
+        assert_eq!(call["result"]["structuredContent"]["status"], "ok");
     }
 
     let unknown = dispatch(
@@ -344,7 +347,8 @@ fn legacy_lifecycle_and_shaping_are_exact() {
     )
     .expect("legacy tool call");
     validate("2025-11-25", &call);
-    assert_eq!(call["result"]["isError"], true);
+    assert_eq!(call["result"]["isError"], false);
+    assert_eq!(call["result"]["structuredContent"]["status"], "ok");
     assert!(call["result"].get("resultType").is_none());
 
     let second = dispatch(&mut session, legacy_initialize(7, "2025-11-25"))
@@ -457,6 +461,89 @@ fn dual_era_coexists_without_discovery_committing_the_session() {
 }
 
 #[test]
+fn actual_tool_results_validate_against_advertised_output_schemas() {
+    let scan_output =
+        tooling::parse_schema(tooling::SCAN_OUTPUT_SCHEMA).expect("scan output schema");
+    let scan_validator =
+        jsonschema::validator_for(&scan_output).expect("scan output schema compiles");
+    let transform_output =
+        tooling::parse_schema(tooling::TRANSFORM_OUTPUT_SCHEMA).expect("transform output schema");
+    let transform_validator =
+        jsonschema::validator_for(&transform_output).expect("transform output schema compiles");
+
+    let scan_cases = [
+        tooling::execute("cribra_scan", &json!({"source": "hello"})),
+        tooling::execute("cribra_scan", &json!({})),
+        tooling::execute(
+            "cribra_scan",
+            &json!({
+                "source": "x",
+                "rules": [{"id": "r", "pattern": "[", "severity": "high"}],
+            }),
+        ),
+        tooling::execute(
+            "cribra_scan",
+            &json!({
+                "source": "x",
+                "rules": [
+                    {"id": "r", "pattern": "a", "severity": "high"},
+                    {"id": "r", "pattern": "b", "severity": "low"},
+                ],
+            }),
+        ),
+        tooling::execute(
+            "cribra_scan",
+            &json!({
+                "source": "a".repeat(4097),
+                "rules": [{"id": "r", "pattern": "a", "severity": "low"}],
+            }),
+        ),
+        tooling::internal_error_result(),
+        tooling::response_too_large_result(),
+    ];
+    for result in scan_cases {
+        assert!(
+            scan_validator.is_valid(&result["structuredContent"]),
+            "scan structuredContent must validate: {result}"
+        );
+    }
+
+    let transform_cases = [
+        tooling::execute(
+            "cribra_transform",
+            &json!({"source": "hello", "mode": "redact"}),
+        ),
+        tooling::execute(
+            "cribra_transform",
+            &json!({"source": "hello", "mode": "template"}),
+        ),
+        tooling::execute(
+            "cribra_transform",
+            &json!({"source": "x", "mode": "redact", "options": {"replacement": ""}}),
+        ),
+        tooling::execute(
+            "cribra_transform",
+            &json!({"source": "abcd", "mode": "template", "rules": [
+                {"id": "a", "pattern": "abc", "severity": "high"},
+                {"id": "b", "pattern": "bcd", "severity": "high"},
+            ]}),
+        ),
+        tooling::execute(
+            "cribra_transform",
+            &json!({"source": "x", "mode": "synthesize"}),
+        ),
+        tooling::internal_error_result(),
+        tooling::response_too_large_result(),
+    ];
+    for result in transform_cases {
+        assert!(
+            transform_validator.is_valid(&result["structuredContent"]),
+            "transform structuredContent must validate: {result}"
+        );
+    }
+}
+
+#[test]
 fn tool_contract_schemas_accept_and_reject_the_documented_shapes() {
     let tools = tooling::tools_array().expect("tool contracts parse");
     assert_eq!(tools.len(), 2);
@@ -544,9 +631,17 @@ fn tool_contract_schemas_accept_and_reject_the_documented_shapes() {
         "error": {"code": "internal_error", "message": "unavailable"}
     })));
 
-    let stub = tooling::stub_tool_result();
+    let error_result = tooling::execute(
+        "cribra_transform",
+        &json!({"source": "x", "mode": "synthesize"}),
+    );
+    assert_eq!(error_result["isError"], true);
+    assert_eq!(
+        error_result["structuredContent"]["error"]["code"],
+        "unsupported_mode"
+    );
     assert!(
-        transform_output_validator.is_valid(&stub["structuredContent"]),
-        "stub structuredContent must match the transform output contract"
+        transform_output_validator.is_valid(&error_result["structuredContent"]),
+        "error structuredContent must match the transform output contract"
     );
 }
