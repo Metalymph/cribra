@@ -9,6 +9,10 @@ use std::time::Duration;
 use serde_json::json;
 use wait_timeout::ChildExt;
 
+/// Hang detector for work bounded by Core CPU time. Shared CI runners can be an
+/// order of magnitude slower than a developer machine.
+const CORE_WORK_TIMEOUT: Duration = Duration::from_secs(60);
+
 fn modern_tools_list(id: u64) -> Vec<u8> {
     let request = json!({
         "jsonrpc": "2.0",
@@ -131,7 +135,7 @@ fn eof_discards_queued_real_tool_work_and_exits_zero() {
     }
     server.close_stdin();
 
-    let status = server.wait(Duration::from_secs(10)).expect("exit");
+    let status = server.wait(CORE_WORK_TIMEOUT).expect("exit");
     assert!(status.success());
     assert_eq!(server.stderr_text(), "");
 
@@ -178,7 +182,7 @@ fn cancellation_after_real_scan_is_well_formed_or_silent() {
     }));
     server.close_stdin();
 
-    let status = server.wait(Duration::from_secs(10)).expect("exit");
+    let status = server.wait(CORE_WORK_TIMEOUT).expect("exit");
     assert!(status.success());
     assert_eq!(server.stderr_text(), "");
 
@@ -313,7 +317,7 @@ fn large_response_survives_partial_pipe_writes() {
 
     drop(stdin);
     let status = child
-        .wait_timeout(Duration::from_secs(10))
+        .wait_timeout(CORE_WORK_TIMEOUT)
         .expect("wait for exit")
         .expect("server terminated");
     assert!(status.success());
@@ -345,7 +349,7 @@ fn closed_stdout_mid_response_terminates_cleanly() {
     drop(stdout);
 
     let status = child
-        .wait_timeout(Duration::from_secs(10))
+        .wait_timeout(CORE_WORK_TIMEOUT)
         .expect("no hang after client disconnect")
         .expect("server terminated");
     assert!(
