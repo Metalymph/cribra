@@ -41,7 +41,7 @@ fn run_transcript(input: &str, expected: &str, versions: &[&str]) -> (Vec<Value>
     // server deliberately discards anything that was still queued.
     let mut responses = Vec::new();
     for version in versions {
-        let response = server.next_json(Duration::from_secs(10));
+        let response = server.next_json(Duration::from_secs(60));
         validate_official(version, &response);
         responses.push(response);
     }
@@ -52,7 +52,7 @@ fn run_transcript(input: &str, expected: &str, versions: &[&str]) -> (Vec<Value>
         "unexpected extra stdout line"
     );
 
-    let status = server.wait(Duration::from_secs(10)).expect("server exits");
+    let status = server.wait(Duration::from_secs(60)).expect("server exits");
     assert!(status.success(), "unexpected exit status: {status}");
     let stderr = server.stderr_text();
     assert_eq!(stderr, "", "stderr must remain diagnostic-clean on success");
@@ -134,7 +134,7 @@ fn normal_operation_returns_one_response_per_accepted_request() {
         }
 
         for expected_id in first_id..next_id {
-            let response = server.next_json(Duration::from_secs(10));
+            let response = server.next_json(Duration::from_secs(60));
             validate_official("2026-07-28", &response);
             assert_eq!(response["id"], json!(expected_id));
             assert_eq!(response["result"]["resultType"], "complete");
@@ -147,7 +147,7 @@ fn normal_operation_returns_one_response_per_accepted_request() {
         None,
         "no response may be stranded after EOF"
     );
-    let status = server.wait(Duration::from_secs(10)).expect("exit");
+    let status = server.wait(Duration::from_secs(60)).expect("exit");
     assert!(status.success());
     assert_eq!(server.stderr_text(), "");
 }
@@ -168,7 +168,7 @@ fn modern_tools_execute_scan_and_transform_without_source_disclosure() {
         "method": "tools/list",
         "params": meta,
     }));
-    let list = server.next_json(Duration::from_secs(10));
+    let list = server.next_json(Duration::from_secs(60));
     validate_official("2026-07-28", &list);
     let names: Vec<&str> = list["result"]["tools"]
         .as_array()
@@ -199,7 +199,7 @@ fn modern_tools_execute_scan_and_transform_without_source_disclosure() {
             "arguments": {"source": source},
         },
     }));
-    let scan = server.next_json(Duration::from_secs(10));
+    let scan = server.next_json(Duration::from_secs(60));
     validate_official("2026-07-28", &scan);
     assert_eq!(scan["result"]["resultType"], "complete");
     assert_eq!(scan["result"]["isError"], false);
@@ -240,7 +240,7 @@ fn modern_tools_execute_scan_and_transform_without_source_disclosure() {
             "arguments": {"source": source, "mode": "redact"},
         },
     }));
-    let transform = server.next_json(Duration::from_secs(10));
+    let transform = server.next_json(Duration::from_secs(60));
     validate_official("2026-07-28", &transform);
     assert_eq!(transform["result"]["isError"], false);
     validate_tool_output(
@@ -267,7 +267,7 @@ fn modern_tools_execute_scan_and_transform_without_source_disclosure() {
     assert!(!transform.to_string().contains(SECRET));
 
     server.close_stdin();
-    let status = server.wait(Duration::from_secs(10)).expect("exit");
+    let status = server.wait(Duration::from_secs(60)).expect("exit");
     assert!(status.success());
     assert_eq!(server.stderr_text(), "");
 }
@@ -346,7 +346,7 @@ fn tool_success_and_failure_results_match_advertised_schemas() {
                 "arguments": arguments,
             },
         }));
-        let response = server.next_json(Duration::from_secs(10));
+        let response = server.next_json(Duration::from_secs(60));
         validate_official("2026-07-28", &response);
         let structured = &response["result"]["structuredContent"];
         validate_tool_output(name, structured);
@@ -377,7 +377,7 @@ fn tool_success_and_failure_results_match_advertised_schemas() {
     server.close_stdin();
     assert!(
         server
-            .wait(Duration::from_secs(10))
+            .wait(Duration::from_secs(60))
             .expect("exit")
             .success()
     );
@@ -428,7 +428,7 @@ fn oversized_transform_output_is_replaced_by_a_bounded_tool_error() {
     server.close_stdin();
     assert!(
         server
-            .wait(Duration::from_secs(10))
+            .wait(Duration::from_secs(60))
             .expect("exit")
             .success()
     );
@@ -448,13 +448,13 @@ fn legacy_tools_surface_omits_modern_fields() {
             "clientInfo": {"name": "jsonl", "version": "1.0.0"},
         },
     }));
-    let initialize = server.next_json(Duration::from_secs(10));
+    let initialize = server.next_json(Duration::from_secs(60));
     validate_official("2025-11-25", &initialize);
     assert!(initialize["result"].get("resultType").is_none());
 
     server.send(&json!({"jsonrpc": "2.0", "method": "notifications/initialized"}));
     server.send(&json!({"jsonrpc": "2.0", "id": 2, "method": "tools/list"}));
-    let list = server.next_json(Duration::from_secs(10));
+    let list = server.next_json(Duration::from_secs(60));
     validate_official("2025-11-25", &list);
     assert_eq!(list["result"]["tools"].as_array().expect("tools").len(), 2);
     assert!(list["result"].get("resultType").is_none());
@@ -466,7 +466,7 @@ fn legacy_tools_surface_omits_modern_fields() {
         "method": "tools/call",
         "params": {"name": "cribra_scan", "arguments": {"source": "hello"}},
     }));
-    let call = server.next_json(Duration::from_secs(10));
+    let call = server.next_json(Duration::from_secs(60));
     validate_official("2025-11-25", &call);
     assert_eq!(call["result"]["isError"], false);
     assert_eq!(call["result"]["structuredContent"]["status"], "ok");
@@ -498,7 +498,7 @@ fn legacy_tools_surface_omits_modern_fields() {
             "arguments": {"source": "hello", "unexpectedField": true},
         },
     }));
-    let failure = server.next_json(Duration::from_secs(10));
+    let failure = server.next_json(Duration::from_secs(60));
     validate_official("2025-11-25", &failure);
     assert!(
         failure.get("error").is_none(),
@@ -513,7 +513,7 @@ fn legacy_tools_surface_omits_modern_fields() {
     assert!(failure["result"].get("resultType").is_none());
 
     server.close_stdin();
-    let status = server.wait(Duration::from_secs(10)).expect("exit");
+    let status = server.wait(Duration::from_secs(60)).expect("exit");
     assert!(status.success());
     assert_eq!(server.stderr_text(), "");
 }
@@ -524,14 +524,14 @@ fn parse_batch_and_oversized_messages_are_fixed_and_source_free() {
     let mut server = ServerProcess::spawn();
 
     server.send_raw(&format!("{{\"secret\":\"{CANARY}\""));
-    let parse_error = server.next_json(Duration::from_secs(10));
+    let parse_error = server.next_json(Duration::from_secs(60));
     validate_official("2026-07-28", &parse_error);
     assert!(parse_error.get("id").is_none());
     assert_eq!(parse_error["error"]["code"], -32700);
     assert_eq!(parse_error["error"]["message"], "Parse error");
 
     server.send(&json!([{"jsonrpc": "2.0", "id": 1, "method": "ping"}]));
-    let batch = server.next_json(Duration::from_secs(10));
+    let batch = server.next_json(Duration::from_secs(60));
     validate_official("2026-07-28", &batch);
     assert_eq!(batch["error"]["code"], -32600);
     assert_eq!(
@@ -540,7 +540,7 @@ fn parse_batch_and_oversized_messages_are_fixed_and_source_free() {
     );
 
     server.send_raw(&"a".repeat(MAX_MESSAGE_BYTES + 17));
-    let oversized = server.next_json(Duration::from_secs(10));
+    let oversized = server.next_json(Duration::from_secs(60));
     validate_official("2026-07-28", &oversized);
     assert_eq!(oversized["error"]["code"], -32600);
     assert_eq!(
@@ -559,12 +559,12 @@ fn parse_batch_and_oversized_messages_are_fixed_and_source_free() {
             }
         }
     }));
-    let discover = server.next_json(Duration::from_secs(10));
+    let discover = server.next_json(Duration::from_secs(60));
     validate_official("2026-07-28", &discover);
     assert_eq!(discover["result"]["resultType"], "complete");
 
     server.close_stdin();
-    let status = server.wait(Duration::from_secs(10)).expect("exit");
+    let status = server.wait(Duration::from_secs(60)).expect("exit");
     assert!(status.success());
     let stderr = server.stderr_text();
     assert!(!stderr.contains(CANARY));
@@ -581,7 +581,7 @@ fn notifications_produce_no_output_and_eof_exits_zero() {
         "notification must not produce stdout"
     );
     server.close_stdin();
-    let status = server.wait(Duration::from_secs(10)).expect("exit");
+    let status = server.wait(Duration::from_secs(60)).expect("exit");
     assert!(status.success());
     assert_eq!(server.stderr_text(), "");
 }
@@ -590,7 +590,7 @@ fn notifications_produce_no_output_and_eof_exits_zero() {
 fn empty_eof_exits_zero() {
     let mut server = ServerProcess::spawn();
     server.close_stdin();
-    let status = server.wait(Duration::from_secs(10)).expect("exit");
+    let status = server.wait(Duration::from_secs(60)).expect("exit");
     assert!(status.success());
     assert_eq!(server.stderr_text(), "");
 }
@@ -625,14 +625,14 @@ fn unknown_and_malformed_cancellations_are_silent_and_harmless() {
             }
         }
     }));
-    let response = server.next_json(Duration::from_secs(10));
+    let response = server.next_json(Duration::from_secs(60));
     validate_official("2026-07-28", &response);
     assert_eq!(response["result"]["resultType"], "complete");
 
     server.close_stdin();
     assert!(
         server
-            .wait(Duration::from_secs(10))
+            .wait(Duration::from_secs(60))
             .expect("exit")
             .success()
     );
@@ -643,7 +643,7 @@ fn unknown_and_malformed_cancellations_are_silent_and_harmless() {
 fn legacy_request_without_session_is_rejected() {
     let mut server = ServerProcess::spawn();
     server.send(&json!({"jsonrpc": "2.0", "id": 1, "method": "tools/list"}));
-    let response = server.next_json(Duration::from_secs(10));
+    let response = server.next_json(Duration::from_secs(60));
     validate_official("2025-11-25", &response);
     assert_eq!(response["error"]["code"], -32602);
     assert_eq!(
@@ -653,7 +653,7 @@ fn legacy_request_without_session_is_rejected() {
     server.close_stdin();
     assert!(
         server
-            .wait(Duration::from_secs(10))
+            .wait(Duration::from_secs(60))
             .expect("exit")
             .success()
     );

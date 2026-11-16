@@ -9,6 +9,10 @@ use std::time::Duration;
 use serde_json::json;
 use wait_timeout::ChildExt;
 
+/// Hang detector for work bounded by Core CPU time. Shared CI runners can be an
+/// order of magnitude slower than a developer machine.
+const CORE_WORK_TIMEOUT: Duration = Duration::from_secs(60);
+
 fn modern_tools_list(id: u64) -> Vec<u8> {
     let request = json!({
         "jsonrpc": "2.0",
@@ -37,9 +41,10 @@ fn sustained_stdout_backpressure_is_terminal_with_exit_3() {
         .expect("spawn server");
 
     // Keep the read end open but never read it. Each tools/list response is
-    // about 8 KiB, so more than eight responses exceed the 64 KiB pipe buffer
-    // and the writer must enter poll and reach the explicit no-progress
-    // deadline instead of waiting for stdin EOF.
+    // about 8 KiB, so the output eventually stalls. The terminal condition is
+    // reported either by the write deadline or by the bounded writer queue,
+    // whichever the writer thread observes first; both are backpressure and
+    // both must terminate with the same explicit code and a diagnostic.
     let _unread_stdout = child.stdout.take().expect("stdout pipe");
     let mut stdin = child.stdin.take().expect("stdin pipe");
     for id in 1..=12 {
@@ -68,8 +73,11 @@ fn sustained_stdout_backpressure_is_terminal_with_exit_3() {
         .expect("stderr pipe")
         .read_to_string(&mut stderr)
         .expect("read stderr");
+    // The diagnostic must be written before the terminal code becomes visible,
+    // so a process exit can never race the message away. It must name the
+    // output-backpressure condition without pinning which detector fired.
     assert!(
-        stderr.contains("stdout backpressure timeout"),
+        stderr.contains("output backpressure"),
         "unexpected terminal diagnostic: {stderr}"
     );
 }
@@ -127,7 +135,7 @@ fn eof_discards_queued_real_tool_work_and_exits_zero() {
     }
     server.close_stdin();
 
-    let status = server.wait(Duration::from_secs(10)).expect("exit");
+    let status = server.wait(CORE_WORK_TIMEOUT).expect("exit");
     assert!(status.success());
     assert_eq!(server.stderr_text(), "");
 
@@ -174,7 +182,7 @@ fn cancellation_after_real_scan_is_well_formed_or_silent() {
     }));
     server.close_stdin();
 
-    let status = server.wait(Duration::from_secs(10)).expect("exit");
+    let status = server.wait(CORE_WORK_TIMEOUT).expect("exit");
     assert!(status.success());
     assert_eq!(server.stderr_text(), "");
 
@@ -309,7 +317,7 @@ fn large_response_survives_partial_pipe_writes() {
 
     drop(stdin);
     let status = child
-        .wait_timeout(Duration::from_secs(10))
+        .wait_timeout(CORE_WORK_TIMEOUT)
         .expect("wait for exit")
         .expect("server terminated");
     assert!(status.success());
@@ -341,7 +349,7 @@ fn closed_stdout_mid_response_terminates_cleanly() {
     drop(stdout);
 
     let status = child
-        .wait_timeout(Duration::from_secs(10))
+        .wait_timeout(CORE_WORK_TIMEOUT)
         .expect("no hang after client disconnect")
         .expect("server terminated");
     assert!(

@@ -77,6 +77,31 @@ mcp-matrix:
 mcp-qualify:
     crates/cribra-mcp/qualification/run-qualification.sh
 
+# Build, checksum, and verify the host-target MCP release archive under target/mcp-dist.
+mcp-package outdir="target/mcp-dist":
+    #!/usr/bin/env sh
+    set -eu
+    target="$(rustc -vV | sed -n 's/^host: //p')"
+    rm -rf "{{outdir}}"
+    cargo build --release -p cribra-mcp
+    python3 crates/cribra-mcp/packaging/package.py build \
+      --target "$target" \
+      --binary target/release/cribra-mcp \
+      --outdir "{{outdir}}"
+    python3 crates/cribra-mcp/packaging/package.py checksums --outdir "{{outdir}}"
+
+# Extract the packaged archive into a clean temporary directory and qualify the
+# extracted binary as a real MCP stdio server.
+mcp-package-smoke outdir="target/mcp-dist":
+    python3 crates/cribra-mcp/qualification/packaging/smoke.py --dir "{{outdir}}"
+
+# Local dry run of the complete MCP release qualification. Never publishes.
+mcp-release-readiness:
+    just mcp-matrix
+    just mcp-qualify
+    just mcp-package
+    just mcp-package-smoke
+
 # Build/generate the Core-only UniFFI Python consumer and run its focused tests.
 uniffi-python-smoke python="python3.13":
     "{{python}}" bindings/python/smoke.py
