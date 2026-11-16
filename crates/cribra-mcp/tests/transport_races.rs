@@ -231,3 +231,130 @@ fn eof_discards_queued_work_and_exits_zero() {
         "shutdown must not invent responses for discarded work"
     );
 }
+
+fn large_transform_request(id: u64) -> Vec<u8> {
+    let source = "hello world\n".repeat(20_000);
+    let request = json!({
+        "jsonrpc": "2.0",
+        "id": id,
+        "method": "tools/call",
+        "params": {
+            "_meta": {
+                "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+                "io.modelcontextprotocol/clientCapabilities": {},
+            },
+            "name": "cribra_transform",
+            "arguments": {"source": source, "mode": "redact"},
+        }
+    });
+    let mut line = serde_json::to_vec(&request).expect("request serializes");
+    line.push(b'\n');
+    line
+}
+
+/// A response larger than the pipe buffer is delivered to a slow reader in
+/// several partial writes. It must still reassemble into exactly one complete
+/// JSON line.
+#[test]
+fn large_response_survives_partial_pipe_writes() {
+    let mut child = Command::new(env!("CARGO_BIN_EXE_cribra-mcp"))
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("spawn server");
+
+    let mut stdout = child.stdout.take().expect("stdout pipe");
+    let mut stdin = child.stdin.take().expect("stdin pipe");
+    stdin
+        .write_all(&large_transform_request(1))
+        .expect("write request");
+    stdin.flush().expect("flush request");
+
+    // Deliberately read in small chunks so the writer performs many partial
+    // writes and observes WouldBlock between them.
+    let mut collected = Vec::new();
+    let mut chunk = [0u8; 1024];
+    let line_end = loop {
+        let read = stdout.read(&mut chunk).expect("read stdout");
+        assert_ne!(read, 0, "stdout closed before the response was complete");
+        collected.extend_from_slice(&chunk[..read]);
+        if let Some(position) = collected.iter().position(|byte| *byte == b'\n') {
+            break position;
+        }
+    };
+
+    assert!(
+        collected[line_end + 1..].is_empty(),
+        "the first response must be exactly one line"
+    );
+    let line = std::str::from_utf8(&collected[..line_end]).expect("utf-8 response");
+    let response: serde_json::Value = serde_json::from_str(line).expect("one complete JSON line");
+    support::validate_official("2026-07-28", &response);
+    assert_eq!(response["id"], 1);
+    assert_eq!(response["result"]["isError"], false);
+
+    let output = response["result"]["structuredContent"]["output"]
+        .as_str()
+        .expect("transformed output");
+    assert_eq!(output, "hello world\n".repeat(20_000));
+    assert_eq!(
+        response["result"]["content"][0]["text"].as_str(),
+        Some(output)
+    );
+    assert!(
+        collected.len() > 64 * 1024,
+        "the response must exceed the pipe buffer to exercise partial writes"
+    );
+
+    drop(stdin);
+    let status = child
+        .wait_timeout(Duration::from_secs(10))
+        .expect("wait for exit")
+        .expect("server terminated");
+    assert!(status.success());
+}
+
+/// If the client disappears in the middle of a large response, the server must
+/// treat it as a broken pipe and terminate cleanly instead of hanging on a
+/// half-written line.
+#[test]
+fn closed_stdout_mid_response_terminates_cleanly() {
+    let mut child = Command::new(env!("CARGO_BIN_EXE_cribra-mcp"))
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("spawn server");
+
+    let mut stdout = child.stdout.take().expect("stdout pipe");
+    let mut stdin = child.stdin.take().expect("stdin pipe");
+    stdin
+        .write_all(&large_transform_request(1))
+        .expect("write request");
+    stdin.flush().expect("flush request");
+
+    // Consume only the start of the response, then close the read end.
+    let mut prefix = [0u8; 512];
+    let read = stdout.read(&mut prefix).expect("read partial response");
+    assert!(read > 0, "expected at least part of the response");
+    drop(stdout);
+
+    let status = child
+        .wait_timeout(Duration::from_secs(10))
+        .expect("no hang after client disconnect")
+        .expect("server terminated");
+    assert!(
+        status.success(),
+        "a mid-response disconnect must shut down cleanly, got {status}"
+    );
+
+    let mut stderr = String::new();
+    child
+        .stderr
+        .take()
+        .expect("stderr pipe")
+        .read_to_string(&mut stderr)
+        .expect("read stderr");
+    assert_eq!(stderr, "");
+}

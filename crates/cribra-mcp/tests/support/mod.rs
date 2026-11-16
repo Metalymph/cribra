@@ -147,6 +147,19 @@ impl ServerProcess {
         stdin.flush().expect("flush request");
     }
 
+    /// Writes arbitrary bytes exactly as given, without appending a newline.
+    pub fn send_bytes(&mut self, bytes: &[u8]) {
+        let stdin = self.stdin.as_mut().expect("stdin still open");
+        stdin.write_all(bytes).expect("write bytes");
+        stdin.flush().expect("flush bytes");
+    }
+
+    /// Writes arbitrary bytes followed by a newline delimiter.
+    pub fn send_frame(&mut self, bytes: &[u8]) {
+        self.send_bytes(bytes);
+        self.send_bytes(b"\n");
+    }
+
     pub fn send(&mut self, value: &Value) {
         self.send_raw(&value.to_string());
     }

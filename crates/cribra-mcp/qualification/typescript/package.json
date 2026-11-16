@@ -1,0 +1,11 @@
+{
+  "name": "cribra-mcp-qualification-ts",
+  "private": true,
+  "type": "module",
+  "description": "TypeScript MCP client interoperability qualification for the cribra-mcp stdio server.",
+  "engines": { "node": ">=22" },
+  "dependencies": {
+    "@modelcontextprotocol/client": "2.4.0",
+    "ajv": "8.17.1"
+  }
+}
