@@ -111,6 +111,57 @@ Scheduled audits may create GitHub issues for newly discovered advisories.
 
 Dependabot checks Cargo and GitHub Actions dependencies weekly.
 
+### MCP
+
+`cribra-mcp` has its own workflows, independent of the Core, WASM, TypeScript,
+and UniFFI pipelines.
+
+`.github/workflows/mcp.yml` runs on pushes to `main`, pull requests, and manual
+dispatch:
+
+- **gate** (`ubuntu-latest`): `cargo fmt --check`, clippy with `-D warnings`,
+  `cargo test -p cribra-mcp --all-targets`, the conformance matrix check, and a
+  release build that is packaged, checksummed, and smoke-tested from the
+  extracted archive;
+- **msrv** (`ubuntu-latest`, Rust `1.97.0`): all MCP tests;
+- **packaged**: a five-target matrix (`ubuntu-latest`, `ubuntu-24.04-arm`,
+  `macos-latest`, `macos-15-intel`, `windows-latest`) that runs the full MCP
+  test suite natively, then builds, packages, checksums, and runs the extracted
+  binary against six packaged scenarios on its own runner. The Windows leg
+  therefore executes the bounded-writer deadline and `BrokenPipe` tests rather
+  than only compiling them.
+
+`.github/workflows/mcp-release.yml` is the only MCP release path, and it is
+opt-in:
+
+- a pushed `cribra-mcp-v*` tag runs validation, five-target build, assembly, and
+  verification, with no write permission and no release creation. Each build
+  leg checks out the tag, runs the full MCP test suite natively, asserts the
+  archive carries the tag version and matrix target, and uploads only the
+  archive;
+- `workflow_dispatch` from the tag ref defaults to `readiness`, which repeats
+  the whole dry run without mutating anything;
+- `workflow_dispatch` with `mode: stage` requires the confirmation
+  `stage <tag>`, runs in the protected `mcp-release` environment, checks that
+  the tag exists and is reachable from `origin/main`, refuses to replace an
+  existing release, verifies `SHA256SUMS`, rejects any missing, extra,
+  duplicate, or wrong-version archive, and creates a **draft** release with
+  `--draft --verify-tag --latest=false`.
+
+The MCP release namespace cannot trigger Core `v*.*.*` or WASM
+`cribra-wasm-v*` releases, and `--latest=false` prevents an MCP release from
+becoming the repository "latest" release. Distribution details are in
+[`crates/cribra-mcp/DISTRIBUTION.md`](../crates/cribra-mcp/DISTRIBUTION.md).
+
+Local equivalents:
+
+```text
+just mcp-qualify
+just mcp-package
+just mcp-package-smoke
+just mcp-release-readiness
+```
+
 ## Release process
 
 Releases are tag-driven.

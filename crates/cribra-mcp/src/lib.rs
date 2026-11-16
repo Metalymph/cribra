@@ -8,9 +8,6 @@
 
 #![cfg_attr(not(unix), allow(unused))]
 
-#[cfg(not(unix))]
-compile_error!("cribra-mcp currently supports macOS and Linux stdio transports only");
-
 pub mod core_adapter;
 pub mod error;
 pub mod jsonrpc;

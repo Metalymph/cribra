@@ -33,7 +33,7 @@ use crate::protocol::{Dispatch, Reply, ReplyOutcome, Session, ToolCall, shape_su
 use crate::registry::{AcceptError, EmitDecision, Registry, StartDecision};
 use crate::tooling;
 use crate::transport::{
-    LineDecoder, LineEvent, WriteOutcome, ignore_sigpipe, set_nonblocking, write_all_nonblocking,
+    LineDecoder, LineEvent, WriteOutcome, ignore_sigpipe, prepare_stdout, write_stdout,
 };
 
 struct Shared {
@@ -376,7 +376,7 @@ fn writer_loop(
     shared: Arc<Shared>,
     backpressure_timeout: Duration,
 ) -> WriterExit {
-    if set_nonblocking(libc::STDOUT_FILENO).is_err() {
+    if prepare_stdout().is_err() {
         eprintln!("cribra-mcp: stdout configuration failed");
         return WriterExit::Completed(EXIT_INTERNAL);
     }
@@ -439,7 +439,7 @@ fn writer_loop(
             }
         }
 
-        match write_all_nonblocking(libc::STDOUT_FILENO, &outbound.bytes, backpressure_timeout) {
+        match write_stdout(&outbound.bytes, backpressure_timeout) {
             WriteOutcome::Written => {
                 if let Some(id) = outbound.tracked.as_ref()
                     && let Ok(mut registry) = shared.registry.lock()

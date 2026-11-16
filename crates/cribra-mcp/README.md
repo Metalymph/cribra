@@ -25,7 +25,13 @@ Implemented:
   cancellation lifecycle tracking, prompt EOF shutdown with queued-work
   discard, broken-pipe handling, and explicit terminal backpressure
   termination;
-- fixed, source-free protocol errors and diagnostics.
+- fixed, source-free protocol errors and diagnostics;
+- native macOS, Linux, and Windows stdio transports;
+- deterministic release archives (given identical compiled binaries), one
+  `SHA256SUMS` manifest, and packaged smoke qualification of the extracted
+  executable; compilation itself is not claimed to be bit-for-bit reproducible;
+- an opt-in release workflow that qualifies on tag push and publishes only by
+  explicit dispatch as a draft, never as the repository "latest".
 
 Not implemented:
 
@@ -350,13 +356,38 @@ until writes would block, and the process test queues twelve roughly 8 KiB
 `tools/list` responses without reading stdout. A closed read end yields `EPIPE`
 rather than an asynchronous `SIGPIPE` termination.
 
+### Windows pipe behavior
+
+Windows anonymous pipes have no nonblocking mode; a full pipe blocks the write
+syscall. The writer therefore performs each response on a dedicated helper
+thread and waits for completion with the same no-progress deadline. On timeout
+the helper thread is deliberately **not** joined: it is still inside a blocking
+syscall, and joining it would reintroduce the unbounded stall the deadline
+exists to prevent. The writer instead reports backpressure to the main thread,
+which prints the fixed diagnostic and calls `process::exit(3)`. Process exit
+terminates every thread, so shutdown stays bounded even while the writer thread
+is blocked forever.
+
+That Windows path is compiled and tested on every platform
+(`#[cfg(any(not(unix), test))]`). Two tests make the guarantee explicit:
+
+- `threaded_writer_deadline_fires_while_write_is_still_blocked` uses a writer
+  whose `write` never returns; the test completes because the timeout path does
+  not join.
+- `blocked_writer_process_exits_within_deadline` re-executes the test binary
+  with an unread stdout pipe and asserts that the child reaches the backpressure
+  exit code within a bounded time.
+
+A closed Windows pipe surfaces as a synchronous write error, so the same helper
+thread reports `BrokenPipe` and the process exits cleanly with code `0`.
+
 ### Exit codes
 
 | Code | Meaning |
 | --- | --- |
 | `0` | Normal EOF shutdown after discarding queued work, or the peer closed stdout (`EPIPE`) |
 | `1` | Internal reader/encoder/registry/write failure |
-| `2` | Reserved for startup/configuration failure |
+| `2` | Startup/configuration failure, including unrecognized CLI arguments |
 | `3` | Sustained stdout backpressure or an exhausted output queue |
 
 ## Cancellation and identifier lifetime
@@ -552,5 +583,36 @@ M2 is complete when all of the following are true:
 
 ## Platform support
 
-M2 supports macOS and Linux stdio transports. Non-Unix targets fail at compile
-time. Windows stdio behavior is not claimed.
+M4 supports native stdio transports on macOS, Linux, and Windows:
+
+- `aarch64-apple-darwin`, `x86_64-apple-darwin`;
+- `x86_64-unknown-linux-gnu`, `aarch64-unknown-linux-gnu`;
+- `x86_64-pc-windows-msvc`.
+
+Unix targets use nonblocking `poll`-based writes; Windows uses the bounded
+writer thread described above. Both platforms share stdin decoding, protocol
+handling, limits, and exit-code semantics. Releases are native builds on native
+runners; see [`DISTRIBUTION.md`](DISTRIBUTION.md) for the install, host
+configuration, checksum, and release-process record. `aarch64-pc-windows-msvc`
+and musl targets are not produced.
+
+## Distribution
+
+Prebuilt archives for the five supported targets, one `SHA256SUMS` manifest,
+install instructions, and verified host configuration (Claude Desktop, Claude
+Code, Codex, and generic stdio hosts) are documented in
+[`DISTRIBUTION.md`](DISTRIBUTION.md).
+
+Qualification commands:
+
+```sh
+just mcp-package          # build, checksum, and verify the host archive
+just mcp-package-smoke    # extract into a clean temp dir and run the packaged server
+just mcp-release-readiness  # full local dry run; never publishes
+```
+
+The opt-in release workflow (`.github/workflows/mcp-release.yml`) runs
+qualification and packaging on a `cribra-mcp-v*` tag push and never publishes
+from that path. Publishing is a separate `workflow_dispatch` from the tag ref,
+behind the protected `mcp-release` environment, and creates a draft release
+with `--latest=false`. See [`DISTRIBUTION.md`](DISTRIBUTION.md) §9.
