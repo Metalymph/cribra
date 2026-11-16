@@ -68,6 +68,15 @@ check:
 check-all:
     cargo check --all-features
 
+# Verify the generated MCP conformance matrix against the pinned official requirement sets.
+mcp-matrix:
+    python3 crates/cribra-mcp/tests/conformance/matrix.py --self-test
+    python3 crates/cribra-mcp/tests/conformance/matrix.py --check
+
+# Build the release MCP server and run the independent TypeScript and Python SDK qualification.
+mcp-qualify:
+    crates/cribra-mcp/qualification/run-qualification.sh
+
 # Build/generate the Core-only UniFFI Python consumer and run its focused tests.
 uniffi-python-smoke python="python3.13":
     "{{python}}" bindings/python/smoke.py
