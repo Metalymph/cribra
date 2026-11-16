@@ -478,6 +478,40 @@ fn legacy_tools_surface_omits_modern_fields() {
     );
     assert!(call["result"].get("resultType").is_none());
 
+    // A legacy tool result carries a text content block, like the modern era.
+    let content = call["result"]["content"].as_array().expect("content");
+    assert_eq!(content[0]["type"], "text");
+    assert!(
+        content[0]["text"]
+            .as_str()
+            .is_some_and(|text| !text.is_empty()),
+        "the first content block must be non-empty text"
+    );
+
+    // A legacy tool-level failure is an `isError` result, not a JSON-RPC error.
+    server.send(&json!({
+        "jsonrpc": "2.0",
+        "id": 4,
+        "method": "tools/call",
+        "params": {
+            "name": "cribra_scan",
+            "arguments": {"source": "hello", "unexpectedField": true},
+        },
+    }));
+    let failure = server.next_json(Duration::from_secs(10));
+    validate_official("2025-11-25", &failure);
+    assert!(
+        failure.get("error").is_none(),
+        "a tool failure must not be a JSON-RPC error"
+    );
+    assert_eq!(failure["result"]["isError"], true);
+    assert_eq!(
+        failure["result"]["structuredContent"]["error"]["code"],
+        "invalid_arguments"
+    );
+    validate_tool_output("cribra_scan", &failure["result"]["structuredContent"]);
+    assert!(failure["result"].get("resultType").is_none());
+
     server.close_stdin();
     let status = server.wait(Duration::from_secs(10)).expect("exit");
     assert!(status.success());

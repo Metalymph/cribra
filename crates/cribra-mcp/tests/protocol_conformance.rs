@@ -645,3 +645,119 @@ fn tool_contract_schemas_accept_and_reject_the_documented_shapes() {
         "error structuredContent must match the transform output contract"
     );
 }
+
+/// Reproduces the transport-independent checks of the canonical
+/// `server-stateless`, `tools-list` and `caching` scenarios: discovery shape,
+/// the exact advertised capability set, caching hints, and tool-list ordering.
+#[test]
+fn modern_discovery_reports_exact_capabilities_and_caching() {
+    let mut session = Session::new();
+    let discover = dispatch(
+        &mut session,
+        modern_request(1, "server/discover", json!({"_meta": meta(MODERN_VERSION)})),
+    )
+    .expect("discover response");
+    validate(MODERN_VERSION, &discover);
+
+    let result = &discover["result"];
+    assert_eq!(result["supportedVersions"], json!([MODERN_VERSION]));
+    assert_eq!(
+        result["capabilities"],
+        json!({"tools": {}}),
+        "the server MUST advertise exactly the tools capability"
+    );
+    for absent in ["prompts", "resources", "logging", "sampling", "elicitation"] {
+        assert!(
+            result["capabilities"].get(absent).is_none(),
+            "capability {absent} must not be advertised"
+        );
+    }
+    assert_eq!(result["resultType"], "complete");
+    assert_eq!(result["ttlMs"], 0);
+    assert_eq!(result["cacheScope"], "private");
+    assert_eq!(
+        result["_meta"]["io.modelcontextprotocol/serverInfo"]["name"],
+        "cribra-mcp"
+    );
+
+    // `tools/list` must carry caching hints and stay in a stable order across
+    // consecutive requests while the advertised set is unchanged.
+    let mut snapshots = Vec::new();
+    for id in 2..=4 {
+        let list =
+            dispatch(&mut session, modern_meta_request(id, "tools/list")).expect("tool list");
+        validate(MODERN_VERSION, &list);
+        assert_eq!(list["result"]["ttlMs"], 0);
+        assert_eq!(list["result"]["cacheScope"], "private");
+        assert_eq!(list["result"]["resultType"], "complete");
+        snapshots.push(list["result"].clone());
+    }
+    assert_eq!(
+        snapshots[0], snapshots[1],
+        "a repeated tools/list with an unchanged tool set must be byte-stable"
+    );
+    assert_eq!(snapshots[1], snapshots[2]);
+
+    for tool in list_tools(&snapshots[0]) {
+        let name = tool["name"].as_str().expect("tool name");
+        assert!(
+            (1..=128).contains(&name.len()),
+            "tool name length outside 1..=128: {name}"
+        );
+        assert!(
+            name.chars()
+                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | '-')),
+            "tool name outside [A-Za-z0-9_.-]: {name}"
+        );
+        assert!(tool["description"].as_str().is_some_and(|d| !d.is_empty()));
+        assert!(tool["inputSchema"].is_object());
+    }
+}
+
+fn list_tools(result: &Value) -> &Vec<Value> {
+    result["tools"].as_array().expect("tools array")
+}
+
+/// Reproduces the canonical `ping` scenario and confirms that methods removed
+/// in the modern revision are still method-not-found, in both eras.
+#[test]
+fn legacy_ping_and_removed_modern_methods_are_exact() {
+    let mut session = Session::new();
+
+    for method in ["ping", "initialize", "logging/setLevel", "resources/list"] {
+        let response = dispatch(&mut session, modern_meta_request(1, method)).expect("response");
+        validate(MODERN_VERSION, &response);
+        assert_eq!(
+            response["error"]["code"], -32601,
+            "{method} must be absent in {MODERN_VERSION}"
+        );
+    }
+
+    dispatch(&mut session, legacy_initialize(2, "2025-11-25")).expect("initialize");
+    assert!(
+        dispatch(
+            &mut session,
+            json!({"jsonrpc": "2.0", "method": "notifications/initialized"})
+        )
+        .is_none()
+    );
+
+    // After `initialize` and before the notification, ping is still serviced.
+    let ping = dispatch(
+        &mut session,
+        json!({"jsonrpc": "2.0", "id": 3, "method": "ping"}),
+    )
+    .expect("legacy ping");
+    validate("2025-11-25", &ping);
+    assert_eq!(ping["result"], json!({}));
+    assert!(ping["result"].get("resultType").is_none());
+
+    let removed = dispatch(
+        &mut session,
+        json!({"jsonrpc": "2.0", "id": 4, "method": "logging/setLevel", "params": {"level": "info"}}),
+    )
+    .expect("legacy removed method");
+    validate("2025-11-25", &removed);
+    assert_eq!(removed["error"]["code"], -32601);
+    assert_eq!(removed["error"]["message"], "Method not found");
+}

@@ -424,16 +424,27 @@ is URL/HTTP-SSE based (`--url`) and does not launch a stdio server. Its
 and multi-round tool scenarios beyond this crate's declared scope. This crate
 does **not** claim an official conformance-suite pass or certification.
 
-Independent official TypeScript SDK 2.4.0 clients were connected directly to
-the real binary over stdio:
+M3 adds a reproducible qualification record:
+[`CONFORMANCE.md`](CONFORMANCE.md) holds the generated requirement matrix for
+both pinned revisions (147 canonical rows, each classified as applicable,
+partial or not applicable with its prerequisite spelled out), the evidence for
+every passing row, and an explicit PASS/FAIL/PARTIAL verdict.
 
-- modern client pinned to `2026-07-28`: negotiated `2026-07-28`, observed
-  `supportedVersions: ["2026-07-28"]`, listed exactly `cribra_scan` and
-  `cribra_transform`, scanned a fake GitHub PAT without leaking it, and
-  transformed the same source to `before [REDACTED] after` with matching first
-  text content;
-- legacy client: negotiated `2025-11-25`, reported the legacy era, listed the
-  same two tools, and executed both scan and template transform successfully.
+Independent SDK clients are pinned and run by
+`crates/cribra-mcp/qualification/run-qualification.sh`:
+
+- TypeScript `@modelcontextprotocol/client` 2.4.0 — 5 scenarios covering pinned
+  modern negotiation, `auto` negotiation, the legacy handshake, an unexpected
+  server exit, and clean close;
+- Python `mcp` 2.3.0 — 5 scenarios covering a pinned modern client (which
+  performs **no** discovery probe; asserted rather than assumed), explicit
+  `server/discover` over the wire, `auto` negotiation, legacy handshake with the
+  tool-error taxonomy, and clean close.
+
+Each harness re-validates tool results with a third-party JSON Schema validator
+against the advertised output schemas. The legacy *fallback* negotiation path is
+not exercised against this server, because the server answers `server/discover`,
+and is not claimed.
 
 ## Measurements
 
@@ -471,6 +482,10 @@ cargo test -p cribra-mcp --all-targets
 cargo test -p cribra-mcp --all-targets # with +1.97.0
 cargo test -p cribra
 cargo build --release -p cribra-mcp
+
+# M3 conformance matrix and independent SDK qualification
+just mcp-matrix
+just mcp-qualify
 ```
 
 Expected test coverage:
@@ -500,7 +515,17 @@ Expected test coverage:
 - stdout full-pipe timeout with exit `3`;
 - broken stdout pipe shutdown;
 - EOF with queued real scan work, and cancellation during real execution;
-- stdout cleanliness, source-free errors, and normal EOF exit.
+- stdout cleanliness, source-free errors, and normal EOF exit;
+- adversarial framing: empty lines, batch arrays, CRLF delimiters, invalid
+  UTF-8, recursion-limited nesting, maximum-length identifiers, oversized
+  frames and duplicate live identifiers;
+- 1 MiB source-size boundary exactly at and one byte over the limit;
+- canary-based privacy checks for scan results, tool errors, stderr and
+  transform text/structured agreement;
+- partial pipe writes for a multi-chunk response, and a mid-response client
+  disconnect;
+- the generated conformance matrix itself: completeness, uniqueness, verbatim
+  canonical classification, and existence of every cited test.
 
 ## M2 exit criteria
 
