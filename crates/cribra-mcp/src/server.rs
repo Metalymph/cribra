@@ -12,7 +12,7 @@
 //! writer returns an explicit terminal exit code; it never leaves the reader
 //! blocked while pretending the connection is healthy.
 
-use std::io;
+use std::io::{self, Write};
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 use std::sync::mpsc::{self, RecvTimeoutError, SyncSender, TrySendError};
@@ -38,6 +38,9 @@ use crate::transport::{
 
 struct Shared {
     terminal: AtomicI32,
+    /// Claimed by the first thread that reports a terminal condition. The
+    /// claim orders the diagnostic write before the terminal code is published.
+    terminal_reported: AtomicBool,
     input_closed: AtomicBool,
     registry: Mutex<Registry>,
 }
@@ -56,6 +59,7 @@ impl Shared {
     fn new() -> Self {
         Self {
             terminal: AtomicI32::new(0),
+            terminal_reported: AtomicBool::new(false),
             input_closed: AtomicBool::new(false),
             registry: Mutex::new(Registry::new(CANCELLATION_REGISTRY_CAPACITY)),
         }
@@ -449,11 +453,13 @@ fn writer_loop(
             }
             WriteOutcome::BrokenPipe => return WriterExit::Completed(0),
             WriteOutcome::Backpressure => {
-                eprintln!("cribra-mcp: stdout backpressure timeout; terminating");
+                write_diagnostic(
+                    "cribra-mcp: output backpressure: stdout write deadline exceeded; terminating",
+                );
                 return WriterExit::Completed(EXIT_BACKPRESSURE);
             }
             WriteOutcome::Error => {
-                eprintln!("cribra-mcp: stdout write failed; terminating");
+                write_diagnostic("cribra-mcp: stdout write failed; terminating");
                 return WriterExit::Completed(EXIT_INTERNAL);
             }
         }
@@ -474,7 +480,7 @@ fn send_tracked(
             mark_terminal(
                 shared,
                 EXIT_BACKPRESSURE,
-                "cribra-mcp: output queue exhausted",
+                "cribra-mcp: output backpressure: writer queue exhausted; terminating",
             );
             false
         }
@@ -506,7 +512,7 @@ fn send_untracked(writer_tx: &SyncSender<Outbound>, shared: &Shared, reply: Repl
             mark_terminal(
                 shared,
                 EXIT_BACKPRESSURE,
-                "cribra-mcp: output queue exhausted",
+                "cribra-mcp: output backpressure: writer queue exhausted; terminating",
             );
             false
         }
@@ -541,10 +547,23 @@ fn encode_reply(reply: &Reply) -> Result<Vec<u8>, ()> {
 }
 
 fn mark_terminal(shared: &Shared, code: i32, message: &'static str) {
-    let previous = shared.terminal.swap(code, Ordering::AcqRel);
-    if previous == 0 {
-        eprintln!("{message}");
+    // Claim the diagnostic before publishing the terminal code. Any thread that
+    // observes a non-zero code may terminate the process immediately, and
+    // Windows `ExitProcess` stops every other thread; a diagnostic written after
+    // the code became visible could therefore be lost. The release store below
+    // makes "diagnostic written" happen-before every acquire load of `terminal`.
+    if shared.terminal_reported.swap(true, Ordering::AcqRel) {
+        return;
     }
+    write_diagnostic(message);
+    shared.terminal.store(code, Ordering::Release);
+}
+
+/// Writes one terminal diagnostic without panicking on a broken stderr.
+fn write_diagnostic(message: &str) {
+    let mut stderr = io::stderr().lock();
+    let _ = writeln!(stderr, "{message}");
+    let _ = stderr.flush();
 }
 
 #[cfg(test)]

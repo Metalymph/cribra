@@ -37,9 +37,10 @@ fn sustained_stdout_backpressure_is_terminal_with_exit_3() {
         .expect("spawn server");
 
     // Keep the read end open but never read it. Each tools/list response is
-    // about 8 KiB, so more than eight responses exceed the 64 KiB pipe buffer
-    // and the writer must enter poll and reach the explicit no-progress
-    // deadline instead of waiting for stdin EOF.
+    // about 8 KiB, so the output eventually stalls. The terminal condition is
+    // reported either by the write deadline or by the bounded writer queue,
+    // whichever the writer thread observes first; both are backpressure and
+    // both must terminate with the same explicit code and a diagnostic.
     let _unread_stdout = child.stdout.take().expect("stdout pipe");
     let mut stdin = child.stdin.take().expect("stdin pipe");
     for id in 1..=12 {
@@ -68,8 +69,11 @@ fn sustained_stdout_backpressure_is_terminal_with_exit_3() {
         .expect("stderr pipe")
         .read_to_string(&mut stderr)
         .expect("read stderr");
+    // The diagnostic must be written before the terminal code becomes visible,
+    // so a process exit can never race the message away. It must name the
+    // output-backpressure condition without pinning which detector fired.
     assert!(
-        stderr.contains("stdout backpressure timeout"),
+        stderr.contains("output backpressure"),
         "unexpected terminal diagnostic: {stderr}"
     );
 }

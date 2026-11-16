@@ -328,7 +328,10 @@ source-free errors.
   matched text, and surrounding context.
 - Message size, response size, queue depth, and custom-rule counts are bounded.
 - On sustained stdout backpressure the process terminates deterministically
-  with exit code `3` instead of blocking forever.
+  with exit code `3` instead of blocking forever. The terminal diagnostic is
+  written before the exit code becomes observable, so a process exit cannot
+  race the message away; this matters on Windows, where `ExitProcess` stops
+  every other thread immediately.
 - On stdin EOF the server drains and discards queued work, then exits `0`.
 - A closed stdout pipe results in a clean, deterministic shutdown.
 
@@ -437,9 +440,11 @@ Not executed locally, and therefore not claimed as verified here:
   asserts a bounded exit. The Windows-native full test suite runs on
   `windows-latest` in both the MCP workflow and the release build jobs.
   `std::process::exit` cannot block on the helper thread: runtime cleanup uses
-  `try_lock` on the stdout buffer and never flushes it. This is reasoned from
-  the standard library source and proven at process level on the shared code
-  path, but not executed on Windows in this local environment.
+  `try_lock` on the stdout buffer and never flushes it. Terminal diagnostics are
+  written before the terminal code is published, so the Windows exit path cannot
+  discard them. This is reasoned from the standard library source and proven at
+  process level on the shared code path, but not executed on Windows in this
+  local environment.
 - `x86_64-apple-darwin` and both Linux targets on their native runners. The
   x86_64 binary and its test binaries build locally, but Rosetta is not
   installed on this host, so it is not executed here.
