@@ -4,7 +4,9 @@ Evidence reviewed on 2026-10-20; P0.4/P0.5 WASM source streaming and incremental
 scanning, P0.6A/P0.6B/P0.6C adapter configuration/metadata/batch scanning and
 P0.6D Flow Share Bundles locally checked on 2026-10-22. Swift Fuse 0.7.2
 publication and clean-room remote qualification were recorded on 2026-10-29.
-This is a snapshot of distinct contracts:
+The `cribra-mcp` 0.1.1 release, five-target distribution and registry status for
+the CLI and npm packages were verified on 2026-11-17. This is a snapshot of
+distinct contracts:
 **implemented** means an API/build path exists; **locally qualified** means a
 consumer ran on the recorded host; **CI-qualified** means the named remote job
 completed successfully. Neither a successful build nor an uploaded artifact is
@@ -18,7 +20,8 @@ this document records evidence, not delivery commitments.
 | Component | Source contract | Verified publication / distribution |
 | --- | --- | --- |
 | Rust Core `cribra` | 0.7.2; MSRV 1.97 | Latest [Core GitHub release](https://github.com/Metalymph/cribra/releases/tag/v0.7.2); independently verified 0.7.2 on crates.io |
-| CLI `cribra-cli` / executable `cribra` | 0.4.4; workspace currently uses Core `^0.7` | Source build available; no CLI record found in the official registry index at this audit; Core releases do not establish CLI publication |
+| CLI `cribra-cli` / executable `cribra` | 0.4.4; workspace currently uses Core `^0.7` | Source build and `cargo install --path crates/cribra-cli` from a checkout; crates.io returned 404 at this audit, so there is no `cargo install cribra-cli` registry path. Core releases do not establish CLI publication |
+| MCP `cribra-mcp` | 0.1.1; five native targets; stdio only | [Published `cribra-mcp-v0.1.1`](https://github.com/Metalymph/cribra/releases/tag/cribra-mcp-v0.1.1) with five archives and one `SHA256SUMS` manifest; M3 conformance **PARTIAL PASS**, M4 distribution **PASS**. Tool integration, not a language binding |
 | C adapter `cribra-capi` | 0.3.0; native ABI protocol 0.3.0 | Source-built dynamic/static libraries and checked-in header; Cargo `publish = false` |
 | WASM `cribra-wasm` | 0.4.7; workspace currently uses Core `^0.7` | [Independent GitHub release](https://github.com/Metalymph/cribra/releases/tag/cribra-wasm-v0.4.7); [registry 0.4.7](https://github.com/rust-lang/crates.io-index/blob/master/cr/ib/cribra-wasm) depends on Core `^0.6`. Published and workspace dependency contracts differ |
 | Shared `cribra-uniffi` | 0.1.0; Core 0.7.2; UniFFI exactly 0.32.2; Rust 1.97 | Cargo `publish = false`; shared generator/adapter, not a second detection engine |
@@ -26,6 +29,26 @@ this document records evidence, not delivery commitments.
 | Python | Fuse wheel `cribra` 0.7.2+fuse; module `cribra_uniffi` | Local/CI wheels; planned official Fuse PyPI artifact; no PyPI publication established |
 | Kotlin/JVM | Profile JAR/ZIP names use Core 0.7.2; adapter 0.1.0 | Local and CI host ZIPs; planned official Fuse Maven artifact; no Maven Central or other package publication established |
 | TypeScript `@metalymph/cribra` | 0.1.0; Flow WebAssembly package; Node `>=22` declaration | **Not published.** Approved identity (`cribraRelease.state` `approved`); no npm registry record. Local source or packed-tarball installation only until a separately authorized release |
+
+### Registry audit — 2026-11-17
+
+The official registries were queried independently of GitHub. Results are
+publication evidence, not implementation or qualification claims.
+
+| Registry / package | Observed result |
+| --- | --- |
+| crates.io `cribra` | `200`; latest `0.7.2` |
+| crates.io `cribra-wasm` | `200`; latest `0.4.7` |
+| crates.io `cribra-cli` | `404`; crate does not exist |
+| crates.io `cribra-capi` | `404`; crate does not exist |
+| crates.io `cribra-uniffi` | `404`; crate does not exist |
+| npm `@metalymph/cribra` | `404 Not found` |
+| npm `@metalymph/cribra-react-native` | `404 Not found` |
+| GitHub `cribra-mcp-v0.1.1` | Published release; five archives plus `SHA256SUMS` |
+
+The MCP release is a GitHub release, not a Cargo or npm registry package. Use
+`cargo install --path crates/cribra-cli` from a checkout for the CLI; do not use
+`cargo install cribra-cli` or an npm install command for an unpublished package.
 
 The official binding distribution policy is one Fuse-first package per ecosystem
 (SwiftPM, Maven Central and PyPI); see
@@ -50,17 +73,24 @@ approved but unpublished `@metalymph/cribra@0.1.0`. The package is not private,
 has no npm registry record, and uses `cribraRelease.state` `approved`; the
 unpublished `@metalymph/cribra` name is not usable as an npm installation
 instruction until a separately authorized release succeeds.
-The TypeScript native backend and native Rust MCP server remain official planned
-workstreams, and the native backend does not exist. The React Native milestone
-has three separate gates: UniFFI/JSI/TurboModule compatibility investigation,
-native binding implementation preserving classification semantics and resource
-ownership, and real iOS/Android consumer qualification. C#, Go and PHP are planned
-as demand-driven / community-contribution candidates and are not actively
-scheduled; Ruby, Elixir and other language candidates retain that status.
-Doxygen-generated C API documentation and GitHub/GitLab integrations are likewise
-demand-driven and unscheduled. These candidates are not implemented, qualified or
-published, and no delivery dates are promised. Community integrations may use the
-public interoperability surfaces without becoming officially maintained. See
+The React Native package is implemented, merged and qualified through RN.1.6 as
+the private, unpublished `@metalymph/cribra-react-native@0.0.0`. It is a direct
+C ABI TurboModule over Core 0.7.2 and `cribra-capi` 0.3.0, not a UniFFI or
+WebAssembly consumer. RN.1.6 evidence covers host plain/ASan/UBSan/TSan tests,
+iOS Simulator Debug/Release, Android ARM64 emulator Debug/Release, Android
+four-ABI builds and three JS reload cycles per platform; physical devices and iOS
+device builds are not tested. The separate native Node.js TypeScript backend
+remains an official planned workstream and does not exist. The native Rust MCP
+server is published as `cribra-mcp` 0.1.1: five native archives, one
+`SHA256SUMS` manifest, local stdio transport, M3 conformance **PARTIAL PASS** and
+M4 distribution **PASS**. It is a tool integration, not a language binding.
+C#, Go and PHP are planned as demand-driven / community-contribution candidates
+and are not actively scheduled; Ruby, Elixir and other language candidates
+retain that status. Doxygen-generated C API documentation is likewise
+demand-driven and unscheduled. Official GitHub/GitLab scanner integrations are
+not on the roadmap. These candidates are not implemented, qualified or
+published, and no delivery dates are promised. Community integrations may use
+the public interoperability surfaces without becoming officially maintained. See
 [Ecosystem and scope](ECOSYSTEM.md#binding-support-policy) for the authoritative
 binding policy and the
 [roadmap priority order](../ROADMAP.md#development-priority-order-forward-looking)

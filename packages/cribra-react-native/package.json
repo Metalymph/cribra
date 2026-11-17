@@ -29,6 +29,7 @@
   "scripts": {
     "typecheck": "node consumer/node_modules/typescript/bin/tsc --noEmit -p tsconfig.json",
     "test:abi": "clang++ -std=c++17 -I third_party/cribra/include tools/abi-check/main.cpp -o \"${TMPDIR:-/tmp}/cribra-abi-check\" && \"${TMPDIR:-/tmp}/cribra-abi-check\"",
+    "test:host": "bash tools/host-tests/run.sh",
     "build:native": "bash scripts/build-native.sh"
   },
   "codegenConfig": {

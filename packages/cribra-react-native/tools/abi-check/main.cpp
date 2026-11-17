@@ -14,6 +14,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <string_view>
+#include <type_traits>
 
 namespace {
 
@@ -265,6 +266,97 @@ void CheckExplanationMapping() {
   assert(!MapExplanation(CRIBRA_EXPLANATION_AMBIGUOUS, kNone, 2));
 }
 
+void CheckTransformProtocol() {
+  // The transformation surface is part of the same 0.3 ABI. Pin the exported
+  // signatures so a header or linkage drift fails this host check.
+  using RedactFn = CribraStatus (*)(
+      const uint8_t*,
+      size_t,
+      const CribraReport*,
+      CribraOutput**,
+      CribraError**);
+  using RedactWithFn = CribraStatus (*)(
+      const uint8_t*,
+      size_t,
+      const CribraReport*,
+      const uint8_t*,
+      size_t,
+      CribraOutput**,
+      CribraError**);
+  using TemplateFn = CribraStatus (*)(
+      const uint8_t*,
+      size_t,
+      const CribraReport*,
+      CribraOutput**,
+      CribraError**);
+  using TemplateWithFn = CribraStatus (*)(
+      const uint8_t*,
+      size_t,
+      const CribraReport*,
+      const CribraTemplateConfig*,
+      CribraOutput**,
+      CribraError**);
+  using PseudonymizeFn = CribraStatus (*)(
+      const uint8_t*,
+      size_t,
+      const CribraReport*,
+      const CribraPseudonymizeConfig*,
+      CribraOutput**,
+      CribraError**);
+  using SynthesizeFn = CribraStatus (*)(
+      const uint8_t*,
+      size_t,
+      const CribraReport*,
+      const CribraSynthesizeConfig*,
+      CribraOutput**,
+      CribraError**);
+
+  static_assert(std::is_same_v<decltype(&cribra_transform_redact), RedactFn>);
+  static_assert(
+      std::is_same_v<decltype(&cribra_transform_redact_with), RedactWithFn>);
+  static_assert(
+      std::is_same_v<decltype(&cribra_transform_template), TemplateFn>);
+  static_assert(
+      std::is_same_v<decltype(&cribra_transform_template_with), TemplateWithFn>);
+  static_assert(std::is_same_v<
+                decltype(&cribra_transform_pseudonymize),
+                PseudonymizeFn>);
+  static_assert(
+      std::is_same_v<decltype(&cribra_transform_synthesize), SynthesizeFn>);
+
+  // Transform failures use their own coarse status; classification in the
+  // facade is a compatibility mapping over fixed diagnostics, not this code.
+  static_assert(CRIBRA_TRANSFORM_ERROR == 5);
+
+  // The three configuration structs used by the bridge carry exactly the
+  // documented fields and borrow caller memory only for one call.
+  CribraTemplateConfig templateConfig{};
+  templateConfig.namespace_ = CribraStringView{nullptr, 0};
+  templateConfig.numbered = 0;
+  assert(templateConfig.numbered == 0);
+
+  CribraPseudonymizeConfig pseudonymizeConfig{};
+  pseudonymizeConfig.key = nullptr;
+  pseudonymizeConfig.key_len = 0;
+  pseudonymizeConfig.prefix = CribraStringView{nullptr, 0};
+  pseudonymizeConfig.digest_bytes = 16;
+  assert(pseudonymizeConfig.key_len == 0);
+  assert(pseudonymizeConfig.digest_bytes == 16);
+
+  CribraSynthesizeConfig synthesizeConfig{};
+  synthesizeConfig.key = nullptr;
+  synthesizeConfig.key_len = 0;
+  synthesizeConfig.marker = CribraStringView{nullptr, 0};
+  assert(synthesizeConfig.key_len == 0);
+
+  // The output handle is Rust-owned and released exactly once.
+  using OutputFreeFn = void (*)(CribraOutput*);
+  using OutputViewFn =
+      CribraStatus (*)(const CribraOutput*, CribraStringView*);
+  static_assert(std::is_same_v<decltype(&cribra_output_free), OutputFreeFn>);
+  static_assert(std::is_same_v<decltype(&cribra_output_view), OutputViewFn>);
+}
+
 void CheckConfigurationProtocol() {
   // Rule metadata has no sentinel: all four documented families map, and any
   // other value fails closed.
@@ -372,11 +464,13 @@ int main() {
   CheckFindingEnums();
   CheckCandidateEnums();
   CheckExplanationMapping();
+  CheckTransformProtocol();
   CheckConfigurationProtocol();
 
   std::puts("ABI compatibility gate: PASS");
   std::puts("JS safe-integer boundary: PASS");
   std::puts("Strict enum/explanation projection: PASS");
+  std::puts("Transformation ABI signatures: PASS");
   std::puts("Scanner configuration protocol: PASS");
   return 0;
 }

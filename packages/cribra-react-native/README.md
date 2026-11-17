@@ -1,10 +1,12 @@
 # @metalymph/cribra-react-native
 
 Private, unpublished native React Native backend for the Cribra sensitive-data
-scanner. This is the RN.1.3 implementation: a direct C ABI TurboModule with a
-small TypeScript facade, asynchronous scanning, and caller-configurable scanner
-construction from Core catalogs and custom rules, validated in an isolated
-React Native 0.88.1 New Architecture/Hermes consumer.
+scanner. This is the RN.1.6 implementation: a direct C ABI TurboModule with a
+small TypeScript facade, asynchronous scanning, caller-configurable scanner
+construction from Core catalogs and custom rules, pure UTF-8/UTF-16 offset
+helpers, scan-coupled Flow transformations, and an explicit worker
+lifecycle/teardown contract, validated in an isolated React Native 0.88.1 New
+Architecture/Hermes consumer.
 
 This package is **not** the WebAssembly package `@metalymph/cribra` and is **not
 published to npm**. It does not change the Cribra Core, the released C ABI, or
@@ -22,8 +24,10 @@ TypeScript facade (src/index.ts)
 ```
 
 Native work runs on one serial worker thread. JSI values are read or created
-only on the JS thread; the worker only sees plain C++ values. Scanner, report,
-builder, and error handles are owned by RAII guards and never exposed to
+only on the JS thread. The worker queue carries owned C++ values and an
+`AsyncPromise` settlement handle; the worker never dereferences a raw JSI value,
+and settlement is scheduled through the React Native call invoker. Scanner,
+report, builder, and error handles are owned by RAII guards and never exposed to
 JavaScript. JavaScript receives only numeric scanner IDs and source-free DTOs.
 
 `createScanner(config?)` copies the entire configuration on the JS thread, then
@@ -41,6 +45,65 @@ neither finding/candidate explanations nor the severity summary fields. The
 whole batch resolves as one detached DTO or rejects atomically; no partial
 entries are returned.
 
+`transform()` is one TurboModule call and one worker job. The worker runs one
+`cribra_scanner_scan()` for the exact source, projects the full scan report, then
+runs one `cribra_transform_*()` call against that same live report and copies
+the owned UTF-8 output before releasing it. The key is copied into one
+non-copyable 32-byte native buffer owned through a shared pointer; the job
+lambda is copyable only because it shares that single owner. The key buffer is
+volatile-zeroed when the final owner is destroyed.
+
+### Lifecycle and teardown
+
+The native module has an explicit one-way lifecycle: `Running → Stopping →
+Stopped`. Destructing the TurboModule closes a settlement gate, then stops the
+serial worker:
+
+1. the worker stops accepting jobs;
+2. the job that is already running finishes its native work;
+3. queued jobs are destroyed on the worker without executing any Core call;
+4. every remaining scanner handle and copied key is released on the worker;
+5. the worker thread is joined. It is never detached.
+
+Shutdown never reads or creates a JSI value: the gate only prevents *new*
+settlement scheduling, and the destructor only uses plain C++ state. A job that
+was accepted before shutdown may still be discarded with its promise left
+pending; React Native owns invalidation of already-scheduled JavaScript
+callbacks through its weak `CallbackWrapper`. The gate and the worker-level
+catch-all are crash boundaries, not proof that an abandoned promise settled.
+
+Queue disposal is **O(N)** in the number of queued jobs. It is not
+constant-time: destroying queued transformation jobs wipes their copied source
+and key buffers, and destroying queued scan jobs releases their scanner
+references. The host suite measures 5,000 queued transform jobs (4 KiB source
+each) released in roughly 7 ms in a plain build and roughly 250 ms under TSan
+on the qualification host; these numbers are indicative, not a latency
+guarantee.
+
+A job that cannot be accepted is rejected immediately on the JS thread with a
+fixed, source-free detail:
+
+| Outcome | Detail | Public code |
+| --- | --- | --- |
+| Worker is stopping or stopped | `cribra_native_error:worker_stopped` | `native_error` |
+| Job could not be enqueued | `cribra_native_error:worker_unavailable` | `native_error` |
+
+No lifecycle-specific public error code is added. Releasing the rejected job
+also releases its scanner reference or copied key before the promise is
+rejected.
+
+Key material stays subject to the RN.1.5 rules on every path: the public
+`transform()` copies the caller's key into a fresh JavaScript temporary, the
+native module copies it once more into one non-copyable native `KeyBytes`
+buffer, and the caller's `Uint8Array` is never written. The JavaScript
+temporary is zeroed when the promise settles, including enqueue refusal and
+normal rejection; the native buffer is zeroed when its last owner is destroyed,
+whether the job ran, threw, or was discarded at shutdown. On a full JavaScript
+reload the old runtime is destroyed without running promise continuations, so
+the JavaScript temporary cannot be explicitly zeroed and abandoned jobs leave
+pending promises. That limitation is inherent to runtime teardown and is
+recorded in [QUALIFICATION.md](./QUALIFICATION.md).
+
 Before creating a scanner or scanning, including every source in a batch, the
 bridge compares the linked ABI (`cribra_abi_version_*`) with the vendored header
 contract (`ABI_VERSION_*`).
@@ -55,18 +118,21 @@ released.
 | --- | --- |
 | `src/NativeCribraReactNative.ts` | Codegen TurboModule spec and wire DTOs |
 | `src/index.ts` | Public TypeScript facade, DTO projection, lifecycle and errors |
-| `cpp/CribraBridge.h/.cpp` | C ABI ownership, scanner construction, rule metadata, scan projection, batch aggregation, ABI version |
+| `src/transform.ts` | Pure transform request validation, Core defaults, key copy/zeroize |
+| `cpp/CribraBridge.h/.cpp` | C ABI ownership, scanner construction, rule metadata, scan projection, batch aggregation, transformations, ABI version |
 | `cpp/CribraEnums.h` | Pure strict ABI enum, rule/build mapping, explanation, and sentinel helpers |
 | `cpp/CribraAbi.h` | Major/minor gate and JavaScript safe-integer helpers |
-| `cpp/CribraReactNative.h/.cpp` | Serial worker, scanner registry, async TurboModule methods |
-| `tools/abi-check/` | Host protocol test for the ABI gate, strict enum mapping, and configuration protocol |
+| `cpp/CribraSerialWorker.h` | JSI-free serial worker, settlement gate, refusal diagnostics, shutdown/discard contract |
+| `cpp/CribraOwnership.h` | JSI-free scanner/key ownership and zeroization primitives |
+| `cpp/CribraReactNative.h/.cpp` | Scanner registry, async TurboModule methods, transform input decoding |
+| `tools/abi-check/` | Host protocol test for the ABI gate, strict enum mapping, transform signatures, and configuration protocol |
 | `ios/OnLoad.mm` | iOS pure-C++ TurboModule registration |
 | `CribraReactNative.podspec` | CocoaPods integration and xcframework linkage |
 | `android/CMakeLists.txt` | Android target and prebuilt Rust static-library linkage |
 | `third_party/cribra/include/cribra.h` | Vendored copy of the canonical C ABI header |
 | `scripts/build-native.sh` | Builds iOS/Android Rust static libraries |
 | `fixtures/` | Synthetic, non-secret scan fixture |
-| `tools/oracle/` | Test-only direct-Core oracle generator for scans and configurations |
+| `tools/oracle/` | Test-only direct-Core oracle generator for scans, configurations, and transformations |
 | `consumer/` | Isolated RN 0.88.1 runtime/parity harness |
 
 ## API
@@ -150,6 +216,61 @@ remediation; the output-only `'unknown'` label is rejected as input.
 `scanner.rulesCount` its length. Both remain readable after `dispose()`. The
 snapshot never contains matcher, pattern, or source contents.
 
+### Transformations
+
+`scanner.transform(source, request)` is the native Flow surface. It performs
+exactly one Core scan and one Core transformation against the report from that
+same scan, and returns both:
+
+```ts
+import { createScanner, type TransformRequest } from '@metalymph/cribra-react-native';
+
+const scanner = await createScanner();
+try {
+  const request: TransformRequest = {
+    kind: 'redact',
+    replacement: '[HIDDEN]',
+  };
+  const { scan, output } = await scanner.transform(source, request);
+  console.log(scan.findings.length, output);
+} finally {
+  await scanner.dispose();
+}
+```
+
+| Kind | Required | Options | Core default |
+| --- | --- | --- | --- |
+| `redact` | — | `replacement` | `"[REDACTED]"`; `""` is a valid explicit value |
+| `template` | — | `namespace`, `numbered` | `"CRIBRA"`, `false` |
+| `pseudonymize` | `key` | `prefix`, `digestBytes` | `"cribra_pseudo_"`, `16` |
+| `synthesize` | `key` | `marker` | `"cribra_synthetic"` |
+
+`key` must be a `Uint8Array` of exactly 32 bytes. The facade copies it into a
+fresh exactly-sized `ArrayBuffer`, zeroes that JavaScript temporary in a
+`finally` block after the call settles, and never mutates the caller's array
+(or its backing store). The native side copies the buffer on the JS thread,
+zeroes its own key buffer when the final owner is destroyed, and does not
+retain the key after the worker job. The facade only substitutes a default when
+an option is absent, so omitted and explicit values (including `""`) are never
+conflated for `replacement`, `namespace`, `prefix`, or `marker`.
+
+`digestBytes` accepts any nonnegative integer up to `0xFFFFFFFF`; Core clamps
+the effective digest length to its supported range, so the facade does not
+re-clamp or reinterpret it.
+
+`scan` is the same detached report `scan(source)` would return for that string,
+including findings, candidates, counts, severity, and `hasCritical`. It has no
+`sourceId`, because a transformation is a single unnamed source. Ambiguous
+candidates are preserved in `scan` and are never rewritten in `output`.
+
+Errors are raised before any native work for a non-string source, a
+non-object request, an unknown `kind`, invalid option types, malformed UTF-16
+in the source or any option string, and a key that is not exactly 32 bytes.
+Core remains the only authority for span validation, overlap policy, and
+replacement semantics; TypeScript and C++ contain no transformation logic.
+Core merges overlapping finding spans for redaction and rejects them for the
+other three kinds, exactly as the WebAssembly package does.
+
 ### Async differences from the WebAssembly package
 
 - `createScanner()` is a promise, not a synchronous factory after `init()`.
@@ -158,6 +279,8 @@ snapshot never contains matcher, pattern, or source contents.
 - `scan()` and `scanBatch()` are promises. `scanBatch()` is one TurboModule
   call and one native worker job that runs N serial C ABI scans; the batch
   resolves or rejects atomically with no partial result.
+- `transform()` is a promise. It is one TurboModule call and one native worker
+  job that runs one scan and one C ABI transformation against that report.
 - `scanBatch()` preserves empty IDs, duplicate IDs, empty sources, and the
   exact input order. An empty input array is still one native call and returns
   an accurate zero summary.
@@ -166,6 +289,14 @@ snapshot never contains matcher, pattern, or source contents.
   scan after disposal throws `CribraError` with `code === 'disposed'`.
 - Findings and candidate explanations are always materialized. There is no
   `includeExplanations` option. Detached rule metadata is available in RN.1.3.
+- `transform()` resolves with `{ scan, output }`; it is the native equivalent
+  of the WebAssembly `scanner.transform()`.
+- Work that reaches a stopping or stopped native worker is rejected with
+  `CribraError` code `native_error` and the fixed detail
+  `cribra_native_error:worker_stopped`. A native enqueue failure uses
+  `cribra_native_error:worker_unavailable`. Both are refusals, never a silently
+  pending promise. A full JS reload does not settle promises that were still in
+  flight when the old runtime was destroyed.
 
 ### Errors
 
@@ -180,6 +311,12 @@ enum values and impossible explanation kind/payload combinations fail closed as
 reports `numeric_overflow`. Both map to `CribraError` with
 `code === 'invalid_native_report'`. JSI string conversion failures are sanitized
 to `invalid_input_string` without forwarding the JavaScript/JSI exception text.
+
+Malformed UTF-16 in a scanned source is rejected locally, before any native
+call, as `CribraError` with `code === 'invalid_unicode_string'`. Offset
+conversions use the additional stable codes `invalid_span_value`,
+`invalid_span_order`, `span_out_of_bounds`, `span_not_utf8_boundary`, and
+`span_not_utf16_boundary`. See [Offsets](#offsets).
 
 An incompatible linked ABI is reported as `CribraError` with
 `code === 'abi_mismatch'` and a detail of the form
@@ -208,14 +345,137 @@ in the error message or detail. Matcher, pattern, and source contents are never
 reported. The builder is released on every early error, and a scanner whose
 metadata projection fails is disposed before the projection error is surfaced.
 
+Flow transformations have their own error codes. Every Core transformation
+failure arrives as C ABI status `CRIBRA_TRANSFORM_ERROR` with one of Cribra's
+fixed privacy-safe diagnostics; the facade classifies only an exact match of
+that isolated diagnostic, and only when the `transform_failed` native token is
+present. Prefixes, suffixes, rewording, different casing, or a different native
+status map to `transform_unknown`:
+
+| Fixed C ABI diagnostic | `CribraError.code` |
+| --- | --- |
+| `transform report contains an invalid source span` | `transform_invalid_span` |
+| `transform report span is not aligned to UTF-8 boundaries` | `transform_invalid_utf8_boundary` |
+| `transform requires non-overlapping finding spans` | `transform_overlapping_spans` |
+| `transform source length does not match report` | `transform_unknown` |
+| `source transformation could not be applied safely` | `transform_unknown` |
+
+A key that is not exactly 32 bytes is `invalid_key_length`, both in the facade
+and in the native bridge. A wrong length never reaches Core.
+
+### Offsets
+
+Core reports zero-based half-open UTF-8 byte spans (`finding.span`,
+`candidate.span`). JavaScript strings are indexed in UTF-16 code units, so use
+the pure conversion utilities rather than byte arithmetic:
+
+```ts
+import {
+  byteSpanToUtf16Range,
+  byteSpansToUtf16Ranges,
+  utf16RangeToByteSpan,
+  utf8ByteLength,
+} from '@metalymph/cribra-react-native';
+
+const range = byteSpanToUtf16Range(source, finding.span);
+const matched = source.slice(range.start, range.end);
+
+const ranges = byteSpansToUtf16Ranges(
+  source,
+  findings.map((finding) => finding.span),
+);
+const span = utf16RangeToByteSpan(source, range);
+```
+
+They are pure, synchronous and native-independent: they work without a scanner.
+
+Conversion rules:
+
+- Exact or throw. There is no clamping, rounding, U+FFFD substitution, or
+  selection of half a surrogate pair.
+- Ranges are half-open in both directions. Byte offset `0`, UTF-16 index `0`,
+  and the exclusive end of a non-empty source are valid boundaries.
+- Grapheme clusters are not respected. Combining marks and ZWJ emoji are
+  separate scalars and may be split at any scalar boundary. No Unicode
+  normalization is applied.
+- `byteSpansToUtf16Ranges` converts many spans from one source in a single walk
+  (`O(n + k log k)` time, `O(k)` memory) and preserves input order. Prefer it
+  over converting findings one at a time, which costs `O(k * n)`.
+
+Validation is deterministic and source-free, in this order:
+
+| # | Failure | `CribraError.code` |
+| --- | --- | --- |
+| 1 | source is not a string | `invalid_argument` |
+| 2 | unpaired UTF-16 surrogate in the source | `invalid_unicode_string` |
+| 3 | span/range is not an object, or an endpoint is not a safe non-negative integer | `invalid_span_value` |
+| 4 | `start > end` | `invalid_span_order` |
+| 5 | endpoint beyond the source length | `span_out_of_bounds` |
+| 6 | endpoint inside a UTF-8 scalar (forward) | `span_not_utf8_boundary` |
+| 6 | endpoint inside a surrogate pair (reverse) | `span_not_utf16_boundary` |
+
+Errors never contain source text, matched values, offsets, matchers, or rule
+IDs.
+
+#### Malformed UTF-16 and scan preflight
+
+Hermes replaces an unpaired surrogate with U+FFFD before scanning, and JSC
+silently truncates at it. Either way, native spans could refer to text that is
+not the caller's string. `scan()`, `scanBatch()`, and `transform()` therefore
+reject any unpaired high or low surrogate with `invalid_unicode_string` before
+dispatching native work. For `transform()`, the same preflight covers the
+source and every option string (`replacement`, `namespace`, `prefix`,
+`marker`), so the transformed source and inserted option text are exactly the
+caller's values. Every batch source is validated before the batch is sent, so no
+partial or rewritten source reaches Core. Well-formed strings, including
+supplementary characters and emoji, are unaffected. The conversion utilities
+independently reject malformed input.
+
+#### Source drift
+
+Spans are only meaningful for the exact string value passed to the scan. Keep
+that value. JavaScript strings are immutable, so "modified after scanning"
+means the caller substituted a different value. Before applying highlights or
+redactions, compare the retained value with the current editor content:
+
+```ts
+const scanned = source;
+const report = await scanner.scan(scanned, { id });
+if (currentText !== scanned || report.sourceBytes !== utf8ByteLength(scanned)) {
+  // Stale result: rescan. Do not index, highlight, or redact.
+}
+```
+
+The byte-length check is a necessary consistency check but not proof of
+identity: different strings can share a UTF-8 byte length (`"é"` and `"Ā"` are
+both 2 bytes). Never apply redaction or highlighting to a changed source merely
+because the length matches. For an in-place transform, pass the retained string
+to `scanner.transform(scanned, request)`: the native call scans that exact
+value and returns the output for it, so a transformed result never inherits
+stale spans. There is still no background or editor-driven redaction.
+
+The preflight is `O(n)` with no allocation. Measured on the qualification
+matrix: 33-34 ms per MiB on the Android ARM64 emulator and 55-60 ms per MiB on
+the iOS simulator, both Hermes debug builds. Typical editor sources are far
+smaller (about 2-4 ms per 64 KiB). Work happens on the JS thread before the
+async native call.
+
 ## Privacy
 
 The native package does not log, persist, or upload source text, matcher
-payloads, rule identifiers, or findings. The runtime harness logs and displays
-only the aggregate marker
-`CRIBRA_RN_SMOKE:PASS:abi=...:entries=...:findings=...:candidates=...:lifecycle=ok:parity=ok:batch=ok:config=ok:negative=ok:privacy=ok`
+payloads, rule identifiers, findings, transformation keys, or transformed
+output. The runtime harness logs and displays only the aggregate marker
+`CRIBRA_RN_SMOKE:PASS:abi=...:entries=...:findings=...:candidates=...:lifecycle=ok:parity=ok:batch=ok:config=ok:transform=ok:key=ok:negative=ok:offset=ok:probe=...:privacy=ok`
 or a source-free failure reason. Error messages come from the C ABI's
 privacy-safe diagnostic metadata.
+
+Transformation keys are sensitive. Mandatory zeroization covers the JavaScript
+temporary created by the facade and the single native key buffer owned by the
+worker job. Best-effort zeroization also covers the native copied
+transformation source. These erase the copies Cribra controls; they cannot
+guarantee erasure of the caller's original array, the JavaScript engine's
+string representations, immutable JSI strings, or Core's transient buffers. Do
+not log keys, and treat any copy you make as your own responsibility.
 
 ## Building
 
@@ -274,7 +534,14 @@ the complete native result tree against a direct-Core oracle generated by
 order preservation, independent UTF-8 byte lengths, repeat determinism), the
 scanner lifecycle (counts, idempotent disposal, post-disposal rejection,
 in-flight disposal), deterministic native negative cases (invalid scanner ID
-and malformed batch elements), and the RN.1.3 configuration surface.
+and malformed batch elements), the RN.1.3 configuration surface, the RN.1.4
+UTF-8/UTF-16 span correspondence, and the RN.1.5 Flow transformations. The
+RN.1.6 phases add a 1,000-scan mixed stress burst, all four transformations
+including 200 keyed requests, an isolated-failure recovery loop, and the
+`stress=ok` / `recovery=ok` marker segments. A development-only **Reload JS**
+button (and the Metro inspector `Page.reload`) exercises full runtime reloads
+with abandoned scanners and queued work. The harness logs only counts and
+durations (`CRIBRA_RN_STRESS:…`), never source text or keys.
 
 The configuration checks build default, explicit-empty, financial, personal,
 combined, and custom-rule scanners; compare their detached `scanner.rules`
@@ -283,6 +550,16 @@ exercise every Core-reachable build-error code and its structured `ruleId`; and
 confirm the live-scanner count returns to baseline after every failure. They
 also verify that emitted markers contain no fixture secret, candidate value,
 matcher payload, rule ID, or source ID.
+
+The transformation checks run every mode with default and custom options,
+including empty and multibyte replacement/prefix/marker values, deterministic
+keyed repeats, digest clamping, clean and candidate-only sources, merged
+redaction overlaps, and rejected strict-mode overlaps. Each successful case is
+compared against the direct-Core oracle for both the whole scan projection and
+the exact output, and the embedded scan is compared with a detached scan of the
+same source. Separate checks cover malformed UTF-16 source and option strings,
+invalid native key lengths, in-flight disposal, key zeroization, and marker
+privacy (no transformed output, key material, or fixture secret in the marker).
 
 ```sh
 # Terminal 1
@@ -318,32 +595,52 @@ cargo run --release -- --config-cases \
   > ../../consumer/src/fixtures/rn13-oracle.json
 ```
 
+Regenerate the transformation oracle after changing the transformation fixture
+or Core:
+
+```sh
+cd tools/oracle
+cargo run --release -- --transform-cases \
+  ../../consumer/src/fixtures/rn15-transform-cases.json \
+  > ../../consumer/src/fixtures/rn15-transform-oracle.json
+```
+
 Checks:
 
 ```sh
 npm run typecheck          # package facade (uses the consumer's TypeScript)
 npm run test:abi           # host test for the ABI gate, safe-integer boundary,
-                           # strict enum/explanation mapping, and config protocol
+                           # strict enum/explanation mapping, transform
+                           # signatures, and config protocol
+npm run test:host          # JSI-free worker lifecycle, teardown, zeroization,
+                           # stress and sanitizer runs (see below)
 cd consumer
 npx tsc --noEmit           # consumer harness types
-npm test                   # Jest facade batch/config contracts plus App render
+npm test                   # Jest facade batch/config/transform/lifecycle
+                           # contracts, oracle fixture integrity, and App render
 ```
+
+`npm run test:host` links the real host `target/release/libcribra_capi.a` and
+runs `tools/host-tests/run.sh`. Pass `asan`, `ubsan`, or `tsan` to select a
+sanitizer, for example `bash tools/host-tests/run.sh tsan`.
 
 `npm run typecheck` reads React Native's generated types from the consumer's
 `node_modules`, so install the consumer first. Jest mocks the native
 TurboModule because unit tests have no native binary; it pins the JavaScript
 contract (one native call, copied inputs, strict DTO/summary/metadata
-validation, structured build errors, scanner cleanup, and source-free error
+validation, structured build errors, scanner cleanup, key copying and
+zeroization, exact transform diagnostic classification, and source-free error
 normalisation). The real native path is the simulator/emulator harness above.
 
 ## Scope
 
-RN.1.3 exposes scanner-builder configuration and detached rule metadata. It
-deliberately excludes Unicode helper surfaces (RN.1.4), flow transforms
-(RN.1.5), cancellation/stress/reload (RN.1.6), streaming, incremental
-documents, Share Bundles, parallel scanning, and npm publication. It does not
-link `cribra-uniffi`, does not introduce a second scanner engine, and does not
-modify the WebAssembly API, Core, or the released C ABI protocol.
+RN.1.6 exposes scanner-builder configuration, detached rule metadata, Unicode
+offset helpers, the scan-coupled Flow transformations (redact, template,
+pseudonymize, synthesize), and the explicit worker lifecycle/teardown contract.
+It deliberately excludes Share Bundles, streaming, incremental documents,
+cancellation, editor integration, parallel scanning, and npm publication. It
+does not link `cribra-uniffi`, does not introduce a second scanner engine, and
+does not modify the WebAssembly API, Core, or the released C ABI protocol.
 
 See [QUALIFICATION.md](./QUALIFICATION.md) for the build, ABI, parity,
-lifecycle, size, and limitation record.
+lifecycle, sanitizer, reload, size, and limitation record.
