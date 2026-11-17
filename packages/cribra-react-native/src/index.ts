@@ -18,7 +18,34 @@ import type {
   ScanSourceDto,
   ScanSummaryDto,
   ScannerCreationDto,
+  TransformResultDto,
 } from './NativeCribraReactNative';
+import { CribraError } from './errors';
+import type { CribraErrorCode } from './errors';
+import { assertWellFormedUtf16 } from './offset';
+import {
+  copyTransformKey,
+  normalizeTransformRequest,
+  zeroTransformKey,
+} from './transform';
+import type { TransformRequest } from './transform';
+
+export { CribraError } from './errors';
+export type { CribraErrorCode } from './errors';
+export {
+  byteSpanToUtf16Range,
+  byteSpansToUtf16Ranges,
+  utf16RangeToByteSpan,
+  utf8ByteLength,
+} from './offset';
+export type { Utf16Range } from './offset';
+export type {
+  PseudonymizeRequest,
+  RedactRequest,
+  SynthesizeRequest,
+  TemplateRequest,
+  TransformRequest,
+} from './transform';
 
 export type Severity = 'info' | 'low' | 'medium' | 'high' | 'critical';
 export type Confidence = 'low' | 'medium' | 'high';
@@ -129,6 +156,17 @@ export interface ScanOptions {
 }
 
 /**
+ * One detached scan and the UTF-8 output produced from that exact report.
+ *
+ * `scan` describes the same source that was transformed. Review candidates are
+ * preserved in `scan` but are never rewritten by the transformation.
+ */
+export interface TransformResult {
+  readonly scan: ScanResult;
+  readonly output: string;
+}
+
+/**
  * Scanner construction configuration.
  *
  * Omitted or `{}` selects the canonical current catalog, exactly like the
@@ -191,70 +229,41 @@ export interface RuleMetadata {
   readonly remediation: Remediation | null;
 }
 
-export type CribraErrorCode =
-  | 'disposed'
-  | 'invalid_argument'
-  | 'invalid_input_string'
-  | 'invalid_utf8'
-  | 'scanner_not_found'
-  | 'scanner_create_failed'
-  | 'abi_mismatch'
-  | 'invalid_native_report'
-  | 'invalid_pattern'
-  | 'pattern_matches_empty'
-  | 'missing_capture_group'
-  | 'empty_rule_id'
-  | 'duplicate_rule_id'
-  | 'empty_matcher'
-  | 'too_many_rules'
-  | 'automaton_build'
-  | 'native_error';
-
-const MESSAGES: Record<CribraErrorCode, string> = {
-  disposed: 'The Cribra scanner has been disposed.',
-  invalid_argument: 'A Cribra argument is invalid.',
-  invalid_input_string: 'The source could not be converted to UTF-8.',
-  invalid_utf8: 'The source is not valid UTF-8.',
-  scanner_not_found: 'The native scanner handle is not available.',
-  scanner_create_failed: 'The native scanner could not be created.',
-  abi_mismatch: 'The linked Cribra native ABI is incompatible with this package.',
-  invalid_native_report: 'The native scanner returned an unsupported value.',
-  invalid_pattern: 'A custom rule pattern is invalid.',
-  pattern_matches_empty: 'A custom rule pattern can match empty input.',
-  missing_capture_group: 'A custom rule capture configuration is invalid.',
-  empty_rule_id: 'A custom rule identifier is empty.',
-  duplicate_rule_id: 'A rule identifier is duplicated.',
-  empty_matcher: 'A custom rule matcher is empty.',
-  too_many_rules: 'The configured rule count exceeds the scanner limit.',
-  automaton_build: 'The scanner matcher could not be compiled.',
-  native_error: 'The Cribra native operation failed.',
-};
-
 /**
- * Structured error with a fixed, source-free message. `detail` carries only the
- * privacy-safe diagnostic metadata returned by the C ABI.
+ * Exact C ABI 0.3.0 transform diagnostics.
+ *
+ * The C ABI reports every Core transformation failure as
+ * `CRIBRA_TRANSFORM_ERROR` and exposes only a fixed diagnostic message. This
+ * table is a compatibility classification against those known messages, not a
+ * structured ABI error code. The native bridge emits the `transform_failed`
+ * token only when `cribra_error_status` confirms `CRIBRA_TRANSFORM_ERROR`.
+ *
+ * Matching is exact equality on the isolated diagnostic text. Unknown, missing
+ * or reworded diagnostics fall back to `transform_unknown`; arbitrary exception
+ * text is never classified.
  */
-export class CribraError extends Error {
-  readonly code: CribraErrorCode;
-  readonly detail?: string;
-  /**
-   * Caller-supplied rule identity for a construction failure, or a public
-   * built-in ID for a catalog collision. Never embedded in the message and
-   * never derived from scanned source or matcher contents.
-   */
-  readonly ruleId?: string;
+const TRANSFORM_DIAGNOSTICS: Readonly<Record<string, CribraErrorCode>> =
+  Object.freeze({
+    'transform report contains an invalid source span':
+      'transform_invalid_span',
+    'transform report span is not aligned to UTF-8 boundaries':
+      'transform_invalid_utf8_boundary',
+    'transform requires non-overlapping finding spans':
+      'transform_overlapping_spans',
+  });
 
-  constructor(code: CribraErrorCode, detail?: string, ruleId?: string) {
-    super(MESSAGES[code]);
-    this.name = 'CribraError';
-    this.code = code;
-    if (detail !== undefined && detail.length > 0) {
-      this.detail = detail;
-    }
-    if (ruleId !== undefined && ruleId.length > 0) {
-      this.ruleId = ruleId;
-    }
+const TRANSFORM_FAILURE_PATTERN =
+  /^cribra_native_error:transform_failed:[a-z_]+:(.*)$/s;
+
+function transformFailureCode(detail: string): CribraErrorCode {
+  const match = TRANSFORM_FAILURE_PATTERN.exec(detail);
+  if (match === null) {
+    return 'transform_unknown';
   }
+  const message = match[1];
+  return Object.prototype.hasOwnProperty.call(TRANSFORM_DIAGNOSTICS, message)
+    ? (TRANSFORM_DIAGNOSTICS[message] as CribraErrorCode)
+    : 'transform_unknown';
 }
 
 function normalizeError(error: unknown): CribraError {
@@ -285,6 +294,10 @@ function normalizeError(error: unknown): CribraError {
     case 'invalid_native_report':
     case 'numeric_overflow':
       return new CribraError('invalid_native_report', detail);
+    case 'invalid_key_length':
+      return new CribraError('invalid_key_length', detail);
+    case 'transform_failed':
+      return new CribraError(transformFailureCode(detail), detail);
     default:
       return new CribraError('native_error', detail);
   }
@@ -529,7 +542,16 @@ function projectCandidate(dto: CandidateDto): Candidate {
   });
 }
 
-function projectReport(dto: ScanReportDto): ScanResult {
+type ReportFields = Pick<
+  ScanReportDto,
+  | 'sourceBytes'
+  | 'findings'
+  | 'candidateCount'
+  | 'needsReview'
+  | 'candidates'
+>;
+
+function projectReport(dto: ReportFields): ScanResult {
   if (typeof dto !== 'object' || dto === null) {
     throw invalidNativeReport('report');
   }
@@ -553,6 +575,19 @@ function projectReport(dto: ScanReportDto): ScanResult {
     needsReview: dto.needsReview,
     hasCritical: findings.some((finding) => finding.severity === 'critical'),
   });
+}
+
+function projectTransformResult(dto: TransformResultDto): TransformResult {
+  if (typeof dto !== 'object' || dto === null) {
+    throw invalidNativeReport('transform');
+  }
+  if (typeof dto.output !== 'string') {
+    throw invalidNativeReport('transform.output');
+  }
+  // Validate and copy the complete Core-derived report before exposing any
+  // output. Any protocol violation rejects the whole result.
+  const scan = projectReport(dto);
+  return Object.freeze({ scan, output: dto.output });
 }
 
 function invariant(condition: boolean, field: string): void {
@@ -1081,6 +1116,11 @@ export class CribraScanner {
     if (typeof source !== 'string') {
       throw new CribraError('invalid_argument');
     }
+    // Preflight: Hermes would silently replace an unpaired surrogate with U+FFFD
+    // and JSC would silently truncate at it, so the native scan text could differ
+    // from the string these offsets are later resolved against. Reject instead of
+    // dispatching native work.
+    assertWellFormedUtf16(source);
     const id = options.id ?? '';
     try {
       const dto = await NativeCribraReactNative.scan(
@@ -1111,9 +1151,12 @@ export class CribraScanner {
     }
 
     // Validate every entry on the JS thread before dispatching any native work.
+    // UTF-16 well-formedness is part of that validation: a malformed source is
+    // reported as `invalid_unicode_string` and the batch is never dispatched.
     const inputs: ScanSourceDto[] = [];
     for (const candidate of sources) {
       const source = requireSource(candidate);
+      assertWellFormedUtf16(source.source);
       inputs.push({ id: source.id, source: source.source });
     }
 
@@ -1126,6 +1169,95 @@ export class CribraScanner {
         dto,
         inputs.map((input) => input.id),
       );
+    } catch (error) {
+      throw normalizeError(error);
+    }
+  }
+
+  /**
+   * Scans and transforms one source atomically.
+   *
+   * Exactly one TurboModule call and one native worker job perform one Core
+   * scan and one Core transformation against the report from that same scan.
+   * The returned scan is detached and contains the exact findings and
+   * candidates Core reported. Review candidates are never transformed.
+   *
+   * Keyed modes copy the caller's 32-byte key into a fresh JavaScript buffer
+   * before dispatch and zero that temporary in a `finally` block. The caller's
+   * key is never mutated. JavaScript, JSI, native and Core copies cannot be
+   * guaranteed erased.
+   */
+  async transform(
+    source: string,
+    request: TransformRequest,
+  ): Promise<TransformResult> {
+    this.#assertLive();
+    if (typeof source !== 'string') {
+      throw new CribraError('invalid_argument');
+    }
+
+    // Validate the complete request and every option string before any native
+    // work. The key is validated here but copied only immediately before the
+    // native call below.
+    const normalized = normalizeTransformRequest(request);
+
+    // Reuse the RN.1.4 preflight: Hermes would replace and JSC would truncate
+    // malformed UTF-16, so native must never see a string that differs from
+    // the one the returned byte spans describe.
+    assertWellFormedUtf16(source);
+
+    try {
+      let dto: TransformResultDto;
+      switch (normalized.kind) {
+        case 'redact':
+          dto = await NativeCribraReactNative.transformRedact(
+            this.#nativeId,
+            source,
+            normalized.replacement ?? '',
+            normalized.replacement !== undefined,
+          );
+          break;
+        case 'template':
+          dto = await NativeCribraReactNative.transformTemplate(
+            this.#nativeId,
+            source,
+            normalized.namespace,
+            normalized.numbered,
+          );
+          break;
+        case 'pseudonymize': {
+          const key = copyTransformKey(normalized.key);
+          try {
+            dto = await NativeCribraReactNative.transformPseudonymize(
+              this.#nativeId,
+              source,
+              key.buffer as ArrayBuffer,
+              normalized.prefix,
+              normalized.digestBytes,
+            );
+          } finally {
+            zeroTransformKey(key);
+          }
+          break;
+        }
+        case 'synthesize': {
+          const key = copyTransformKey(normalized.key);
+          try {
+            dto = await NativeCribraReactNative.transformSynthesize(
+              this.#nativeId,
+              source,
+              key.buffer as ArrayBuffer,
+              normalized.marker,
+            );
+          } finally {
+            zeroTransformKey(key);
+          }
+          break;
+        }
+        default:
+          throw new CribraError('invalid_argument');
+      }
+      return projectTransformResult(dto);
     } catch (error) {
       throw normalizeError(error);
     }

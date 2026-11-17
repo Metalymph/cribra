@@ -1,0 +1,444 @@
+name: MCP Release
+
+# Opt-in, MCP-only release pipeline.
+#
+# Trigger namespace
+#   * tag push  `cribra-mcp-v<major>.<minor>.<patch>` -> qualification and
+#     packaging only. This workflow has no write permission on that path and
+#     never creates a release.
+#   * manual    workflow_dispatch from the release tag itself -> `readiness`
+#     (default, still no release mutation) or `stage` (creates a *draft*
+#     release behind the protected `mcp-release` environment).
+#
+# Core releases use `v*.*.*` and WASM releases use `cribra-wasm-v*`; neither
+# namespace can trigger this workflow, and this namespace cannot trigger them.
+
+on:
+  push:
+    tags:
+      - "cribra-mcp-v*"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "readiness (no release mutation) or stage (draft release)"
+        type: choice
+        options:
+          - readiness
+          - stage
+        default: readiness
+      tag:
+        description: "Release tag, for example cribra-mcp-v0.1.0"
+        type: string
+        required: true
+      confirmation:
+        description: 'Stage only; type exactly: stage <tag>'
+        type: string
+        required: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mcp-release-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: "1"
+  TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+
+jobs:
+  validate:
+    name: Validate tag, version, and gates
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+
+    steps:
+      - name: Checkout release ref
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ env.TAG }}
+          fetch-depth: 0
+
+      - name: Verify the run is pinned to the release tag commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${GITHUB_SHA}" = "$(git rev-parse HEAD)"
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Install Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Cache Rust artifacts
+        uses: Swatinem/rust-cache@v2.9.1
+        with:
+          key: mcp-release-validate
+
+      - name: Verify tag namespace, version, and ancestry
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if ! printf '%s' "$TAG" | grep -Eq '^cribra-mcp-v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::invalid MCP release tag: $TAG"
+            exit 1
+          fi
+
+          version="$(
+            cargo metadata --no-deps --format-version 1 |
+              python -c '
+          import json
+          import sys
+          metadata = json.load(sys.stdin)
+          package = next(
+              package
+              for package in metadata["packages"]
+              if package["name"] == "cribra-mcp"
+          )
+          print(package["version"])
+          '
+          )"
+
+          if [[ "$TAG" != "cribra-mcp-v$version" ]]; then
+            echo "::error::Tag $TAG does not match cribra-mcp version $version"
+            exit 1
+          fi
+
+          if [[ "${GITHUB_REF}" != "refs/tags/$TAG" ]]; then
+            echo "::error::Dispatch this workflow from refs/tags/$TAG, got ${GITHUB_REF}"
+            exit 1
+          fi
+
+          if ! git rev-parse --verify --quiet "refs/tags/$TAG" >/dev/null; then
+            echo "::error::Tag $TAG does not exist"
+            exit 1
+          fi
+
+          git fetch --quiet origin main
+          if ! git merge-base --is-ancestor HEAD origin/main; then
+            echo "::error::Tag $TAG is not reachable from origin/main"
+            exit 1
+          fi
+
+      - name: Require explicit staging confirmation
+        if: github.event_name == 'workflow_dispatch' && inputs.mode == 'stage'
+        shell: bash
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+          if [[ "$CONFIRMATION" != "stage $TAG" ]]; then
+            echo "::error::Stage requires the confirmation 'stage $TAG'"
+            exit 1
+          fi
+
+      - name: Refuse to replace an existing release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "::error::Release $TAG already exists; this workflow never replaces artifacts"
+            exit 1
+          fi
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Clippy
+        run: cargo clippy -p cribra-mcp --all-targets -- -D warnings
+
+      - name: Test all MCP targets
+        run: cargo test -p cribra-mcp --all-targets
+
+      - name: Verify conformance matrix
+        run: |
+          python crates/cribra-mcp/tests/conformance/matrix.py --self-test
+          python crates/cribra-mcp/tests/conformance/matrix.py --check
+
+      - name: Build and identify the release binary
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo build --release --locked -p cribra-mcp
+          version="${TAG#cribra-mcp-v}"
+          test "$(target/release/cribra-mcp --version)" = "cribra-mcp $version"
+
+  build:
+    name: Package ${{ matrix.target }}
+    needs: validate
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            binary: cribra-mcp
+          - os: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+            binary: cribra-mcp
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            binary: cribra-mcp
+          - os: macos-15-intel
+            target: x86_64-apple-darwin
+            binary: cribra-mcp
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            binary: cribra-mcp.exe
+
+    steps:
+      - name: Checkout release ref
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ env.TAG }}
+          fetch-depth: 0
+
+      - name: Verify the run is pinned to the release tag commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${GITHUB_SHA}" = "$(git rev-parse HEAD)"
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Cache Rust artifacts
+        uses: Swatinem/rust-cache@v2.9.1
+        with:
+          key: mcp-release-${{ matrix.target }}
+
+      # The release build is qualified on its own native runner before any
+      # archive is produced, so a staged asset cannot come from an untested
+      # platform build.
+      - name: Test all MCP targets natively
+        run: cargo test --locked -p cribra-mcp --all-targets
+
+      - name: Build release server
+        run: cargo build --release --locked -p cribra-mcp
+
+      - name: Package, checksum, and smoke the packaged binary
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+          BINARY: ${{ matrix.binary }}
+        run: |
+          set -euo pipefail
+          version="${TAG#cribra-mcp-v}"
+
+          python crates/cribra-mcp/packaging/package.py build \
+            --target "$TARGET" \
+            --binary "target/release/$BINARY" \
+            --outdir target/mcp-dist
+
+          # The archive must name the tag's version and this matrix target.
+          case "$TARGET" in
+            *windows*) expected_archive="cribra-mcp-${version}-${TARGET}.zip" ;;
+            *) expected_archive="cribra-mcp-${version}-${TARGET}.tar.gz" ;;
+          esac
+          test -f "target/mcp-dist/$expected_archive"
+
+          python crates/cribra-mcp/packaging/package.py checksums --outdir target/mcp-dist
+          python crates/cribra-mcp/qualification/packaging/smoke.py \
+            --dir target/mcp-dist --expected-version "$version"
+
+      # Upload only the archive, never the per-target checksum manifest: all
+      # five jobs would otherwise collide on the identical file name during
+      # assembly. The single release manifest is generated after the merge.
+      - name: Upload package
+        uses: actions/upload-artifact@v7
+        with:
+          name: cribra-mcp-package-${{ matrix.target }}
+          path: target/mcp-dist/cribra-mcp-*
+          if-no-files-found: error
+          retention-days: 7
+
+  assemble:
+    name: Assemble and verify distribution
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout release ref
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ env.TAG }}
+
+      - name: Verify the run is pinned to the release tag commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The checkout used the tag ref, so HEAD is the tag's commit. Every
+          # artifact in this run was built by a job that checked out the same
+          # ref, and download-artifact defaults to this workflow run.
+          test "${GITHUB_SHA}" = "$(git rev-parse HEAD)"
+
+      - name: Install Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Download all packages
+        uses: actions/download-artifact@v8
+        with:
+          pattern: cribra-mcp-package-*
+          path: target/mcp-dist
+          merge-multiple: true
+
+      - name: Write the single distribution checksum manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd target/mcp-dist
+
+          # Build jobs upload only archives. A manifest here would mean either a
+          # stale artifact or a merged per-target manifest, both of which would
+          # make the published checksum file ambiguous.
+          test ! -e SHA256SUMS
+
+          shopt -s nullglob
+          archives=(cribra-mcp-*.tar.gz cribra-mcp-*.zip)
+          test "${#archives[@]}" -eq 5
+
+          cd - >/dev/null
+          python crates/cribra-mcp/packaging/package.py checksums --outdir target/mcp-dist
+
+      - name: Verify all five archives without executing them
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${TAG#cribra-mcp-v}"
+          python crates/cribra-mcp/qualification/packaging/smoke.py \
+            --dir target/mcp-dist \
+            --run none \
+            --require-all \
+            --expected-version "$version"
+
+      - name: Upload distribution
+        uses: actions/upload-artifact@v7
+        with:
+          name: cribra-mcp-dist
+          path: target/mcp-dist/*
+          if-no-files-found: error
+          retention-days: 7
+
+  readiness:
+    name: Readiness report
+    needs: assemble
+    if: github.event_name == 'workflow_dispatch' && inputs.mode == 'readiness'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Download distribution
+        uses: actions/download-artifact@v8
+        with:
+          name: cribra-mcp-dist
+          path: target/mcp-dist
+
+      - name: Report the dry-run inventory
+        run: |
+          set -euo pipefail
+          echo "Dry run for $TAG: no release, tag, or asset was created."
+          cd target/mcp-dist
+          sha256sum -c SHA256SUMS
+          ls -l
+          cat SHA256SUMS
+
+  stage:
+    name: Stage draft release
+    needs: [validate, assemble]
+    if: >-
+      github.event_name == 'workflow_dispatch'
+      && inputs.mode == 'stage'
+      && inputs.confirmation == format('stage {0}', inputs.tag)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: mcp-release
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout release ref for verification scripts
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ env.TAG }}
+          fetch-depth: 0
+
+      - name: Verify the run is pinned to the release tag commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${GITHUB_SHA}" = "$(git rev-parse HEAD)"
+
+      - name: Download distribution
+        uses: actions/download-artifact@v8
+        with:
+          name: cribra-mcp-dist
+          path: target/mcp-dist
+
+      - name: Verify checksums and distribution completeness before publishing
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${TAG#cribra-mcp-v}"
+          ( cd target/mcp-dist && sha256sum -c SHA256SUMS )
+          python3 crates/cribra-mcp/qualification/packaging/smoke.py \
+            --dir target/mcp-dist \
+            --run none \
+            --require-all \
+            --expected-version "$version"
+
+      - name: Refuse to replace an existing release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "::error::Release $TAG already exists; refusing to replace artifacts"
+            exit 1
+          fi
+
+      - name: Create draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          version="${TAG#cribra-mcp-v}"
+          notes="$(
+            cat <<EOF
+          Native MCP stdio server for Cribra ${version}.
+
+          Assets: \`cribra-mcp-${version}-<target>.tar.gz\` for macOS and Linux,
+          \`cribra-mcp-${version}-x86_64-pc-windows-msvc.zip\` for Windows, and one
+          \`SHA256SUMS\` manifest covering every archive.
+
+          Install and host configuration:
+          https://github.com/Metalymph/cribra/blob/main/crates/cribra-mcp/DISTRIBUTION.md
+
+          This is a draft. Review the assets and publish from the GitHub UI.
+          EOF
+          )"
+          gh release create "$TAG" \
+            --draft \
+            --verify-tag \
+            --latest=false \
+            --title "cribra-mcp $version" \
+            --notes "$notes" \
+            target/mcp-dist/*

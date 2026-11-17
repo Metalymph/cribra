@@ -5,7 +5,10 @@
 #include <cribra.h>
 
 #include "CribraEnums.h"
+#include "CribraOwnership.h"
 
+#include <array>
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <stdexcept>
@@ -69,6 +72,15 @@ using ScanBatchDto = facebook::react::NativeCribraReactNativeScanBatchDto<
     std::vector<ScanReportDto>,
     ScanSummaryDto>;
 
+using TransformResultDto =
+    facebook::react::NativeCribraReactNativeTransformResultDto<
+        double,
+        std::vector<FindingDto>,
+        double,
+        bool,
+        std::vector<CandidateDto>,
+        std::string>;
+
 using RuleSpecDto = facebook::react::NativeCribraReactNativeRuleSpecDto<
     std::string,
     std::string,
@@ -97,29 +109,6 @@ using ScannerCreationDto =
 class BridgeError : public std::runtime_error {
  public:
   explicit BridgeError(const std::string& message) : std::runtime_error(message) {}
-};
-
-/// Owns one CribraScanner handle. Destruction is the only place that frees it.
-class ScannerHandle final {
- public:
-  explicit ScannerHandle(CribraScanner* scanner) noexcept : scanner_(scanner) {}
-  ~ScannerHandle();
-
-  ScannerHandle(const ScannerHandle&) = delete;
-  ScannerHandle& operator=(const ScannerHandle&) = delete;
-  ScannerHandle(ScannerHandle&&) = delete;
-  ScannerHandle& operator=(ScannerHandle&&) = delete;
-
-  [[nodiscard]] CribraScanner* get() const noexcept { return scanner_; }
-
- private:
-  CribraScanner* scanner_;
-};
-
-/// One copied batch input. Both strings are owned for the whole native call.
-struct ScanInput {
-  std::string id;
-  std::string source;
 };
 
 /// One copied custom rule. Strings are owned through every ABI call that
@@ -223,6 +212,15 @@ ScanBatchDto ScanBatch(
     const std::shared_ptr<ScannerHandle>& scanner,
     const std::vector<ScanInput>& inputs);
 
+/// Scans one source and transforms it with the report from that exact scan.
+///
+/// The report, output and error handles are owned by RAII guards. The output
+/// view is copied before `cribra_output_free`. Throws BridgeError on any ABI,
+/// Core or protocol failure; the caller never observes partial output.
+TransformResultDto Transform(
+    const std::shared_ptr<ScannerHandle>& scanner,
+    const TransformInput& input);
+
 AbiVersionDto GetAbiVersion() noexcept;
 
 }  // namespace cribra::rn
@@ -253,6 +251,11 @@ struct Bridging<cribra::rn::ScanSummaryDto>
 template <>
 struct Bridging<cribra::rn::ScanBatchDto>
     : NativeCribraReactNativeScanBatchDtoBridging<cribra::rn::ScanBatchDto> {};
+
+template <>
+struct Bridging<cribra::rn::TransformResultDto>
+    : NativeCribraReactNativeTransformResultDtoBridging<
+          cribra::rn::TransformResultDto> {};
 
 template <>
 struct Bridging<cribra::rn::RuleSpecDto>
