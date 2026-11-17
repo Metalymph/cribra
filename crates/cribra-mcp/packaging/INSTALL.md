@@ -24,16 +24,42 @@ The archive contains:
 
 ## 2. Verify the checksum (recommended)
 
-The release publishes one `SHA256SUMS` file covering every archive.
+The release publishes one `SHA256SUMS` file covering every archive. Verify only
+the entry for this archive; checking the whole manifest fails when the other
+archives are absent.
 
 ```sh
-shasum -a 256 -c SHA256SUMS     # macOS
-sha256sum -c SHA256SUMS         # Linux
+archive={{archive}}
+if ! awk -v f="$archive" '$2 == f' SHA256SUMS > "$archive.sha256"; then
+  echo "error: cannot read SHA256SUMS" >&2
+  exit 1
+fi
+if [ ! -s "$archive.sha256" ]; then
+  echo "error: SHA256SUMS has no entry for $archive" >&2
+  exit 1
+fi
+shasum -a 256 -c "$archive.sha256"    # macOS
+sha256sum -c "$archive.sha256"        # Linux
 ```
 
+`shasum`/`sha256sum -c` exit non-zero and report `FAILED` on a checksum
+mismatch. The explicit size check fails when the manifest has no entry for the
+archive, rather than silently verifying nothing.
+
 ```powershell
-Get-FileHash -Algorithm SHA256 {{archive}}
+$archive = '{{archive}}'
+$entry = Get-Content SHA256SUMS | Where-Object { ($_ -split '\s+')[1] -eq $archive }
+if (-not $entry) { Write-Error "SHA256SUMS has no entry for $archive"; exit 1 }
+$expected = ($entry -split '\s+')[0].ToLower()
+$actual = (Get-FileHash -Algorithm SHA256 $archive).Hash.ToLower()
+if ($actual -ne $expected) { Write-Error "checksum mismatch for $archive"; exit 1 }
+"$archive OK"
 ```
+
+`SHA256SUMS` is an integrity check, not an authenticity guarantee: it confirms
+that the archive matches the bytes recorded in the manifest, but it is not a
+cryptographic signature, does not assert who built the artifact, and is not a
+reproducible-build attestation.
 
 ## 3. Install
 
