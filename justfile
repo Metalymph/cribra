@@ -68,6 +68,52 @@ check:
 check-all:
     cargo check --all-features
 
+# Verify the generated MCP conformance matrix against the pinned official requirement sets.
+mcp-matrix:
+    python3 crates/cribra-mcp/tests/conformance/matrix.py --self-test
+    python3 crates/cribra-mcp/tests/conformance/matrix.py --check
+
+# Build the release MCP server and run the independent TypeScript and Python SDK qualification.
+mcp-qualify:
+    crates/cribra-mcp/qualification/run-qualification.sh
+
+# Build, checksum, and verify the host-target MCP release archive under target/mcp-dist.
+mcp-package outdir="target/mcp-dist":
+    #!/usr/bin/env sh
+    set -eu
+    target="$(rustc -vV | sed -n 's/^host: //p')"
+    rm -rf "{{outdir}}"
+    cargo build --release -p cribra-mcp
+    python3 crates/cribra-mcp/packaging/package.py build \
+      --target "$target" \
+      --binary target/release/cribra-mcp \
+      --outdir "{{outdir}}"
+    python3 crates/cribra-mcp/packaging/package.py checksums --outdir "{{outdir}}"
+
+# Extract the packaged archive into a clean temporary directory and qualify the
+# extracted binary as a real MCP stdio server. Uses the same per-target
+# invocation as mcp-release.yml: --expected-version validates the one supplied
+# archive without requiring the other four targets.
+mcp-package-smoke outdir="target/mcp-dist":
+    #!/usr/bin/env sh
+    set -eu
+    version="$(sed -n 's/^version = "\(.*\)"/\1/p' crates/cribra-mcp/Cargo.toml | head -1)"
+    python3 crates/cribra-mcp/qualification/packaging/smoke.py \
+      --dir "{{outdir}}" --expected-version "$version"
+
+# Regression-test the distribution verifier's version and completeness policy.
+mcp-smoke-tests:
+    python3 -B -m unittest discover \
+      -s crates/cribra-mcp/qualification/packaging -p 'test_smoke.py'
+
+# Local dry run of the complete MCP release qualification. Never publishes.
+mcp-release-readiness:
+    just mcp-matrix
+    just mcp-smoke-tests
+    just mcp-qualify
+    just mcp-package
+    just mcp-package-smoke
+
 # Build/generate the Core-only UniFFI Python consumer and run its focused tests.
 uniffi-python-smoke python="python3.13":
     "{{python}}" bindings/python/smoke.py

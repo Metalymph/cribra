@@ -12,9 +12,16 @@ contract, output details, and parity matrix.
 
 ## Install
 
+`cribra-cli` is not currently published to crates.io. The verified installation
+paths are source builds from a repository checkout:
+
 ```text
-cargo install cribra-cli
+cargo install --path crates/cribra-cli   # from the repository root
+cargo build -p cribra-cli                # target/debug/cribra
 ```
+
+There is no `cargo install cribra-cli` registry path until a separately
+authorized crates.io publication succeeds.
 
 ## Commands
 

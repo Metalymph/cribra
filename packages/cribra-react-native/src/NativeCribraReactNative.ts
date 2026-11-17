@@ -39,6 +39,22 @@ export type ScanReportDto = {
   candidates: CandidateDto[];
 };
 
+/**
+ * Flat scan-coupled transformation result.
+ *
+ * The scan fields deliberately mirror `ScanReportDto` without `sourceId`.
+ * A nested DTO would resolve to a `jsi::Object` in generated C++, which cannot
+ * cross the serial-worker boundary.
+ */
+export type TransformResultDto = {
+  sourceBytes: number;
+  findings: FindingDto[];
+  candidateCount: number;
+  needsReview: boolean;
+  candidates: CandidateDto[];
+  output: string;
+};
+
 export type ScanSourceDto = {
   id: string;
   source: string;
@@ -126,6 +142,44 @@ export interface Spec extends TurboModule {
     scannerId: number,
     sources: ScanSourceDto[],
   ): Promise<ScanBatchDto>;
+  /**
+   * One scan-coupled redaction. `hasReplacement` distinguishes an omitted
+   * replacement (Core's `[REDACTED]`) from an explicit empty replacement.
+   */
+  transformRedact(
+    scannerId: number,
+    text: string,
+    replacement: string,
+    hasReplacement: boolean,
+  ): Promise<TransformResultDto>;
+  /** One scan-coupled template transformation with resolved defaults. */
+  transformTemplate(
+    scannerId: number,
+    text: string,
+    namespaceName: string,
+    numbered: boolean,
+  ): Promise<TransformResultDto>;
+  /**
+   * One scan-coupled pseudonymization. `key` must be exactly 32 bytes; it is
+   * copied synchronously on the JS thread and never retained.
+   */
+  transformPseudonymize(
+    scannerId: number,
+    text: string,
+    key: ArrayBuffer,
+    prefix: string,
+    digestBytes: number,
+  ): Promise<TransformResultDto>;
+  /**
+   * One scan-coupled synthesis. `key` must be exactly 32 bytes; it is copied
+   * synchronously on the JS thread and never retained.
+   */
+  transformSynthesize(
+    scannerId: number,
+    text: string,
+    key: ArrayBuffer,
+    marker: string,
+  ): Promise<TransformResultDto>;
   disposeScanner(scannerId: number): Promise<void>;
   getLiveScannerCount(): number;
 }

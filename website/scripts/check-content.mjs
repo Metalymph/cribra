@@ -23,6 +23,8 @@ const distDirectory = path.join(websiteRoot, 'dist');
 const packageManifestPath = path.join(repositoryRoot, 'packages/cribra/package.json');
 const bindingsDataSourcePath = path.join(websiteRoot, 'src/data/bindings.ts');
 const docsNavigationPath = path.join(websiteRoot, 'src/pages/docs/index.astro');
+const siteConfigPath = path.join(websiteRoot, 'astro-theme-config.ts');
+const mcpGuideUrl = '/docs/integration-mcp/';
 
 const typescriptDocs = new Map([
   ['typescript', '/docs/typescript/'],
@@ -69,6 +71,11 @@ const bindingLinks = [
   {
     id: 'cli',
     guide: '/docs/getting-started/#use-the-cli-from-this-repository',
+  },
+  {
+    id: 'react-native',
+    guide: '/docs/integration-react-native/',
+    package: `${repositoryPrefix}tree/main/packages/cribra-react-native`,
   },
   {
     id: 'swift',
@@ -430,6 +437,22 @@ async function checkBindingsData() {
     'bindings data no longer retains the planned native TypeScript backend',
   );
   assert(
+    contents.includes("id: 'react-native'"),
+    'bindings data has no React Native entry',
+  );
+  assert(
+    contents.includes('@metalymph/cribra-react-native 0.0.0'),
+    'bindings data does not record @metalymph/cribra-react-native 0.0.0',
+  );
+  assert(
+    contents.includes('private and unpublished'),
+    'bindings data does not mark the React Native package as private and unpublished',
+  );
+  assert(
+    !/React Native is not implemented/i.test(contents),
+    'bindings data still says React Native is not implemented',
+  );
+  assert(
     !contents.includes('TypeScript isomorphic API contract'),
     'bindings data still lists the completed TypeScript API contract as planned',
   );
@@ -668,12 +691,135 @@ function checkTypescriptDocsStatus(docsById) {
   }
 }
 
+function checkMcpDocsStatus(docsById) {
+  const mcp = docsById.get('integration-mcp');
+  assert(!!mcp, 'missing MCP integration guide: integration-mcp.md');
+  if (!mcp) return;
+
+  const required = [
+    [/cribra-mcp`? 0\.1\.1/, 'MCP guide must record published version 0.1.1'],
+    [/cribra-mcp-v0\.1\.1/, 'MCP guide must link the cribra-mcp-v0.1.1 release'],
+    [/five qualified native targets/i, 'MCP guide must record five native targets'],
+    [/aarch64-apple-darwin/, 'MCP guide must list the aarch64 Apple target'],
+    [/x86_64-apple-darwin/, 'MCP guide must list the x86_64 Apple target'],
+    [/x86_64-unknown-linux-gnu/, 'MCP guide must list the x86_64 Linux target'],
+    [/aarch64-unknown-linux-gnu/, 'MCP guide must list the aarch64 Linux target'],
+    [/x86_64-pc-windows-msvc/, 'MCP guide must list the Windows target'],
+    [/SHA256SUMS/, 'MCP guide must document checksum verification'],
+    [
+      /SHA256SUMS has no entry/,
+      'MCP guide must fail explicitly when the manifest has no entry for the archive',
+    ],
+    [
+      /integrity check, not an authenticity/i,
+      'MCP guide must describe SHA256SUMS as integrity verification, not authentication',
+    ],
+    [/GLIBC_2\.34/, 'MCP guide must record the measured GLIBC_2.34 symbol floor'],
+    [
+      /binary symbol requirement, not a\s+runtime-qualification statement/i,
+      'MCP guide must distinguish symbol requirements from runtime qualification',
+    ],
+    [/local stdio/i, 'MCP guide must document local stdio transport'],
+    [/Claude Desktop/, 'MCP guide must document Claude Desktop'],
+    [/Claude Code/, 'MCP guide must document Claude Code'],
+    [/Codex/, 'MCP guide must document Codex'],
+    [/cribra_scan/, 'MCP guide must document cribra_scan'],
+    [/cribra_transform/, 'MCP guide must document cribra_transform'],
+    [/metadata[- ]only/i, 'MCP guide must document metadata-only scan results'],
+    [/\[REDACTED\]/, 'MCP guide must document redaction'],
+    [/<CRIBRA:/, 'MCP guide must document templating'],
+    [/2026-07-28/, 'MCP guide must document the modern protocol revision'],
+    [/2025-11-25/, 'MCP guide must document the legacy protocol revision'],
+    [/PARTIAL PASS/, 'MCP guide must record the M3 PARTIAL PASS verdict'],
+    [/147-row/, 'MCP guide must record the 147-row conformance matrix'],
+    [
+      /10 of 10 applicable/i,
+      'MCP guide must record the 10 applicable canonical matrix rows',
+    ],
+    [
+      /5 TypeScript, 5 Python/,
+      'MCP guide must distinguish the 10 independent SDK scenarios',
+    ],
+    [
+      /official runner is HTTP-only/i,
+      'MCP guide must record the official-runner limitation',
+    ],
+    [/M4 distribution[^\n]*PASS/i, 'MCP guide must record the M4 distribution PASS'],
+    [/not a language binding/i, 'MCP guide must present MCP as a tool integration'],
+  ];
+
+  for (const [pattern, message] of required) {
+    assert(pattern.test(mcp.contents), message);
+  }
+
+  assert(
+    !/authenticates the exact published binaries/i.test(mcp.contents),
+    'MCP guide must not claim SHA256SUMS authenticates published binaries',
+  );
+}
+
+async function checkMcpNavigation() {
+  const navigation = await readText(docsNavigationPath);
+  assert(
+    navigation.includes(`'${mcpGuideUrl}'`),
+    `docs navigation does not link ${mcpGuideUrl}`,
+  );
+
+  const siteConfig = await readText(siteConfigPath);
+  assert(
+    siteConfig.includes(`href: '${mcpGuideUrl}'`),
+    `site navigation does not link ${mcpGuideUrl}`,
+  );
+
+  const source = await readText(bindingsDataSourcePath);
+  assert(
+    source.includes('toolIntegrations'),
+    'bindings data has no tool integrations section',
+  );
+  assert(
+    source.includes("id: 'mcp'"),
+    'bindings data has no MCP tool integration entry',
+  );
+  assert(
+    source.includes(mcpGuideUrl),
+    `bindings data does not link the MCP guide ${mcpGuideUrl}`,
+  );
+  assert(
+    source.includes('not a language binding'),
+    'bindings data does not present MCP as a tool integration',
+  );
+
+  const bindingsHtml = await readText(path.join(distDirectory, 'bindings/index.html')).catch(
+    () => null,
+  );
+  const homeHtml = await readText(path.join(distDirectory, 'index.html')).catch(() => null);
+
+  assert(bindingsHtml !== null, 'bindings page is missing from the built website');
+  assert(homeHtml !== null, 'homepage is missing from the built website');
+  if (bindingsHtml === null || homeHtml === null) return;
+
+  assert(
+    bindingsHtml.includes('id="mcp"'),
+    'bindings page has no MCP tool integration entry',
+  );
+  assert(
+    bindingsHtml.includes(`href="${mcpGuideUrl}"`),
+    `bindings page does not render the MCP guide ${mcpGuideUrl}`,
+  );
+  assert(
+    homeHtml.includes(`href="${mcpGuideUrl}"`),
+    `homepage does not link the MCP guide ${mcpGuideUrl}`,
+  );
+
+  await assertResolvedLink('bindings page MCP guide', mcpGuideUrl);
+}
+
 async function checkBindingLinkMetadata() {
   const source = await readText(bindingsDataSourcePath);
 
   assert(
-    bindingLinks.length === 8,
-    `expected eight implemented bindings, found ${bindingLinks.length}`,
+    bindingLinks.length === 9,
+    `expected nine implemented bindings, found ${bindingLinks.length}`,
   );
 
   for (const binding of bindingLinks) {
@@ -841,6 +987,7 @@ async function main() {
     const docs = await loadDocs();
     const docsById = new Map(docs.map((doc) => [doc.id, doc]));
     checkTypescriptDocsStatus(docsById);
+    checkMcpDocsStatus(docsById);
     await checkTypescriptSnippetCoverage();
 
     for (const doc of docs) {
@@ -887,6 +1034,7 @@ async function main() {
     await checkBindingsData();
     await checkBindingLinkMetadata();
     await checkBindingNavigation();
+    await checkMcpNavigation();
     await checkSwiftPackageIndexDisclosure();
     await checkPackageIdentity();
     await checkForbiddenInstallCommands();

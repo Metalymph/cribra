@@ -29,9 +29,10 @@ The old document remains available in Git history. These decisions still matter:
 - **Adapter authority:** C/WASM and future native bindings project Rust semantics.
   Missing applicable capabilities are recorded gaps; genuinely inapplicable
   surfaces are explicit N/A. Binding readiness needs versioned conformance,
-  lifetime/error contracts, ABI guarantees and consumer tests. CLI parity and
-  Homebrew/APT distribution remain independent commitments, tracked in the
-  [roadmap](../ROADMAP.md) and [CLI matrix](CLI_PARITY.md).
+  lifetime/error contracts, ABI guarantees and consumer tests. CLI parity remains
+  an independent commitment tracked in the [roadmap](../ROADMAP.md) and
+  [CLI matrix](CLI_PARITY.md); Homebrew/APT distribution is not on the active
+  roadmap.
 - **Streaming scope:** the original v0.5 phase notes explored broader admission,
   pre-EOF delivery, reader/async helpers and whole-source executor migration.
   They are not outstanding requirements of the released admitted-subset contract.
