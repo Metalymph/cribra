@@ -9,6 +9,10 @@ The M3 conformance verdict is unchanged: **PARTIAL PASS**. See
 [`CONFORMANCE.md`](CONFORMANCE.md). Distribution readiness does not upgrade,
 replace, or re-certify that verdict.
 
+The M4 distribution verdict is **PASS**. The `cribra-mcp-v0.1.1` release
+published five native archives and one `SHA256SUMS` manifest; each archive was
+packaged and smoke-qualified on its own native runner before publication.
+
 ## 1. What is distributed
 
 `cribra-mcp` is a single native executable. It reads newline-delimited JSON-RPC

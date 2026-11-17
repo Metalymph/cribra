@@ -114,7 +114,9 @@ Dependabot checks Cargo and GitHub Actions dependencies weekly.
 ### MCP
 
 `cribra-mcp` has its own workflows, independent of the Core, WASM, TypeScript,
-and UniFFI pipelines.
+and UniFFI pipelines. Version 0.1.1 is published as a five-target native stdio
+distribution; see
+[`crates/cribra-mcp/DISTRIBUTION.md`](../crates/cribra-mcp/DISTRIBUTION.md).
 
 `.github/workflows/mcp.yml` runs on pushes to `main`, pull requests, and manual
 dispatch:

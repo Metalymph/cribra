@@ -39,6 +39,7 @@ focuses on independently versioned integrations and developer experience; see
 | `cribra` **v0.7.0** | Released | Incremental performance, configurable profiles and integration quality |
 | `cribra` **v0.7.1** | Released | htpasswd CRLF detection fix |
 | `cribra` **v0.7.2** | Latest Core GitHub release; crates.io verified | P0.7 adapter conformance, binding alignment and qualification |
+| `cribra-mcp` **v0.1.1** | **Published — five native targets** | Native MCP stdio tool integration; M3 PARTIAL PASS, M4 distribution PASS |
 
 Core release-line numbering does not force synchronized CLI, C, WASM, or
 language-binding versions. Adapter parity applies to each adapter's documented,
@@ -47,64 +48,69 @@ implementation, and qualification.
 
 ## Development priority order (forward-looking)
 
-This section records the current priority sequence for integration work. It is
-forward-looking and does not modify the historical v0.5/v0.6/v0.7 milestone
-records below. A priority is not a delivery date, and an item is complete only
-when the repository records it as released, qualified or published.
+This section records the current priority sequence. It is forward-looking and
+does not modify the historical v0.5/v0.6/v0.7 milestone records below. A
+priority is not a delivery date, and an item is complete only when the
+repository records it as released, qualified or published.
+
+Cribra remains an embeddable, local-first, deterministic sensitive-data engine.
+It is not a standalone application or a repository security scanner. Source
+acquisition, repository traversal, managed monitoring and destination policy
+remain outside the engine. Existing Linux support and the public
+interoperability contracts are preserved.
+
+The native Rust MCP server is no longer planned work: `cribra-mcp` 0.1.1 is
+published as a tool integration over local stdio, with five qualified native
+targets, a single `SHA256SUMS` manifest, an M3 conformance verdict of
+**PARTIAL PASS**, and an M4 distribution result of **PASS**. MCP is a tool
+integration, not a language binding. See the
+[MCP distribution record](crates/cribra-mcp/DISTRIBUTION.md).
 
 The Swift Fuse distribution is complete: `cribra-swift` 0.7.2 is published, its
 XCFramework asset is checksum-verified, and a clean-room remote consumer passed
 on macOS ARM64 with iOS Simulator compile/link. The package is listed on the
 Swift Package Index for discovery; the listing is not Cribra compatibility-build
 evidence. Core and Flow remain source-build profiles; only Fuse is distributed as
-the official public Swift package. The TypeScript isomorphic API contract and
-the WebAssembly package are complete and qualified, but the package is not yet
-published. The native React Native integration is complete through RN.1.6:
+the official public Swift package.
+
+The TypeScript isomorphic API and WebAssembly package are implemented and
+qualified with the approved identity `@metalymph/cribra@0.1.0`, but the package
+is not published: no npm registry record exists. Publication remains an
+outstanding, separately authorized release gate, not an implied capability
+release. See [the TypeScript release runbook](docs/TYPESCRIPT_RELEASE.md).
+
+The native React Native integration is complete through RN.1.6:
 `@metalymph/cribra-react-native@0.0.0` is implemented, merged and qualified, but
 it is private and unpublished. It is a direct C ABI TurboModule over the New
-Architecture, not a UniFFI or WebAssembly consumer. The following adoption-first
-priorities therefore focus on release, the separate native Node.js backend,
-native adoption, and developer distribution:
+Architecture, not a UniFFI or WebAssembly consumer. The separate native
+TypeScript backend for Node.js remains planned and is **not implemented**.
 
-0. **Complete the official `@metalymph/cribra@0.1.0` npm release.** Release
-   preparation, qualification and staging do not imply publication. The package
-   identity is approved and the Flow tarball is qualified, but no npm registry
-   record exists. A real publication requires explicit release authorization, the
-   `typescript-v0.1.0` tag, verified tarball digest, and the documented bootstrap
-   and Trusted Publishing gates. See
-   [the TypeScript release runbook](docs/TYPESCRIPT_RELEASE.md).
-1. **Native TypeScript backend for Node.js.** This is a separate workstream from
-   the completed React Native package and is **not implemented**. Gates:
-   - **Gate 1 — compatibility investigation.** Establish whether UniFFI 0.32.2
-     or a direct C ABI layer is appropriate for Node.js, including a documented
-     fallback if a candidate generator is incompatible.
-   - **Gate 2 — native binding implementation.** Preserve Cribra classification
-     semantics, exact UTF-8 spans, deterministic ordering, documented error
-     contracts, and resource ownership and lifetime rules. The native backend is
-     distinct from the WebAssembly package and must not imply that WASM runs
-     automatically in Node.js.
-   - **Gate 3 — real Node.js consumer qualification.** Qualify consuming
-     applications, including lifecycle, packaging and resource behavior.
+The next priorities are:
 
-   The completed React Native work does not establish this backend.
-2. **Build the native Rust MCP server.** Planned design constraints: an
-   ultra-lightweight Rust binary using MCP over stdio, direct reuse of Cribra
-   Core, explicit caller-provided input, a minimal dependency footprint, no
-   Node.js or Python runtime, no database or external service requirement, a
-   small deliberate set of scanning and transformation tools, and no arbitrary
-   filesystem access by default. HTTP transport and a broad service architecture
-   are outside the initial scope. This is planned, not implemented.
-3. **Distribute the CLI through Homebrew and Debian/Ubuntu APT.** Publish
-   qualified prebuilt binaries that preserve canonical CLI semantics, version
-   identity, deterministic output, privacy-safe diagnostics and documented exit
-   codes. Optionally evaluate container-friendly OCI artifacts; that evaluation
-   is not a delivery commitment. Homebrew and APT distribution remain planned
-   independently of Core releases.
-4. **Consolidate Python and Kotlin/JVM documentation and developer guidance.**
-   Provide complete, runnable examples and accurate API guidance for the existing
-   implemented bindings without asserting new package registry releases. Maven
-   Central and PyPI publication remain separate, unscheduled gates; neither is
-   established.
+1. **Dependency and CI maintenance.** Keep the workspace, toolchains and
+   workflows current, apply security fixes, and preserve the qualification gates
+   without changing runtime behavior or upgrading dependencies as part of this
+   documentation cycle.
+2. **Evaluate Python and Kotlin/JVM documentation and official package
+   distribution.** Improve runnable examples and API guidance for the existing
+   implemented bindings, and evaluate the Maven Central and PyPI publication
+   gates. Neither registry publication is established, and evaluation does not
+   authorize a release.
+3. **Evaluate further bindings based on ecosystem demand.** Consider additional
+   bindings or adapters only with demonstrated real-world demand, a credible
+   maintenance commitment, and the documented conformance, ownership, packaging
+   and consumer-qualification gates.
+
+Not on the active development roadmap:
+
+- Homebrew distribution;
+- Debian/Ubuntu APT distribution;
+- a dedicated embedded Linux distribution workstream;
+- official GitHub/GitLab scanner integrations.
+
+These are not delivery commitments. Removing them from the roadmap does not
+remove existing Linux builds, the C ABI, the CLI, WebAssembly, the native MCP
+server, or any public interoperability contract.
 
 Amon is a potential real-world, post-beta consumer for optional on-device
 sensitive-data scanning before chat messages, posts, comments and other content
@@ -434,15 +440,14 @@ features are not automatically present in any adapter.
 
 - Maintain the canonical `cribra-cli` contract, deterministic human/JSON output,
   explicit input ownership, privacy-safe diagnostics, and documented exit codes.
-- Evaluate additional applicable core capabilities and distribution channels
-  independently; preserve existing CLI compatibility. Track exact filters,
-  sorting, pack selection, transformations, multi-source/parallel applicability
-  and explicit failure policy in [CLI parity](docs/CLI_PARITY.md).
-- Homebrew and Debian/Ubuntu APT distribution are priority 3 in the
-  [development priority order](#development-priority-order-forward-looking).
-  Qualified prebuilt binaries must preserve canonical CLI semantics, version
-  identity and privacy-safe diagnostics. Container-friendly OCI artifacts are an
-  optional evaluation, not a commitment.
+- Evaluate additional applicable core capabilities independently; preserve
+  existing CLI compatibility. Track exact filters, sorting, pack selection,
+  transformations, multi-source/parallel applicability and explicit failure
+  policy in [CLI parity](docs/CLI_PARITY.md).
+- `cribra-cli` is not published to crates.io. The verified Cargo installation
+  paths are source builds from a checkout: `cargo install --path crates/cribra-cli`
+  and `cargo build -p cribra-cli`. Homebrew and Debian/Ubuntu APT distribution
+  are not on the active roadmap.
 
 ### Planned language integrations
 
@@ -456,7 +461,10 @@ published packages. The authoritative support policy is in
 | TypeScript (WebAssembly) | Higher-level package over the existing typed WASM exports, implemented against the shared public API | IMPLEMENTED AND QUALIFIED — approved `@metalymph/cribra@0.1.0`; unpublished |
 | React Native | Native New Architecture TurboModule over the C ABI: TypeScript facade, Codegen spec, C++ bridge, `cribra-capi` 0.3.0, Core 0.7.2 | IMPLEMENTED, MERGED AND QUALIFIED — RN.1.1–RN.1.6; private and unpublished `@metalymph/cribra-react-native@0.0.0` |
 | TypeScript native backend (Node.js) | Standalone native TypeScript backend for Node.js where compatible | PLANNED — three separate gates: compatibility investigation, binding implementation, real Node.js consumer qualification |
-| MCP server | Native Rust binary over stdio, reusing Cribra Core with explicit caller-provided input | PLANNED |
+
+The published `cribra-mcp` 0.1.1 server is a **tool integration**, not a language
+binding, so it is not part of this table. See the
+[MCP distribution record](crates/cribra-mcp/DISTRIBUTION.md).
 
 The TypeScript public API contract and WebAssembly package are implemented. The
 package is not published: the approved identity is `@metalymph/cribra`, and no
@@ -471,12 +479,14 @@ not run automatically in Hermes; React Native uses the native package.
 #### Demand-driven and community bindings
 
 C#, Go and PHP are **Planned — demand-driven / community contribution**. So are
-Ruby, Elixir and other previously documented language candidates. Doxygen-generated
-C API documentation and GitHub/GitLab integrations are likewise explicitly
-demand-driven and unscheduled. None of these items is actively scheduled.
-Implementation will be considered only when supported by demonstrated real-world
-demand or a viable community contribution. Previously documented language
-candidates are not removed from consideration.
+Ruby, Elixir and other previously documented language candidates.
+Doxygen-generated C API documentation is likewise explicitly demand-driven and
+unscheduled. None of these items is actively scheduled. Official GitHub/GitLab
+scanner integrations are not on the roadmap and are not an active or planned
+Cribra deliverable. Implementation of the remaining candidates will be
+considered only when supported by demonstrated real-world demand or a viable
+community contribution. Previously documented language candidates are not
+removed from consideration.
 
 Community contributions are welcome under the repository
 [contribution guidelines](CONTRIBUTING.md). Official support requires an ongoing
@@ -576,9 +586,10 @@ Core/Flow/Fuse package variants.
 
 ### Developer integrations
 
-- GitHub and GitLab integrations, Astro integration, agent/AI interoperability,
-  and other application ecosystem integrations remain independently scoped and
-  explicitly demand-driven and unscheduled.
+- Official GitHub/GitLab scanner integrations are **not** on the roadmap.
+  Astro integration, agent/AI interoperability, and other application ecosystem
+  integrations remain independently scoped and explicitly demand-driven and
+  unscheduled.
 - Repository traversal, application exposure policy, correlation, crawling,
   ownership decisions, and network validation are not core scanner features.
 
