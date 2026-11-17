@@ -90,7 +90,9 @@ The next priorities are:
 1. **Dependency and CI maintenance.** Keep the workspace, toolchains and
    workflows current, apply security fixes, and preserve the qualification gates
    without changing runtime behavior or upgrading dependencies as part of this
-   documentation cycle.
+   documentation cycle. This phase also investigates the recorded intermittent
+   `closed_stdout_mid_response_terminates_cleanly` MCP transport test failure
+   without weakening the test.
 2. **Evaluate Python and Kotlin/JVM documentation and official package
    distribution.** Improve runnable examples and API guidance for the existing
    implemented bindings, and evaluate the Maven Central and PyPI publication

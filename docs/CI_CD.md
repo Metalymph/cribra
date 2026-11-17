@@ -164,6 +164,17 @@ just mcp-package-smoke
 just mcp-release-readiness
 ```
 
+#### Known intermittent test
+
+`closed_stdout_mid_response_terminates_cleanly` in
+`crates/cribra-mcp/tests/transport_races.rs` failed once on the
+`x86_64-apple-darwin` packaged leg during PR #107 (2026-11-17). The process
+exited `3` (sustained backpressure) instead of the expected clean shutdown after
+a mid-response disconnect. The same test passed on the immediate re-run and on
+the other native targets. The test and runtime code are unchanged; the failure
+is recorded for investigation during the dependency and CI maintenance phase,
+not waived or weakened.
+
 ## Release process
 
 Releases are tag-driven.

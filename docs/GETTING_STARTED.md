@@ -109,8 +109,8 @@ Code and Codex.
 
 Download one of the five qualified native archives from the
 [`cribra-mcp-v0.1.1` release](https://github.com/Metalymph/cribra/releases/tag/cribra-mcp-v0.1.1),
-verify `SHA256SUMS`, extract it, and point the host at the absolute executable
-path:
+verify that archive's entry in the shared `SHA256SUMS` manifest, extract it, and
+point the host at the absolute executable path:
 
 ```sh
 tar -xzf cribra-mcp-0.1.1-<target>.tar.gz

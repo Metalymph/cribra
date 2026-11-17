@@ -305,8 +305,9 @@ Claude Code and Codex through two tools, `cribra_scan` and `cribra_transform`.
 
 Download the archive for one of the five qualified native targets from the
 [`cribra-mcp-v0.1.1` release](https://github.com/Metalymph/cribra/releases/tag/cribra-mcp-v0.1.1),
-verify `SHA256SUMS`, and use the absolute path to the extracted executable in
-the host configuration:
+verify that archive's entry in the shared `SHA256SUMS` manifest (the manifest
+covers all five archives), and use the absolute path to the extracted
+executable in the host configuration:
 
 ```text
 ./cribra-mcp-0.1.1-<target>/cribra-mcp --version
@@ -315,7 +316,9 @@ the host configuration:
 
 The server reads newline-delimited JSON-RPC on stdin and writes responses on
 stdout. It has no HTTP transport, network access, filesystem discovery,
-configuration file, telemetry or persistent storage. See the
+configuration file, telemetry or persistent storage. Linux archives reference
+GLIBC symbols up to 2.34, which is a binary symbol requirement rather than a
+runtime-qualified distribution list. See the
 [MCP integration guide](https://cribra.pages.dev/docs/integration-mcp/) and the
 [MCP distribution record](crates/cribra-mcp/DISTRIBUTION.md) for targets,
 checksums, host configuration, protocol versions and limitations.

@@ -60,8 +60,14 @@ the extracted executable as a real MCP server on its own runner.
 | `x86_64-pc-windows-msvc`    | `.zip`    | PE x86_64     |
 
 `aarch64-pc-windows-msvc` and musl targets are intentionally not produced.
-Linux archives target glibc 2.35 or newer (Ubuntu 22.04 or equivalent). macOS
-archives are ad-hoc signed, not notarized; Windows executables are unsigned.
+Both published Linux binaries reference GLIBC symbols up to `GLIBC_2.34`
+(measured with `readelf --version-info` on the published archives), so a host
+must provide glibc 2.34 or newer. That is a binary symbol requirement, not a
+runtime-qualification statement: the x86_64 archive was runtime-qualified on
+GitHub's Ubuntu 26.04 image and the aarch64 archive on Ubuntu 24.04 ARM64.
+Older distributions that satisfy the symbol floor are expected to load but were
+not runtime-qualified. macOS archives are ad-hoc signed, not notarized;
+Windows executables are unsigned.
 
 ## Download and verify
 
@@ -77,21 +83,43 @@ curl -LO "${base}/cribra-mcp-${version}-${target}.tar.gz"
 curl -LO "${base}/SHA256SUMS"
 ```
 
-Verify before extracting. The manifest covers all five archives, so verify from a
-directory that contains the archive you downloaded:
+Verify before extracting. The shared manifest covers all five archives, but you
+downloaded only one: verify only that archive's entry. Checking the whole
+manifest fails when the other four archives are absent.
 
 ```sh
-shasum -a 256 -c SHA256SUMS    # macOS
-sha256sum -c SHA256SUMS        # Linux
+archive=cribra-mcp-0.1.1-<target>.tar.gz
+if ! awk -v f="$archive" '$2 == f' SHA256SUMS > "$archive.sha256"; then
+  echo "error: cannot read SHA256SUMS" >&2
+  exit 1
+fi
+if [ ! -s "$archive.sha256" ]; then
+  echo "error: SHA256SUMS has no entry for $archive" >&2
+  exit 1
+fi
+shasum -a 256 -c "$archive.sha256"    # macOS
+sha256sum -c "$archive.sha256"        # Linux
 ```
 
+`shasum`/`sha256sum -c` exit non-zero and report `FAILED` on a checksum
+mismatch. The explicit size check fails when the manifest has no entry for the
+archive, rather than silently verifying nothing.
+
 ```powershell
-Get-FileHash -Algorithm SHA256 cribra-mcp-0.1.1-x86_64-pc-windows-msvc.zip
+$archive = 'cribra-mcp-0.1.1-x86_64-pc-windows-msvc.zip'
+$entry = Get-Content SHA256SUMS | Where-Object { ($_ -split '\s+')[1] -eq $archive }
+if (-not $entry) { Write-Error "SHA256SUMS has no entry for $archive"; exit 1 }
+$expected = ($entry -split '\s+')[0].ToLower()
+$actual = (Get-FileHash -Algorithm SHA256 $archive).Hash.ToLower()
+if ($actual -ne $expected) { Write-Error "checksum mismatch for $archive"; exit 1 }
+"$archive OK"
 ```
 
 A checksum mismatch means the download is corrupted or incomplete. Re-download
-and verify again. `SHA256SUMS` authenticates the exact published binaries; it is
-not a reproducible-build attestation.
+and verify again. `SHA256SUMS` is an integrity check, not an authenticity
+guarantee: it confirms that the archive matches the bytes recorded in the
+manifest, but it is not a cryptographic signature, does not assert who built
+the artifact, and is not a reproducible-build attestation.
 
 ## Install
 

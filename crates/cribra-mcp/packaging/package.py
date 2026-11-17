@@ -54,8 +54,10 @@ PLATFORM_NOTES = {
         "`xattr -d com.apple.quarantine {binary}` before configuring the host."
     ),
     "linux": (
-        "Linux note: this build targets glibc 2.35 or newer (Ubuntu 22.04 or "
-        "equivalent). It does not use musl or any bundled libc."
+        "Linux note: the binaries reference GLIBC symbols up to 2.34, so the "
+        "host must provide glibc 2.34 or newer. This is a binary symbol "
+        "requirement, not a runtime-qualified distribution list. This build "
+        "does not use musl or any bundled libc."
     ),
     "windows": (
         "Windows note: the executable is unsigned, so SmartScreen may prompt "

@@ -706,6 +706,19 @@ function checkMcpDocsStatus(docsById) {
     [/aarch64-unknown-linux-gnu/, 'MCP guide must list the aarch64 Linux target'],
     [/x86_64-pc-windows-msvc/, 'MCP guide must list the Windows target'],
     [/SHA256SUMS/, 'MCP guide must document checksum verification'],
+    [
+      /SHA256SUMS has no entry/,
+      'MCP guide must fail explicitly when the manifest has no entry for the archive',
+    ],
+    [
+      /integrity check, not an authenticity/i,
+      'MCP guide must describe SHA256SUMS as integrity verification, not authentication',
+    ],
+    [/GLIBC_2\.34/, 'MCP guide must record the measured GLIBC_2.34 symbol floor'],
+    [
+      /binary symbol requirement, not a\s+runtime-qualification statement/i,
+      'MCP guide must distinguish symbol requirements from runtime qualification',
+    ],
     [/local stdio/i, 'MCP guide must document local stdio transport'],
     [/Claude Desktop/, 'MCP guide must document Claude Desktop'],
     [/Claude Code/, 'MCP guide must document Claude Code'],
@@ -738,6 +751,11 @@ function checkMcpDocsStatus(docsById) {
   for (const [pattern, message] of required) {
     assert(pattern.test(mcp.contents), message);
   }
+
+  assert(
+    !/authenticates the exact published binaries/i.test(mcp.contents),
+    'MCP guide must not claim SHA256SUMS authenticates published binaries',
+  );
 }
 
 async function checkMcpNavigation() {
