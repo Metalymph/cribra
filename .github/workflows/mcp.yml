@@ -60,6 +60,11 @@ jobs:
           python crates/cribra-mcp/tests/conformance/matrix.py --self-test
           python crates/cribra-mcp/tests/conformance/matrix.py --check
 
+      - name: Test packaging verifier policy
+        run: |
+          python -B -m unittest discover \
+            -s crates/cribra-mcp/qualification/packaging -p 'test_smoke.py'
+
       - name: Build release server
         run: cargo build --release --locked -p cribra-mcp
 

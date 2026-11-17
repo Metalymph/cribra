@@ -111,6 +111,21 @@ def expected_artifact_names(version: str) -> set[str]:
     }
 
 
+def require_versions(names: list[str], expected_version: str) -> None:
+    """Requires every supplied archive to carry `expected_version`.
+
+    This checks only the archives that are actually supplied. It deliberately
+    does not require the full target set: a per-target build is qualified before
+    the other targets exist, and distribution completeness is a separate check.
+    """
+    if not names:
+        fail("no archives to verify")
+    for name in names:
+        version, _, _ = parse_artifact_name(name)
+        if version != expected_version:
+            fail(f"{name} is version {version}, expected {expected_version}")
+
+
 def require_complete(names: list[str], expected_version: str | None) -> str:
     """Rejects missing, extra, duplicate, or wrong-version artifacts.
 
@@ -137,6 +152,21 @@ def require_complete(names: list[str], expected_version: str | None) -> str:
     if missing or extra:
         fail(f"incomplete distribution; missing={missing} unexpected={extra}")
     return version
+
+
+def enforce_distribution(
+    names: list[str], require_all: bool, expected_version: str | None
+) -> None:
+    """Applies the requested distribution policy.
+
+    `--require-all` is the only flag that demands the full five-target set.
+    `--expected-version` validates the supplied archives without implying
+    completeness, so it can qualify one target at a time.
+    """
+    if require_all:
+        require_complete(names, expected_version)
+    elif expected_version is not None:
+        require_versions(names, expected_version)
 
 
 def inspect_archive(archive: Path, directory: str, binary: str) -> None:
@@ -531,8 +561,9 @@ def main() -> int:
 
     check(bool(archives), "no archives to verify")
 
-    if args.require_all or args.expected_version is not None:
-        require_complete([path.name for path in archives], args.expected_version)
+    enforce_distribution(
+        [path.name for path in archives], args.require_all, args.expected_version
+    )
 
     host = host_target()
     executed = False
