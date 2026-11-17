@@ -373,6 +373,8 @@ Provenance is enforced end to end:
 - each job asserts that the archive it produced names the tag's version and its
   matrix target before uploading;
 - build jobs upload only the archive, never a per-target `SHA256SUMS`;
+- each `build` job qualifies its single archive with `--expected-version <v>`,
+  which validates the supplied archives only and does not imply completeness;
 - `assemble` rejects a pre-existing manifest, requires exactly five archives,
   generates the single `SHA256SUMS`, and then `--require-all
   --expected-version <v>` rejects any missing, extra, duplicate, or
@@ -407,8 +409,9 @@ Executed locally on `feat/mcp-m4` (macOS arm64):
 - Packaging negative tests: a mislabeled archive (wrong target in the name), a
   wrong-architecture binary under a correct name, a stripped executable bit, and
   a corrupted `SHA256SUMS` are each rejected.
-- Distribution-completeness tests: `--require-all` rejects an incomplete set
-  and a duplicate name; `--expected-version` rejects a mismatched version.
+- Distribution-policy tests (`just mcp-smoke-tests`): a single archive passes
+  with `--expected-version`, a mismatched version fails, a missing target fails
+  only with `--require-all`, and a complete five-target set passes.
 - Cross-target compile checks that do not require execution:
   - `x86_64-apple-darwin` release binary built, packaged, and structurally
     verified (Mach-O x86_64, SHA-256 recorded); all test binaries compile for
