@@ -91,9 +91,15 @@ mcp-package outdir="target/mcp-dist":
     python3 crates/cribra-mcp/packaging/package.py checksums --outdir "{{outdir}}"
 
 # Extract the packaged archive into a clean temporary directory and qualify the
-# extracted binary as a real MCP stdio server.
+# extracted binary as a real MCP stdio server. Uses the same per-target
+# invocation as mcp-release.yml: --expected-version validates the one supplied
+# archive without requiring the other four targets.
 mcp-package-smoke outdir="target/mcp-dist":
-    python3 crates/cribra-mcp/qualification/packaging/smoke.py --dir "{{outdir}}"
+    #!/usr/bin/env sh
+    set -eu
+    version="$(sed -n 's/^version = "\(.*\)"/\1/p' crates/cribra-mcp/Cargo.toml | head -1)"
+    python3 crates/cribra-mcp/qualification/packaging/smoke.py \
+      --dir "{{outdir}}" --expected-version "$version"
 
 # Regression-test the distribution verifier's version and completeness policy.
 mcp-smoke-tests:

@@ -45,20 +45,20 @@ intentionally out of scope, not silently broken.
 ## 3. Artifact naming
 
 ```text
-cribra-mcp-0.1.0-aarch64-apple-darwin.tar.gz
-cribra-mcp-0.1.0-x86_64-apple-darwin.tar.gz
-cribra-mcp-0.1.0-x86_64-unknown-linux-gnu.tar.gz
-cribra-mcp-0.1.0-aarch64-unknown-linux-gnu.tar.gz
-cribra-mcp-0.1.0-x86_64-pc-windows-msvc.zip
+cribra-mcp-0.1.1-aarch64-apple-darwin.tar.gz
+cribra-mcp-0.1.1-x86_64-apple-darwin.tar.gz
+cribra-mcp-0.1.1-x86_64-unknown-linux-gnu.tar.gz
+cribra-mcp-0.1.1-aarch64-unknown-linux-gnu.tar.gz
+cribra-mcp-0.1.1-x86_64-pc-windows-msvc.zip
 SHA256SUMS
 ```
 
 Artifacts carry the Cargo version without a `v`; the git tag keeps its
-`cribra-mcp-v` prefix (`cribra-mcp-v0.1.0`). Each archive extracts to exactly
+`cribra-mcp-v` prefix (`cribra-mcp-v0.1.1`). Each archive extracts to exactly
 one directory:
 
 ```text
-cribra-mcp-0.1.0-<target>/
+cribra-mcp-0.1.1-<target>/
   cribra-mcp           (cribra-mcp.exe on Windows)
   LICENSE
   INSTALL.md
@@ -81,9 +81,9 @@ binaries; it is not a reproducible-build attestation.
 ### macOS and Linux
 
 ```sh
-tar -xzf cribra-mcp-0.1.0-<target>.tar.gz
-sudo mv cribra-mcp-0.1.0-<target> /opt/
-/opt/cribra-mcp-0.1.0-<target>/cribra-mcp --version
+tar -xzf cribra-mcp-0.1.1-<target>.tar.gz
+sudo mv cribra-mcp-0.1.1-<target> /opt/
+/opt/cribra-mcp-0.1.1-<target>/cribra-mcp --version
 ```
 
 Linux builds target glibc 2.35 or newer (Ubuntu 22.04 or equivalent). No musl
@@ -93,14 +93,14 @@ macOS builds are ad-hoc signed, not notarized. If a browser download sets the
 quarantine attribute:
 
 ```sh
-xattr -d com.apple.quarantine /opt/cribra-mcp-0.1.0-<target>/cribra-mcp
+xattr -d com.apple.quarantine /opt/cribra-mcp-0.1.1-<target>/cribra-mcp
 ```
 
 ### Windows
 
 ```powershell
-Expand-Archive cribra-mcp-0.1.0-x86_64-pc-windows-msvc.zip -DestinationPath C:\Tools
-C:\Tools\cribra-mcp-0.1.0-x86_64-pc-windows-msvc\cribra-mcp.exe --version
+Expand-Archive cribra-mcp-0.1.1-x86_64-pc-windows-msvc.zip -DestinationPath C:\Tools
+C:\Tools\cribra-mcp-0.1.1-x86_64-pc-windows-msvc\cribra-mcp.exe --version
 ```
 
 The Windows executable is unsigned. SmartScreen may prompt once; verify the
@@ -116,7 +116,7 @@ sha256sum -c SHA256SUMS         # Linux
 ```
 
 ```powershell
-Get-FileHash -Algorithm SHA256 cribra-mcp-0.1.0-x86_64-pc-windows-msvc.zip
+Get-FileHash -Algorithm SHA256 cribra-mcp-0.1.1-x86_64-pc-windows-msvc.zip
 ```
 
 ### CLI surface
@@ -154,7 +154,7 @@ Config file:
 {
   "mcpServers": {
     "cribra": {
-      "command": "/opt/cribra-mcp-0.1.0-aarch64-apple-darwin/cribra-mcp",
+      "command": "/opt/cribra-mcp-0.1.1-aarch64-apple-darwin/cribra-mcp",
       "args": []
     }
   }
@@ -173,7 +173,7 @@ That version writes a **global** server to `config.json`:
   "mcpServers": {
     "cribra": {
       "type": "stdio",
-      "command": "/opt/cribra-mcp-0.1.0-aarch64-apple-darwin/cribra-mcp",
+      "command": "/opt/cribra-mcp-0.1.1-aarch64-apple-darwin/cribra-mcp",
       "args": [],
       "env": {}
     }
@@ -187,14 +187,14 @@ and a **project**-scoped server into the project-path key of the same
 Command form for that version:
 
 ```sh
-claude mcp add -s global cribra /opt/cribra-mcp-0.1.0-aarch64-apple-darwin/cribra-mcp
-claude mcp add -s project cribra /opt/cribra-mcp-0.1.0-aarch64-apple-darwin/cribra-mcp
+claude mcp add -s global cribra /opt/cribra-mcp-0.1.1-aarch64-apple-darwin/cribra-mcp
+claude mcp add -s project cribra /opt/cribra-mcp-0.1.1-aarch64-apple-darwin/cribra-mcp
 ```
 
 Current Claude Code releases accept an explicit transport and a `--` separator:
 
 ```sh
-claude mcp add --transport stdio -s user cribra -- /opt/cribra-mcp-0.1.0-aarch64-apple-darwin/cribra-mcp
+claude mcp add --transport stdio -s user cribra -- /opt/cribra-mcp-0.1.1-aarch64-apple-darwin/cribra-mcp
 ```
 
 and project scope writes a committed `.mcp.json`:
@@ -204,7 +204,7 @@ and project scope writes a committed `.mcp.json`:
   "mcpServers": {
     "cribra": {
       "type": "stdio",
-      "command": "/opt/cribra-mcp-0.1.0-aarch64-apple-darwin/cribra-mcp",
+      "command": "/opt/cribra-mcp-0.1.1-aarch64-apple-darwin/cribra-mcp",
       "args": []
     }
   }
@@ -222,13 +222,13 @@ Codex stores MCP servers in `config.toml` (`$CODEX_HOME/config.toml`, default
 
 ```toml
 [mcp_servers.cribra]
-command = "/opt/cribra-mcp-0.1.0-aarch64-apple-darwin/cribra-mcp"
+command = "/opt/cribra-mcp-0.1.1-aarch64-apple-darwin/cribra-mcp"
 ```
 
 Command form:
 
 ```sh
-codex mcp add cribra -- /opt/cribra-mcp-0.1.0-aarch64-apple-darwin/cribra-mcp
+codex mcp add cribra -- /opt/cribra-mcp-0.1.1-aarch64-apple-darwin/cribra-mcp
 codex mcp list
 codex mcp get cribra
 ```
@@ -244,7 +244,7 @@ Any host that supports an MCP `stdio` server accepts the same three fields:
 
 ```json
 {
-  "command": "/opt/cribra-mcp-0.1.0-aarch64-apple-darwin/cribra-mcp",
+  "command": "/opt/cribra-mcp-0.1.1-aarch64-apple-darwin/cribra-mcp",
   "args": [],
   "env": {}
 }
