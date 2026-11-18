@@ -159,7 +159,7 @@ batch, reversed order and a 64-source repeated batch.
 
 The local wheel uses the standard [PyPA build frontend](https://build.pypa.io/en/stable/)
 and `setuptools.build_meta` backend. Build-only dependencies are pinned in
-`build-requirements.txt`: build 1.6.1, setuptools 84.0.0, packaging 26.3 and
+`build-requirements.txt`: build 1.6.1, setuptools 84.1.0, packaging 26.3 and
 pyproject_hooks 1.3.3. The wheel has no Python runtime dependencies. Rust 1.97.0,
 Cargo and the platform C toolchain (the Apple SDK on macOS, `cc`/linker on
 Linux) are needed only to build it.
