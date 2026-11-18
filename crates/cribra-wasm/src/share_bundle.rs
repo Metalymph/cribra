@@ -13,11 +13,11 @@ use cribra::ScanSummary;
 use cribra::transform::{
     PseudonymizationOptions, ShareBundle as CoreShareBundle,
     ShareBundleBuilder as CoreShareBundleBuilder, ShareManifest, ShareMode,
-    ShareModeKind as CoreShareModeKind, SynthesisOptions, TransformError,
+    ShareModeKind as CoreShareModeKind, SynthesisOptions, TransformError as CoreTransformError,
 };
 use wasm_bindgen::prelude::*;
 
-use crate::{ScanEngine, ScanSummaryView, batch::decode_sources, key32_bytes};
+use crate::{ScanEngine, ScanSummaryView, TransformError, batch::decode_sources, key32_bytes};
 
 #[wasm_bindgen]
 extern "C" {
@@ -46,6 +46,72 @@ impl From<CoreShareModeKind> for ShareModeKind {
             CoreShareModeKind::Synthesize => Self::Synthesize,
             _ => Self::Unknown,
         }
+    }
+}
+
+/// Stable Share Bundle failure codes. Existing assignments never move.
+#[wasm_bindgen]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ShareBundleErrorCode {
+    /// No transformation mode was selected before scanning.
+    MissingMode = 0,
+    /// The number of sources did not match the scan entries.
+    SourceCountMismatch = 1,
+    /// A source byte length did not match its scan entry.
+    SourceLengthMismatch = 2,
+    /// A supplied generation time was invalid or preceded the Unix epoch.
+    TimestampInvalid = 3,
+    /// A structural source or mode argument was invalid.
+    InvalidArgument = 4,
+    /// A future Core Share Bundle failure is not understood by this adapter.
+    UnknownCoreError = 5,
+}
+
+/// Owned thrown wasm-bindgen object. Inspect it and call generated free() once.
+#[wasm_bindgen]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ShareBundleError {
+    code: ShareBundleErrorCode,
+}
+
+#[wasm_bindgen]
+impl ShareBundleError {
+    /// Stable reason independent of diagnostic wording.
+    #[wasm_bindgen(getter)]
+    pub fn code(&self) -> ShareBundleErrorCode {
+        self.code
+    }
+
+    /// Fixed diagnostics contain neither source text nor keys.
+    #[wasm_bindgen(getter)]
+    pub fn message(&self) -> String {
+        match self.code {
+            ShareBundleErrorCode::MissingMode => {
+                "share bundle transformation mode was not configured"
+            }
+            ShareBundleErrorCode::SourceCountMismatch => "share bundle source count does not match",
+            ShareBundleErrorCode::SourceLengthMismatch => {
+                "share bundle source length does not match"
+            }
+            ShareBundleErrorCode::TimestampInvalid => "share bundle generation time is invalid",
+            ShareBundleErrorCode::InvalidArgument => "share bundle arguments are invalid",
+            ShareBundleErrorCode::UnknownCoreError => "unknown Core share bundle failure",
+        }
+        .to_owned()
+    }
+}
+
+impl ShareBundleError {
+    const fn new(code: ShareBundleErrorCode) -> Self {
+        Self { code }
+    }
+
+    const fn invalid_argument() -> Self {
+        Self::new(ShareBundleErrorCode::InvalidArgument)
+    }
+
+    const fn timestamp_invalid() -> Self {
+        Self::new(ShareBundleErrorCode::TimestampInvalid)
     }
 }
 
@@ -99,9 +165,8 @@ impl ShareBundleBuilder {
         key: &[u8],
         prefix: Option<String>,
         digest_bytes: Option<usize>,
-    ) -> Result<(), JsError> {
+    ) -> Result<(), TransformError> {
         self.mode_pseudonymize_core(key, prefix, digest_bytes)
-            .map_err(|error| JsError::new(&error))
     }
 
     /// Selects Core keyed deterministic synthesis.
@@ -110,9 +175,12 @@ impl ShareBundleBuilder {
     /// Omitted `marker` retains Core's default; an explicit empty marker is
     /// preserved.
     #[wasm_bindgen(js_name = modeSynthesize)]
-    pub fn mode_synthesize(&mut self, key: &[u8], marker: Option<String>) -> Result<(), JsError> {
+    pub fn mode_synthesize(
+        &mut self,
+        key: &[u8],
+        marker: Option<String>,
+    ) -> Result<(), TransformError> {
         self.mode_synthesize_core(key, marker)
-            .map_err(|error| JsError::new(&error))
     }
 
     /// Scans and transforms the complete ordered source collection atomically.
@@ -122,28 +190,43 @@ impl ShareBundleBuilder {
     /// reading the host clock. IDs and input order are preserved by Core;
     /// duplicate, empty and
     /// Unicode IDs are valid. Invalid structural inputs fail before Core.
-    /// Core failures retain Core's source-free diagnostics.
+    /// Failures are typed and source-free.
     #[wasm_bindgen(js_name = scanAndBuild)]
     pub fn scan_and_build(
         &self,
         engine: &ScanEngine,
         #[wasm_bindgen(unchecked_param_type = "ScanBatchSource[]")] sources: Vec<JsValue>,
-    ) -> Result<ShareBundle, JsError> {
-        let inputs = decode_sources(&sources, "share bundle source")?;
+    ) -> Result<ShareBundle, ShareBundleError> {
+        let inputs = decode_sources(&sources, "share bundle source")
+            .map_err(|_| ShareBundleError::invalid_argument())?;
         let generated_at = host_generated_at()?;
         self.scan_and_build_at_core(engine, inputs, generated_at)
-            .map_err(|error| match error {
-                ShareBundleFailure::Transform(error) => JsError::new(&error.to_string()),
-                ShareBundleFailure::Timestamp => {
-                    JsError::new("share bundle generation time precedes the Unix epoch")
-                }
-            })
+            .map_err(ShareBundleError::from)
+    }
+
+    /// Scans and transforms using an explicit Unix-millisecond generation time.
+    ///
+    /// The value must be a finite, nonnegative safe integer. The adapter passes
+    /// it to Core's `scan_and_build_with_generated_at()`, so the resulting
+    /// manifest carries exactly this timestamp.
+    #[wasm_bindgen(js_name = scanAndBuildWithGeneratedAt)]
+    pub fn scan_and_build_with_generated_at(
+        &self,
+        engine: &ScanEngine,
+        #[wasm_bindgen(unchecked_param_type = "ScanBatchSource[]")] sources: Vec<JsValue>,
+        generated_at_millis: f64,
+    ) -> Result<ShareBundle, ShareBundleError> {
+        let inputs = decode_sources(&sources, "share bundle source")
+            .map_err(|_| ShareBundleError::invalid_argument())?;
+        let generated_at = system_time_from_unix_millis(generated_at_millis)
+            .ok_or_else(ShareBundleError::timestamp_invalid)?;
+        self.scan_and_build_at_core(engine, inputs, generated_at)
+            .map_err(ShareBundleError::from)
     }
 }
 
-fn host_generated_at() -> Result<SystemTime, JsError> {
-    system_time_from_unix_millis(host_now_millis())
-        .ok_or_else(|| JsError::new("host clock did not return a valid Unix millisecond timestamp"))
+fn host_generated_at() -> Result<SystemTime, ShareBundleError> {
+    system_time_from_unix_millis(host_now_millis()).ok_or_else(ShareBundleError::timestamp_invalid)
 }
 
 fn system_time_from_unix_millis(millis: f64) -> Option<SystemTime> {
@@ -162,13 +245,33 @@ fn system_time_from_unix_millis(millis: f64) -> Option<SystemTime> {
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 enum ShareBundleFailure {
-    Transform(TransformError),
+    Transform(CoreTransformError),
     Timestamp,
 }
 
-impl From<TransformError> for ShareBundleFailure {
-    fn from(error: TransformError) -> Self {
+impl From<CoreTransformError> for ShareBundleFailure {
+    fn from(error: CoreTransformError) -> Self {
         Self::Transform(error)
+    }
+}
+
+impl From<ShareBundleFailure> for ShareBundleError {
+    fn from(failure: ShareBundleFailure) -> Self {
+        match failure {
+            ShareBundleFailure::Transform(error) => match error {
+                CoreTransformError::MissingShareMode => {
+                    Self::new(ShareBundleErrorCode::MissingMode)
+                }
+                CoreTransformError::SourceCountMismatch { .. } => {
+                    Self::new(ShareBundleErrorCode::SourceCountMismatch)
+                }
+                CoreTransformError::SourceLengthMismatch { .. } => {
+                    Self::new(ShareBundleErrorCode::SourceLengthMismatch)
+                }
+                _ => Self::new(ShareBundleErrorCode::UnknownCoreError),
+            },
+            ShareBundleFailure::Timestamp => Self::timestamp_invalid(),
+        }
     }
 }
 
@@ -182,7 +285,7 @@ impl ShareBundleBuilder {
         key: &[u8],
         prefix: Option<String>,
         digest_bytes: Option<usize>,
-    ) -> Result<(), String> {
+    ) -> Result<(), TransformError> {
         let mut options = PseudonymizationOptions::new(key32_bytes(key)?);
         if let Some(prefix) = prefix {
             options = options.prefix(prefix);
@@ -194,7 +297,11 @@ impl ShareBundleBuilder {
         Ok(())
     }
 
-    fn mode_synthesize_core(&mut self, key: &[u8], marker: Option<String>) -> Result<(), String> {
+    fn mode_synthesize_core(
+        &mut self,
+        key: &[u8],
+        marker: Option<String>,
+    ) -> Result<(), TransformError> {
         let mut options = SynthesisOptions::new(key32_bytes(key)?);
         if let Some(marker) = marker {
             options = options.marker(marker);

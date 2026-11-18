@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Cribra explicit-asset browser qualification</title>
+  </head>
+  <body>
+    <pre id="result">PENDING</pre>
+    <script>
+      const result = document.getElementById("result");
+      window.addEventListener("error", (event) => {
+        result.textContent =
+          "FAIL: " + (event.error && event.error.message ? event.error.message : event.message);
+      });
+      window.addEventListener("unhandledrejection", (event) => {
+        const reason = event.reason;
+        result.textContent =
+          "FAIL: " + (reason && reason.message ? reason.message : String(reason));
+      });
+    </script>
+    <script type="module" src="/test/browser/explicit.mjs"></script>
+  </body>
+</html>

@@ -1,0 +1,5 @@
+dist/
+src/wasm/
+src/generated/package-version.ts
+node_modules/
+*.tgz

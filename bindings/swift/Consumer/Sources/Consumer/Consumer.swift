@@ -16,6 +16,8 @@ enum Integration {
         let source = ScanSource(id: SourceId(value: "documento/文書😀"), text: text)
         let result = scanner.scanMany(sources: [source, source, ScanSource(id: SourceId(value: ""), text: "")])
         precondition(result.reports.count == 3 && result.summary.totalFindings == 2)
+        let single = scanner.scan(source: source)
+        precondition(single.findings == result.reports[0].findings)
         precondition(result.reports[0].sourceId.value == source.id.value && result.reports[1].sourceId.value == source.id.value)
         let finding = result.reports[0].findings[0]
         precondition(finding.ruleId.value == "literal")

@@ -24,6 +24,34 @@ website-build:
 website-check:
     npm --prefix website run check
 
+# Validate built website content, links, Pagefind, sitemap, and publication boundaries.
+website-content-check:
+    npm --prefix website run check:content -- --require-sitemap
+
+# Build and verify the packed TypeScript Flow and test-only Core tarballs.
+typescript-pack:
+    npm --prefix packages/cribra run qualify:pack
+
+# Qualify installed TypeScript tarballs on Node, TypeScript, browsers, Vite and webpack.
+typescript-consumers:
+    npm --prefix packages/cribra run qualify:consumers
+
+# Run the complete packed-artifact TypeScript qualification, including repeat packing.
+typescript-qualify:
+    npm --prefix packages/cribra run qualify:all
+
+# Build the Flow and test-only Core tarballs and check repeat-pack reproducibility.
+typescript-release-pack:
+    npm --prefix packages/cribra run qualify:pack
+
+# Produce a local, non-publishable release manifest from existing pack evidence.
+typescript-release-readiness:
+    npm --prefix packages/cribra run release:readiness -- --local --skip-qualification --allow-provisional
+
+# Verify a local release tarball against its release manifest without registry access.
+typescript-release-verify:
+    npm --prefix packages/cribra run release:verify -- --release-root ../../target/typescript-release --provisional
+
 # Format the workspace.
 fmt:
     cargo fmt --all
@@ -39,6 +67,52 @@ check:
 # Check every optional core feature.
 check-all:
     cargo check --all-features
+
+# Verify the generated MCP conformance matrix against the pinned official requirement sets.
+mcp-matrix:
+    python3 crates/cribra-mcp/tests/conformance/matrix.py --self-test
+    python3 crates/cribra-mcp/tests/conformance/matrix.py --check
+
+# Build the release MCP server and run the independent TypeScript and Python SDK qualification.
+mcp-qualify:
+    crates/cribra-mcp/qualification/run-qualification.sh
+
+# Build, checksum, and verify the host-target MCP release archive under target/mcp-dist.
+mcp-package outdir="target/mcp-dist":
+    #!/usr/bin/env sh
+    set -eu
+    target="$(rustc -vV | sed -n 's/^host: //p')"
+    rm -rf "{{outdir}}"
+    cargo build --release -p cribra-mcp
+    python3 crates/cribra-mcp/packaging/package.py build \
+      --target "$target" \
+      --binary target/release/cribra-mcp \
+      --outdir "{{outdir}}"
+    python3 crates/cribra-mcp/packaging/package.py checksums --outdir "{{outdir}}"
+
+# Extract the packaged archive into a clean temporary directory and qualify the
+# extracted binary as a real MCP stdio server. Uses the same per-target
+# invocation as mcp-release.yml: --expected-version validates the one supplied
+# archive without requiring the other four targets.
+mcp-package-smoke outdir="target/mcp-dist":
+    #!/usr/bin/env sh
+    set -eu
+    version="$(sed -n 's/^version = "\(.*\)"/\1/p' crates/cribra-mcp/Cargo.toml | head -1)"
+    python3 crates/cribra-mcp/qualification/packaging/smoke.py \
+      --dir "{{outdir}}" --expected-version "$version"
+
+# Regression-test the distribution verifier's version and completeness policy.
+mcp-smoke-tests:
+    python3 -B -m unittest discover \
+      -s crates/cribra-mcp/qualification/packaging -p 'test_smoke.py'
+
+# Local dry run of the complete MCP release qualification. Never publishes.
+mcp-release-readiness:
+    just mcp-matrix
+    just mcp-smoke-tests
+    just mcp-qualify
+    just mcp-package
+    just mcp-package-smoke
 
 # Build/generate the Core-only UniFFI Python consumer and run its focused tests.
 uniffi-python-smoke python="python3.13":
@@ -238,6 +312,33 @@ swift-apple-inspect profile="core": _swift-apple-tool
 # Copy the distribution and consumer outside this checkout; run macOS and compile iOS Simulator.
 swift-apple-consumer profile="core" directory="": _swift-apple-tool
     target/swift-apple/apple "{{justfile_directory()}}" consumer "{{profile}}" "{{directory}}"
+
+# Stage and qualify the unpublished Fuse remote SwiftPM distribution; never publishes.
+swift-apple-dist profile="fuse": _swift-apple-tool
+    target/swift-apple/apple "{{justfile_directory()}}" dist "{{profile}}"
+
+# Test the dependency-free Swift distribution packaging validators.
+swift-apple-packaging-test:
+    mkdir -p target/swift-apple
+    tool_dir="$(mktemp -d target/swift-apple/test.XXXXXX)" && rustc +1.97.0 --edition 2024 --test bindings/swift/tools/apple.rs -o "$tool_dir/apple-tests" && "$tool_dir/apple-tests" && rm -rf "$tool_dir"
+
+# Generate and validate Swift-DocC API documentation for Core, Flow or Fuse.
+swift-docc profile="all":
+    bash bindings/swift/scripts/generate-docc.sh "{{profile}}"
+
+# Generate Core Swift-DocC with the versioned public hosting base path.
+swift-docc-core:
+    bash bindings/swift/scripts/generate-docc.sh core --hosting-base-path /api/0.7.2/swift/core
+
+# Stage generated Core Swift-DocC assets into Astro's ignored build inputs.
+stage-swift-docc-core:
+    node website/scripts/stage-swift-docc.mjs --profile core --version 0.7.2
+
+# Generate, stage, and build the website with the Core API reference at /api/0.7.2/swift/core/.
+website-build-swift-core:
+    just swift-docc-core
+    just stage-swift-docc-core
+    just website-build
 
 # Check, lint, and build the native C adapter artifact skeleton.
 capi:
@@ -546,3 +647,21 @@ clean:
 # Measure owned edits plus exact incremental updates against edits plus full scans.
 bench-incremental:
     cargo bench --bench incremental --all-features
+
+# Type-check the provisional TypeScript package against fresh Flow bindings.
+typescript-package-check:
+    npm --prefix packages/cribra ci
+    npm --prefix packages/cribra run check
+
+# Build and test the provisional TypeScript package against the default Flow dist.
+typescript-package-test:
+    npm --prefix packages/cribra ci
+    npm --prefix packages/cribra run build
+    npm --prefix packages/cribra run test:types
+    npm --prefix packages/cribra test
+    npm --prefix packages/cribra run package:check
+
+# Qualify the provisional TypeScript package for Core and Flow (Node + Chrome).
+typescript-package-qualify:
+    npm --prefix packages/cribra ci
+    npm --prefix packages/cribra run qualify

@@ -31,3 +31,10 @@ See the [incremental contract](https://github.com/Metalymph/cribra/blob/main/doc
 ## Integration coverage
 
 The checkout's Rust, C ABI, WASM, Swift, Python, and Kotlin/JVM surfaces expose their documented session APIs. The CLI does not expose streaming or incremental-document commands. Checkout availability does not establish published-package availability; compare the [bindings matrix](/bindings/).
+
+## Detailed scanning guides
+
+- [Whole-source scanning](/docs/whole-source-scanning/)
+- [Streaming scanning](/docs/streaming-scanning/)
+- [Incremental scanning](/docs/incremental-scanning/)
+- [Resource limits and errors](/docs/resource-limits-and-errors/)

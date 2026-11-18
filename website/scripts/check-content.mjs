@@ -1,0 +1,1067 @@
+#!/usr/bin/env node
+
+/**
+ * Dependency-free content and publication-boundary validation for the Cribra
+ * website. Runs after `astro build && pagefind --site dist`.
+ *
+ * The Pagefind check inspects the generated fragment metadata and asserts that
+ * each documentation URL is present. It never compares a global Pagefind page
+ * count with the number of Markdown documents: the site indexes other pages too.
+ */
+
+import { readFile, readdir, stat } from 'node:fs/promises';
+import { gunzipSync } from 'node:zlib';
+import path from 'node:path';
+import process from 'node:process';
+import { fileURLToPath } from 'node:url';
+
+const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
+const websiteRoot = path.resolve(scriptDirectory, '..');
+const repositoryRoot = path.resolve(websiteRoot, '..');
+const docsSourceDirectory = path.join(websiteRoot, 'src/content/docs');
+const distDirectory = path.join(websiteRoot, 'dist');
+const packageManifestPath = path.join(repositoryRoot, 'packages/cribra/package.json');
+const bindingsDataSourcePath = path.join(websiteRoot, 'src/data/bindings.ts');
+const docsNavigationPath = path.join(websiteRoot, 'src/pages/docs/index.astro');
+const siteConfigPath = path.join(websiteRoot, 'astro-theme-config.ts');
+const mcpGuideUrl = '/docs/integration-mcp/';
+
+const typescriptDocs = new Map([
+  ['typescript', '/docs/typescript/'],
+  ['typescript-api-reference', '/docs/typescript-api-reference/'],
+  [
+    'typescript-sessions-and-transformations',
+    '/docs/typescript-sessions-and-transformations/',
+  ],
+  [
+    'typescript-runtime-compatibility',
+    '/docs/typescript-runtime-compatibility/',
+  ],
+]);
+
+const repositoryPrefix = 'https://github.com/Metalymph/cribra/';
+
+/**
+ * Every implemented integration must expose a directly reachable guide from
+ * /bindings/. API and package links are included only where the corresponding
+ * artifact exists.
+ */
+const bindingLinks = [
+  {
+    id: 'rust',
+    guide: '/docs/integration-rust/',
+    apiReference: '/docs/api-reference/',
+    package: `${repositoryPrefix}releases/tag/v0.7.2`,
+  },
+  { id: 'c', guide: '/docs/integration-c/' },
+  {
+    id: 'wasm',
+    guide: '/docs/integration-wasm/',
+    package: `${repositoryPrefix}releases/tag/cribra-wasm-v0.4.7`,
+  },
+  {
+    id: 'typescript',
+    guide: '/docs/typescript/',
+    apiReference: '/docs/typescript-api-reference/',
+    additionalGuides: [
+      '/docs/typescript-sessions-and-transformations/',
+      '/docs/typescript-runtime-compatibility/',
+    ],
+  },
+  {
+    id: 'cli',
+    guide: '/docs/getting-started/#use-the-cli-from-this-repository',
+  },
+  {
+    id: 'react-native',
+    guide: '/docs/integration-react-native/',
+    package: `${repositoryPrefix}tree/main/packages/cribra-react-native`,
+  },
+  {
+    id: 'swift',
+    guide: '/docs/integration-swift/',
+    apiReference: '/api/0.7.2/swift/core/documentation/cribra/',
+    package: 'https://github.com/Metalymph/cribra-swift',
+    registry: 'https://swiftpackageindex.com/Metalymph/cribra-swift',
+  },
+  { id: 'python', guide: '/docs/integration-python/' },
+  { id: 'kotlin', guide: '/docs/integration-kotlin/' },
+];
+
+const staleSwiftPackageIndexClaims = [
+  /Swift Package\s+Index registration has not been submitted/i,
+  /Swift Package\s+Index registration remains outstanding/i,
+  /Index registration has not been submitted/i,
+  /no Swift Package\s+Index registration/i,
+  /no SPI entry has been created or submitted/i,
+  /no SPI entry\s+exists/i,
+  /\bSPI registration\b/i,
+];
+
+const failures = [];
+const warnings = [];
+
+function fail(message) {
+  failures.push(message);
+}
+
+function warn(message) {
+  warnings.push(message);
+}
+
+function assert(condition, message) {
+  if (!condition) fail(message);
+}
+
+async function pathKind(target) {
+  const details = await stat(target).catch(() => null);
+  if (!details) return null;
+  if (details.isDirectory()) return 'directory';
+  if (details.isFile()) return 'file';
+  return 'other';
+}
+
+async function readText(target) {
+  return readFile(target, 'utf8');
+}
+
+function decodeHtmlEntities(value) {
+  return value
+    .replaceAll('&lt;', '<')
+    .replaceAll('&gt;', '>')
+    .replaceAll('&quot;', '"')
+    .replaceAll('&#39;', "'")
+    .replaceAll('&#x27;', "'")
+    .replaceAll('&amp;', '&');
+}
+
+function parseFrontmatter(contents, file) {
+  const match = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/.exec(contents);
+  if (!match) {
+    fail(`${file}: missing frontmatter block`);
+    return null;
+  }
+
+  const data = {};
+  for (const rawLine of match[1].split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith('#')) continue;
+    const separator = line.indexOf(':');
+    if (separator === -1) {
+      fail(`${file}: invalid frontmatter line: ${rawLine}`);
+      continue;
+    }
+    const key = line.slice(0, separator).trim();
+    let value = line.slice(separator + 1).trim();
+    if (
+      (value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith("'") && value.endsWith("'"))
+    ) {
+      value = value.slice(1, -1);
+    }
+    data[key] = value;
+  }
+
+  return data;
+}
+
+async function loadDocs() {
+  const entries = await readdir(docsSourceDirectory, { withFileTypes: true });
+  const docs = [];
+
+  for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
+    if (!entry.isFile() || !entry.name.endsWith('.md')) continue;
+
+    const id = entry.name.slice(0, -'.md'.length);
+    const file = path.join(docsSourceDirectory, entry.name);
+    const contents = await readText(file);
+    const data = parseFrontmatter(contents, file);
+    if (!data) continue;
+
+    const title = data.title ?? '';
+    const description = data.description ?? '';
+    const order = Number(data.order);
+
+    if (!title.trim()) fail(`${file}: empty title`);
+    if (!description.trim()) fail(`${file}: empty description`);
+    if (!Number.isInteger(order)) {
+      fail(`${file}: order must be an integer, received ${JSON.stringify(data.order)}`);
+    }
+
+    docs.push({ id, file, contents, title, description, order });
+  }
+
+  const orders = new Map();
+  for (const doc of docs) {
+    if (!Number.isInteger(doc.order)) continue;
+    if (orders.has(doc.order)) {
+      fail(
+        `duplicate documentation order ${doc.order}: ${orders.get(doc.order)} and ${doc.id}`,
+      );
+    }
+    orders.set(doc.order, doc.id);
+  }
+
+  return docs;
+}
+
+function assertHtmlMetadata(doc, html) {
+  const titleMatch = /<title>([\s\S]*?)<\/title>/i.exec(html);
+  if (!titleMatch) {
+    fail(`${doc.id}: rendered page has no <title>`);
+  } else if (!decodeHtmlEntities(titleMatch[1]).includes(doc.title)) {
+    fail(`${doc.id}: <title> does not contain frontmatter title ${JSON.stringify(doc.title)}`);
+  }
+
+  const descriptions = [
+    ...html.matchAll(/<meta\s+name="description"\s+content="([^"]*)"/gi),
+  ].map((match) => decodeHtmlEntities(match[1]));
+  if (descriptions.length !== 1) {
+    fail(`${doc.id}: expected exactly one meta description, found ${descriptions.length}`);
+  } else if (descriptions[0] !== doc.description) {
+    fail(
+      `${doc.id}: meta description does not match frontmatter description\n  frontmatter: ${JSON.stringify(doc.description)}\n  rendered:    ${JSON.stringify(descriptions[0])}`,
+    );
+  }
+
+  assert(
+    html.includes('data-pagefind-body'),
+    `${doc.id}: rendered page is missing data-pagefind-body`,
+  );
+}
+
+function extractDocumentLinks(html) {
+  const links = [];
+  for (const match of html.matchAll(/<a\s[^>]*href="([^"]*)"/gi)) {
+    links.push(decodeHtmlEntities(match[1]));
+  }
+  return links;
+}
+
+const browserManagedScheme = /^[a-z][a-z0-9+.-]*:/i;
+
+async function resolveInternalLink(href) {
+  if (!href || href.startsWith('//') || browserManagedScheme.test(href)) {
+    return { kind: 'external' };
+  }
+
+  const [withoutFragment] = href.split('#');
+  const [pathname] = withoutFragment.split('?');
+
+  if (!pathname) {
+    return { kind: 'fragment-only', fragment: href.split('#')[1] ?? '' };
+  }
+  if (!pathname.startsWith('/')) {
+    return { kind: 'external' };
+  }
+
+  let decoded;
+  try {
+    decoded = decodeURIComponent(pathname);
+  } catch {
+    decoded = pathname;
+  }
+
+  const relative = decoded.replace(/^\/+/, '');
+  const absolute = path.resolve(distDirectory, relative);
+  if (
+    absolute !== distDirectory &&
+    !absolute.startsWith(`${distDirectory}${path.sep}`)
+  ) {
+    return { kind: 'missing', target: decoded };
+  }
+
+  const directKind = await pathKind(absolute);
+  if (directKind === 'file') {
+    return {
+      kind: 'file',
+      target: absolute,
+      fragment: href.includes('#') ? href.split('#')[1] : '',
+    };
+  }
+  if (directKind === 'directory') {
+    const indexPath = path.join(absolute, 'index.html');
+    if ((await pathKind(indexPath)) === 'file') {
+      return {
+        kind: 'file',
+        target: indexPath,
+        fragment: href.includes('#') ? href.split('#')[1] : '',
+      };
+    }
+  }
+
+  return { kind: 'missing', target: decoded };
+}
+
+function hasAnchor(contents, fragment) {
+  if (!fragment) return true;
+  let decoded;
+  try {
+    decoded = decodeURIComponent(fragment);
+  } catch {
+    decoded = fragment;
+  }
+  const escaped = decoded.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`(?:id|name)=["']${escaped}["']`).test(contents);
+}
+
+async function assertDocumentLinks(doc, html) {
+  const links = extractDocumentLinks(html);
+  const seen = new Set();
+
+  for (const href of links) {
+    if (seen.has(href)) continue;
+    seen.add(href);
+
+    const resolved = await resolveInternalLink(href);
+    if (resolved.kind === 'external') continue;
+
+    if (resolved.kind === 'missing') {
+      // The Swift-DocC tree is staged separately from the Astro build. Skip those
+      // links only when the generated tree is absent, rather than pretending it
+      // was validated.
+      if (resolved.target.startsWith('/api/')) {
+        const apiPresent = (await pathKind(path.join(distDirectory, 'api'))) !== null;
+        if (!apiPresent) {
+          warn(`${doc.id}: skipping unstaged DocC link ${href}`);
+          continue;
+        }
+      }
+      fail(`${doc.id}: internal link does not resolve: ${href}`);
+      continue;
+    }
+
+    if (resolved.kind === 'fragment-only') {
+      if (!hasAnchor(html, resolved.fragment)) {
+        fail(`${doc.id}: missing local anchor for ${href}`);
+      }
+      continue;
+    }
+
+    if (resolved.kind === 'file' && resolved.fragment) {
+      const targetContents = await readText(resolved.target).catch(() => '');
+      if (!hasAnchor(targetContents, resolved.fragment)) {
+        fail(`${doc.id}: link fragment does not exist: ${href}`);
+      }
+    }
+  }
+}
+
+async function loadPagefindUrls() {
+  const fragmentDirectory = path.join(distDirectory, 'pagefind/fragment');
+  const details = await stat(fragmentDirectory).catch(() => null);
+  if (!details?.isDirectory()) {
+    fail('Pagefind fragment directory is missing; run npm run build');
+    return new Set();
+  }
+
+  const urls = new Set();
+  for (const file of await readdir(fragmentDirectory)) {
+    if (!file.endsWith('.pf_fragment')) continue;
+    const compressed = await readFile(path.join(fragmentDirectory, file));
+    let payload;
+    try {
+      payload = gunzipSync(compressed).toString('utf8');
+    } catch (error) {
+      fail(`Pagefind fragment is not gzip-compressed: ${file} (${error.message})`);
+      continue;
+    }
+
+    // Pagefind fragments are a short codec marker followed by JSON metadata.
+    const decoded = payload.replace(/^pagefind_[a-z0-9]+/, '');
+    try {
+      const metadata = JSON.parse(decoded);
+      if (typeof metadata.url === 'string') urls.add(metadata.url);
+    } catch (error) {
+      fail(`Pagefind fragment metadata is not JSON: ${file} (${error.message})`);
+    }
+  }
+
+  return urls;
+}
+
+async function loadSitemapUrls(requireSitemap) {
+  const indexPath = path.join(distDirectory, 'sitemap-index.xml');
+  const indexContents = await readText(indexPath).catch(() => null);
+
+  if (indexContents === null) {
+    if (requireSitemap) {
+      fail('sitemap-index.xml is missing; build with ASTRO_SITE_URL to validate coverage');
+    } else {
+      warn('sitemap not generated because ASTRO_SITE_URL is unset; skipping sitemap coverage');
+    }
+    return null;
+  }
+
+  const sitemapFiles = [...indexContents.matchAll(/<loc>([^<]+)<\/loc>/g)].map(
+    (match) => match[1],
+  );
+  if (sitemapFiles.length === 0) {
+    fail('sitemap-index.xml contains no sitemap entries');
+    return null;
+  }
+
+  const urls = new Set();
+  for (const sitemapUrl of sitemapFiles) {
+    const filename = new URL(sitemapUrl).pathname.split('/').pop();
+    const contents = await readText(path.join(distDirectory, filename)).catch(() => null);
+    if (contents === null) {
+      fail(`sitemap entry points at a missing file: ${filename}`);
+      continue;
+    }
+    for (const match of contents.matchAll(/<loc>([^<]+)<\/loc>/g)) {
+      urls.add(match[1]);
+    }
+  }
+
+  if (urls.size === 0) {
+    fail('sitemap files contain no page URLs');
+  }
+
+  return urls;
+}
+
+async function checkBindingsData() {
+  const contents = await readText(bindingsDataSourcePath);
+  assert(contents.includes("id: 'typescript'"), 'bindings data has no TypeScript entry');
+  assert(
+    contents.includes('@metalymph/cribra 0.1.0'),
+    'bindings data does not record @metalymph/cribra 0.1.0',
+  );
+  assert(
+    contents.includes('approved and unpublished'),
+    'bindings data does not mark the TypeScript package as approved and unpublished',
+  );
+  assert(
+    contents.includes('TypeScript native backend'),
+    'bindings data no longer retains the planned native TypeScript backend',
+  );
+  assert(
+    contents.includes("id: 'react-native'"),
+    'bindings data has no React Native entry',
+  );
+  assert(
+    contents.includes('@metalymph/cribra-react-native 0.0.0'),
+    'bindings data does not record @metalymph/cribra-react-native 0.0.0',
+  );
+  assert(
+    contents.includes('private and unpublished'),
+    'bindings data does not mark the React Native package as private and unpublished',
+  );
+  assert(
+    !/React Native is not implemented/i.test(contents),
+    'bindings data still says React Native is not implemented',
+  );
+  assert(
+    !contents.includes('TypeScript isomorphic API contract'),
+    'bindings data still lists the completed TypeScript API contract as planned',
+  );
+  assert(
+    !contents.includes('TypeScript / WebAssembly wrapper'),
+    'bindings data still lists the implemented WebAssembly wrapper as planned',
+  );
+
+  const navigation = await readText(docsNavigationPath);
+  for (const url of typescriptDocs.values()) {
+    assert(
+      navigation.includes(`'${url}'`),
+      `docs navigation does not link ${url}`,
+    );
+  }
+}
+
+async function checkPackageIdentity() {
+  const manifest = JSON.parse(await readText(packageManifestPath));
+  assert(
+    manifest.name === '@metalymph/cribra',
+    'package name must be @metalymph/cribra',
+  );
+  assert(manifest.version === '0.1.0', 'package version must remain 0.1.0');
+  assert(manifest.private === undefined, 'package must not be private');
+  assert(
+    manifest.cribraRelease?.state === 'approved',
+    'cribraRelease.state must be approved',
+  );
+  assert(
+    manifest.cribraRelease?.approvedName === '@metalymph/cribra',
+    'approved package name must remain @metalymph/cribra',
+  );
+  assert(manifest.engines?.node === '>=22', 'engines.node must remain >=22');
+}
+
+async function walkFiles(directory) {
+  const entries = await readdir(directory, { withFileTypes: true });
+  const files = [];
+  for (const entry of entries) {
+    const target = path.join(directory, entry.name);
+    if (entry.isDirectory()) {
+      if (['node_modules', 'dist', '.astro', 'target'].includes(entry.name)) continue;
+      files.push(...(await walkFiles(target)));
+    } else if (entry.isFile() && /\.(?:md|mdx|astro|ts|mjs)$/.test(entry.name)) {
+      files.push(target);
+    }
+  }
+  return files;
+}
+
+async function checkForbiddenInstallCommands() {
+  const roots = [
+    path.join(websiteRoot, 'src'),
+    path.join(websiteRoot, 'README.md'),
+    path.join(repositoryRoot, 'README.md'),
+    path.join(repositoryRoot, 'ROADMAP.md'),
+    path.join(repositoryRoot, 'docs'),
+    path.join(repositoryRoot, 'packages/cribra/README.md'),
+  ];
+
+  const installCommand =
+    /(?:\bnpm\s+(?:install|i|add)\b|\bpnpm\s+(?:add|install)\b|\byarn\s+add\b|\bbun\s+add\b)[^\n]*@metalymph\/cribra/;
+
+  for (const root of roots) {
+    const kind = await pathKind(root);
+    if (kind === null) {
+      fail(`publication-boundary scan target is missing: ${root}`);
+      continue;
+    }
+    const files = kind === 'file' ? [root] : await walkFiles(root);
+    for (const file of files) {
+      const contents = await readText(file);
+      const match = installCommand.exec(contents);
+      if (match) {
+        fail(
+          `executable registry install instruction for the unpublished package in ${path.relative(repositoryRoot, file)}: ${match[0]}`,
+        );
+      }
+    }
+  }
+}
+
+async function checkTypescriptSnippetCoverage() {
+  const fixturePath = path.join(
+    repositoryRoot,
+    'packages/cribra/qualification/apps/typescript/docs-examples.ts',
+  );
+  const fixture = await readText(fixturePath).catch(() => null);
+  if (fixture === null) {
+    fail('missing installed-tarball TypeScript documentation fixture');
+    return;
+  }
+
+  const markers = new Set(
+    [...fixture.matchAll(/docs-example:\s*([^\s*]+)/g)].map((match) => match[1]),
+  );
+  const titles = new Set();
+
+  for (const id of typescriptDocs.keys()) {
+    const file = path.join(docsSourceDirectory, `${id}.md`);
+    const contents = await readText(file).catch(() => null);
+    if (contents === null) continue;
+
+    for (const match of contents.matchAll(/```ts(?: title="([^"]*)")?\r?\n([\s\S]*?)```/g)) {
+      const [, title = '', code] = match;
+      if (title) titles.add(title);
+
+      for (const forbidden of [
+        'packages/cribra/src',
+        'packages/cribra/dist',
+        '../src/',
+        '../dist/',
+        '/dist/',
+      ]) {
+        assert(
+          !code.includes(forbidden),
+          `${id}.md: TypeScript example uses forbidden import or path ${forbidden}`,
+        );
+      }
+
+      const publicOperations = [
+        'init',
+        'isInitialized',
+        'createScanner',
+        'getCapabilities',
+        'getVersion',
+        'byteSpanToTextRange',
+        'createShareBundle',
+        'scan',
+        'scanBatch',
+        'stream',
+        'incremental',
+        'transform',
+        'push',
+        'finish',
+        'applyEdit',
+        'snapshot',
+        'dispose',
+      ];
+      for (const operation of publicOperations) {
+        if (!new RegExp(`\\b${operation}\\s*\\(`).test(code)) continue;
+        assert(
+          new RegExp(`\\b${operation}\\s*\\(`).test(fixture),
+          `${id}.md: operation ${operation}() has no executable coverage in docs-examples.ts`,
+        );
+      }
+    }
+  }
+
+  for (const title of titles) {
+    assert(
+      markers.has(title),
+      `${title}: published example has no executable coverage marker in docs-examples.ts`,
+    );
+  }
+  for (const marker of markers) {
+    assert(
+      titles.has(marker),
+      `${marker}: docs-examples.ts marker has no matching published fenced example`,
+    );
+  }
+
+  const importedNames = (source) => {
+    const names = new Set();
+    for (const match of source.matchAll(
+      /import\s+(?:type\s+)?\{([\s\S]*?)\}\s+from\s+["'](?:@metalymph\/cribra|cribra-typescript|__CRIBRA_PACKAGE_SPECIFIER__)["']/g,
+    )) {
+      for (const raw of match[1].split(',')) {
+        const name = raw.trim().replace(/^type\s+/, '');
+        if (name) names.add(name);
+      }
+    }
+    return names;
+  };
+
+  const fixtureImports = importedNames(fixture);
+  const documentedImports = new Set();
+  for (const id of typescriptDocs.keys()) {
+    const contents = await readText(path.join(docsSourceDirectory, `${id}.md`));
+    for (const name of importedNames(contents)) documentedImports.add(name);
+  }
+
+  for (const name of documentedImports) {
+    assert(
+      fixtureImports.has(name),
+      `${name}: imported by documentation but absent from the installed-tarball fixture`,
+    );
+  }
+  for (const name of fixtureImports) {
+    assert(
+      documentedImports.has(name),
+      `${name}: exercised by docs-examples.ts but absent from the published examples`,
+    );
+  }
+}
+
+function checkTypescriptDocsStatus(docsById) {
+  for (const id of typescriptDocs.keys()) {
+    assert(docsById.has(id), `missing TypeScript documentation page: ${id}.md`);
+  }
+
+  const quickStart = docsById.get('typescript');
+  if (quickStart) {
+    assert(
+      /not published/i.test(quickStart.contents),
+      'TypeScript quick start must state that the package is not published',
+    );
+    assert(
+      /cribraRelease\.state[^.]*approved|state[^.]*approved/i.test(
+        quickStart.contents,
+      ),
+      'TypeScript quick start must record cribraRelease.state approved',
+    );
+  }
+
+  const runtime = docsById.get('typescript-runtime-compatibility');
+  if (runtime) {
+    assert(
+      /not published/i.test(runtime.contents),
+      'TypeScript runtime guide must state that the package is not published',
+    );
+    assert(
+      /Native Safari[^.]*unverified/i.test(runtime.contents) ||
+        /unverified[^.]*Native Safari/i.test(runtime.contents),
+      'TypeScript runtime guide must keep native Safari unverified',
+    );
+    assert(
+      /React Native/.test(runtime.contents) && /Not claimed/i.test(runtime.contents),
+      'TypeScript runtime guide must exclude React Native from claims',
+    );
+    assert(
+      /multi-threaded/i.test(runtime.contents),
+      'TypeScript runtime guide must exclude multi-threaded WASM from claims',
+    );
+  }
+}
+
+function checkMcpDocsStatus(docsById) {
+  const mcp = docsById.get('integration-mcp');
+  assert(!!mcp, 'missing MCP integration guide: integration-mcp.md');
+  if (!mcp) return;
+
+  const required = [
+    [/cribra-mcp`? 0\.1\.1/, 'MCP guide must record published version 0.1.1'],
+    [/cribra-mcp-v0\.1\.1/, 'MCP guide must link the cribra-mcp-v0.1.1 release'],
+    [/five qualified native targets/i, 'MCP guide must record five native targets'],
+    [/aarch64-apple-darwin/, 'MCP guide must list the aarch64 Apple target'],
+    [/x86_64-apple-darwin/, 'MCP guide must list the x86_64 Apple target'],
+    [/x86_64-unknown-linux-gnu/, 'MCP guide must list the x86_64 Linux target'],
+    [/aarch64-unknown-linux-gnu/, 'MCP guide must list the aarch64 Linux target'],
+    [/x86_64-pc-windows-msvc/, 'MCP guide must list the Windows target'],
+    [/SHA256SUMS/, 'MCP guide must document checksum verification'],
+    [
+      /SHA256SUMS has no entry/,
+      'MCP guide must fail explicitly when the manifest has no entry for the archive',
+    ],
+    [
+      /integrity check, not an authenticity/i,
+      'MCP guide must describe SHA256SUMS as integrity verification, not authentication',
+    ],
+    [/GLIBC_2\.34/, 'MCP guide must record the measured GLIBC_2.34 symbol floor'],
+    [
+      /binary symbol requirement, not a\s+runtime-qualification statement/i,
+      'MCP guide must distinguish symbol requirements from runtime qualification',
+    ],
+    [/local stdio/i, 'MCP guide must document local stdio transport'],
+    [/Claude Desktop/, 'MCP guide must document Claude Desktop'],
+    [/Claude Code/, 'MCP guide must document Claude Code'],
+    [/Codex/, 'MCP guide must document Codex'],
+    [/cribra_scan/, 'MCP guide must document cribra_scan'],
+    [/cribra_transform/, 'MCP guide must document cribra_transform'],
+    [/metadata[- ]only/i, 'MCP guide must document metadata-only scan results'],
+    [/\[REDACTED\]/, 'MCP guide must document redaction'],
+    [/<CRIBRA:/, 'MCP guide must document templating'],
+    [/2026-07-28/, 'MCP guide must document the modern protocol revision'],
+    [/2025-11-25/, 'MCP guide must document the legacy protocol revision'],
+    [/PARTIAL PASS/, 'MCP guide must record the M3 PARTIAL PASS verdict'],
+    [/147-row/, 'MCP guide must record the 147-row conformance matrix'],
+    [
+      /10 of 10 applicable/i,
+      'MCP guide must record the 10 applicable canonical matrix rows',
+    ],
+    [
+      /5 TypeScript, 5 Python/,
+      'MCP guide must distinguish the 10 independent SDK scenarios',
+    ],
+    [
+      /official runner is HTTP-only/i,
+      'MCP guide must record the official-runner limitation',
+    ],
+    [/M4 distribution[^\n]*PASS/i, 'MCP guide must record the M4 distribution PASS'],
+    [/not a language binding/i, 'MCP guide must present MCP as a tool integration'],
+  ];
+
+  for (const [pattern, message] of required) {
+    assert(pattern.test(mcp.contents), message);
+  }
+
+  assert(
+    !/authenticates the exact published binaries/i.test(mcp.contents),
+    'MCP guide must not claim SHA256SUMS authenticates published binaries',
+  );
+}
+
+async function checkMcpNavigation() {
+  const navigation = await readText(docsNavigationPath);
+  assert(
+    navigation.includes(`'${mcpGuideUrl}'`),
+    `docs navigation does not link ${mcpGuideUrl}`,
+  );
+
+  const siteConfig = await readText(siteConfigPath);
+  assert(
+    siteConfig.includes(`href: '${mcpGuideUrl}'`),
+    `site navigation does not link ${mcpGuideUrl}`,
+  );
+
+  const source = await readText(bindingsDataSourcePath);
+  assert(
+    source.includes('toolIntegrations'),
+    'bindings data has no tool integrations section',
+  );
+  assert(
+    source.includes("id: 'mcp'"),
+    'bindings data has no MCP tool integration entry',
+  );
+  assert(
+    source.includes(mcpGuideUrl),
+    `bindings data does not link the MCP guide ${mcpGuideUrl}`,
+  );
+  assert(
+    source.includes('not a language binding'),
+    'bindings data does not present MCP as a tool integration',
+  );
+
+  const bindingsHtml = await readText(path.join(distDirectory, 'bindings/index.html')).catch(
+    () => null,
+  );
+  const homeHtml = await readText(path.join(distDirectory, 'index.html')).catch(() => null);
+
+  assert(bindingsHtml !== null, 'bindings page is missing from the built website');
+  assert(homeHtml !== null, 'homepage is missing from the built website');
+  if (bindingsHtml === null || homeHtml === null) return;
+
+  assert(
+    bindingsHtml.includes('id="mcp"'),
+    'bindings page has no MCP tool integration entry',
+  );
+  assert(
+    bindingsHtml.includes(`href="${mcpGuideUrl}"`),
+    `bindings page does not render the MCP guide ${mcpGuideUrl}`,
+  );
+  assert(
+    homeHtml.includes(`href="${mcpGuideUrl}"`),
+    `homepage does not link the MCP guide ${mcpGuideUrl}`,
+  );
+
+  await assertResolvedLink('bindings page MCP guide', mcpGuideUrl);
+}
+
+async function checkBindingLinkMetadata() {
+  const source = await readText(bindingsDataSourcePath);
+
+  assert(
+    bindingLinks.length === 9,
+    `expected nine implemented bindings, found ${bindingLinks.length}`,
+  );
+
+  for (const binding of bindingLinks) {
+    assert(
+      source.includes(`id: '${binding.id}'`),
+      `bindings data has no ${binding.id} entry`,
+    );
+
+    for (const href of bindingLinkHrefs(binding)) {
+      const expectedSource =
+        href.startsWith(repositoryPrefix) &&
+        !source.includes(`href: '${href}'`)
+          ? `\${repository}/${href.slice(repositoryPrefix.length)}`
+          : `href: '${href}'`;
+      assert(
+        source.includes(expectedSource),
+        `bindings data does not expose the ${binding.id} link ${href}`,
+      );
+    }
+  }
+
+  for (const href of typescriptDocs.values()) {
+    assert(
+      source.includes(`href: '${href}'`),
+      `bindings data does not link the existing TypeScript page ${href}`,
+    );
+  }
+
+  const swiftRegistry = bindingLinks.find(
+    (binding) => binding.id === 'swift',
+  )?.registry;
+  assert(
+    swiftRegistry === 'https://swiftpackageindex.com/Metalymph/cribra-swift',
+    'Swift binding must use the exact Swift Package Index URL',
+  );
+  assert(
+    source.includes('not Cribra compatibility-build evidence'),
+    'bindings data does not limit the Swift Package Index listing to discovery',
+  );
+}
+
+function bindingLinkHrefs(binding) {
+  return [
+    binding.guide,
+    ...(binding.additionalGuides ?? []),
+    ...(binding.apiReference ? [binding.apiReference] : []),
+    ...(binding.package ? [binding.package] : []),
+    ...(binding.registry ? [binding.registry] : []),
+  ];
+}
+
+async function assertResolvedLink(label, href) {
+  const resolved = await resolveInternalLink(href);
+  if (resolved.kind === 'external') return;
+
+  if (resolved.kind === 'missing') {
+    fail(`${label}: internal link does not resolve: ${href}`);
+    return;
+  }
+
+  if (resolved.kind === 'fragment-only') {
+    fail(`${label}: guide link must target a page, not only a fragment: ${href}`);
+    return;
+  }
+
+  if (resolved.kind === 'file' && resolved.fragment) {
+    const contents = await readText(resolved.target).catch(() => '');
+    if (!hasAnchor(contents, resolved.fragment)) {
+      fail(`${label}: link fragment does not exist: ${href}`);
+    }
+  }
+}
+
+async function checkBindingNavigation() {
+  const bindingsHtml = await readText(path.join(distDirectory, 'bindings/index.html')).catch(
+    () => null,
+  );
+  const homeHtml = await readText(path.join(distDirectory, 'index.html')).catch(() => null);
+
+  assert(bindingsHtml !== null, 'bindings page is missing from the built website');
+  assert(homeHtml !== null, 'homepage is missing from the built website');
+  if (bindingsHtml === null || homeHtml === null) return;
+
+  for (const binding of bindingLinks) {
+    assert(
+      bindingsHtml.includes(`id="${binding.id}"`),
+      `bindings page has no ${binding.id} matrix row`,
+    );
+
+    for (const href of bindingLinkHrefs(binding)) {
+      assert(
+        bindingsHtml.includes(`href="${href}"`),
+        `bindings page does not render the ${binding.id} link ${href}`,
+      );
+    }
+
+    assert(
+      homeHtml.includes(`href="${binding.guide}"`),
+      `homepage does not link the ${binding.id} guide ${binding.guide}`,
+    );
+
+    await assertResolvedLink(`bindings page ${binding.id} guide`, binding.guide);
+    for (const href of binding.additionalGuides ?? []) {
+      await assertResolvedLink(
+        `bindings page ${binding.id} additional guide`,
+        href,
+      );
+    }
+    if (binding.apiReference) {
+      await assertResolvedLink(
+        `bindings page ${binding.id} API reference`,
+        binding.apiReference,
+      );
+    }
+  }
+}
+
+async function checkSwiftPackageIndexDisclosure() {
+  const files = [
+    'website/src/content/docs/integration-swift.md',
+    'website/src/content/docs/compatibility-and-distribution.md',
+    'website/src/data/bindings.ts',
+    'docs/COMPATIBILITY.md',
+    'docs/ECOSYSTEM.md',
+    'ROADMAP.md',
+    'bindings/swift/README.md',
+  ];
+
+  for (const file of files) {
+    const contents = await readText(path.join(repositoryRoot, file)).catch(() => null);
+    if (contents === null) {
+      fail(`Swift Package Index disclosure target is missing: ${file}`);
+      continue;
+    }
+    for (const pattern of staleSwiftPackageIndexClaims) {
+      assert(
+        !pattern.test(contents),
+        `${file}: stale Swift Package Index claim (${pattern})`,
+      );
+    }
+  }
+
+  const swiftGuide = await readText(
+    path.join(docsSourceDirectory, 'integration-swift.md'),
+  ).catch(() => '');
+  const swiftIndexLink =
+    /\[Swift Package Index\]\(([^)\s]+)\)/.exec(swiftGuide);
+  assert(
+    swiftIndexLink?.[1] === 'https://swiftpackageindex.com/Metalymph/cribra-swift',
+    'Swift integration guide must link the exact Swift Package Index URL',
+  );
+  assert(
+    /not Cribra compatibility-build evidence/i.test(swiftGuide),
+    'Swift integration guide does not limit the Swift Package Index listing to discovery',
+  );
+}
+
+async function main() {
+  const requireSitemap = process.argv.includes('--require-sitemap');
+
+  const distKind = await pathKind(distDirectory);
+  if (distKind !== 'directory') {
+    fail('missing built website: website/dist; run npm run build');
+  } else {
+    const docs = await loadDocs();
+    const docsById = new Map(docs.map((doc) => [doc.id, doc]));
+    checkTypescriptDocsStatus(docsById);
+    checkMcpDocsStatus(docsById);
+    await checkTypescriptSnippetCoverage();
+
+    for (const doc of docs) {
+      const htmlPath = path.join(distDirectory, 'docs', doc.id, 'index.html');
+      const html = await readText(htmlPath).catch(() => null);
+      if (html === null) {
+        fail(`${doc.id}: missing rendered route /docs/${doc.id}/`);
+        continue;
+      }
+      assertHtmlMetadata(doc, html);
+      await assertDocumentLinks(doc, html);
+    }
+
+    const pagefindUrls = await loadPagefindUrls();
+    for (const doc of docs) {
+      const url = `/docs/${doc.id}/`;
+      assert(pagefindUrls.has(url), `${doc.id}: route is absent from the Pagefind index (${url})`);
+    }
+    for (const [id, url] of typescriptDocs) {
+      assert(pagefindUrls.has(url), `${id}: new TypeScript route is absent from the Pagefind index (${url})`);
+    }
+
+    const sitemapUrls = await loadSitemapUrls(requireSitemap);
+    if (sitemapUrls) {
+      const origin = new URL(sitemapUrls.values().next().value).origin;
+      for (const doc of docs) {
+        const url = `/docs/${doc.id}/`;
+        const canonical = await readMetadataCanonical(doc.id);
+        if (canonical === null) {
+          fail(`${doc.id}: missing canonical URL in sitemap-enabled build`);
+          continue;
+        }
+        assert(
+          canonical === `${origin}${url}`,
+          `${doc.id}: canonical URL must be ${origin}${url}, received ${canonical}`,
+        );
+        assert(
+          sitemapUrls.has(canonical),
+          `${doc.id}: route is absent from the sitemap (${canonical})`,
+        );
+      }
+    }
+
+    await checkBindingsData();
+    await checkBindingLinkMetadata();
+    await checkBindingNavigation();
+    await checkMcpNavigation();
+    await checkSwiftPackageIndexDisclosure();
+    await checkPackageIdentity();
+    await checkForbiddenInstallCommands();
+  }
+
+  for (const warning of warnings) {
+    console.warn(`WARN: ${warning}`);
+  }
+
+  if (failures.length > 0) {
+    for (const failure of failures) {
+      console.error(`FAIL: ${failure}`);
+    }
+    console.error(`\n${failures.length} content validation failure(s).`);
+    process.exit(1);
+  }
+
+  console.log('Content validation passed.');
+}
+
+async function readMetadataCanonical(id) {
+  const html = await readText(path.join(distDirectory, 'docs', id, 'index.html')).catch(
+    () => null,
+  );
+  if (html === null) return null;
+  const match = /<link\s+rel="canonical"\s+href="([^"]*)"/i.exec(html);
+  return match ? decodeHtmlEntities(match[1]) : null;
+}
+
+await main();

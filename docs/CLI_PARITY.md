@@ -158,6 +158,9 @@ The CLI must not independently implement detector or validator behavior.
 | Pseudonymization | EXPOSED | `cribra pseudonymize` with mandatory `--key-file`, using Core defaults |
 | Synthesis | EXPOSED | `cribra synthesize` with mandatory `--key-file`, using Core defaults |
 | Share bundle | EXPOSED | private, atomic no-overwrite directory export on macOS and Linux |
+| Streaming scanning | LIBRARY-ONLY | Core admitted-configuration `StreamSession`; no CLI streaming interface |
+| Incremental scanning | LIBRARY-ONLY | Core `IncrementalSession`; CLI commands read complete sources |
+| Generic batch scanning | LIBRARY-ONLY | `bundle` accepts explicit ordered sources, but no general batch command or API is exposed |
 | Custom `Rule` construction | LIBRARY-ONLY | programmable Rust API |
 | Custom `ScannerBuilder` construction | LIBRARY-ONLY | programmable Rust API |
 | Parallel scanning | LIBRARY-ONLY | bundle scanning uses Core defaults |
@@ -569,6 +572,12 @@ CLI parity defects.
 
 Parallel scanning remains a library-level configuration; bundle export uses
 Core defaults. These classifications may be revisited independently.
+
+Streaming and incremental sessions remain Core library capabilities. The CLI
+reads complete UTF-8 sources and does not expose a streaming or incremental
+command. Its multi-file `bundle` input is not a general batch-scanning API; it is
+the explicit input contract of the Share Bundle command. Source/local
+availability of these Rust APIs is not a registry-publication claim.
 
 ## Input orchestration is separate from semantic parity
 

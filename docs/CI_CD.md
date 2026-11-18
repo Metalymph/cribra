@@ -4,7 +4,7 @@ Cribra treats `main` as the release-quality branch.
 
 ## Continuous integration
 
-Pull requests and pushes to `main` are validated by four independent surfaces.
+Pull requests and pushes to `main` are validated by five independent surfaces.
 
 ### CI
 
@@ -39,6 +39,65 @@ The supported browser-oriented WASM contract is checked for
 The optional `parallel` feature is not part of the supported browser WASM
 contract.
 
+### TypeScript
+
+`.github/workflows/typescript.yml` is dedicated to the TypeScript package
+artifact and is scoped to `packages/cribra/**`, `crates/cribra-wasm/**`,
+`Cargo.toml`, `Cargo.lock`, and the workflow itself. It is also callable via
+`workflow_call` by the release workflow. The package is
+`@metalymph/cribra@0.1.0` (not private, not published); its manifest is the
+single source of the package name, version, and tarball names.
+
+One producer job builds the Flow and test-only Core `npm pack` tarballs and
+uploads them with `actions/upload-artifact`. Independent consumer jobs download
+that artifact and never rebuild it:
+
+- Node 22, 24, and 26 ESM consumers;
+- TypeScript 5.9.3 and 7.0.2 with `NodeNext` and `Bundler` resolution;
+- Chrome, Chromium, Playwright Firefox, and Playwright WebKit;
+- Vite development/production and webpack production, importing the package by
+  name.
+
+The workflow has `contents: read` permissions, no registry credentials, and no
+publish step. Native Safari is probed only on manual dispatch on macOS; it
+reports blocked when remote automation is not already enabled and never
+modifies system settings.
+
+### TypeScript release
+
+`.github/workflows/typescript-release.yml` is manual only and has two paths.
+Ordinary pushes, pull requests, and unreviewed tag creation never reach staging.
+
+1. **Readiness** reuses `typescript.yml` through `workflow_call`, then verifies
+   the dispatched tag and commit, byte-for-byte repeat-pack reproducibility, the
+   complete consumer matrix, and the approved package identity. It writes
+   `release-manifest.json` and `SHA256SUMS` and uploads
+   `typescript-release-<tag>`. It has `contents: read` and no OIDC permission.
+2. **Stage** requires the protected GitHub environment `npm-release` and
+   `id-token: write`. It fails unless the identity is approved, the tag/commit
+   match the qualified manifest, the tarball digest and file records match, the
+   version is not already published, the protected environment defines
+   `CRIBRA_RELEASE_AUTHORIZED=1`, and the confirmation is exactly
+   `stage <tag>`. It runs
+   `npm stage publish` and stops. A maintainer must download the staged
+   tarball, compare its SHA-256 with the manifest, verify provenance, and approve
+   with 2FA. The workflow never approves or promotes the version.
+
+The manifest is `@metalymph/cribra@0.1.0` with `cribraRelease.state: "approved"`,
+so release-mode checks pass. Staging is still impossible without the separately
+protected authorization, and no npm record exists yet. The npm CLI is pinned to
+`12.2.2`, above the required `11.15` minimum for staged publishing.
+
+Trusted Publishing is configured only for the approved package and only
+immediately before an authorized release; npm expires an unused configuration
+after two days. A brand-new package needs a `0.0.0-stage` placeholder published
+only under the `stage` dist-tag before OIDC staging can work. The placeholder is
+never `latest` and is not a release.
+
+See [the TypeScript release runbook](TYPESCRIPT_RELEASE.md) for the verified
+ownership, bootstrap, digest verification, approval, and rollback limits. Rollback means a
+new patch plus `npm deprecate`; published versions cannot be overwritten.
+
 ### Security
 
 RustSec's `audit-check` action audits `Cargo.lock`:
@@ -51,6 +110,70 @@ RustSec's `audit-check` action audits `Cargo.lock`:
 Scheduled audits may create GitHub issues for newly discovered advisories.
 
 Dependabot checks Cargo and GitHub Actions dependencies weekly.
+
+### MCP
+
+`cribra-mcp` has its own workflows, independent of the Core, WASM, TypeScript,
+and UniFFI pipelines. Version 0.1.1 is published as a five-target native stdio
+distribution; see
+[`crates/cribra-mcp/DISTRIBUTION.md`](../crates/cribra-mcp/DISTRIBUTION.md).
+
+`.github/workflows/mcp.yml` runs on pushes to `main`, pull requests, and manual
+dispatch:
+
+- **gate** (`ubuntu-latest`): `cargo fmt --check`, clippy with `-D warnings`,
+  `cargo test -p cribra-mcp --all-targets`, the conformance matrix check, and a
+  release build that is packaged, checksummed, and smoke-tested from the
+  extracted archive;
+- **msrv** (`ubuntu-latest`, Rust `1.97.0`): all MCP tests;
+- **packaged**: a five-target matrix (`ubuntu-latest`, `ubuntu-24.04-arm`,
+  `macos-latest`, `macos-15-intel`, `windows-latest`) that runs the full MCP
+  test suite natively, then builds, packages, checksums, and runs the extracted
+  binary against six packaged scenarios on its own runner. The Windows leg
+  therefore executes the bounded-writer deadline and `BrokenPipe` tests rather
+  than only compiling them.
+
+`.github/workflows/mcp-release.yml` is the only MCP release path, and it is
+opt-in:
+
+- a pushed `cribra-mcp-v*` tag runs validation, five-target build, assembly, and
+  verification, with no write permission and no release creation. Each build
+  leg checks out the tag, runs the full MCP test suite natively, asserts the
+  archive carries the tag version and matrix target, and uploads only the
+  archive;
+- `workflow_dispatch` from the tag ref defaults to `readiness`, which repeats
+  the whole dry run without mutating anything;
+- `workflow_dispatch` with `mode: stage` requires the confirmation
+  `stage <tag>`, runs in the protected `mcp-release` environment, checks that
+  the tag exists and is reachable from `origin/main`, refuses to replace an
+  existing release, verifies `SHA256SUMS`, rejects any missing, extra,
+  duplicate, or wrong-version archive, and creates a **draft** release with
+  `--draft --verify-tag --latest=false`.
+
+The MCP release namespace cannot trigger Core `v*.*.*` or WASM
+`cribra-wasm-v*` releases, and `--latest=false` prevents an MCP release from
+becoming the repository "latest" release. Distribution details are in
+[`crates/cribra-mcp/DISTRIBUTION.md`](../crates/cribra-mcp/DISTRIBUTION.md).
+
+Local equivalents:
+
+```text
+just mcp-qualify
+just mcp-package
+just mcp-package-smoke
+just mcp-release-readiness
+```
+
+#### Known intermittent test
+
+`closed_stdout_mid_response_terminates_cleanly` in
+`crates/cribra-mcp/tests/transport_races.rs` failed once on the
+`x86_64-apple-darwin` packaged leg during PR #107 (2026-11-17). The process
+exited `3` (sustained backpressure) instead of the expected clean shutdown after
+a mid-response disconnect. The same test passed on the immediate re-run and on
+the other native targets. The test and runtime code are unchanged; the failure
+is recorded for investigation during the dependency and CI maintenance phase,
+not waived or weakened.
 
 ## Release process
 

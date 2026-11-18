@@ -46,8 +46,12 @@ const requiredPublicDeclarations = [
   "export class ShareBundle",
   "export class ShareBundleBuilder",
   "export class ShareBundleEntry",
+  "export class ShareBundleError",
+  "export enum ShareBundleErrorCode",
   "export class ShareManifestView",
   "export enum ShareModeKind",
+  "export class TransformError",
+  "export enum TransformErrorCode",
 ];
 
 const requiredMethods = [
@@ -56,6 +60,10 @@ const requiredMethods = [
   "entryAt(index: number): ScanBatchEntry",
   "summary(): ScanSummaryView",
   "scanAndBuild(engine: ScanEngine, sources: ScanBatchSource[]): ShareBundle",
+  "scanAndBuildWithGeneratedAt(",
+  "readonly code: ShareBundleErrorCode",
+  "readonly code: TransformErrorCode",
+  "readonly message: string",
   "modeRedact(): void",
   "modeTemplate(): void",
   "modePseudonymize(",
@@ -255,7 +263,9 @@ async function validateGlue() {
     "export class ShareBundle",
     "export class ShareBundleBuilder",
     "export class ShareBundleEntry",
+    "export class ShareBundleError",
     "export class ShareManifestView",
+    "export class TransformError",
     "new URL('cribra_bg.wasm', import.meta.url)",
     "WebAssembly.instantiate",
   ];

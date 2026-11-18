@@ -1,0 +1,175 @@
+name: MCP
+
+# Continuous qualification for the native MCP server. This workflow is
+# independent of the Core, WASM, TypeScript, UniFFI, and documentation
+# pipelines: it never publishes and only reads repository contents.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mcp-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: "1"
+
+jobs:
+  gate:
+    name: Gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Install Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Cache Rust artifacts
+        uses: Swatinem/rust-cache@v2.9.1
+        with:
+          key: mcp-gate
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Clippy
+        run: cargo clippy -p cribra-mcp --all-targets -- -D warnings
+
+      - name: Test all MCP targets
+        run: cargo test -p cribra-mcp --all-targets
+
+      - name: Verify conformance matrix
+        run: |
+          python crates/cribra-mcp/tests/conformance/matrix.py --self-test
+          python crates/cribra-mcp/tests/conformance/matrix.py --check
+
+      - name: Test packaging verifier policy
+        run: |
+          python -B -m unittest discover \
+            -s crates/cribra-mcp/qualification/packaging -p 'test_smoke.py'
+
+      - name: Build release server
+        run: cargo build --release --locked -p cribra-mcp
+
+      - name: Package and smoke the host artifact
+        env:
+          TARGET: x86_64-unknown-linux-gnu
+        run: |
+          python crates/cribra-mcp/packaging/package.py build \
+            --target "$TARGET" \
+            --binary target/release/cribra-mcp \
+            --outdir target/mcp-dist
+          python crates/cribra-mcp/packaging/package.py checksums --outdir target/mcp-dist
+          python crates/cribra-mcp/qualification/packaging/smoke.py --dir target/mcp-dist
+
+  msrv:
+    name: Rust 1.97
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install Rust 1.97.0
+        uses: dtolnay/rust-toolchain@1.97.0
+
+      - name: Cache Rust artifacts
+        uses: Swatinem/rust-cache@v2.9.1
+        with:
+          key: mcp-msrv-1.97
+
+      - name: Verify rustc version
+        run: rustc --version
+
+      - name: Test all MCP targets
+        run: cargo test -p cribra-mcp --all-targets
+
+  packaged:
+    name: Packaged ${{ matrix.target }}
+    needs: gate
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            binary: cribra-mcp
+          - os: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+            binary: cribra-mcp
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            binary: cribra-mcp
+          - os: macos-15-intel
+            target: x86_64-apple-darwin
+            binary: cribra-mcp
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            binary: cribra-mcp.exe
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Cache Rust artifacts
+        uses: Swatinem/rust-cache@v2.9.1
+        with:
+          key: mcp-package-${{ matrix.target }}
+
+      # Execute the platform-specific transport tests on the native runner,
+      # including the Windows bounded-writer deadline and BrokenPipe exit tests.
+      - name: Test all MCP targets natively
+        run: cargo test --locked -p cribra-mcp --all-targets
+
+      - name: Build release server
+        run: cargo build --release --locked -p cribra-mcp
+
+      - name: Package, checksum, and smoke the packaged binary
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+          BINARY: ${{ matrix.binary }}
+        run: |
+          set -euo pipefail
+          python crates/cribra-mcp/packaging/package.py build \
+            --target "$TARGET" \
+            --binary "target/release/$BINARY" \
+            --outdir target/mcp-dist
+          python crates/cribra-mcp/packaging/package.py checksums --outdir target/mcp-dist
+          python crates/cribra-mcp/qualification/packaging/smoke.py --dir target/mcp-dist
+
+      - name: Upload packaged artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: cribra-mcp-${{ matrix.target }}
+          path: target/mcp-dist/*
+          if-no-files-found: error
+          retention-days: 14

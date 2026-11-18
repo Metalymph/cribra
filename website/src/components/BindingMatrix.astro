@@ -1,4 +1,5 @@
 ---
+import BindingLinks from './BindingLinks.astro';
 import { bindings, evidenceDate } from '../data/bindings';
 ---
 
@@ -18,9 +19,11 @@ import { bindings, evidenceDate } from '../data/bindings';
     >
     <thead
       ><tr
-        ><th scope="col">Integration</th><th scope="col">Implementation</th><th scope="col"
-          >Qualification evidence</th
-        ><th scope="col">Distribution / publication</th><th scope="col">Capability coverage</th></tr
+        ><th scope="col">Integration</th><th scope="col">Guides &amp; references</th><th scope="col"
+          >Implementation</th
+        ><th scope="col">Qualification evidence</th><th scope="col"
+          >Distribution / publication</th
+        ><th scope="col">Capability coverage</th></tr
       ></thead
     >
     <tbody
@@ -28,6 +31,7 @@ import { bindings, evidenceDate } from '../data/bindings';
         bindings.map((binding) => (
           <tr id={binding.id}>
             <th scope="row">{binding.name}</th>
+            <td><BindingLinks binding={binding} /></td>
             <td>{binding.implementation}</td>
             <td>
               {binding.qualification}

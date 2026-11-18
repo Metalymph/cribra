@@ -1,0 +1,9 @@
+# Python qualification dependencies.
+#
+# Qualification-only. `mcp` is the official Python MCP SDK client used to prove
+# interoperability; it is never a dependency of the `cribra-mcp` crate.
+#
+# Both pins are exact. Transitively resolved versions observed on 2026-11-15
+# with Python 3.13.18 are recorded in ../README.md.
+mcp==2.3.0
+jsonschema==4.26.0

@@ -12,7 +12,7 @@ Cribra is an embeddable, local-first, fully synchronous Rust engine for determin
 
 It is not a file, repository, or vulnerability scanner. Cribra operates on caller-provided data and provides reusable security primitives that applications, CLIs, APIs, pipelines, WebAssembly hosts, and native integrations can compose into their own workflows.
 
-Use it directly as a Rust crate, through the canonical CLI as a process boundary, via C ABI or WebAssembly, or through the Swift, Python and Kotlin/JVM UniFFI consumers.
+Use it directly as a Rust crate, through the canonical CLI as a process boundary, via C ABI or WebAssembly, through the Swift, Python and Kotlin/JVM UniFFI consumers, or through the native MCP server for tool integrations.
 
 *Cribra provides the engine; the surrounding application decides the workflow.*
 
@@ -34,6 +34,16 @@ with Rayon, while streaming execution allows a source to be supplied in
 chunks without changing that execution model.
 
 Matched secret values are not stored in public findings.
+
+## Repositories and contributions
+
+[GitHub](https://github.com/Metalymph/cribra) is the canonical repository. Issues,
+pull requests, releases, CI, and all development activity happen there.
+
+[Codeberg](https://codeberg.org/Metalymph/cribra) is a read-only contribution
+mirror. It receives `main` and release tags automatically, has issues and pull
+requests disabled, and does not accept contributions. Open issues and pull
+requests on GitHub.
 
 ## Streaming core — available since 0.5.0
 
@@ -250,15 +260,23 @@ Measurements: macOS ARM64, Rust 1.99.0. See
 
 ### Canonical CLI
 
+`cribra-cli` is not currently published to crates.io. Build or install it from
+a repository checkout; these are the verified Cargo paths:
+
 ```text
-cargo build -p cribra-cli
+cargo install --path crates/cribra-cli   # installs the `cribra` executable
+cargo build -p cribra-cli                # target/debug/cribra
+```
+
+Then scan one explicit file or stdin:
+
+```text
 target/debug/cribra scan config.env --format json
 ```
 
-Build from the repository root; the executable is `target/debug/cribra`
-(`target/debug/cribra.exe` on Windows). The usage below assumes that executable
-is on PATH. CLI registry publication is not established by the Core release;
-see [distribution status](docs/COMPATIBILITY.md).
+The executable is `cribra` (`cribra.exe` on Windows). The usage below assumes
+it is on PATH. CLI registry publication is not established; see
+[distribution status](docs/COMPATIBILITY.md).
 
 ```text
 cribra scan config.env
@@ -278,6 +296,32 @@ Exit codes:
 | `2` | command-line usage or parse error |
 
 CLI output is metadata-only. Matched secret values are not printed.
+
+### MCP server
+
+`cribra-mcp` 0.1.1 is published as a native stdio server, not a language
+binding. It exposes the engine to MCP tool hosts such as Claude Desktop,
+Claude Code and Codex through two tools, `cribra_scan` and `cribra_transform`.
+
+Download the archive for one of the five qualified native targets from the
+[`cribra-mcp-v0.1.1` release](https://github.com/Metalymph/cribra/releases/tag/cribra-mcp-v0.1.1),
+verify that archive's entry in the shared `SHA256SUMS` manifest (the manifest
+covers all five archives), and use the absolute path to the extracted
+executable in the host configuration:
+
+```text
+./cribra-mcp-0.1.1-<target>/cribra-mcp --version
+./cribra-mcp-0.1.1-<target>/cribra-mcp
+```
+
+The server reads newline-delimited JSON-RPC on stdin and writes responses on
+stdout. It has no HTTP transport, network access, filesystem discovery,
+configuration file, telemetry or persistent storage. Linux archives reference
+GLIBC symbols up to 2.34, which is a binary symbol requirement rather than a
+runtime-qualified distribution list. See the
+[MCP integration guide](https://cribra.pages.dev/docs/integration-mcp/) and the
+[MCP distribution record](crates/cribra-mcp/DISTRIBUTION.md) for targets,
+checksums, host configuration, protocol versions and limitations.
 
 ## Quick start
 
@@ -558,25 +602,63 @@ or platform qualification.
 
 | Language / platform | Integration | Status |
 | --- | --- | --- |
-| Rust | Native Core crate | AVAILABLE |
-| C / C++ | Native C ABI | AVAILABLE |
-| Swift | UniFFI Core / Flow / Fuse | AVAILABLE |
-| Python | UniFFI Core / Flow / Fuse | AVAILABLE |
-| Kotlin/JVM | UniFFI Core / Flow / Fuse | AVAILABLE |
-| JavaScript / TypeScript | `wasm-bindgen` adapter and generated TypeScript declarations | AVAILABLE |
-| TypeScript | Higher-level WebAssembly wrapper | PLANNED |
-| TypeScript / React Native | UniFFI integration | PLANNED |
-| C# / .NET | C ABI integration | PLANNED |
-| Go | C ABI integration (cgo) | PLANNED |
-| PHP | C ABI integration (FFI) | PLANNED |
+| Rust | Native Core crate | OFFICIAL — published (`cribra`) |
+| C / C++ | Native C ABI | OFFICIAL — source-built |
+| Swift | UniFFI Core / Flow / Fuse; published Fuse SwiftPM package | OFFICIAL — published (`cribra-swift` 0.7.2); Core/Flow source-build |
+| Python | UniFFI Core / Flow / Fuse; Fuse PyPI distribution in progress | OFFICIAL — local/CI artifacts; PyPI not published |
+| Kotlin/JVM | UniFFI Core / Flow / Fuse; Fuse Maven distribution in progress | OFFICIAL — local/CI artifacts; Maven Central not published |
+| JavaScript / `wasm-bindgen` | Typed WebAssembly adapter and generated TypeScript declarations | OFFICIAL — source and published adapter |
+| TypeScript (WebAssembly) | Higher-level package over the typed WASM exports | OFFICIAL — implemented and qualified from installed tarballs; `@metalymph/cribra` 0.1.0 is approved and not published |
+| React Native | Native New Architecture TurboModule over the C ABI: TypeScript facade, Codegen spec, C++ bridge, `cribra-capi` 0.3.0, Core 0.7.2 | OFFICIAL — implemented and qualified (RN.1.6); private and unpublished `@metalymph/cribra-react-native` 0.0.0 |
+| TypeScript native backend (Node.js) | Standalone native TypeScript backend for Node.js where compatible; separate from React Native | OFFICIAL — planned, not implemented |
+| C#, Go, PHP, Ruby, Elixir | Potential additional language bindings | PLANNED — demand-driven / community contribution |
 
-The planned TypeScript wrapper is distinct from the existing typed WASM
-exports. React Native, C#, Go and PHP bindings are not yet implemented or
-qualified.
+The Fuse-first Swift distribution is published and remotely qualified: SwiftPM
+package [`cribra-swift` 0.7.2](https://github.com/Metalymph/cribra-swift) installs
+the Fuse binding without Rust, Cargo, UniFFI generators or a Cribra checkout; see
+[Swift installation](bindings/swift/README.md#install-fuse-from-swiftpm). Core and
+Flow remain source-build profiles. The TypeScript shared API and WebAssembly
+package are implemented with the approved identity `@metalymph/cribra@0.1.0`,
+but the package is unpublished and no npm registry record exists yet. The
+native React Native package `@metalymph/cribra-react-native@0.0.0` is implemented
+and qualified through RN.1.6, but it is private and unpublished; it is a direct
+C ABI TurboModule over the New Architecture, not a WebAssembly or UniFFI
+consumer. The next priorities are dependency and CI maintenance, evaluation of
+Python and Kotlin/JVM documentation and official package distribution, and
+evaluation of further bindings based on demonstrated ecosystem demand. The
+WebAssembly backend does not run automatically in Hermes; React Native
+applications use the native package.
 
-See [Interoperability](docs/INTEROP.md) for the implemented adapter capability
-matrix and [Compatibility](docs/COMPATIBILITY.md) for versions, distribution
-and qualification boundaries.
+### Tool integrations
+
+The native Rust [`cribra-mcp` 0.1.1](https://github.com/Metalymph/cribra/releases/tag/cribra-mcp-v0.1.1)
+server is a published **tool integration**, not a language binding. It speaks
+MCP over local stdio and exposes `cribra_scan` and `cribra_transform` to hosts
+such as Claude Desktop, Claude Code and Codex. Five native targets are
+qualified and published; the M3 conformance verdict remains **PARTIAL PASS**
+and the M4 distribution result is **PASS**. See the
+[MCP integration guide](https://cribra.pages.dev/docs/integration-mcp/) and the
+[MCP distribution record](crates/cribra-mcp/DISTRIBUTION.md).
+
+Homebrew, Debian/Ubuntu APT, a dedicated embedded Linux distribution
+workstream, and official GitHub/GitLab scanner integrations are not on the
+active roadmap. Existing Linux support and the public interoperability
+contracts remain in place.
+
+C#, Go and PHP are planned as demand-driven / community-contribution candidates,
+not actively scheduled work. Ruby, Elixir and other candidates retain the same
+status. The project will consider them only with demonstrated real-world demand
+or a viable community contribution; no delivery dates are promised, and none is
+implemented, qualified or published. Community contributions are welcome under
+[`CONTRIBUTING.md`](CONTRIBUTING.md), but official support requires an ongoing
+maintenance commitment, documentation, testing and CI coverage.
+
+See [Ecosystem and scope](docs/ECOSYSTEM.md#binding-support-policy) for the
+authoritative binding policy, [Interoperability](docs/INTEROP.md) for the
+implemented adapter capability matrix, [Compatibility](docs/COMPATIBILITY.md)
+for versions, distribution and qualification boundaries, and
+[Roadmap](ROADMAP.md#development-priority-order-forward-looking) for the
+forward-looking priority order.
 
 ## Release status
 
@@ -600,13 +682,22 @@ but are supported by the incremental API.
 See [the D4 evidence](docs/0.6-d4-qualification.md) and
 [the D5 qualification record](docs/0.6-d5-qualification.md).
 
-Existing Rayon execution of independent sources remains available. Swift,
-Python and Kotlin/JVM integrations now have qualified consumers and local or CI
-artifacts; their packaging and publication status is documented separately in
+Existing Rayon execution of independent sources remains available. Swift Fuse
+0.7.2 is published through
+[`Metalymph/cribra-swift`](https://github.com/Metalymph/cribra-swift); Python and
+Kotlin/JVM integrations have qualified consumers and local or CI artifacts. Their
+packaging and publication status is documented separately in
 [Compatibility](docs/COMPATIBILITY.md).
 
-CLI, C, WASM, native bindings and distribution remain independently versioned
-workstreams with their own documented capability surfaces.
+The native MCP server
+[`cribra-mcp` 0.1.1](https://github.com/Metalymph/cribra/releases/tag/cribra-mcp-v0.1.1)
+is published as five native archives with a single `SHA256SUMS` manifest. Its M3
+conformance verdict is **PARTIAL PASS**; its M4 distribution result is **PASS**
+and does not upgrade that verdict.
+
+CLI, C, WASM, native bindings, the MCP server and distribution remain
+independently versioned workstreams with their own documented capability
+surfaces.
 
 See `ROADMAP.md` for the architectural roadmap and the independent interface
 and ecosystem workstreams.

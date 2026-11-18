@@ -1,0 +1,156 @@
+{
+  "abiVersion": {
+    "major": 0,
+    "minor": 3,
+    "patch": 0
+  },
+  "entries": [
+    {
+      "id": "文書/é🙂é",
+      "result": {
+        "candidateCount": 0,
+        "candidates": [],
+        "findingCount": 1,
+        "findings": [
+          {
+            "column": 19,
+            "confidence": "high",
+            "explanation": {
+              "detectionMode": "deterministic",
+              "kind": "classified"
+            },
+            "line": 2,
+            "remediation": "revoke_and_rotate_credential",
+            "ruleId": "github.classic-pat",
+            "severity": "critical",
+            "span": {
+              "end": 65,
+              "start": 28
+            }
+          }
+        ],
+        "hasCritical": true,
+        "needsReview": true,
+        "sourceBytes": 66
+      },
+      "sourceBytes": 66
+    },
+    {
+      "id": "empty",
+      "result": {
+        "candidateCount": 0,
+        "candidates": [],
+        "findingCount": 0,
+        "findings": [],
+        "hasCritical": false,
+        "needsReview": false,
+        "sourceBytes": 0
+      },
+      "sourceBytes": 0
+    },
+    {
+      "id": "",
+      "result": {
+        "candidateCount": 0,
+        "candidates": [],
+        "findingCount": 0,
+        "findings": [],
+        "hasCritical": false,
+        "needsReview": false,
+        "sourceBytes": 21
+      },
+      "sourceBytes": 21
+    },
+    {
+      "id": "review/候補",
+      "result": {
+        "candidateCount": 1,
+        "candidates": [
+          {
+            "column": 1,
+            "evidence": "structural",
+            "explanation": {
+              "evidence": "structural",
+              "kind": "ambiguous"
+            },
+            "kind": "recovery_like_code",
+            "line": 1,
+            "span": {
+              "end": 19,
+              "start": 0
+            }
+          }
+        ],
+        "findingCount": 0,
+        "findings": [],
+        "hasCritical": false,
+        "needsReview": true,
+        "sourceBytes": 19
+      },
+      "sourceBytes": 19
+    },
+    {
+      "id": "文書/é🙂é",
+      "result": {
+        "candidateCount": 0,
+        "candidates": [],
+        "findingCount": 2,
+        "findings": [
+          {
+            "column": 14,
+            "confidence": "high",
+            "explanation": {
+              "detectionMode": "deterministic",
+              "kind": "classified"
+            },
+            "line": 1,
+            "remediation": "revoke_and_rotate_credential",
+            "ruleId": "github.classic-pat",
+            "severity": "critical",
+            "span": {
+              "end": 50,
+              "start": 13
+            }
+          },
+          {
+            "column": 19,
+            "confidence": "high",
+            "explanation": {
+              "detectionMode": "deterministic",
+              "kind": "classified"
+            },
+            "line": 2,
+            "remediation": "revoke_and_rotate_credential",
+            "ruleId": "stripe.test-secret-key",
+            "severity": "high",
+            "span": {
+              "end": 110,
+              "start": 69
+            }
+          }
+        ],
+        "hasCritical": true,
+        "needsReview": true,
+        "sourceBytes": 111
+      },
+      "sourceBytes": 111
+    }
+  ],
+  "summary": {
+    "critical": 2,
+    "hasCandidates": true,
+    "hasCritical": true,
+    "high": 1,
+    "info": 0,
+    "isClean": false,
+    "low": 0,
+    "medium": 0,
+    "reportsWithCandidates": 1,
+    "reportsWithFindings": 2,
+    "reportsWithoutFindings": 3,
+    "scannedBytes": 217,
+    "scannedSources": 5,
+    "totalCandidates": 1,
+    "totalFindings": 3
+  }
+}

@@ -1,17 +1,33 @@
 /** Repository evidence snapshot, not a live package-registry lookup. */
-export const evidenceDate = '2026-10-23';
+export const evidenceDate = '2026-11-17';
 export const repository = 'https://github.com/Metalymph/cribra';
+
+/** A labeled destination that is safe to render as a link. */
+export interface BindingLink {
+  label: string;
+  href: string;
+}
 
 /** One independently evidenced integration surface. */
 export interface Binding {
   id: string;
   name: string;
+  /** Primary integration guide on this website. */
+  guide: BindingLink;
+  /** Additional existing guide pages for the same integration. */
+  additionalGuides?: BindingLink[];
+  /** Generated or hand-written API reference, when one exists. */
+  apiReference?: BindingLink;
+  /** Published package, release, or repository distribution entry. */
+  package?: BindingLink;
+  /** Discovery/registry listing, never compatibility-build evidence. */
+  registry?: BindingLink;
   implementation: string;
   capabilities: string;
   qualification: string;
   limits: string;
   distribution: string;
-  sources: { label: string; href: string }[];
+  sources: BindingLink[];
 }
 
 const source = (label: string, path: string) => ({
@@ -26,11 +42,14 @@ export const bindings: readonly Binding[] = [
   {
     id: 'rust',
     name: 'Rust',
+    guide: { label: 'Rust integration guide', href: '/docs/integration-rust/' },
+    apiReference: { label: 'Rust API overview', href: '/docs/api-reference/' },
+    package: { label: 'cribra 0.7.2 release', href: `${repository}/releases/tag/v0.7.2` },
     implementation: 'Available · cribra 0.7.2 · MSRV 1.97',
     capabilities:
       'Core: scanning, reports, batch, admitted streaming and incremental documents. Flow (default): four transforms and Share Bundles. Fuse: Flow plus Serde and parallel independent-source scans. These are Cargo feature combinations, not features named core/flow/fuse.',
     qualification:
-      'Recorded engine CI: Linux full gate, native Linux ARM64, RISC-V64 under QEMU, and macOS/Windows tests.',
+      'Recorded engine CI: Linux full gate, native Linux ARM64, RISC-V64 under QEMU, and macOS/Windows tests. Local minimal/default/all-features public API contracts and three independent Cargo consumers passed.',
     limits:
       'Recorded environments are evidence, not a promise for every platform. Whole-source execution is the semantic reference.',
     distribution:
@@ -44,11 +63,12 @@ export const bindings: readonly Binding[] = [
   {
     id: 'c',
     name: 'C ABI',
+    guide: { label: 'C ABI integration guide', href: '/docs/integration-c/' },
     implementation: 'Available · cribra-capi 0.3.0 · ABI protocol 0.3.0',
     capabilities:
       'Scanner configuration, metadata, findings/review, batch, admitted byte streaming, incremental snapshots, four transformations and in-memory Share Bundles. AUTO batches may use parallel scanning only with the adapter parallel feature.',
     qualification:
-      'Native C ABI gates recorded on Ubuntu, macOS and Windows; real C/C++ consumers and header checks. Later metadata checks were local macOS ARM64 source checks.',
+      'Native C ABI gates recorded on Ubuntu, macOS and Windows; real C/C++ consumers and header checks. Additional macOS ARM64 checks verified 57 exports, header synchronization, and an independent C11 consumer using a copied header and dynamic library (ABI 0.3.0).',
     limits:
       'Explicit ownership and destruction. Borrowed views must not outlive their owner. Existing C evidence does not qualify every FFI language.',
     distribution:
@@ -62,11 +82,17 @@ export const bindings: readonly Binding[] = [
   {
     id: 'wasm',
     name: 'WebAssembly',
+    guide: { label: 'WebAssembly integration guide', href: '/docs/integration-wasm/' },
+    additionalGuides: [{ label: 'WebAssembly examples', href: '/examples/#webassembly' }],
+    package: {
+      label: 'cribra-wasm 0.4.7 release',
+      href: `${repository}/releases/tag/cribra-wasm-v0.4.7`,
+    },
     implementation: 'Available · cribra-wasm 0.4.7 · typed JS/TypeScript exports',
     capabilities:
       'Checkout Core/Flow: configuration, metadata, ordered sequential batch scans, admitted streaming and incremental snapshots. Flow adds transformations and Share Bundles. No Fuse or Rayon parallel API.',
     qualification:
-      'Existing production browser and Node/Bun/Deno examples. Newer sessions, configuration, batches and Share Bundles checked locally on macOS ARM64 with Node 26.12.0/Bun 1.4.3 against Core oracles.',
+      'Existing production browser and Node/Bun/Deno examples. Newer sessions, configuration, batches and Share Bundles checked locally on macOS ARM64 with Node 26.12.0/Bun 1.4.3 against Core oracles. On 2026-10-25, Node 26.12.1 Core/Flow runtime qualification and the Binaryen -Oz production release gate passed, including JS/TypeScript contract, Rust parity and package validation.',
     limits:
       'Earlier WASM CI predates source session APIs. New session browser execution and Deno qualification are not established by those local checks; Workers/CSP remain host responsibilities.',
     distribution:
@@ -81,8 +107,80 @@ export const bindings: readonly Binding[] = [
     ],
   },
   {
+    id: 'typescript',
+    name: 'TypeScript',
+    guide: { label: 'TypeScript quick start', href: '/docs/typescript/' },
+    additionalGuides: [
+      {
+        label: 'TypeScript sessions and transformations',
+        href: '/docs/typescript-sessions-and-transformations/',
+      },
+      {
+        label: 'TypeScript runtime compatibility',
+        href: '/docs/typescript-runtime-compatibility/',
+      },
+    ],
+    apiReference: {
+      label: 'TypeScript API reference',
+      href: '/docs/typescript-api-reference/',
+    },
+    implementation:
+      'Implemented · @metalymph/cribra 0.1.0 · WebAssembly backend · approved and unpublished',
+    capabilities:
+      'Scanning, ordered batch scans, admitted byte streaming, incremental documents, structured errors and UTF-8 offset conversion. Flow adds the four scan-coupled transformations and in-memory Share Bundles. No native Node.js TypeScript backend or multi-threaded WASM API; React Native uses the separate @metalymph/cribra-react-native native package.',
+    qualification:
+      'W3.2C-1 installed-tarball qualification: Node 22.22.0, 24.22.2 and 26.13.0 for Flow and the test-only Core artifact; TypeScript 5.9.3 and 7.0.2 with NodeNext and Bundler; Google Chrome 156.0.8078.74, Playwright Chromium 156.0.8078.4, Playwright Firefox 157.0 and Playwright WebKit 27.2 for Flow; Chrome for Core; Vite 8.3.6 development/production and webpack 5.112.2 production. Public documentation examples run from the installed Flow tarball under Node.',
+    limits:
+      'Native Safari is unverified. Playwright WebKit is not Safari, Playwright Firefox is not branded Firefox, and Chrome is distinct from Playwright Chromium. The engines.node >=22 declaration is not evidence for untested or odd-numbered releases. Direct Rollup/esbuild consumption, React Native through this WebAssembly package, and multi-threaded WASM are not qualified.',
+    distribution:
+      'The approved package @metalymph/cribra@0.1.0 is not published; no npm registry record exists. Install only from a source checkout or a locally packed Flow tarball until a separately authorized release; the Core tarball is test-only.',
+    sources: [
+      compatibility,
+      source('TypeScript API contract', 'docs/TYPESCRIPT_API.md'),
+      source('TypeScript release runbook', 'docs/TYPESCRIPT_RELEASE.md'),
+      source('Package README', 'packages/cribra/README.md'),
+      source('TypeScript quick start', 'website/src/content/docs/typescript.md'),
+    ],
+  },
+  {
+    id: 'react-native',
+    name: 'React Native',
+    guide: {
+      label: 'React Native integration guide',
+      href: '/docs/integration-react-native/',
+    },
+    package: {
+      label: 'Private React Native package source',
+      href: `${repository}/tree/main/packages/cribra-react-native`,
+    },
+    implementation:
+      'Implemented · @metalymph/cribra-react-native 0.0.0 · private and unpublished · C ABI TurboModule over Core 0.7.2',
+    capabilities:
+      'TypeScript facade → React Native Codegen TurboModule → C++ bridge → C ABI 0.3.0 → Rust Core. Asynchronous serial native worker; React Native New Architecture and Hermes. Scanning and ordered batch scans, caller-configured scanners with catalogs and custom rules, detached rule metadata, UTF-8/UTF-16 offset conversion, and the four scan-coupled transformations. Flow profile without Rayon parallelism. No streaming, Share Bundles, incremental documents, cancellation, or parallel scanning.',
+    qualification:
+      'RN.1.6, recorded 2026-11-12: 10 Jest suites and 281 tests; host suite 15,736 checks with 0 failures; host plain, ASan, UBSan and TSan runs passed. iOS Simulator Debug and Release runtime verified; Android ARM64 emulator Debug and Release runtime verified; Android armeabi-v7a, arm64-v8a, x86 and x86_64 Debug and Release builds verified; three full JS reload cycles per platform. Physical devices and iOS device builds are not tested; macOS ASan leak detection is not tested.',
+    limits:
+      'Qualification covers only the recorded Simulator/emulator matrix and the Android build ABIs. No physical-device, universal-platform, production-publication or performance-guarantee claim. No Expo Go or arbitrary Expo SDK support claim. Scanner creation, scanning, batch scanning, transformation and disposal are asynchronous. No streaming, Share Bundles, incremental documents, cancellation, editor integration or parallel scanning.',
+    distribution:
+      'Private, unpublished package @metalymph/cribra-react-native@0.0.0; install from a local checkout or file: dependency. No npm registry record, npm installation command or publication claim. Uses cribra-capi 0.3.0 static libraries built from this repository; the C ABI remains publish = false.',
+    sources: [
+      compatibility,
+      source('React Native package README', 'packages/cribra-react-native/README.md'),
+      source(
+        'React Native qualification record',
+        'packages/cribra-react-native/QUALIFICATION.md',
+      ),
+      source('C ABI contract', 'docs/INTEROP.md'),
+    ],
+  },
+  {
     id: 'cli',
     name: 'CLI',
+    guide: {
+      label: 'CLI guide',
+      href: '/docs/getting-started/#use-the-cli-from-this-repository',
+    },
+    additionalGuides: [{ label: 'CLI examples', href: '/examples/#cli' }],
     implementation: 'Available · cribra-cli 0.4.4 · executable cribra',
     capabilities:
       'Explicit UTF-8 file/stdin scanning, filters, sorting, metadata reports, four transforms and explicit-file bundle export. No directory traversal, streaming session or incremental-document command; parallel execution is library-only.',
@@ -101,18 +199,39 @@ export const bindings: readonly Binding[] = [
   {
     id: 'swift',
     name: 'Swift',
-    implementation: 'Available · Core 0.7.2 · UniFFI adapter 0.1.0',
+    guide: { label: 'Swift integration guide', href: '/docs/integration-swift/' },
+    apiReference: {
+      label: 'Swift Core API reference (0.7.2)',
+      href: '/api/0.7.2/swift/core/documentation/cribra/',
+    },
+    package: {
+      label: 'Published cribra-swift package',
+      href: 'https://github.com/Metalymph/cribra-swift',
+    },
+    registry: {
+      label: 'Swift Package Index listing',
+      href: 'https://swiftpackageindex.com/Metalymph/cribra-swift',
+    },
+    implementation: 'Available · Core 0.7.2 · published Fuse SwiftPM package 0.7.2',
     capabilities:
-      'Core: configuration, reports, batch, admitted streaming and incremental snapshots. Flow adds transformations/Share Bundles. Fuse adds Core-owned parallel scans. Select one matching Cribra module/package per process.',
+      'Core: configuration, reports, batch, admitted streaming and incremental snapshots. Flow adds transformations/Share Bundles. Fuse adds Core-owned parallel scans and is the published official remote package. Core and Flow remain source-build profiles. Select one matching Cribra module/package per process.',
     qualification:
-      'macOS ARM64, Swift 6.4 and external package consumers; recorded Apple CI passed all three packages. ARM64 device/Simulator archives built; Simulator compiled/linked.',
+      'macOS ARM64, Swift 6.4 and independent Core/Flow/Fuse SwiftPM package consumers passed; recorded Apple CI passed all three packages. On 2026-10-29 a clean-room remote consumer resolved cribra-swift 0.7.2, downloaded and checksum-verified the XCFramework, and ran on macOS ARM64. The same consumer compiled and linked for arm64-apple-ios16.0-simulator.',
     limits:
-      'No device or Simulator execution claim. macOS 13/iOS 16 are declared minimums, not runtime coverage of each OS. Intel slices absent.',
+      'No device or Simulator runtime execution claim. macOS 13/iOS 16 are declared minimums, not runtime coverage of each OS. Intel slices absent. No signing or notarization qualification.',
     distribution:
-      'Generated local SwiftPM packages and XCFrameworks. No remote SwiftPM publication or signed release established.',
+      'Published official Fuse SwiftPM package: Metalymph/cribra-swift 0.7.2 (tag fa37a32), with a checksum-verified XCFramework release asset. Core and Flow remain source-build alternatives. The package is listed on the Swift Package Index for discovery; the listing is not Cribra compatibility-build evidence.',
     sources: [
       compatibility,
       source('Swift consumer guide', 'bindings/swift/README.md'),
+      {
+        label: 'Published Swift package',
+        href: 'https://github.com/Metalymph/cribra-swift',
+      },
+      {
+        label: 'Swift 0.7.2 release',
+        href: 'https://github.com/Metalymph/cribra-swift/releases/tag/0.7.2',
+      },
       {
         label: 'Apple CI receipt',
         href: 'https://github.com/Metalymph/cribra/actions/runs/39411373180',
@@ -122,11 +241,12 @@ export const bindings: readonly Binding[] = [
   {
     id: 'python',
     name: 'Python',
+    guide: { label: 'Python integration guide', href: '/docs/integration-python/' },
     implementation: 'Available · module cribra_uniffi · Core/Flow/Fuse consumers',
     capabilities:
       'Core scanning/configuration, batch, admitted streaming and incremental snapshots. Flow adds transformations/Share Bundles; Fuse adds parallel scans. Packaged wheel contains Fuse only.',
     qualification:
-      'Installed Fuse wheel on macOS ARM64 CPython 3.11–3.14. Recorded CI includes Linux x86_64, repaired manylinux_2_28_x86_64 and native Windows x86_64 installed-wheel gates.',
+      'Installed Fuse wheel on macOS ARM64 CPython 3.11.17, 3.12.15, 3.13.7 and 3.14.8 passed isolated consumer tests. Recorded CI includes Linux x86_64, repaired manylinux_2_28_x86_64 and native Windows x86_64 installed-wheel gates.',
     limits:
       'macOS 13 deployment metadata is not runtime qualification on macOS 13. No musl, Linux/Windows ARM64 or Intel macOS qualification established.',
     distribution:
@@ -140,11 +260,12 @@ export const bindings: readonly Binding[] = [
   {
     id: 'kotlin',
     name: 'Kotlin/JVM',
+    guide: { label: 'Kotlin/JVM integration guide', href: '/docs/integration-kotlin/' },
     implementation: 'Available · Core 0.7.2 · adapter 0.1.0 · JDK 17',
     capabilities:
       'Core/Flow/Fuse with scanning, configuration, batch, admitted streams and incremental snapshots; Flow transformations/Share Bundles; Fuse parallel scanning. One profile JAR and matching native library per classpath.',
     qualification:
-      'Recorded Kotlin 2.4.21/JDK 17 bundle consumers on macOS ARM64, Linux x86_64 and Windows x86_64. Later configuration/session conformance ran locally on macOS ARM64.',
+      'Recorded Kotlin 2.4.21/JDK 17 bundle consumers on macOS ARM64, Linux x86_64 and Windows x86_64. Later configuration/session conformance and Core/Flow/Fuse isolated bundle consumers passed locally on macOS ARM64 (three positive consumers and nine expected rejections).',
     limits:
       'No Android, Kotlin Multiplatform, other architecture/JDK or external Gradle application qualification inferred. Later local conformance does not update earlier CI evidence.',
     distribution:
@@ -160,11 +281,63 @@ export const bindings: readonly Binding[] = [
   },
 ];
 
-/** Roadmap integrations; none is presented as implemented or qualified. */
+/** Official workstreams that are planned or in progress; none is a published package unless the matrix above says so. */
 export const plannedBindings = [
-  'Higher-level TypeScript wrapper over existing typed WASM exports',
-  'TypeScript / React Native via UniFFI',
-  'C# / .NET via C ABI',
-  'Go via cgo',
-  'PHP via FFI',
+  {
+    name: 'Dependency and CI maintenance',
+    detail:
+      'Keep workspace dependencies, toolchains and workflows current, apply security fixes, and preserve the qualification gates without changing runtime behavior or upgrading dependencies as part of the current documentation cycle.',
+  },
+  {
+    name: 'Python and Kotlin/JVM documentation and distribution evaluation',
+    detail:
+      'Improve runnable examples and API guidance for the existing implemented bindings, and evaluate the Maven Central and PyPI publication gates. Neither registry publication is established, and evaluation does not authorize a release.',
+  },
+  {
+    name: 'Further bindings based on ecosystem demand',
+    detail:
+      'Consider additional bindings or adapters only with demonstrated real-world demand, a credible maintenance commitment, and the documented conformance, ownership, packaging and consumer-qualification gates.',
+  },
+  {
+    name: 'TypeScript native backend for Node.js',
+    detail:
+      'Standalone native Node.js backend where compatible. This is a separate workstream from the implemented and qualified React Native package and is not implemented. Gates: a UniFFI 0.32.2 or direct C ABI compatibility investigation with a documented fallback; binding implementation preserving Cribra classification semantics and resource ownership; and real Node.js consumer qualification. No native Node.js package or publication is established.',
+  },
+] as const;
+
+/** Candidates without a scheduled commitment or published package. */
+export const demandDrivenBindings = ['C#/.NET', 'Go', 'PHP', 'Ruby', 'Elixir'] as const;
+
+export const contributingHref = `${repository}/blob/main/CONTRIBUTING.md`;
+
+/**
+ * Published tool integrations. These are not language bindings and are kept
+ * separate from the language matrix so distribution and support claims do not
+ * imply a new binding.
+ */
+export interface ToolIntegration {
+  id: string;
+  name: string;
+  guide: BindingLink;
+  package: BindingLink;
+  implementation: string;
+  detail: string;
+  limits: string;
+}
+
+export const toolIntegrations: readonly ToolIntegration[] = [
+  {
+    id: 'mcp',
+    name: 'MCP server',
+    guide: { label: 'MCP integration guide', href: '/docs/integration-mcp/' },
+    package: {
+      label: 'cribra-mcp 0.1.1 release',
+      href: `${repository}/releases/tag/cribra-mcp-v0.1.1`,
+    },
+    implementation: 'Published · cribra-mcp 0.1.1 · five qualified native targets',
+    detail:
+      'Native Rust server speaking MCP over local stdio. Exposes exactly two tools, cribra_scan and cribra_transform, backed directly by Cribra Core. Hosts include Claude Desktop, Claude Code and Codex. MCP is a tool integration, not a language binding: it is not a WASM, UniFFI, C ABI, TypeScript or React Native package.',
+    limits:
+      'M3 conformance verdict is PARTIAL PASS: 10 of 10 applicable rows pass in the 147-row canonical matrix, the official runner is HTTP-only and executed zero rows, and a separate 10 SDK qualification scenarios pass (5 TypeScript, 5 Python); nothing is certified. M4 distribution is PASS. Stdio only; no HTTP/SSE, OAuth, filesystem discovery, keyed modes, telemetry or persistent storage. Five targets: aarch64/x86_64 Apple, x86_64/aarch64 Linux GNU, x86_64 Windows MSVC.',
+  },
 ] as const;

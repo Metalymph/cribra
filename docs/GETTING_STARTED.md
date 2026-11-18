@@ -8,15 +8,15 @@ profile selection and publication status; a build artifact is not a registry pac
 
 ## Rust
 
-Core v0.7.1 is independently verified in the crates.io registry index:
+Core v0.7.2 is independently verified in the crates.io registry index:
 
 ```toml
 [dependencies]
-cribra = "0.7.1"
+cribra = "0.7.2"
 ```
 
 This selects Flow (transformations enabled). For Core use
-`cribra = { version = "0.7.1", default-features = false }`; Fuse adds
+`cribra = { version = "0.7.2", default-features = false }`; Fuse adds
 `features = ["serde", "parallel"]` to the default configuration.
 The [root quick start](../README.md#quick-start) uses the public Rust API:
 
@@ -34,18 +34,21 @@ see [financial_review.rs](../examples/financial_review.rs).
 
 ## CLI
 
-Build the existing `cribra-cli` workspace binary (registry publication is not
-assumed), then use the documented single-file/stdin interface:
+`cribra-cli` is not published to crates.io. Build or install it from a
+repository checkout; these are the verified Cargo installation paths:
 
 ```sh
+cargo install --path crates/cribra-cli
 cargo build -p cribra-cli
 # macOS/Linux; use target/debug/cribra.exe on Windows:
 target/debug/cribra scan config.env --format json
 ```
 
-Supply an existing UTF-8 file. The executable is named `cribra`; findings and
-review-only results still return exit code 0. See the [CLI guide](../crates/cribra-cli/README.md)
-and [capability parity](CLI_PARITY.md). There is no directory traversal.
+`cargo install --path crates/cribra-cli` installs the `cribra` executable into
+the Cargo bin directory. Supply an existing UTF-8 file. Findings and review-only
+results still return exit code 0. See the [CLI guide](../crates/cribra-cli/README.md)
+and [capability parity](CLI_PARITY.md). There is no directory traversal, and
+there is no `cargo install cribra-cli` registry path at this audit.
 
 ## C / C++
 
@@ -85,10 +88,69 @@ There is no WASM Fuse profile; Core/Flow expose sequential batch scanning,
 admitted byte streaming and incremental document interfaces, and Flow adds
 Core-backed in-memory Share Bundles.
 
+## TypeScript
+
+The existing WebAssembly adapter provides typed JavaScript/TypeScript exports.
+The higher-level TypeScript package is implemented as the approved but
+unpublished `@metalymph/cribra@0.1.0`; it is not available from npm yet. Its public
+API contract is recorded in [TYPESCRIPT_API.md](TYPESCRIPT_API.md), and the
+installed-package qualification evidence is summarized in
+[COMPATIBILITY.md](COMPATIBILITY.md). A future native Node.js TypeScript backend
+remains planned and separately gated; React Native has a separate implemented
+native package. Start with the
+[TypeScript quick start](https://cribra.pages.dev/docs/typescript/).
+
+## MCP server
+
+The native Rust MCP server is published as `cribra-mcp` 0.1.1. It is a tool
+integration, not a language binding: it speaks MCP over local stdio and exposes
+`cribra_scan` and `cribra_transform` to hosts such as Claude Desktop, Claude
+Code and Codex.
+
+Download one of the five qualified native archives from the
+[`cribra-mcp-v0.1.1` release](https://github.com/Metalymph/cribra/releases/tag/cribra-mcp-v0.1.1),
+verify that archive's entry in the shared `SHA256SUMS` manifest, extract it, and
+point the host at the absolute executable path:
+
+```sh
+tar -xzf cribra-mcp-0.1.1-<target>.tar.gz
+./cribra-mcp-0.1.1-<target>/cribra-mcp --version
+```
+
+The server has no HTTP transport, network access, filesystem discovery or
+persistent storage. Its M3 conformance verdict is **PARTIAL PASS** and its M4
+distribution result is **PASS**. See the
+[MCP integration guide](https://cribra.pages.dev/docs/integration-mcp/) and
+[distribution record](../crates/cribra-mcp/DISTRIBUTION.md) for checksums, host
+configuration, protocol versions and explicit limitations.
+
 ## Swift
 
-On native macOS ARM64 with Swift 6.4, Xcode's macOS/iOS/Simulator SDKs, Rust
-1.97.0 and the three Apple Rust targets installed as in the [Swift guide](../bindings/swift/README.md):
+The official Fuse package is published as SwiftPM package
+[`cribra-swift` 0.7.2](https://github.com/Metalymph/cribra-swift). Add the remote
+dependency and link the `Cribra` product; no Rust, Cargo, UniFFI generator or
+Cribra checkout is required:
+
+```swift
+.package(url: "https://github.com/Metalymph/cribra-swift", exact: "0.7.2")
+```
+
+```swift
+.product(name: "Cribra", package: "cribra-swift")
+```
+
+```swift
+import Cribra
+```
+
+See
+[Install Fuse from SwiftPM](../bindings/swift/README.md#install-fuse-from-swiftpm)
+for the complete manifest, a minimal scanning example and qualification limits.
+
+Core and Flow remain source-build alternatives. On native macOS ARM64 with Swift
+6.4, Xcode's macOS/iOS/Simulator SDKs, Rust 1.97.0 and the three Apple Rust
+targets installed as in the
+[Swift guide](../bindings/swift/README.md#build):
 
 ```sh
 just swift-apple core

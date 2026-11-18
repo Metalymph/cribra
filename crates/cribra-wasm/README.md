@@ -67,6 +67,70 @@ part of the supported browser WASM API; the adapter has no Fuse configuration.
 Streaming, incremental sessions and sequential batches are available in both
 configurations. Share Bundles are Flow-only.
 
+## Adapter version and capability manifest
+
+Two additive free functions describe the compiled artifact:
+
+```ts
+export function wasmAdapterVersion(): string;
+export function capabilityManifest(): CapabilityManifest;
+
+export enum BackendKind { Wasm = 0 }
+export enum ProfileKind { Core = 0, Flow = 1 }
+```
+
+`wasmAdapterVersion()` returns `cribra-wasm`'s own `CARGO_PKG_VERSION` captured
+at compile time. It is the adapter version, not Core's version. No `coreVersion()`
+export exists: Core exposes no version constant that the adapter can prove
+without a Core change, and substituting the adapter version would be false.
+
+`capabilityManifest()` reports backend-level capabilities of the built artifact:
+
+| Getter | Core | Flow | Basis |
+| --- | --- | --- | --- |
+| `backend` | `BackendKind.Wasm` | `BackendKind.Wasm` | Adapter identity |
+| `profile` | `ProfileKind.Core` | `ProfileKind.Flow` | `transform` feature |
+| `singleSourceScan` | `true` | `true` | `ScanEngine.scan` |
+| `batchScan` | `true` | `true` | `ScanEngine.scanBatch` |
+| `streaming` | `true` | `true` | `stream` / `streamWithLimits` |
+| `incremental` | `true` | `true` | `incremental` / `incrementalWithLimits` |
+| `redaction` | `false` | `true` | `redact` / `redactWith` |
+| `templating` | `false` | `true` | `template` / `templateWith` |
+| `pseudonymization` | `false` | `true` | `pseudonymize` |
+| `synthesis` | `false` | `true` | `synthesize` |
+| `shareBundle` | `false` | `true` | `ShareBundleBuilder` |
+| `ruleMetadata` | `true` | `true` | `activeRules` |
+| `explanations` | `true` | `true` | `explainFinding`, `candidateExplanationAt` |
+| `parallel` | `false` | `false` | No parallel WASM export |
+
+`streaming: true` means the operation is exported. It says nothing about a
+particular ruleset: Core still rejects non-streamable scanners with
+`StreamErrorCode.UnsupportedRuleSet`, and the scanner remains usable.
+
+`CapabilityManifest`, `BackendKind` and `ProfileKind` are internal adapter types;
+they are not part of the `@metalymph/cribra` public surface. The
+manifest is a wasm-bindgen class, so its getters must be copied into a plain
+object and its generated `free()` called even on failure:
+
+```js
+const native = capabilityManifest();
+let manifest;
+try {
+  manifest = {
+    backend: native.backend,
+    profile: native.profile,
+    singleSourceScan: native.singleSourceScan,
+    // ...every other getter
+  };
+} finally {
+  native.free();
+}
+```
+
+The future wrapper maps the enums to `"wasm"`, `"core"` and `"flow"` string
+literals and adds its own `utf16OffsetConversion: true` helper flag, which the
+adapter does not report.
+
 ## Custom rule remediation
 
 Both variants preserve `addLiteral`, `addPrefix`, `addSuffix` and `addPattern`
@@ -473,6 +537,51 @@ Ordering and ownership are explicit:
 - reusing a `ScanResult` with `ScanEngine.explainFinding()` still requires a
   compatible engine, as with every existing result.
 
+## Flow transformations and typed errors
+
+Flow `ScanResult` exposes the six Core transformation methods. They borrow the
+result and return an owned JavaScript string; they never consume or invalidate
+the result or the report it came from.
+
+```ts
+export class ScanResult {
+    redact(source: string): string;
+    redactWith(source: string, replacement: string): string;
+    template(source: string): string;
+    templateWith(source: string, namespace: string, numbered: boolean): string;
+    pseudonymize(source: string, key: Uint8Array, prefix: string,
+        digest_bytes: number): string;
+    synthesize(source: string, key: Uint8Array, marker: string): string;
+}
+```
+
+Failures are typed. Catch the thrown object, read its stable numeric `code`,
+then call `free()` exactly once. Messages are fixed and never contain source
+text, matched values, replacements or key material.
+
+```ts
+export class TransformError {
+    readonly code: TransformErrorCode;
+    readonly message: string;
+    free(): void;
+}
+
+export enum TransformErrorCode {
+    InvalidSpan = 0,
+    InvalidUtf8Boundary = 1,
+    OverlappingSpans = 2,
+    InvalidKeyLength = 3,
+    UnknownCoreError = 4,
+}
+```
+
+Keyed methods require exactly 32 key bytes and otherwise fail with
+`InvalidKeyLength` before Core runs. Core's default markers are
+`[REDACTED]`, `CRIBRA`, `cribra_pseudo_` with 16 digest bytes, and
+`cribra_synthetic`. Core rejects overlapping findings in template,
+pseudonymization and synthesis modes; `OverlappingSpans` makes that outcome
+programmatic instead of string-matched.
+
 ## Share Bundles
 
 Share Bundles are available **only in the Flow configuration** (`transform`).
@@ -490,7 +599,24 @@ export class ShareBundleBuilder {
         digest_bytes?: number | null): void;
     modeSynthesize(key: Uint8Array, marker?: string | null): void;
     scanAndBuild(engine: ScanEngine, sources: ScanBatchSource[]): ShareBundle;
+    scanAndBuildWithGeneratedAt(engine: ScanEngine, sources: ScanBatchSource[],
+        generated_at_millis: number): ShareBundle;
     free(): void;
+}
+
+export class ShareBundleError {
+    readonly code: ShareBundleErrorCode;
+    readonly message: string;
+    free(): void;
+}
+
+export enum ShareBundleErrorCode {
+    MissingMode = 0,
+    SourceCountMismatch = 1,
+    SourceLengthMismatch = 2,
+    TimestampInvalid = 3,
+    InvalidArgument = 4,
+    UnknownCoreError = 5,
 }
 
 export class ShareBundle {
@@ -572,25 +698,32 @@ Configuration and failure semantics:
 - `modeTemplate()` uses Core's default Share Bundle template policy because the
   Core `ShareMode` contract exposes no template options for bundles;
 - keyed modes require exactly 32 key bytes. The caller's `Uint8Array` is copied
-  into Core options and is not retained by the adapter;
+  into Core options and is not retained by the adapter. Invalid keys throw a
+  typed `TransformError` with `TransformErrorCode.InvalidKeyLength`;
 - omitted `prefix`, `digest_bytes` and `marker` retain Core defaults. Explicit
   empty strings are preserved. Core clamps pseudonym digest lengths to its
   supported range;
-- Core transformation, source-length and missing-mode failures retain their
-  existing source-free diagnostics as native JavaScript `Error` objects;
+- Core transformation, source-length and missing-mode failures are projected
+  into typed `ShareBundleError` objects. Inspect the stable `code`, then call
+  `free()` exactly once. Messages are fixed and contain neither source text nor
+  key material;
 - structural `sources` inputs are validated before Core and never echo source
-  text. `entryAt()` fails closed for an out-of-range index.
+  text; they fail with `ShareBundleErrorCode.InvalidArgument`. `entryAt()` fails
+  closed for an out-of-range index.
 
 Timestamp handling is explicit. `wasm32-unknown-unknown` does not implement
-`SystemTime::now()`, so the adapter reads the JavaScript host clock once through
-`Date.now()` at the invocation boundary, converts the non-negative safe-integer
-milliseconds to `SystemTime`, and passes it to Core's additive
-`scan_and_build_with_generated_at()` entry point. Core remains the sole owner of
-manifest mode, summary and timestamp storage; the adapter does not construct
-manifest fields itself. `generatedAtSeconds` is a bigint and
+`SystemTime::now()`, so `scanAndBuild()` reads the JavaScript host clock once
+through `Date.now()` at the invocation boundary, converts the non-negative
+safe-integer milliseconds to `SystemTime`, and passes it to Core's additive
+`scan_and_build_with_generated_at()` entry point. `scanAndBuildWithGeneratedAt()`
+accepts the same value from the caller instead; non-finite, negative or unsafe
+values fail with `ShareBundleErrorCode.TimestampInvalid`. Core remains the sole
+owner of manifest mode, summary and timestamp storage; the adapter does not
+construct manifest fields itself. `generatedAtSeconds` is a bigint and
 `generatedAtNanoseconds` is always below one billion. Tests compare
-deterministic manifest fields and validate the timestamp against the invocation
-window rather than expecting independently generated timestamps to match.
+deterministic manifest fields, validate the host-clock path against the
+invocation window, and assert that an explicit timestamp reaches the manifest
+unchanged.
 
 Ownership boundaries:
 
@@ -606,10 +739,9 @@ Ownership boundaries:
   `free()`.
 
 The WASM surface intentionally exposes only Core's atomic `scan_and_build()`
-workflow. It does not expose precomputed `ScanResults` build, arbitrary
-timestamps from JavaScript, archives, serialization, filesystem output or
-custom bundle template options. No transport, worker, parallel path or new
-runtime dependency is involved.
+workflow. It does not expose precomputed `ScanResults` build, archives,
+serialization, filesystem output or custom bundle template options. No
+transport, worker, parallel path or new runtime dependency is involved.
 
 ## Runtime and release qualification
 
@@ -635,6 +767,17 @@ methods; Core must omit them from both JS and TypeScript. A checked-in API
 contract verifies exported classes, enums, member names and TypeScript
 signatures (including the input-only limit interfaces), with runtime
 checks for JS methods, arity, getters and generated `free()` methods.
+
+Every variant also checks `wasmAdapterVersion()` against the adapter package
+version and `capabilityManifest()` against the compiled artifact: the exact
+getter set, backend/profile enums, boolean types, transform and Share Bundle
+export presence or absence, and `parallel === false`. The checks execute the
+reported operations rather than only reading flags: scanning, batches, byte
+streaming, incremental edits, rule metadata, explanations, all Flow
+transformations and Share Bundles with expected outputs. A known non-streamable
+suffix ruleset must still throw `StreamErrorCode.UnsupportedRuleSet`, proving
+that `streaming: true` describes the exported operation and not per-ruleset
+admission.
 
 The runner also generates a direct-Core oracle from the shared synthetic
 streaming fixture. Both generated variants compare complete reports across
@@ -707,7 +850,41 @@ distribution from an accidentally reduced API. These smoke checks complement
 the existing package/parity checks; they do not qualify browser integration,
 Workers, CSP or optimized production artifact performance.
 
-## 0.4.6 compatibility release
+## Published package versus current source
+
+The published `cribra-wasm` **0.4.7** registry release depends on Core `^0.6`.
+The current workspace source also declares version `0.4.7` but depends on Core
+`^0.7` and adds streaming, incremental, batch, scanner configuration/metadata
+and Flow Share Bundle APIs. Those additions are not part of the published
+package, and the same version cannot be republished; publishing them requires a
+new adapter version.
+
+## Usage
+
+The following selects the published adapter and its published Core contract:
+
+```toml
+[dependencies]
+cribra-wasm = "0.4.7"
+```
+
+For the newer session, batch, configuration and Share Bundle APIs, build this
+workspace against Core 0.7.x. See
+[Compatibility](../../docs/COMPATIBILITY.md) for the registry contract and the
+source/local distinction.
+
+The crate targets wasm32-unknown-unknown and is intended to be processed with
+wasm-bindgen.
+
+See the repository
+[WASM interoperability documentation](https://github.com/Metalymph/cribra/blob/main/docs/WASM_INTEROP.md)
+for the complete contract, semantic parity policy, browser validation, and
+production build guidance.
+
+## Historical: 0.4.6 compatibility release
+
+This records the earlier published compatibility release; it is not current
+installation guidance.
 
 Version 0.4.6 depends on published `cribra ^0.5` (core 0.5.0). It preserves
 the existing JavaScript/WASM API and whole-source behavior. No streaming
@@ -717,21 +894,6 @@ Rust 1.97 remains the MSRV.
 Publication is owned by the existing `Release WASM` workflow, triggered by
 pushing `cribra-wasm-v0.4.6` at the qualified main commit. Core tag `v0.5.0`
 is independent and must remain unchanged.
-
-## Usage
-
-```toml
-[dependencies]
-cribra-wasm = "0.4.6"
-```
-
-The crate targets wasm32-unknown-unknown and is intended to be processed with
-wasm-bindgen.
-
-See the repository
-[WASM interoperability documentation](https://github.com/Metalymph/cribra/blob/main/docs/WASM_INTEROP.md)
-for the complete contract, semantic parity policy, browser validation, and
-production build guidance.
 
 ## License
 

@@ -1,0 +1,22 @@
+# Native build outputs
+/build/
+/ios/CribraCAPI.xcframework/
+/android/src/main/cpp/prebuilt/
+
+# Test-only oracle build outputs (Cargo.lock is committed for reproducibility)
+/tools/oracle/target/
+
+# Isolated consumer build outputs
+/consumer/node_modules/
+/consumer/ios/Pods/
+/consumer/ios/build/
+/consumer/ios/DerivedData/
+/consumer/ios/*.xcworkspace/xcuserdata/
+/consumer/android/.gradle/
+/consumer/android/build/
+/consumer/android/app/build/
+/consumer/android/app/.cxx/
+/consumer/android/local.properties
+
+# Local logs and captures
+*.log

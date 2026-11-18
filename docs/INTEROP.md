@@ -906,12 +906,18 @@ an exposed capability, not identical APIs or universal platform qualification.
 | UTF-8 streaming | ✓ | ✓ | ✓ | ✓ | ✓ |
 | Incremental scanning | ✓ | ✓ | ✓ | ✓ | ✓ |
 | Batch scanning | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Query, filter and sort | — | — | — | — | — |
 | Transformations | ✓ | ✓ | ✓ | ✓ | ✓ |
 | In-memory Share Bundles | ✓ | ✓ | ✓ | ✓ | ✓ |
 | Parallel scanning | ✓ | ✓ | ✓ | ✓ | —* |
 
 **Notes**
 
+- **Query, filter and sort:** Rust `ScanResults::query()`, `ScanQuery` and
+  `ScanSort` are exposed by the Rust API and the CLI (`--sort` plus severity,
+  confidence and rule filters). They are not projected by the C ABI, Swift,
+  Kotlin/JVM, Python or WebAssembly adapters; those consumers filter and sort
+  returned findings themselves.
 - **C ABI parallel scanning:** `CRIBRA_BATCH_EXECUTION_AUTO` may use parallel
   execution when the `cribra-capi/parallel` feature is enabled; otherwise
   execution remains serial.

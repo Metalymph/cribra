@@ -25,8 +25,10 @@ export function qualifyIncremental(mod, variant, cases, oracle) {
     const outcome = (operation) => {
       try { return { value: operation() }; }
       catch (error) {
-        assert(error instanceof Error);
-        return { error: error.message };
+        try {
+          assert(error instanceof mod.TransformError);
+          return { error: { code: error.code, message: error.message } };
+        } finally { error.free(); }
       }
     };
     for (const [method, args] of [["redact", []], ["redactWith", ["<hidden>"]], ["template", []],

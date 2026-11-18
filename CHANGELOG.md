@@ -9,15 +9,103 @@ history.
 
 ## [Unreleased]
 
-## [0.7.2] — unreleased
+### Added
 
-### Compatibility
+- React Native integration RN.1.1–RN.1.6: the private, unpublished
+  `@metalymph/cribra-react-native@0.0.0` native New Architecture TurboModule
+  over `cribra-capi` 0.3.0 and Core 0.7.2. TypeScript facade → Codegen spec →
+  C++ bridge → C ABI → Rust Core, with an asynchronous serial native worker.
+- Async scanner creation and disposal, single and ordered batch scanning,
+  caller-configured built-in catalogs and custom rules, detached rule metadata,
+  exact UTF-8/UTF-16 offset conversion, and the four scan-coupled
+  transformations.
+- Lifecycle hardening: explicit `Running → Stopping → Stopped` teardown,
+  serial-worker shutdown/discard contract, fixed source-free refusal errors,
+  and key-buffer zeroization on the controlled JavaScript and native copies.
 
-- Updated Python wheel and Kotlin/JVM Core, Flow and Fuse artifact
-  version references to Core 0.7.2.
-- Documented the adapter capability matrix for Rust, C ABI, Swift,
-  Kotlin/JVM, Python and WebAssembly.
-- Preserved independent adapter crate versions and existing API boundaries.
+### Qualification
+
+- RN.1.6, recorded 2026-11-12: 10 Jest suites and 281 tests; 15,736 host checks
+  with 0 failures; host plain, ASan, UBSan and TSan runs; iOS Simulator Debug and
+  Release runtime; Android ARM64 emulator Debug and Release runtime; Android
+  `armeabi-v7a`, `arm64-v8a`, `x86` and `x86_64` Debug and Release builds; three
+  full JS reload cycles per platform.
+- Not tested: physical iOS/Android devices, iOS device builds, and macOS ASan
+  leak detection. No universal-platform, performance-guarantee, Expo Go,
+  arbitrary Expo SDK or npm-publication claim. The separate native Node.js
+  TypeScript backend remains planned and is not implemented.
+
+## [TypeScript 0.1.0] — unreleased
+
+The TypeScript package at `packages/cribra` is independently versioned from the
+Rust Core and `cribra-wasm`. It is not published and has no npm registry record.
+
+### Added
+
+- Initial independent SemVer `0.1.0` for the ESM-only TypeScript bindings to
+  the Cribra WebAssembly Flow scanner.
+- Approved npm identity `@metalymph/cribra@0.1.0`; the package is not private
+  and `cribraRelease.state` is `approved`. It remains unpublished.
+- Installed-artifact qualification of the packed Flow package and a test-only
+  Core package: Node 22/24/26, TypeScript 5.9.3/7.0.2, Chrome, Chromium,
+  Playwright Firefox, Playwright WebKit, Vite, and webpack.
+- Release readiness infrastructure: manifest-derived package identity, generated
+  version constant, deterministic repeat-pack verification, release manifest,
+  strict tarball verification, fail-closed identity checks, and a bootstrap
+  runbook.
+- Manual `.github/workflows/typescript-release.yml` with a non-mutating
+  readiness path and a separately protected `npm-release` staging path using
+  OIDC Trusted Publishing and `npm stage publish`.
+- `package:check:release`, `release:readiness`, `release:verify`, and
+  `release:stage-check` scripts plus Just recipes.
+
+### Security
+
+- Release mode refuses the legacy `cribra-typescript` identity,
+  `private: true`, an unapproved release state, a non-npmjs registry, missing
+  provenance, an unverified ref/commit, a mismatched tarball digest, or an
+  already-published version.
+- Staging requires `CRIBRA_RELEASE_AUTHORIZED=1` and an exact `stage <tag>`
+  confirmation. No long-lived npm token is used.
+
+### Known limitations
+
+- The literal rename to `@metalymph/cribra` is blocked until authenticated npm
+  ownership is verified.
+- Native Safari remains unverified.
+- The Core package is test-only and is never published.
+
+## [0.7.2] — published 2026-10-23
+
+### Added
+
+- Completed adapter parity and conformance across the Rust Core, C ABI,
+  WebAssembly and shared UniFFI surfaces.
+- C ABI protocol **0.3.0** adds Core-owned incremental documents, transactional
+  edits and coherent snapshots alongside the 0.2.0 byte-streaming contract.
+  Existing entry points, numeric statuses and field layouts are preserved.
+- WebAssembly adapter **source** adds admitted byte streaming, incremental
+  documents, sequential multi-source batches, scanner metadata/configuration
+  and in-memory Flow Share Bundles. These are workspace capabilities and were
+  not part of the previously published `cribra-wasm 0.4.7` package.
+- CLI `bundle` exports Share Bundles on macOS and Linux with an explicit mode
+  and optional key, extending the CLI's supported transformation workflows.
+- Introduced the shared `cribra-uniffi 0.1.0` Core/Flow/Fuse adapter consumed by
+  the Swift, Python and Kotlin/JVM bindings, including configuration, batch,
+  streaming, incremental and Share Bundle operations per profile.
+- Added local Swift packages and XCFrameworks, local/CI Python Fuse wheels with
+  Core/Flow/Fuse source consumers, and Kotlin/JVM profile JARs and host bundles
+  for the same Core 0.7.2 semantics.
+
+### Distribution
+
+- Core `cribra 0.7.2` is published on crates.io and documented on docs.rs.
+- The C ABI, shared UniFFI adapter, CLI, Swift, Python and Kotlin/JVM artifacts
+  are source-built or locally/CI-qualified distributions. This release does not
+  establish PyPI, Maven Central or remote SwiftPM publication.
+- Published `cribra-wasm 0.4.7` remains the independent registry release
+  depending on Core `^0.6`. Publishing the newer workspace additions requires
+  a future adapter version.
 
 ### Qualification
 
@@ -26,7 +114,9 @@ history.
 - Validated Python packaging tests and Kotlin/JVM profile JARs.
 - Qualified three isolated Kotlin/JVM bundle consumers on macOS ARM64,
   including nine expected rejection cases.
-- Verified Core 0.7.2 Cargo packaging.
+- Verified Core 0.7.2 Cargo packaging and the checked-in C ABI 0.3.0 header
+  contract.
+- Preserved independent adapter crate versions and existing API boundaries.
 
 ## [0.7.1] — published 2026-10-16
 

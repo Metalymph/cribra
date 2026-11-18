@@ -13,11 +13,13 @@ const config = {
   nav: [
     { label: 'Docs', href: '/docs/' },
     { label: 'Bindings', href: '/bindings/' },
+    { label: 'MCP', href: '/docs/integration-mcp/' },
     { label: 'Examples', href: '/examples/' },
   ],
   footerNav: [
     { label: 'Docs', href: '/docs/' },
     { label: 'GitHub', href: 'https://github.com/Metalymph/cribra' },
+    { label: 'Codeberg', href: 'https://codeberg.org/Metalymph/cribra' },
     { label: 'Search', href: '/search/' },
   ],
   behavior: { smoothScroll: true },
