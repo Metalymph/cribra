@@ -83,13 +83,13 @@ jobs:
         run: npm install --global "npm@${NPM_VERSION}" --ignore-scripts
 
       - name: Download qualified tarballs
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: metalymph-cribra-tarballs
           path: target/typescript-qualification/artifacts
 
       - name: Download qualification evidence
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: typescript-evidence-*
           path: target/typescript-qualification/evidence
@@ -106,7 +106,7 @@ jobs:
             --require-releaseable
 
       - name: Upload release candidate
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: typescript-release-${{ inputs.tag }}
           if-no-files-found: error
@@ -166,7 +166,7 @@ jobs:
           echo "npm ${actual} satisfies the >=11.15 staged-publish requirement (pinned ${NPM_VERSION})"
 
       - name: Download release candidate
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: typescript-release-${{ inputs.tag }}
           path: target/typescript-release
@@ -215,7 +215,7 @@ jobs:
 
       - name: Upload stage record
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: typescript-stage-${{ inputs.tag }}
           if-no-files-found: warn
