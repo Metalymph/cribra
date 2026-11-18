@@ -7,6 +7,7 @@ import {
   contributingHref,
   demandDrivenBindings,
   plannedBindings,
+  toolIntegrations,
 } from '../../data/bindings';
 import { withBase } from '../../utils/paths';
 ---
@@ -51,6 +52,33 @@ import { withBase } from '../../utils/paths';
     }
   </ul>
   <BindingMatrix />
+  <h2 id="tool-integrations">Tool integrations</h2>
+  <p>
+    Tool integrations expose the engine to an external tool protocol. They are not language
+    bindings and are not part of the language matrix above.
+  </p>
+  <ul class="binding-guide-list">
+    {
+      toolIntegrations.map((integration) => (
+        <li id={integration.id}>
+          <h3>{integration.name}</h3>
+          <p><strong>{integration.implementation}</strong></p>
+          <p>{integration.detail}</p>
+          <p>{integration.limits}</p>
+          <ul class="binding-links">
+            <li>
+              <span class="binding-links-kind">Guide</span>
+              <a href={withBase(integration.guide.href)}>{integration.guide.label}</a>
+            </li>
+            <li>
+              <span class="binding-links-kind">Release</span>
+              <a href={integration.package.href}>{integration.package.label}</a>
+            </li>
+          </ul>
+        </li>
+      ))
+    }
+  </ul>
   <h2>Choose a matching profile</h2>
   <p>
     For UniFFI consumers, use one matching generated binding, native library, and profile set per
@@ -82,15 +110,14 @@ import { withBase } from '../../utils/paths';
       href="https://swiftpackageindex.com/Metalymph/cribra-swift">Swift Package Index</a
     > for discovery; the listing is not Cribra compatibility-build evidence.
   </p>
-  <h2>Official planned integrations</h2>
+  <h2>Official planned integrations and priorities</h2>
   <p>
-    The first adoption priority is completing the official
-    <code>@metalymph/cribra@0.1.0</code> npm release; the package is prepared and qualified but not
-    published. The integrations below follow in order. Except where the matrix above records
-    otherwise, they are not implemented, qualified or published. The TypeScript WebAssembly package
-    is implemented and qualified from installed tarballs, but remains unpublished and is therefore
-    not listed here as planned. The React Native package is likewise implemented and qualified but
-    private and unpublished, so it is listed above rather than here.
+    The approved package <code>@metalymph/cribra@0.1.0</code> remains implemented and qualified
+    but unpublished; completing its npm release is a separately authorized release gate, not a
+    claim that registry installation exists. The published MCP server is a tool integration and is
+    listed above. The forward-looking priorities below are not delivery dates. Homebrew,
+    Debian/Ubuntu APT, a dedicated embedded Linux distribution workstream and official
+    GitHub/GitLab scanner integrations are not on the active roadmap.
   </p>
   <ul>
     {
@@ -105,10 +132,10 @@ import { withBase } from '../../utils/paths';
   <p>
     C#, Go and PHP are planned as demand-driven / community-contribution candidates. They are not
     actively scheduled, and no package or integration is available. Ruby, Elixir and other
-    candidates retain the same status. Doxygen-generated C API documentation and GitHub/GitLab
-    integrations are likewise explicitly demand-driven and unscheduled. The project will consider
-    them only with demonstrated real-world demand or a viable community contribution, and no
-    delivery dates are promised.
+    candidates retain the same status. Doxygen-generated C API documentation is likewise
+    explicitly demand-driven and unscheduled. The project will consider these candidates only with
+    demonstrated real-world demand or a viable community contribution, and no delivery dates are
+    promised.
   </p>
   <ul>{demandDrivenBindings.map((name) => <li>{name}</li>)}</ul>
   <p>

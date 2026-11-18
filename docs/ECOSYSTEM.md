@@ -89,7 +89,7 @@ Cribra provides several independently versioned interfaces:
 | Kotlin/JVM | UniFFI Core, Flow and Fuse profile JARs and host bundles; planned official Fuse Maven artifact |
 | Python | UniFFI Core, Flow and Fuse consumers and Fuse wheel packaging; planned official Fuse PyPI package |
 | TypeScript | Implemented WebAssembly package (`@metalymph/cribra`, approved identity and unpublished); future native Node.js backend separately gated. React Native has a separate implemented native package |
-| MCP | Planned native Rust binary using MCP over stdio and reusing Cribra Core |
+| MCP | Published native Rust tool integration using MCP over local stdio and reusing Cribra Core (`cribra-mcp` 0.1.1) |
 | CLI | Explicit UTF-8 file or standard-input scanning |
 
 Streaming and incremental sessions are Core-owned APIs. They are exposed by the
@@ -123,24 +123,27 @@ published to a package registry; registry publication is tracked separately in
 | TypeScript (WebAssembly) | Official, implemented; approved package unpublished | Higher-level package over typed WASM exports for browsers and compatible JS runtimes. Node 22/24/26, selected browsers and Vite/webpack are qualified from installed tarballs; no npm record or publication exists. |
 | React Native | Official, implemented and qualified; private, unpublished package | Native New Architecture TurboModule over the C ABI: TypeScript facade, Codegen spec, C++ bridge, `cribra-capi` 0.3.0 and Core 0.7.2. RN.1.6 evidence covers host plain/ASan/UBSan/TSan, iOS Simulator Debug/Release, Android ARM64 emulator Debug/Release, Android four-ABI builds and three JS reload cycles per platform; physical devices and iOS device builds are not tested. No npm publication or Expo Go claim |
 | TypeScript (native Node.js) | Official, planned; three separately gated milestones | Standalone native TypeScript backend for Node.js where compatible, separate from the completed React Native package. Gates: compatibility investigation with a documented fallback, binding implementation preserving classification semantics and resource ownership, and real Node.js consumer qualification. Not implemented and not implied by UniFFI, the WebAssembly package or React Native |
-| MCP server | Official, planned | Ultra-lightweight native Rust binary over stdio reusing Cribra Core with explicit caller-provided input; no Node.js/Python runtime, database or external service; no arbitrary filesystem access by default |
+| MCP server | Official, published — tool integration, not a language binding | Published `cribra-mcp` 0.1.1: native Rust binary over local stdio reusing Cribra Core with explicit caller-provided input; five qualified native targets; no HTTP transport, Node.js/Python runtime, database or external service; no arbitrary filesystem access by default. M3 conformance **PARTIAL PASS**, M4 distribution **PASS** |
 | C#, Go, PHP, Ruby, Elixir | Planned — demand-driven / community contribution | Not actively scheduled; considered only with demonstrated real-world demand or a viable community contribution |
 | Community integrations | Community-maintained | May use public interoperability surfaces; not officially tested, packaged or supported |
 
 The forward-looking priority order is maintained in the
-[roadmap](../ROADMAP.md#development-priority-order-forward-looking): the official
-`@metalymph/cribra@0.1.0` npm release; the separate native Node.js TypeScript
-backend (not implemented); the native Rust MCP server; CLI distribution through
-Homebrew and Debian/Ubuntu APT; then Python and Kotlin/JVM documentation
-consolidation. The React Native package is implemented and qualified but private
-and unpublished; it is not the native Node.js backend. Amon is
-a potential real-world, post-beta consumer for optional on-device sensitive-data
-scanning before content such as chat messages, posts and comments is shared. Amon
-integration is not a release dependency and must not block completion of the
-Cribra SDK.
+[roadmap](../ROADMAP.md#development-priority-order-forward-looking): dependency
+and CI maintenance; evaluation of Python and Kotlin/JVM documentation and
+official package distribution; then evaluation of further bindings based on
+demonstrated ecosystem demand. The published native MCP server is a tool
+integration, not a language binding. The React Native package is implemented and
+qualified but private and unpublished; it is not the native Node.js backend.
+Amon is a potential real-world, post-beta consumer for optional on-device
+sensitive-data scanning before content such as chat messages, posts and comments
+is shared. Amon integration is not a release dependency and must not block
+completion of the Cribra SDK.
 
-Doxygen-generated C API documentation and GitHub/GitLab integrations are likewise
-explicitly demand-driven and unscheduled, alongside C#/.NET and Go bindings.
+Doxygen-generated C API documentation is likewise explicitly demand-driven and
+unscheduled, alongside C#/.NET and Go bindings. Official GitHub/GitLab scanner
+integrations are not on the roadmap. Homebrew, Debian/Ubuntu APT and a dedicated
+embedded Linux distribution workstream are not active roadmap items; existing
+Linux builds and public interoperability contracts remain supported.
 
 Demand-driven candidates have no delivery dates and are not implemented,
 qualified or published. Community contributions are welcome under the repository

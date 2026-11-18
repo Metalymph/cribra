@@ -13,6 +13,7 @@ const config = {
   nav: [
     { label: 'Docs', href: '/docs/' },
     { label: 'Bindings', href: '/bindings/' },
+    { label: 'MCP', href: '/docs/integration-mcp/' },
     { label: 'Examples', href: '/examples/' },
   ],
   footerNav: [
