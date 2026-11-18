@@ -1414,7 +1414,7 @@ published package.
 | **W3.2A** | Contract (this document): feature inventory, public API, lifecycle, offsets, errors, packaging, capability model | Reviewed and approved; no code |
 | **W3.2B** | Implementation. Adapter work: version/capability exports, DTO materialization primitives, enum normalization. TypeScript package: `init`, synchronous `createScanner`, `scan`, `scanBatch`, transforms, Share Bundle, streaming, incremental, errors, offset helper | Type tests; Node ESM smoke test; explicit-asset browser smoke test; parity against direct WASM |
 | **W3.2C** | Qualification, distribution, and documentation: browser/bundler matrix, published-tarball consumer, capability truthfulness, disposal and DTO-autonomy tests, user docs, release preparation | Each claimed capability and environment verified; unsupported combinations documented |
-| **W3.3** | Native Rust MCP server (separate workstream; reuses Core, not this TypeScript package) | Separate design and approval |
+| **W3.3** | Native Rust MCP server (separate workstream; reuses Core, not this TypeScript package) | Published as `cribra-mcp` 0.1.1; independent of the TypeScript contract |
 
 W3.2B may deliver adapter exports and the wrapper incrementally, but it must not
 claim a capability before its verification exists. W3.2C owns the transition
