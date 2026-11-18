@@ -11,6 +11,19 @@ use sha2::{Digest, Sha256};
 static MODERN_SCHEMA: &str = include_str!("schemas/2026-07-28.json");
 static LEGACY_SCHEMA: &str = include_str!("schemas/2025-11-25.json");
 
+fn sha256_hex(input: &[u8]) -> String {
+    use std::fmt::Write;
+
+    let digest = Sha256::digest(input);
+    let mut output = String::with_capacity(digest.len() * 2);
+
+    for byte in digest {
+        write!(&mut output, "{byte:02x}").expect("writing to String cannot fail");
+    }
+
+    output
+}
+
 static MODERN_VALIDATOR: LazyLock<jsonschema::Validator> = LazyLock::new(|| {
     build_message_validator(MODERN_SCHEMA).expect("modern official schema compiles")
 });
@@ -108,11 +121,11 @@ fn tool_names(result: &Value) -> Vec<String> {
 #[test]
 fn official_schemas_are_pinned_by_hash() {
     assert_eq!(
-        format!("{:x}", Sha256::digest(MODERN_SCHEMA.as_bytes())),
+        sha256_hex(MODERN_SCHEMA.as_bytes()),
         "ef70b61f99b6d2e5e3b46863822eab08dff6a45bedc7a08914e0e5b133f40203"
     );
     assert_eq!(
-        format!("{:x}", Sha256::digest(LEGACY_SCHEMA.as_bytes())),
+        sha256_hex(LEGACY_SCHEMA.as_bytes()),
         "1ffe4c5577974012f5fa02af14ea88df4b7146679df1abaaad497c8d9230ca8a"
     );
 }

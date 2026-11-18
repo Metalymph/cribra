@@ -26,5 +26,5 @@ libc = "0.2"
 
 [dev-dependencies]
 jsonschema = { version = "0.61.2", default-features = false }
-sha2 = "0.10"
+sha2 = "0.11"
 wait-timeout = "0.2"
