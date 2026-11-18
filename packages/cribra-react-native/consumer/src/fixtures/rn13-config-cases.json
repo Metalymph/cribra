@@ -1,0 +1,310 @@
+[
+  {
+    "name": "default",
+    "current": true,
+    "scan": [
+      {
+        "id": "github",
+        "text": "GITHUB_TOKEN=ghp_AbCdEf0123456789_AbCdEf0123456789\n"
+      }
+    ]
+  },
+  {
+    "name": "explicit_empty",
+    "current": false,
+    "scan": [
+      {
+        "id": "github",
+        "text": "GITHUB_TOKEN=ghp_AbCdEf0123456789_AbCdEf0123456789\n"
+      }
+    ]
+  },
+  {
+    "name": "financial_only",
+    "current": false,
+    "financial": true,
+    "scan": [
+      {
+        "id": "iban",
+        "text": "iban=DE89370400440532013000\n"
+      },
+      {
+        "id": "card",
+        "text": "card_number=4111111111111111\ncvc=123\n"
+      }
+    ]
+  },
+  {
+    "name": "personal_only",
+    "current": false,
+    "personal": true,
+    "scan": [
+      {
+        "id": "personal",
+        "text": "cf=RSSMRA85T10A562S\nssn=123-45-6789\nnhs_number=943 476 5919\n"
+      }
+    ]
+  },
+  {
+    "name": "all_catalogs",
+    "current": true,
+    "financial": true,
+    "personal": true,
+    "scan": [
+      {
+        "id": "mixed",
+        "text": "GITHUB_TOKEN=ghp_AbCdEf0123456789_AbCdEf0123456789\niban=DE89370400440532013000\ncf=RSSMRA85T10A562S\n"
+      }
+    ]
+  },
+  {
+    "name": "custom_literal",
+    "current": false,
+    "rules": [
+      {
+        "kind": "literal",
+        "id": "custom.acme-literal",
+        "value": "ACME_LIVE_TOKEN",
+        "severity": "high",
+        "remediation": "rotate_credential"
+      }
+    ],
+    "scan": [
+      {
+        "id": "literal",
+        "text": "token=ACME_LIVE_TOKEN trailing\n"
+      }
+    ]
+  },
+  {
+    "name": "custom_prefix",
+    "current": false,
+    "rules": [
+      {
+        "kind": "prefix",
+        "id": "custom.acme-prefix",
+        "value": "acme_pat_",
+        "severity": "medium",
+        "remediation": "revoke_and_rotate_credential"
+      }
+    ],
+    "scan": [
+      {
+        "id": "prefix",
+        "text": "key=acme_pat_0123456789\n"
+      }
+    ]
+  },
+  {
+    "name": "custom_suffix",
+    "current": false,
+    "rules": [
+      {
+        "kind": "suffix",
+        "id": "custom.acme-suffix",
+        "value": "_acme_secret",
+        "severity": "low"
+      }
+    ],
+    "scan": [
+      {
+        "id": "suffix",
+        "text": "value=0123456789_acme_secret\n"
+      }
+    ]
+  },
+  {
+    "name": "custom_pattern",
+    "current": false,
+    "rules": [
+      {
+        "kind": "pattern",
+        "id": "custom.acme-pattern",
+        "value": "\\bACME-[0-9]{4}-[A-Z]{2}\\b",
+        "severity": "critical",
+        "remediation": "remove_sensitive_value"
+      }
+    ],
+    "scan": [
+      {
+        "id": "pattern",
+        "text": "code ACME-1234-XY and ACME-99-ZZ\n"
+      }
+    ]
+  },
+  {
+    "name": "custom_all_kinds",
+    "current": false,
+    "rules": [
+      {
+        "kind": "literal",
+        "id": "custom.literal",
+        "value": "LITERAL_SECRET",
+        "severity": "info"
+      },
+      {
+        "kind": "prefix",
+        "id": "custom.prefix",
+        "value": "prefix_",
+        "severity": "low"
+      },
+      {
+        "kind": "suffix",
+        "id": "custom.suffix",
+        "value": "_suffix",
+        "severity": "medium"
+      },
+      {
+        "kind": "pattern",
+        "id": "custom.pattern",
+        "value": "PATTERN-[0-9]+",
+        "severity": "high",
+        "remediation": "review_sensitive_hash"
+      }
+    ],
+    "scan": [
+      {
+        "id": "all",
+        "text": "LITERAL_SECRET prefix_value value_suffix PATTERN-42\n"
+      }
+    ]
+  },
+  {
+    "name": "custom_before_catalog",
+    "current": true,
+    "rules": [
+      {
+        "kind": "literal",
+        "id": "custom.acme-catalog",
+        "value": "ACME_CATALOG_TOKEN",
+        "severity": "high"
+      }
+    ],
+    "scan": [
+      {
+        "id": "mixed",
+        "text": "custom=ACME_CATALOG_TOKEN\nbuiltin=ghp_AbCdEf0123456789_AbCdEf0123456789\n"
+      }
+    ]
+  },
+  {
+    "name": "error_invalid_pattern",
+    "current": false,
+    "rules": [
+      {
+        "kind": "pattern",
+        "id": "custom.bad-regex",
+        "value": "(",
+        "severity": "high"
+      }
+    ]
+  },
+  {
+    "name": "error_pattern_matches_empty",
+    "current": false,
+    "rules": [
+      {
+        "kind": "pattern",
+        "id": "custom.empty-match",
+        "value": "a*",
+        "severity": "high"
+      }
+    ]
+  },
+  {
+    "name": "error_empty_rule_id",
+    "current": false,
+    "rules": [
+      {
+        "kind": "literal",
+        "id": "",
+        "value": "SOMETHING",
+        "severity": "high"
+      }
+    ]
+  },
+  {
+    "name": "error_duplicate_rule_id",
+    "current": false,
+    "rules": [
+      {
+        "kind": "literal",
+        "id": "custom.duplicate",
+        "value": "FIRST_VALUE",
+        "severity": "high"
+      },
+      {
+        "kind": "literal",
+        "id": "custom.duplicate",
+        "value": "SECOND_VALUE",
+        "severity": "low"
+      }
+    ]
+  },
+  {
+    "name": "error_duplicate_empty_ids",
+    "current": false,
+    "rules": [
+      {
+        "kind": "literal",
+        "id": "",
+        "value": "FIRST_VALUE",
+        "severity": "high"
+      },
+      {
+        "kind": "literal",
+        "id": "",
+        "value": "SECOND_VALUE",
+        "severity": "low"
+      }
+    ]
+  },
+  {
+    "name": "error_empty_literal",
+    "current": false,
+    "rules": [
+      {
+        "kind": "literal",
+        "id": "custom.empty-literal",
+        "value": "",
+        "severity": "high"
+      }
+    ]
+  },
+  {
+    "name": "error_empty_prefix",
+    "current": false,
+    "rules": [
+      {
+        "kind": "prefix",
+        "id": "custom.empty-prefix",
+        "value": "",
+        "severity": "high"
+      }
+    ]
+  },
+  {
+    "name": "error_empty_suffix",
+    "current": false,
+    "rules": [
+      {
+        "kind": "suffix",
+        "id": "custom.empty-suffix",
+        "value": "",
+        "severity": "high"
+      }
+    ]
+  },
+  {
+    "name": "error_catalog_collision",
+    "current": true,
+    "rules": [
+      {
+        "kind": "literal",
+        "id": "github.classic-pat",
+        "value": "ghp_",
+        "severity": "critical"
+      }
+    ]
+  }
+]

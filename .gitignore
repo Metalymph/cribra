@@ -1,5 +1,8 @@
 /target
+packages/cribra/test/types/public-api.ts
 **/*.rs.bk
 .DS_Store
 .idea/
 .vscode/
+__pycache__/
+*.pyc

@@ -13,14 +13,36 @@ order: 26
 | Surface | Recorded source version | Distribution boundary |
 | --- | --- | --- |
 | Rust `cribra` | 0.7.2; MSRV Rust 1.97 | Core 0.7.2 published on crates.io. |
-| CLI `cribra-cli` | 0.4.4 | Source build; Core publication does not establish CLI publication. |
+| CLI `cribra-cli` | 0.4.4 | Source build and `cargo install --path crates/cribra-cli` from a checkout; crates.io returned 404 at this audit, so there is no `cargo install cribra-cli` registry path. Core publication does not establish CLI publication. |
+| MCP `cribra-mcp` | 0.1.1; five native targets; stdio only | Published [`cribra-mcp-v0.1.1`](https://github.com/Metalymph/cribra/releases/tag/cribra-mcp-v0.1.1) with five archives and one `SHA256SUMS` manifest. M3 conformance **PARTIAL PASS**; M4 distribution **PASS**. Tool integration, not a language binding. |
 | C ABI `cribra-capi` | 0.3.0 | Source-built native libraries and checked-in header; `publish = false`. |
 | WASM `cribra-wasm` | 0.4.7 | Published 0.4.7 uses Core `^0.6`; workspace source uses Core `^0.7`. |
 | Shared UniFFI adapter | 0.1.0 | Generator/adapter, `publish = false`. |
-| Swift | Published Fuse SwiftPM package `cribra-swift` 0.7.2; Core/Flow source builds | Remote package and checksum-verified XCFramework asset published; clean-room macOS ARM64 consumer passed; iOS Simulator compile/link only; no Swift Package Index registration. |
+| Swift | Published Fuse SwiftPM package `cribra-swift` 0.7.2; Core/Flow source builds | Remote package and checksum-verified XCFramework asset published; clean-room macOS ARM64 consumer passed; iOS Simulator compile/link only; listed on the Swift Package Index for discovery; the listing is not Cribra compatibility-build evidence. |
 | Python | Fuse wheel `cribra` 0.7.2+fuse | Local/CI wheels; no PyPI publication established. |
 | Kotlin/JVM | Core 0.7.2 profile JARs/ZIPs | Local/CI artifacts; no Maven publication established. |
-| TypeScript `cribra-typescript` | 0.1.0; Flow WebAssembly package; Node `>=22` declaration | **Not published.** Provisional private package; no registry record. Intended future name `@metalymph/cribra`, with `cribraRelease.state` `pending-ownership`. Local source or packed-tarball installation only. |
+| TypeScript `@metalymph/cribra` | 0.1.0; Flow WebAssembly package; Node `>=22` declaration | **Not published.** Approved identity (`cribraRelease.state` `approved`); no registry record. Local source or packed-tarball installation only until a separately authorized release. |
+| React Native `@metalymph/cribra-react-native` | 0.0.0; native New Architecture TurboModule; C ABI 0.3.0 over Core 0.7.2 | **Private and unpublished.** No registry record or npm installation instruction. Local source checkout with a `file:` dependency only. |
+
+## Registry audit — 2026-11-17
+
+The official registries were queried independently of GitHub. A registry `200`
+is publication evidence; a `404` means no installation path exists yet. Neither
+result is implementation or qualification evidence.
+
+| Registry / package | Observed result |
+| --- | --- |
+| crates.io `cribra` | `200`; latest `0.7.2` |
+| crates.io `cribra-wasm` | `200`; latest `0.4.7` |
+| crates.io `cribra-cli` | `404`; crate does not exist |
+| crates.io `cribra-capi` / `cribra-uniffi` | `404`; crates do not exist |
+| npm `@metalymph/cribra` | `404 Not found` |
+| npm `@metalymph/cribra-react-native` | `404 Not found` |
+| GitHub `cribra-mcp-v0.1.1` | Published release; five archives plus `SHA256SUMS` |
+
+The MCP server is distributed as a GitHub release, not as a Cargo or npm
+package. Install the CLI with `cargo install --path crates/cribra-cli` from a
+checkout; `cargo install cribra-cli` is not a registry path.
 
 ## Feature boundaries
 
@@ -47,10 +69,10 @@ qualification or universal operating-system support.
 ## TypeScript package status
 
 TypeScript is implemented against the WebAssembly backend as
-`cribra-typescript@0.1.0`. The working package is private and unpublished, and
-the intended `@metalymph/cribra` name is not an available installation
-instruction. The package has no npm registry record, and authenticated ownership
-has not been established.
+`@metalymph/cribra@0.1.0`. The package identity is approved but the package is
+unpublished, so the name is not yet an available registry installation
+instruction. The package has no npm registry record; publication remains a
+separately authorized step.
 
 The W3.2C-1 installed-tarball matrix qualified Node 22.22.0, 24.22.2 and 26.13.0
 for Flow and the test-only Core artifact; TypeScript 5.9.3 and 7.0.2 with
@@ -62,20 +84,49 @@ not evidence for untested Node releases. See the [TypeScript quick
 start](/docs/typescript/) and [runtime compatibility
 guide](/docs/typescript-runtime-compatibility/).
 
+## React Native package status
+
+The native React Native package is implemented and qualified through RN.1.6 as
+`@metalymph/cribra-react-native@0.0.0`. It is **private and unpublished**: there
+is no npm registry record, no public installation instruction and no publication
+claim. It is a direct C ABI TurboModule over `cribra-capi` 0.3.0 and Core 0.7.2,
+not a mode of the WebAssembly package and not a UniFFI generator experiment.
+
+RN.1.6, recorded on 2026-11-12, verified 10 Jest suites and 281 tests, 15,736
+host checks with 0 failures, host plain/ASan/UBSan/TSan runs, iOS Simulator
+Debug and Release runtime, Android ARM64 emulator Debug and Release runtime,
+Android four-ABI Debug and Release builds, and three full JS reload cycles per
+platform. Physical devices, iOS device builds and macOS ASan leak detection are
+not tested. Only the recorded RN 0.88.1 / React 19.3.0 / New Architecture /
+Hermes consumer was qualified. See the [React Native integration
+guide](/docs/integration-react-native/).
+
 ## Planned and demand-driven work
 
 The Fuse-first Swift distribution is complete: `cribra-swift` 0.7.2 is published
-and remotely qualified, with Swift Package Index registration still outstanding.
-The next official priorities are the native Rust MCP server over stdio, the
-Kotlin/JVM and Python Fuse distributions, and a future TypeScript native backend.
-The TypeScript WebAssembly package is implemented but unpublished; the native
-backend remains planned and separately gated.
+and remotely qualified, and it is listed on the [Swift Package
+Index](https://swiftpackageindex.com/Metalymph/cribra-swift) for discovery. The
+listing is not Cribra compatibility-build evidence for additional platforms.
+The approved `@metalymph/cribra@0.1.0` npm release remains an outstanding,
+separately authorized release gate; the package is implemented and qualified but
+unpublished. The next priorities are dependency and CI maintenance, evaluation of
+Python and Kotlin/JVM documentation and official package distribution, and
+evaluation of further bindings based on ecosystem demand. The TypeScript
+WebAssembly package is implemented but unpublished. The React Native package is
+implemented and qualified but private and unpublished. The native Node.js
+backend is not implemented and remains separately gated; it is not the React
+Native package. The published `cribra-mcp` 0.1.1 server is a tool integration,
+not a language binding.
 
 C#, Go and PHP are planned as **demand-driven / community contribution**
-candidates. Ruby, Elixir and other candidates retain the same status. They are
-not actively scheduled and are not implemented, qualified or published. No
-delivery dates are promised; the project will consider them only with
-demonstrated real-world demand or a viable community contribution. See the
+candidates. Ruby, Elixir and other candidates retain the same status.
+Doxygen-generated C API documentation is likewise demand-driven and unscheduled.
+Official GitHub/GitLab scanner integrations, Homebrew, Debian/Ubuntu APT and a
+dedicated embedded Linux distribution workstream are not on the active roadmap.
+Existing Linux support and public interoperability contracts remain in place.
+These candidates are not actively scheduled and are not implemented, qualified or
+published. No delivery dates are promised; the project will consider them only
+with demonstrated real-world demand or a viable community contribution. See the
 [contribution guidelines](https://github.com/Metalymph/cribra/blob/main/CONTRIBUTING.md)
 and the [roadmap priority order](https://github.com/Metalymph/cribra/blob/main/ROADMAP.md#development-priority-order-forward-looking).
 
@@ -83,7 +134,8 @@ and the [roadmap priority order](https://github.com/Metalymph/cribra/blob/main/R
 
 Swift's published package is qualified by remote resolution and macOS ARM64
 execution; its device/Simulator checks remain compile-and-link evidence, not
-runtime execution, and no Intel slices or Swift Package Index registration exist. Kotlin/JVM checks do not establish Android/KMP support. Python and Kotlin native bundles target recorded host/architecture combinations, not all platforms. WASM Node/Bun local checks do not establish browser, worker, CSP or publication qualification.
+runtime execution, and no Intel slices exist. Its Swift Package Index listing is
+discovery only and is not Cribra compatibility-build evidence. Kotlin/JVM checks do not establish Android/KMP support. Python and Kotlin native bundles target recorded host/architecture combinations, not all platforms. WASM Node/Bun local checks do not establish browser, worker, CSP or publication qualification.
 
 Never combine generated binding files with a different native library or profile. For C, match the header and binary; for WASM, match the generated JS glue and WASM binary.
 
@@ -92,7 +144,9 @@ Never combine generated binding files with a different native library or profile
 ## Related guides
 
 - [Integration guides](/docs/)
+- [MCP integration](/docs/integration-mcp/)
 - [TypeScript quick start](/docs/typescript/)
 - [TypeScript runtime compatibility](/docs/typescript-runtime-compatibility/)
+- [React Native integration](/docs/integration-react-native/)
 - [Security model](/docs/security-model/)
 - [Troubleshooting](/docs/troubleshooting/)

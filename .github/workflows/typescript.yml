@@ -84,9 +84,9 @@ jobs:
         run: npm run qualify:pack --prefix packages/cribra
 
       - name: Upload packed artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
-          name: cribra-typescript-tarballs
+          name: metalymph-cribra-tarballs
           if-no-files-found: error
           retention-days: 7
           path: |
@@ -114,9 +114,9 @@ jobs:
           node-version: ${{ matrix.node }}
 
       - name: Download packed artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
-          name: cribra-typescript-tarballs
+          name: metalymph-cribra-tarballs
           path: target/typescript-qualification/artifacts
 
       - name: Qualify Flow tarball
@@ -126,7 +126,7 @@ jobs:
         run: npm run qualify:node --prefix packages/cribra -- --profile core
 
       - name: Upload Node evidence
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: typescript-evidence-node-${{ matrix.node }}
           if-no-files-found: error
@@ -154,16 +154,16 @@ jobs:
         run: npm ci --prefix packages/cribra/qualification
 
       - name: Download packed artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
-          name: cribra-typescript-tarballs
+          name: metalymph-cribra-tarballs
           path: target/typescript-qualification/artifacts
 
       - name: Qualify TypeScript consumers
         run: npm run qualify:typescript --prefix packages/cribra
 
       - name: Upload TypeScript evidence
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: typescript-evidence-typescript
           if-no-files-found: error
@@ -211,9 +211,9 @@ jobs:
         run: npx playwright install --with-deps ${{ matrix.browser }}
 
       - name: Download packed artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
-          name: cribra-typescript-tarballs
+          name: metalymph-cribra-tarballs
           path: target/typescript-qualification/artifacts
 
       - name: Qualify ${{ matrix.label }} from installed package
@@ -224,7 +224,7 @@ jobs:
         run: npm run qualify:browser --prefix packages/cribra -- --profile core --engine chrome
 
       - name: Upload browser evidence
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: typescript-evidence-browser-${{ matrix.engine }}
           if-no-files-found: error
@@ -256,9 +256,9 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Download packed artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
-          name: cribra-typescript-tarballs
+          name: metalymph-cribra-tarballs
           path: target/typescript-qualification/artifacts
 
       - name: Qualify Vite development and production
@@ -268,7 +268,7 @@ jobs:
         run: npm run qualify:webpack --prefix packages/cribra -- --engine chromium
 
       - name: Upload bundler evidence
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: typescript-evidence-bundlers
           if-no-files-found: error
@@ -294,16 +294,16 @@ jobs:
           node-version: "24"
 
       - name: Download packed artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
-          name: cribra-typescript-tarballs
+          name: metalymph-cribra-tarballs
           path: target/typescript-qualification/artifacts
 
       - name: Probe native Safari without enabling automation
         run: npm run qualify:safari --prefix packages/cribra -- --profile flow
 
       - name: Upload Safari evidence
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: typescript-evidence-safari
           if-no-files-found: error

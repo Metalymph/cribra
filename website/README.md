@@ -70,7 +70,7 @@ Rust gates. Generated `.astro/`, `dist/`, and `node_modules/` are ignored here.
 - `/docs/core-concepts/` — boundaries, detection/validation, reports/review
 - `/docs/transformations/` — transformations and Share Bundles
 - `/docs/scanning-modes/` — whole-source, streaming, incremental
-- `/docs/typescript/` — provisional TypeScript WebAssembly quick start
+- `/docs/typescript/` — TypeScript WebAssembly quick start for the approved, unpublished package
 - `/docs/typescript-api-reference/` — public exports, types, errors, and disposal
 - `/docs/typescript-sessions-and-transformations/` — streams, incremental edits, transformations, Share Bundles
 - `/docs/typescript-runtime-compatibility/` — tested environments and claim boundaries

@@ -22,7 +22,7 @@ admitted, so select a custom ruleset and handle admission errors rather than
 silently falling back.
 
 ```ts title="stream.ts"
-import { createScanner, init } from "cribra-typescript";
+import { createScanner, init } from "@metalymph/cribra";
 
 await init();
 
@@ -85,7 +85,7 @@ revision. Successful edits return the next revision and make a complete new
 report available through `snapshot()`.
 
 ```ts title="incremental.ts"
-import { createScanner, init } from "cribra-typescript";
+import { createScanner, init } from "@metalymph/cribra";
 
 await init();
 
@@ -156,8 +156,8 @@ both the scan report and the transformed source. It does not accept a previously
 stored report, and multiple transformations require separate calls.
 
 ```ts title="transformations.ts"
-import { createScanner, init } from "cribra-typescript";
-import type { TransformRequest } from "cribra-typescript";
+import { createScanner, init } from "@metalymph/cribra";
+import type { TransformRequest } from "@metalymph/cribra";
 
 await init();
 
@@ -217,8 +217,8 @@ import {
   createScanner,
   createShareBundle,
   init,
-} from "cribra-typescript";
-import type { ScanSource } from "cribra-typescript";
+} from "@metalymph/cribra";
+import type { ScanSource } from "@metalymph/cribra";
 
 await init();
 

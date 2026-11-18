@@ -11,8 +11,10 @@ library product are named **`Cribra`**. Deployment minimums are macOS 13 and iOS
 **Current status:** the official Fuse SwiftPM package **0.7.2** is published in
 [`Metalymph/cribra-swift`](https://github.com/Metalymph/cribra-swift) and has
 passed a clean-room remote consumer gate. Consumers install it from SwiftPM and do
-not need Rust, Cargo, UniFFI generators or a Cribra source checkout. Swift Package
-Index registration has not been submitted. Core and Flow remain source-build
+not need Rust, Cargo, UniFFI generators or a Cribra source checkout. The package
+is listed on the [Swift Package
+Index](https://swiftpackageindex.com/Metalymph/cribra-swift) for discovery; the
+listing is not Cribra compatibility-build evidence. Core and Flow remain source-build
 alternatives in this repository. See
 [Install Fuse from SwiftPM](#install-fuse-from-swiftpm) for the authoritative
 consumer instructions and
@@ -202,8 +204,9 @@ This section records the contract implemented by the official remote SwiftPM
 distribution. The published package lives in
 [`Metalymph/cribra-swift`](https://github.com/Metalymph/cribra-swift) at tag
 `0.7.2`, commit `fa37a32dc04f4574e9972b488637519c602ce671`. The contract remains
-authoritative for future Swift distribution versions. Swift Package Index
-registration has not been submitted.
+authoritative for future Swift distribution versions. The package is listed on
+the [Swift Package Index](https://swiftpackageindex.com/Metalymph/cribra-swift)
+for discovery; the listing is not Cribra compatibility-build evidence.
 
 ### Public package and profile policy
 
@@ -462,20 +465,23 @@ set. The same consumer compiled and linked for
 This qualifies remote resolution, artifact integrity and macOS ARM64 execution
 for the recorded host. It does not qualify iOS Simulator runtime, physical-device
 runtime, Intel Apple targets, signing, notarization or toolchains below Swift 6.4.
-Swift Package Index registration has not been submitted.
+The package is listed on the [Swift Package
+Index](https://swiftpackageindex.com/Metalymph/cribra-swift) for discovery; the
+listing is not Cribra compatibility-build evidence.
 
 ### Swift Package Index
 
 Swift Package Index is a discovery and documentation service, not a binary
 hosting service. The package must first be remotely installable and pass the
-clean-room gate. The `0.7.2` release has passed that gate, but no SPI entry has
-been created or submitted. Do not assume Linux compatibility for an Apple-only
-binary package.
+clean-room gate. The `0.7.2` release has passed that gate and is listed at
+[`swiftpackageindex.com/Metalymph/cribra-swift`](https://swiftpackageindex.com/Metalymph/cribra-swift).
+The listing is not Cribra compatibility-build evidence. Do not assume Linux
+compatibility for an Apple-only binary package.
 
 ### Unresolved distribution questions
 
-- The `0.7.2` package is published; Swift Package Index registration and any
-  further distribution versions remain separate work.
+- The `0.7.2` package is published and listed on the Swift Package Index for
+  discovery; any further distribution versions remain separate work.
 - The earliest consumer Swift toolchain below 6.4 has not been established.
 - Signing, notarization, App Store submission and binary provenance attestations
   are not defined by this contract.
@@ -572,8 +578,8 @@ execution. Qualification uses a temporary local binary-target manifest, so it
 does not exercise remote download, URL resolution or published checksum
 verification. It also does not establish bit-for-bit reproducibility: ZIP
 timestamps and host toolchain details can change. Signing, notarization, release
-publication, the remote-consumer acceptance gate and Swift Package Index remain
-later milestones.
+publication, the remote-consumer acceptance gate and any further Swift Package
+Index compatibility-build evidence remain later milestones.
 
 Packaging validators can be exercised without building the distribution:
 
@@ -677,8 +683,9 @@ git diff --check
 Only ARM64 macOS, iOS device and iOS Simulator slices are provided. Intel Mac,
 x86_64 Simulator, Catalyst, tvOS/watchOS/visionOS and device/simulator runtime
 qualification remain outside the qualified matrix. The `0.7.2` remote package is
-published and remotely qualified; its release asset is immutable and no SPI entry
-exists. Release signing/notarization, App Store submission and automated
+published and remotely qualified; its release asset is immutable. The package is
+listed on the Swift Package Index for discovery, without treating it as Cribra
+compatibility-build evidence. Release signing/notarization, App Store submission and automated
 distribution publication are also outside this phase. If an SDK or Rust target is
 missing, the build fails explicitly and keeps the previous complete package; it
 does not fabricate a slice or fall back to macOS. Core, C API, WASM and CLI are

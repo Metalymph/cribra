@@ -1,8 +1,9 @@
 # TypeScript Package Release Runbook
 
-Status: **release infrastructure implemented in W3.2C-2. No npm record, tag,
-or publication exists. The first publication is blocked until npm ownership is
-verified and a separate explicit release authorization is given.**
+Status: **identity approved in W3.2C-4 as `@metalymph/cribra@0.1.0`. The package
+is still not published: no npm record, tag, or publication exists. The first
+publication remains blocked until a separate explicit release authorization is
+given.**
 
 This runbook covers the independently versioned npm package built from
 `packages/cribra`. It does not cover the Core crate, `cribra-wasm`, the CLI, or
@@ -13,14 +14,15 @@ a test-only qualification artifact and is never published.
 
 | Field | Current value |
 | --- | --- |
-| `package.json` `name` | `cribra-typescript` (provisional) |
+| `package.json` `name` | `@metalymph/cribra` (approved) |
 | `package.json` `version` | `0.1.0` |
-| `private` | `true` |
+| `private` | absent |
 | Approved release name | `@metalymph/cribra` |
-| `cribraRelease.state` | `pending-ownership` |
+| `cribraRelease.state` | `approved` |
 | Tag namespace | `typescript-v*` |
 | Dist-tag | `latest` |
 | Registry | `https://registry.npmjs.org/` |
+| Publication status | **Not published**; no npm record exists |
 
 Every script derives the package specifier and tarball names from
 `package.json`. Renaming the package must not require editing qualification,
@@ -30,7 +32,7 @@ Release mode fails closed unless all of the following hold:
 
 - `cribraRelease.state === "approved"`;
 - `name === cribraRelease.approvedName`;
-- `name` is not the provisional `cribra-typescript`;
+- `name` is not the legacy `cribra-typescript`;
 - `private` is absent;
 - `version` is valid SemVer;
 - `type === "module"` and `engines.node === ">=22"`;
@@ -41,60 +43,40 @@ Release mode fails closed unless all of the following hold:
 
 Any failure is intentional. Do not weaken the gate to make a release run.
 
-## 2. Verify npm ownership before renaming
+## 2. npm ownership (verified)
 
-The rename is blocked until ownership of the approved scope is proven **while
-authenticated**. An unauthenticated `npm view` 404 for `@metalymph/cribra` is not
-proof that the scope is available, and it is not proof that the maintainer can
-publish into it.
-
-Run, on a trusted workstation:
+Ownership was verified while authenticated in W3.2C-4:
 
 ```sh
 npm login
-npm whoami
-npm org ls metalymph
-npm access list packages @metalymph --json
-npm view @metalymph/cribra --json
+npm whoami        # metalymph
 ```
 
-Interpretation:
+`@metalymph` is controlled as the maintainer's personal scope, so no npm
+organization is required. Re-run `npm whoami` before any first publication and
+record the output in the release authorization. Do not infer ownership from the
+GitHub account name: the GitHub `Metalymph` user and an npm scope are different
+systems.
 
-- `npm whoami` must return the maintainer account, not `ENEEDAUTH`.
-- `@metalymph` works as a personal scope only if the npm username is
-  `metalymph`.
-- Otherwise `@metalymph` must be an npm organization, and the authenticated
-  account must have publish rights in it.
-- `npm org ls metalymph` must succeed and list the account. A 404 while
-  unauthenticated is not authoritative.
-- `npm view @metalymph/cribra` must either return 404 or show a record the
-  maintainer controls. An existing record owned by someone else blocks the
-  rename.
+### 2.1 Approved identity (applied)
 
-Record the command output in the release authorization. Do not infer ownership
-from the GitHub account name: the GitHub `Metalymph` user and an npm scope are
-different systems.
+The rename was reviewed and applied in W3.2C-4:
 
-### 2.1 Apply the approved identity
-
-Only after ownership is proven and the rename is reviewed:
-
-1. Set `package.json` `name` to `@metalymph/cribra`.
-2. Remove `"private": true`.
-3. Set `cribraRelease.state` to `"approved"`.
-4. Update the identity and install examples in `packages/cribra/README.md`,
-   `docs/TYPESCRIPT_API.md`, and this runbook. The README ships in the tarball,
-   so stale provisional instructions are a release defect.
-5. Regenerate both lockfiles so their root names match:
+1. `package.json` `name` is `@metalymph/cribra`.
+2. `"private": true` is removed.
+3. `cribraRelease.state` is `"approved"`.
+4. `packages/cribra/README.md`, `docs/TYPESCRIPT_API.md`, this runbook, and the
+   website install examples use the approved identity. The README ships in the
+   tarball, so stale identity instructions are a release defect.
+5. Both lockfiles were regenerated so their root names match:
    ```sh
    npm install --package-lock-only --ignore-scripts --no-audit --no-fund
    npm --prefix packages/cribra/qualification install \
      --package-lock-only --ignore-scripts --no-audit --no-fund
    ```
-6. Run the full checks in section 8.
-7. Confirm `npm run package:check:release` passes and
-   `npm run release:stage-check ...` still refuses until authorization inputs
-   are supplied.
+6. `npm run package:check:release` now passes.
+7. `npm run release:stage-check ...` still refuses until the explicit
+   authorization inputs are supplied.
 
 If the approved name must change, update `cribraRelease.approvedName` and the
 documentation first; do not bypass the comparison.
@@ -185,7 +167,7 @@ Readiness fails unless:
 - the tag matches `typescript-v<semver>` and the manifest version;
 - the tag resolves to HEAD and the workflow ref/sha match;
 - the checkout is clean;
-- the identity is approved and non-provisional;
+- the identity is approved and is not the legacy `cribra-typescript` name;
 - repeat packing is byte-for-byte identical;
 - the qualified tarball and WASM digests still match the pack evidence;
 - the Flow and Core WASM digests differ;
@@ -205,13 +187,12 @@ Local equivalent, without matrix or releaseability requirements:
 ```sh
 cd packages/cribra
 npm run qualify:pack
-npm run release:readiness -- --local --skip-qualification --allow-provisional
-npm run release:verify -- \
-  --release-root ../../target/typescript-release \
-  --provisional
+npm run release:readiness -- --local --skip-qualification
+npm run release:verify -- --release-root ../../target/typescript-release
 ```
 
-The local manifest is `releaseable: false` while the identity is provisional.
+The local manifest is `releaseable: true` because the identity is approved, but
+it is not a substitute for the readiness workflow's matrix and ref gates.
 
 ## 5. Staging workflow
 
@@ -329,18 +310,18 @@ npm run test:types
 npm run build
 npm test
 npm run package:check
-npm run package:check:release      # expected to fail while provisional
+npm run package:check:release
 npm run qualify:pack
 npm run qualify:all
 ```
 
 Before staging:
 
-- [ ] npm ownership proven while authenticated.
-- [ ] Rename applied and `cribraRelease.state` is `approved`.
-- [ ] `private` removed and `publishConfig` unchanged.
-- [ ] Both lockfiles regenerated.
-- [ ] `package:check` and `package:check:release` pass.
+- [x] npm ownership proven while authenticated (`npm whoami` returns `metalymph`).
+- [x] Rename applied and `cribraRelease.state` is `approved`.
+- [x] `private` removed and `publishConfig` unchanged.
+- [x] Both lockfiles regenerated.
+- [x] `package:check` and `package:check:release` pass locally.
 - [ ] Readiness run uploaded a `releaseable: true` manifest.
 - [ ] Tarball SHA-256 and WASM SHA-256 match the manifest.
 - [ ] Repeat pack was byte-for-byte identical.
@@ -364,7 +345,7 @@ After staging:
 
 ## 9. Explicit non-actions
 
-The W3.2C-2 implementation does **not**:
+The W3.2C-4 identity work does **not**:
 
 - create any npm record, including `0.0.0-stage`;
 - configure a Trusted Publisher;
@@ -375,4 +356,6 @@ The W3.2C-2 implementation does **not**:
 - publish the Core tarball;
 - claim native Safari support.
 
-Those remain separately authorized operational steps.
+Those remain separately authorized operational steps. Until the registry
+confirms a successful release, every document must describe
+`@metalymph/cribra@0.1.0` as **not published**.

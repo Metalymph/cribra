@@ -23,6 +23,8 @@ const distDirectory = path.join(websiteRoot, 'dist');
 const packageManifestPath = path.join(repositoryRoot, 'packages/cribra/package.json');
 const bindingsDataSourcePath = path.join(websiteRoot, 'src/data/bindings.ts');
 const docsNavigationPath = path.join(websiteRoot, 'src/pages/docs/index.astro');
+const siteConfigPath = path.join(websiteRoot, 'astro-theme-config.ts');
+const mcpGuideUrl = '/docs/integration-mcp/';
 
 const typescriptDocs = new Map([
   ['typescript', '/docs/typescript/'],
@@ -36,6 +38,65 @@ const typescriptDocs = new Map([
     '/docs/typescript-runtime-compatibility/',
   ],
 ]);
+
+const repositoryPrefix = 'https://github.com/Metalymph/cribra/';
+
+/**
+ * Every implemented integration must expose a directly reachable guide from
+ * /bindings/. API and package links are included only where the corresponding
+ * artifact exists.
+ */
+const bindingLinks = [
+  {
+    id: 'rust',
+    guide: '/docs/integration-rust/',
+    apiReference: '/docs/api-reference/',
+    package: `${repositoryPrefix}releases/tag/v0.7.2`,
+  },
+  { id: 'c', guide: '/docs/integration-c/' },
+  {
+    id: 'wasm',
+    guide: '/docs/integration-wasm/',
+    package: `${repositoryPrefix}releases/tag/cribra-wasm-v0.4.7`,
+  },
+  {
+    id: 'typescript',
+    guide: '/docs/typescript/',
+    apiReference: '/docs/typescript-api-reference/',
+    additionalGuides: [
+      '/docs/typescript-sessions-and-transformations/',
+      '/docs/typescript-runtime-compatibility/',
+    ],
+  },
+  {
+    id: 'cli',
+    guide: '/docs/getting-started/#use-the-cli-from-this-repository',
+  },
+  {
+    id: 'react-native',
+    guide: '/docs/integration-react-native/',
+    package: `${repositoryPrefix}tree/main/packages/cribra-react-native`,
+  },
+  {
+    id: 'swift',
+    guide: '/docs/integration-swift/',
+    apiReference: '/api/0.7.2/swift/core/documentation/cribra/',
+    package: 'https://github.com/Metalymph/cribra-swift',
+    registry: 'https://swiftpackageindex.com/Metalymph/cribra-swift',
+  },
+  { id: 'python', guide: '/docs/integration-python/' },
+  { id: 'kotlin', guide: '/docs/integration-kotlin/' },
+];
+
+const staleSwiftPackageIndexClaims = [
+  /Swift Package\s+Index registration has not been submitted/i,
+  /Swift Package\s+Index registration remains outstanding/i,
+  /Index registration has not been submitted/i,
+  /no Swift Package\s+Index registration/i,
+  /no SPI entry has been created or submitted/i,
+  /no SPI entry\s+exists/i,
+  /\bSPI registration\b/i,
+];
 
 const failures = [];
 const warnings = [];
@@ -364,16 +425,32 @@ async function checkBindingsData() {
   const contents = await readText(bindingsDataSourcePath);
   assert(contents.includes("id: 'typescript'"), 'bindings data has no TypeScript entry');
   assert(
-    contents.includes('cribra-typescript 0.1.0'),
-    'bindings data does not record cribra-typescript 0.1.0',
+    contents.includes('@metalymph/cribra 0.1.0'),
+    'bindings data does not record @metalymph/cribra 0.1.0',
   );
   assert(
-    contents.includes('provisional and unpublished'),
-    'bindings data does not mark the TypeScript package as provisional and unpublished',
+    contents.includes('approved and unpublished'),
+    'bindings data does not mark the TypeScript package as approved and unpublished',
   );
   assert(
     contents.includes('TypeScript native backend'),
     'bindings data no longer retains the planned native TypeScript backend',
+  );
+  assert(
+    contents.includes("id: 'react-native'"),
+    'bindings data has no React Native entry',
+  );
+  assert(
+    contents.includes('@metalymph/cribra-react-native 0.0.0'),
+    'bindings data does not record @metalymph/cribra-react-native 0.0.0',
+  );
+  assert(
+    contents.includes('private and unpublished'),
+    'bindings data does not mark the React Native package as private and unpublished',
+  );
+  assert(
+    !/React Native is not implemented/i.test(contents),
+    'bindings data still says React Native is not implemented',
   );
   assert(
     !contents.includes('TypeScript isomorphic API contract'),
@@ -395,16 +472,19 @@ async function checkBindingsData() {
 
 async function checkPackageIdentity() {
   const manifest = JSON.parse(await readText(packageManifestPath));
-  assert(manifest.name === 'cribra-typescript', 'package name must remain cribra-typescript');
-  assert(manifest.version === '0.1.0', 'package version must remain 0.1.0');
-  assert(manifest.private === true, 'package must remain private');
   assert(
-    manifest.cribraRelease?.state === 'pending-ownership',
-    'cribraRelease.state must remain pending-ownership',
+    manifest.name === '@metalymph/cribra',
+    'package name must be @metalymph/cribra',
+  );
+  assert(manifest.version === '0.1.0', 'package version must remain 0.1.0');
+  assert(manifest.private === undefined, 'package must not be private');
+  assert(
+    manifest.cribraRelease?.state === 'approved',
+    'cribraRelease.state must be approved',
   );
   assert(
     manifest.cribraRelease?.approvedName === '@metalymph/cribra',
-    'approved future package name must remain @metalymph/cribra',
+    'approved package name must remain @metalymph/cribra',
   );
   assert(manifest.engines?.node === '>=22', 'engines.node must remain >=22');
 }
@@ -435,7 +515,7 @@ async function checkForbiddenInstallCommands() {
   ];
 
   const installCommand =
-    /(?:npm\s+(?:install|i|add)|pnpm\s+(?:add|install)|yarn\s+add|bun\s+add)[^\n]*@metalymph\/cribra/;
+    /(?:\bnpm\s+(?:install|i|add)\b|\bpnpm\s+(?:add|install)\b|\byarn\s+add\b|\bbun\s+add\b)[^\n]*@metalymph\/cribra/;
 
   for (const root of roots) {
     const kind = await pathKind(root);
@@ -449,7 +529,7 @@ async function checkForbiddenInstallCommands() {
       const match = installCommand.exec(contents);
       if (match) {
         fail(
-          `executable install instruction for the unapproved package name in ${path.relative(repositoryRoot, file)}: ${match[0]}`,
+          `executable registry install instruction for the unpublished package in ${path.relative(repositoryRoot, file)}: ${match[0]}`,
         );
       }
     }
@@ -482,7 +562,6 @@ async function checkTypescriptSnippetCoverage() {
       if (title) titles.add(title);
 
       for (const forbidden of [
-        '@metalymph/cribra',
         'packages/cribra/src',
         'packages/cribra/dist',
         '../src/',
@@ -540,7 +619,7 @@ async function checkTypescriptSnippetCoverage() {
   const importedNames = (source) => {
     const names = new Set();
     for (const match of source.matchAll(
-      /import\s+(?:type\s+)?\{([\s\S]*?)\}\s+from\s+["'](?:cribra-typescript|__CRIBRA_PACKAGE_SPECIFIER__)["']/g,
+      /import\s+(?:type\s+)?\{([\s\S]*?)\}\s+from\s+["'](?:@metalymph\/cribra|cribra-typescript|__CRIBRA_PACKAGE_SPECIFIER__)["']/g,
     )) {
       for (const raw of match[1].split(',')) {
         const name = raw.trim().replace(/^type\s+/, '');
@@ -583,8 +662,10 @@ function checkTypescriptDocsStatus(docsById) {
       'TypeScript quick start must state that the package is not published',
     );
     assert(
-      /pending-ownership/.test(quickStart.contents),
-      'TypeScript quick start must record cribraRelease.state pending-ownership',
+      /cribraRelease\.state[^.]*approved|state[^.]*approved/i.test(
+        quickStart.contents,
+      ),
+      'TypeScript quick start must record cribraRelease.state approved',
     );
   }
 
@@ -610,6 +691,292 @@ function checkTypescriptDocsStatus(docsById) {
   }
 }
 
+function checkMcpDocsStatus(docsById) {
+  const mcp = docsById.get('integration-mcp');
+  assert(!!mcp, 'missing MCP integration guide: integration-mcp.md');
+  if (!mcp) return;
+
+  const required = [
+    [/cribra-mcp`? 0\.1\.1/, 'MCP guide must record published version 0.1.1'],
+    [/cribra-mcp-v0\.1\.1/, 'MCP guide must link the cribra-mcp-v0.1.1 release'],
+    [/five qualified native targets/i, 'MCP guide must record five native targets'],
+    [/aarch64-apple-darwin/, 'MCP guide must list the aarch64 Apple target'],
+    [/x86_64-apple-darwin/, 'MCP guide must list the x86_64 Apple target'],
+    [/x86_64-unknown-linux-gnu/, 'MCP guide must list the x86_64 Linux target'],
+    [/aarch64-unknown-linux-gnu/, 'MCP guide must list the aarch64 Linux target'],
+    [/x86_64-pc-windows-msvc/, 'MCP guide must list the Windows target'],
+    [/SHA256SUMS/, 'MCP guide must document checksum verification'],
+    [
+      /SHA256SUMS has no entry/,
+      'MCP guide must fail explicitly when the manifest has no entry for the archive',
+    ],
+    [
+      /integrity check, not an authenticity/i,
+      'MCP guide must describe SHA256SUMS as integrity verification, not authentication',
+    ],
+    [/GLIBC_2\.34/, 'MCP guide must record the measured GLIBC_2.34 symbol floor'],
+    [
+      /binary symbol requirement, not a\s+runtime-qualification statement/i,
+      'MCP guide must distinguish symbol requirements from runtime qualification',
+    ],
+    [/local stdio/i, 'MCP guide must document local stdio transport'],
+    [/Claude Desktop/, 'MCP guide must document Claude Desktop'],
+    [/Claude Code/, 'MCP guide must document Claude Code'],
+    [/Codex/, 'MCP guide must document Codex'],
+    [/cribra_scan/, 'MCP guide must document cribra_scan'],
+    [/cribra_transform/, 'MCP guide must document cribra_transform'],
+    [/metadata[- ]only/i, 'MCP guide must document metadata-only scan results'],
+    [/\[REDACTED\]/, 'MCP guide must document redaction'],
+    [/<CRIBRA:/, 'MCP guide must document templating'],
+    [/2026-07-28/, 'MCP guide must document the modern protocol revision'],
+    [/2025-11-25/, 'MCP guide must document the legacy protocol revision'],
+    [/PARTIAL PASS/, 'MCP guide must record the M3 PARTIAL PASS verdict'],
+    [/147-row/, 'MCP guide must record the 147-row conformance matrix'],
+    [
+      /10 of 10 applicable/i,
+      'MCP guide must record the 10 applicable canonical matrix rows',
+    ],
+    [
+      /5 TypeScript, 5 Python/,
+      'MCP guide must distinguish the 10 independent SDK scenarios',
+    ],
+    [
+      /official runner is HTTP-only/i,
+      'MCP guide must record the official-runner limitation',
+    ],
+    [/M4 distribution[^\n]*PASS/i, 'MCP guide must record the M4 distribution PASS'],
+    [/not a language binding/i, 'MCP guide must present MCP as a tool integration'],
+  ];
+
+  for (const [pattern, message] of required) {
+    assert(pattern.test(mcp.contents), message);
+  }
+
+  assert(
+    !/authenticates the exact published binaries/i.test(mcp.contents),
+    'MCP guide must not claim SHA256SUMS authenticates published binaries',
+  );
+}
+
+async function checkMcpNavigation() {
+  const navigation = await readText(docsNavigationPath);
+  assert(
+    navigation.includes(`'${mcpGuideUrl}'`),
+    `docs navigation does not link ${mcpGuideUrl}`,
+  );
+
+  const siteConfig = await readText(siteConfigPath);
+  assert(
+    siteConfig.includes(`href: '${mcpGuideUrl}'`),
+    `site navigation does not link ${mcpGuideUrl}`,
+  );
+
+  const source = await readText(bindingsDataSourcePath);
+  assert(
+    source.includes('toolIntegrations'),
+    'bindings data has no tool integrations section',
+  );
+  assert(
+    source.includes("id: 'mcp'"),
+    'bindings data has no MCP tool integration entry',
+  );
+  assert(
+    source.includes(mcpGuideUrl),
+    `bindings data does not link the MCP guide ${mcpGuideUrl}`,
+  );
+  assert(
+    source.includes('not a language binding'),
+    'bindings data does not present MCP as a tool integration',
+  );
+
+  const bindingsHtml = await readText(path.join(distDirectory, 'bindings/index.html')).catch(
+    () => null,
+  );
+  const homeHtml = await readText(path.join(distDirectory, 'index.html')).catch(() => null);
+
+  assert(bindingsHtml !== null, 'bindings page is missing from the built website');
+  assert(homeHtml !== null, 'homepage is missing from the built website');
+  if (bindingsHtml === null || homeHtml === null) return;
+
+  assert(
+    bindingsHtml.includes('id="mcp"'),
+    'bindings page has no MCP tool integration entry',
+  );
+  assert(
+    bindingsHtml.includes(`href="${mcpGuideUrl}"`),
+    `bindings page does not render the MCP guide ${mcpGuideUrl}`,
+  );
+  assert(
+    homeHtml.includes(`href="${mcpGuideUrl}"`),
+    `homepage does not link the MCP guide ${mcpGuideUrl}`,
+  );
+
+  await assertResolvedLink('bindings page MCP guide', mcpGuideUrl);
+}
+
+async function checkBindingLinkMetadata() {
+  const source = await readText(bindingsDataSourcePath);
+
+  assert(
+    bindingLinks.length === 9,
+    `expected nine implemented bindings, found ${bindingLinks.length}`,
+  );
+
+  for (const binding of bindingLinks) {
+    assert(
+      source.includes(`id: '${binding.id}'`),
+      `bindings data has no ${binding.id} entry`,
+    );
+
+    for (const href of bindingLinkHrefs(binding)) {
+      const expectedSource =
+        href.startsWith(repositoryPrefix) &&
+        !source.includes(`href: '${href}'`)
+          ? `\${repository}/${href.slice(repositoryPrefix.length)}`
+          : `href: '${href}'`;
+      assert(
+        source.includes(expectedSource),
+        `bindings data does not expose the ${binding.id} link ${href}`,
+      );
+    }
+  }
+
+  for (const href of typescriptDocs.values()) {
+    assert(
+      source.includes(`href: '${href}'`),
+      `bindings data does not link the existing TypeScript page ${href}`,
+    );
+  }
+
+  const swiftRegistry = bindingLinks.find(
+    (binding) => binding.id === 'swift',
+  )?.registry;
+  assert(
+    swiftRegistry === 'https://swiftpackageindex.com/Metalymph/cribra-swift',
+    'Swift binding must use the exact Swift Package Index URL',
+  );
+  assert(
+    source.includes('not Cribra compatibility-build evidence'),
+    'bindings data does not limit the Swift Package Index listing to discovery',
+  );
+}
+
+function bindingLinkHrefs(binding) {
+  return [
+    binding.guide,
+    ...(binding.additionalGuides ?? []),
+    ...(binding.apiReference ? [binding.apiReference] : []),
+    ...(binding.package ? [binding.package] : []),
+    ...(binding.registry ? [binding.registry] : []),
+  ];
+}
+
+async function assertResolvedLink(label, href) {
+  const resolved = await resolveInternalLink(href);
+  if (resolved.kind === 'external') return;
+
+  if (resolved.kind === 'missing') {
+    fail(`${label}: internal link does not resolve: ${href}`);
+    return;
+  }
+
+  if (resolved.kind === 'fragment-only') {
+    fail(`${label}: guide link must target a page, not only a fragment: ${href}`);
+    return;
+  }
+
+  if (resolved.kind === 'file' && resolved.fragment) {
+    const contents = await readText(resolved.target).catch(() => '');
+    if (!hasAnchor(contents, resolved.fragment)) {
+      fail(`${label}: link fragment does not exist: ${href}`);
+    }
+  }
+}
+
+async function checkBindingNavigation() {
+  const bindingsHtml = await readText(path.join(distDirectory, 'bindings/index.html')).catch(
+    () => null,
+  );
+  const homeHtml = await readText(path.join(distDirectory, 'index.html')).catch(() => null);
+
+  assert(bindingsHtml !== null, 'bindings page is missing from the built website');
+  assert(homeHtml !== null, 'homepage is missing from the built website');
+  if (bindingsHtml === null || homeHtml === null) return;
+
+  for (const binding of bindingLinks) {
+    assert(
+      bindingsHtml.includes(`id="${binding.id}"`),
+      `bindings page has no ${binding.id} matrix row`,
+    );
+
+    for (const href of bindingLinkHrefs(binding)) {
+      assert(
+        bindingsHtml.includes(`href="${href}"`),
+        `bindings page does not render the ${binding.id} link ${href}`,
+      );
+    }
+
+    assert(
+      homeHtml.includes(`href="${binding.guide}"`),
+      `homepage does not link the ${binding.id} guide ${binding.guide}`,
+    );
+
+    await assertResolvedLink(`bindings page ${binding.id} guide`, binding.guide);
+    for (const href of binding.additionalGuides ?? []) {
+      await assertResolvedLink(
+        `bindings page ${binding.id} additional guide`,
+        href,
+      );
+    }
+    if (binding.apiReference) {
+      await assertResolvedLink(
+        `bindings page ${binding.id} API reference`,
+        binding.apiReference,
+      );
+    }
+  }
+}
+
+async function checkSwiftPackageIndexDisclosure() {
+  const files = [
+    'website/src/content/docs/integration-swift.md',
+    'website/src/content/docs/compatibility-and-distribution.md',
+    'website/src/data/bindings.ts',
+    'docs/COMPATIBILITY.md',
+    'docs/ECOSYSTEM.md',
+    'ROADMAP.md',
+    'bindings/swift/README.md',
+  ];
+
+  for (const file of files) {
+    const contents = await readText(path.join(repositoryRoot, file)).catch(() => null);
+    if (contents === null) {
+      fail(`Swift Package Index disclosure target is missing: ${file}`);
+      continue;
+    }
+    for (const pattern of staleSwiftPackageIndexClaims) {
+      assert(
+        !pattern.test(contents),
+        `${file}: stale Swift Package Index claim (${pattern})`,
+      );
+    }
+  }
+
+  const swiftGuide = await readText(
+    path.join(docsSourceDirectory, 'integration-swift.md'),
+  ).catch(() => '');
+  const swiftIndexLink =
+    /\[Swift Package Index\]\(([^)\s]+)\)/.exec(swiftGuide);
+  assert(
+    swiftIndexLink?.[1] === 'https://swiftpackageindex.com/Metalymph/cribra-swift',
+    'Swift integration guide must link the exact Swift Package Index URL',
+  );
+  assert(
+    /not Cribra compatibility-build evidence/i.test(swiftGuide),
+    'Swift integration guide does not limit the Swift Package Index listing to discovery',
+  );
+}
+
 async function main() {
   const requireSitemap = process.argv.includes('--require-sitemap');
 
@@ -620,6 +987,7 @@ async function main() {
     const docs = await loadDocs();
     const docsById = new Map(docs.map((doc) => [doc.id, doc]));
     checkTypescriptDocsStatus(docsById);
+    checkMcpDocsStatus(docsById);
     await checkTypescriptSnippetCoverage();
 
     for (const doc of docs) {
@@ -664,6 +1032,10 @@ async function main() {
     }
 
     await checkBindingsData();
+    await checkBindingLinkMetadata();
+    await checkBindingNavigation();
+    await checkMcpNavigation();
+    await checkSwiftPackageIndexDisclosure();
     await checkPackageIdentity();
     await checkForbiddenInstallCommands();
   }

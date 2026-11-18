@@ -21,10 +21,10 @@ heap guarantees.
 ## Typed WASM exports versus the TypeScript package
 
 The `cribra-wasm` crate exposes typed `wasm-bindgen` exports. The separate
-`cribra-typescript` package is a higher-level, backend-neutral API over the
-WebAssembly backend; it is provisional, **unpublished**, and currently available
-only from a source checkout or a locally packed tarball. It is not
-`@metalymph/cribra`, and there is no registry installation to recommend. Start
+`@metalymph/cribra` package is a higher-level, backend-neutral API over the
+WebAssembly backend; it is approved but **unpublished**, and currently available
+only from a source checkout or a locally packed tarball. There is no registry
+installation to recommend until a separately authorized release succeeds. Start
 with the [TypeScript quick start](/docs/typescript/) and consult the
 [TypeScript runtime compatibility guide](/docs/typescript-runtime-compatibility/)
 before choosing a distribution path.

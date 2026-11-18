@@ -1,0 +1,2957 @@
+{
+  "abiVersion": {
+    "major": 0,
+    "minor": 3,
+    "patch": 0
+  },
+  "cases": [
+    {
+      "entries": [
+        {
+          "id": "github",
+          "result": {
+            "candidateCount": 0,
+            "candidates": [],
+            "findingCount": 1,
+            "findings": [
+              {
+                "column": 14,
+                "confidence": "high",
+                "explanation": {
+                  "detectionMode": "deterministic",
+                  "kind": "classified"
+                },
+                "line": 1,
+                "remediation": "revoke_and_rotate_credential",
+                "ruleId": "github.classic-pat",
+                "severity": "critical",
+                "span": {
+                  "end": 50,
+                  "start": 13
+                }
+              }
+            ],
+            "hasCritical": true,
+            "needsReview": true,
+            "sourceBytes": 51
+          },
+          "sourceBytes": 51
+        }
+      ],
+      "name": "default",
+      "rules": [
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "github.classic-pat",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "github.fine-grained-pat",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "github.oauth-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "github.app-user-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "github.app-installation-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "pattern",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "github.stateless-installation-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "github.app-refresh-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "gitlab.access-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "gitlab.oauth-application-secret",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "gitlab.deploy-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "gitlab.runner-auth-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "gitlab.registration-derived-runner-auth-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "gitlab.ci-job-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "gitlab.trigger-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "gitlab.feed-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "gitlab.incoming-mail-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "gitlab.agent-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "gitlab.workspace-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "gitlab.scim-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "gitlab.feature-flag-client-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "stripe.live-secret-key",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "stripe.test-secret-key",
+          "severity": "high"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "stripe.live-restricted-key",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "stripe.test-restricted-key",
+          "severity": "high"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "stripe.webhook-secret",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "cloudflare.global-api-key",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "cloudflare.user-api-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "cloudflare.account-api-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "slack.bot-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "slack.user-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "slack.app-level-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "slack.workflow-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "pattern",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "telegram.bot-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "pattern",
+          "remediation": "remove_sensitive_value",
+          "ruleId": "jwt.signed-compact",
+          "severity": "high"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "pattern",
+          "remediation": "replace_private_key",
+          "ruleId": "nats.nkey-seed",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "pattern",
+          "remediation": "replace_private_key",
+          "ruleId": "nats.nkey-private-key",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "matcher_only",
+          "kind": "pattern",
+          "remediation": "replace_private_key",
+          "ruleId": "generic.pkcs8-private-key",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "matcher_only",
+          "kind": "pattern",
+          "remediation": "replace_private_key",
+          "ruleId": "generic.encrypted-private-key",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "matcher_only",
+          "kind": "pattern",
+          "remediation": "replace_private_key",
+          "ruleId": "generic.rsa-private-key",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "matcher_only",
+          "kind": "pattern",
+          "remediation": "replace_private_key",
+          "ruleId": "generic.ec-private-key",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "matcher_only",
+          "kind": "pattern",
+          "remediation": "replace_private_key",
+          "ruleId": "generic.openssh-private-key",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "matcher_only",
+          "kind": "pattern",
+          "remediation": "replace_private_key",
+          "ruleId": "generic.pgp-private-key",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "aws.access-key-id",
+          "severity": "high"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "aws.temporary-access-key-id",
+          "severity": "high"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "aws.secret-access-key",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "aws.session-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "azure.client-secret",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "azure.storage-account-key",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "azure.shared-access-signature",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "gcp.private-key-id",
+          "severity": "high"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "replace_private_key",
+          "ruleId": "gcp.private-key",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "replace_private_key",
+          "ruleId": "gcp.escaped-private-key",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "rotate_password",
+          "ruleId": "docker.registry-auth",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "npm.registry-auth-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "npm.registry-auth",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "rotate_password",
+          "ruleId": "npm.registry-password",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "rotate_password",
+          "ruleId": "composer.http-basic-password",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "composer.bearer-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "composer.bitbucket-consumer-secret",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "composer.forgejo-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "cargo.registry-env-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "cargo.registry-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "pypi.repository-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "nuget.package-source-cleartext-password",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "maven.server-password",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "rubygems.api-key",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "rubygems.host-api-key",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "swiftpm.registry-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "rotate_password",
+          "ruleId": "swiftpm.registry-password",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "swiftpm.source-control-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "rotate_password",
+          "ruleId": "swiftpm.netrc-password",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "rotate_password",
+          "ruleId": "gradle.repository-password",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "gradle.repository-auth-header-value",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "rotate_password",
+          "ruleId": "netrc.password",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "rotate_password",
+          "ruleId": "generic.password-field",
+          "severity": "high"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "rotate_password",
+          "ruleId": "generic.database-password-field",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "rotate_password",
+          "ruleId": "generic.database-connection-password",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "rotate_password",
+          "ruleId": "generic.passphrase-field",
+          "severity": "high"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "review_sensitive_hash",
+          "ruleId": "generic.sensitive-hash",
+          "severity": "medium"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "rotate_credential",
+          "ruleId": "generic.api-key",
+          "severity": "high"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "rotate_credential",
+          "ruleId": "generic.auth-token",
+          "severity": "high"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "rotate_credential",
+          "ruleId": "generic.authorization-bearer",
+          "severity": "high"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "rotate_password",
+          "ruleId": "generic.authorization-basic",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "remove_sensitive_value",
+          "ruleId": "generic.secret",
+          "severity": "high"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "replace_private_key",
+          "ruleId": "wireguard.preshared-key",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "replace_private_key",
+          "ruleId": "wireguard.private-key",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "review_password_verifier",
+          "ruleId": "system.shadow-password-verifier",
+          "severity": "high"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "review_password_verifier",
+          "ruleId": "system.htpasswd-password-verifier",
+          "severity": "high"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "rotate_credential",
+          "ruleId": "mfa.otp-provisioning-secret",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "tailscale.api-access-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "tailscale.auth-key",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "tailscale.oauth-client-secret",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "tailscale.scim-key",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "tailscale.webhook-key",
+          "severity": "critical"
+        }
+      ],
+      "summary": {
+        "critical": 1,
+        "hasCandidates": false,
+        "hasCritical": true,
+        "high": 0,
+        "info": 0,
+        "isClean": false,
+        "low": 0,
+        "medium": 0,
+        "reportsWithCandidates": 0,
+        "reportsWithFindings": 1,
+        "reportsWithoutFindings": 0,
+        "scannedBytes": 51,
+        "scannedSources": 1,
+        "totalCandidates": 0,
+        "totalFindings": 1
+      }
+    },
+    {
+      "entries": [
+        {
+          "id": "github",
+          "result": {
+            "candidateCount": 0,
+            "candidates": [],
+            "findingCount": 0,
+            "findings": [],
+            "hasCritical": false,
+            "needsReview": false,
+            "sourceBytes": 51
+          },
+          "sourceBytes": 51
+        }
+      ],
+      "name": "explicit_empty",
+      "rules": [],
+      "summary": {
+        "critical": 0,
+        "hasCandidates": false,
+        "hasCritical": false,
+        "high": 0,
+        "info": 0,
+        "isClean": true,
+        "low": 0,
+        "medium": 0,
+        "reportsWithCandidates": 0,
+        "reportsWithFindings": 0,
+        "reportsWithoutFindings": 1,
+        "scannedBytes": 51,
+        "scannedSources": 1,
+        "totalCandidates": 0,
+        "totalFindings": 0
+      }
+    },
+    {
+      "entries": [
+        {
+          "id": "iban",
+          "result": {
+            "candidateCount": 0,
+            "candidates": [],
+            "findingCount": 1,
+            "findings": [
+              {
+                "column": 6,
+                "confidence": "high",
+                "explanation": {
+                  "detectionMode": "deterministic",
+                  "kind": "classified"
+                },
+                "line": 1,
+                "remediation": "remove_sensitive_value",
+                "ruleId": "financial.iban",
+                "severity": "high",
+                "span": {
+                  "end": 27,
+                  "start": 5
+                }
+              }
+            ],
+            "hasCritical": false,
+            "needsReview": true,
+            "sourceBytes": 28
+          },
+          "sourceBytes": 28
+        },
+        {
+          "id": "card",
+          "result": {
+            "candidateCount": 0,
+            "candidates": [],
+            "findingCount": 2,
+            "findings": [
+              {
+                "column": 13,
+                "confidence": "high",
+                "explanation": {
+                  "detectionMode": "contextual",
+                  "kind": "classified"
+                },
+                "line": 1,
+                "remediation": "remove_sensitive_value",
+                "ruleId": "financial.pan",
+                "severity": "high",
+                "span": {
+                  "end": 28,
+                  "start": 12
+                }
+              },
+              {
+                "column": 5,
+                "confidence": "high",
+                "explanation": {
+                  "detectionMode": "contextual",
+                  "kind": "classified"
+                },
+                "line": 2,
+                "remediation": "remove_sensitive_value",
+                "ruleId": "financial.card-verification-code",
+                "severity": "high",
+                "span": {
+                  "end": 36,
+                  "start": 33
+                }
+              }
+            ],
+            "hasCritical": false,
+            "needsReview": true,
+            "sourceBytes": 37
+          },
+          "sourceBytes": 37
+        }
+      ],
+      "name": "financial_only",
+      "rules": [
+        {
+          "detectionMode": "deterministic",
+          "kind": "pattern",
+          "remediation": "remove_sensitive_value",
+          "ruleId": "financial.iban",
+          "severity": "high"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "remove_sensitive_value",
+          "ruleId": "financial.pan",
+          "severity": "high"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "remove_sensitive_value",
+          "ruleId": "financial.card-verification-code",
+          "severity": "high"
+        }
+      ],
+      "summary": {
+        "critical": 0,
+        "hasCandidates": false,
+        "hasCritical": false,
+        "high": 3,
+        "info": 0,
+        "isClean": false,
+        "low": 0,
+        "medium": 0,
+        "reportsWithCandidates": 0,
+        "reportsWithFindings": 2,
+        "reportsWithoutFindings": 0,
+        "scannedBytes": 65,
+        "scannedSources": 2,
+        "totalCandidates": 0,
+        "totalFindings": 3
+      }
+    },
+    {
+      "entries": [
+        {
+          "id": "personal",
+          "result": {
+            "candidateCount": 0,
+            "candidates": [],
+            "findingCount": 3,
+            "findings": [
+              {
+                "column": 4,
+                "confidence": "high",
+                "explanation": {
+                  "detectionMode": "deterministic",
+                  "kind": "classified"
+                },
+                "line": 1,
+                "remediation": "remove_sensitive_value",
+                "ruleId": "personal.it-codice-fiscale",
+                "severity": "high",
+                "span": {
+                  "end": 19,
+                  "start": 3
+                }
+              },
+              {
+                "column": 5,
+                "confidence": "high",
+                "explanation": {
+                  "detectionMode": "contextual",
+                  "kind": "classified"
+                },
+                "line": 2,
+                "remediation": "remove_sensitive_value",
+                "ruleId": "personal.us-ssn",
+                "severity": "high",
+                "span": {
+                  "end": 35,
+                  "start": 24
+                }
+              },
+              {
+                "column": 12,
+                "confidence": "high",
+                "explanation": {
+                  "detectionMode": "contextual",
+                  "kind": "classified"
+                },
+                "line": 3,
+                "remediation": "remove_sensitive_value",
+                "ruleId": "personal.uk-nhs-number",
+                "severity": "high",
+                "span": {
+                  "end": 59,
+                  "start": 47
+                }
+              }
+            ],
+            "hasCritical": false,
+            "needsReview": true,
+            "sourceBytes": 60
+          },
+          "sourceBytes": 60
+        }
+      ],
+      "name": "personal_only",
+      "rules": [
+        {
+          "detectionMode": "deterministic",
+          "kind": "pattern",
+          "remediation": "remove_sensitive_value",
+          "ruleId": "personal.it-codice-fiscale",
+          "severity": "high"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "pattern",
+          "remediation": "remove_sensitive_value",
+          "ruleId": "personal.pl-pesel",
+          "severity": "high"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "remove_sensitive_value",
+          "ruleId": "personal.uk-nhs-number",
+          "severity": "high"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "remove_sensitive_value",
+          "ruleId": "personal.us-ssn",
+          "severity": "high"
+        }
+      ],
+      "summary": {
+        "critical": 0,
+        "hasCandidates": false,
+        "hasCritical": false,
+        "high": 3,
+        "info": 0,
+        "isClean": false,
+        "low": 0,
+        "medium": 0,
+        "reportsWithCandidates": 0,
+        "reportsWithFindings": 1,
+        "reportsWithoutFindings": 0,
+        "scannedBytes": 60,
+        "scannedSources": 1,
+        "totalCandidates": 0,
+        "totalFindings": 3
+      }
+    },
+    {
+      "entries": [
+        {
+          "id": "mixed",
+          "result": {
+            "candidateCount": 0,
+            "candidates": [],
+            "findingCount": 3,
+            "findings": [
+              {
+                "column": 14,
+                "confidence": "high",
+                "explanation": {
+                  "detectionMode": "deterministic",
+                  "kind": "classified"
+                },
+                "line": 1,
+                "remediation": "revoke_and_rotate_credential",
+                "ruleId": "github.classic-pat",
+                "severity": "critical",
+                "span": {
+                  "end": 50,
+                  "start": 13
+                }
+              },
+              {
+                "column": 6,
+                "confidence": "high",
+                "explanation": {
+                  "detectionMode": "deterministic",
+                  "kind": "classified"
+                },
+                "line": 2,
+                "remediation": "remove_sensitive_value",
+                "ruleId": "financial.iban",
+                "severity": "high",
+                "span": {
+                  "end": 78,
+                  "start": 56
+                }
+              },
+              {
+                "column": 4,
+                "confidence": "high",
+                "explanation": {
+                  "detectionMode": "deterministic",
+                  "kind": "classified"
+                },
+                "line": 3,
+                "remediation": "remove_sensitive_value",
+                "ruleId": "personal.it-codice-fiscale",
+                "severity": "high",
+                "span": {
+                  "end": 98,
+                  "start": 82
+                }
+              }
+            ],
+            "hasCritical": true,
+            "needsReview": true,
+            "sourceBytes": 99
+          },
+          "sourceBytes": 99
+        }
+      ],
+      "name": "all_catalogs",
+      "rules": [
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "github.classic-pat",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "github.fine-grained-pat",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "github.oauth-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "github.app-user-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "github.app-installation-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "pattern",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "github.stateless-installation-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "github.app-refresh-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "gitlab.access-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "gitlab.oauth-application-secret",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "gitlab.deploy-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "gitlab.runner-auth-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "gitlab.registration-derived-runner-auth-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "gitlab.ci-job-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "gitlab.trigger-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "gitlab.feed-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "gitlab.incoming-mail-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "gitlab.agent-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "gitlab.workspace-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "gitlab.scim-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "gitlab.feature-flag-client-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "stripe.live-secret-key",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "stripe.test-secret-key",
+          "severity": "high"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "stripe.live-restricted-key",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "stripe.test-restricted-key",
+          "severity": "high"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "stripe.webhook-secret",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "cloudflare.global-api-key",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "cloudflare.user-api-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "cloudflare.account-api-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "slack.bot-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "slack.user-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "slack.app-level-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "slack.workflow-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "pattern",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "telegram.bot-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "pattern",
+          "remediation": "remove_sensitive_value",
+          "ruleId": "jwt.signed-compact",
+          "severity": "high"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "pattern",
+          "remediation": "replace_private_key",
+          "ruleId": "nats.nkey-seed",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "pattern",
+          "remediation": "replace_private_key",
+          "ruleId": "nats.nkey-private-key",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "matcher_only",
+          "kind": "pattern",
+          "remediation": "replace_private_key",
+          "ruleId": "generic.pkcs8-private-key",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "matcher_only",
+          "kind": "pattern",
+          "remediation": "replace_private_key",
+          "ruleId": "generic.encrypted-private-key",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "matcher_only",
+          "kind": "pattern",
+          "remediation": "replace_private_key",
+          "ruleId": "generic.rsa-private-key",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "matcher_only",
+          "kind": "pattern",
+          "remediation": "replace_private_key",
+          "ruleId": "generic.ec-private-key",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "matcher_only",
+          "kind": "pattern",
+          "remediation": "replace_private_key",
+          "ruleId": "generic.openssh-private-key",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "matcher_only",
+          "kind": "pattern",
+          "remediation": "replace_private_key",
+          "ruleId": "generic.pgp-private-key",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "aws.access-key-id",
+          "severity": "high"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "aws.temporary-access-key-id",
+          "severity": "high"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "aws.secret-access-key",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "aws.session-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "azure.client-secret",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "azure.storage-account-key",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "azure.shared-access-signature",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "gcp.private-key-id",
+          "severity": "high"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "replace_private_key",
+          "ruleId": "gcp.private-key",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "replace_private_key",
+          "ruleId": "gcp.escaped-private-key",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "rotate_password",
+          "ruleId": "docker.registry-auth",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "npm.registry-auth-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "npm.registry-auth",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "rotate_password",
+          "ruleId": "npm.registry-password",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "rotate_password",
+          "ruleId": "composer.http-basic-password",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "composer.bearer-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "composer.bitbucket-consumer-secret",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "composer.forgejo-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "cargo.registry-env-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "cargo.registry-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "pypi.repository-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "nuget.package-source-cleartext-password",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "maven.server-password",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "rubygems.api-key",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "rubygems.host-api-key",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "swiftpm.registry-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "rotate_password",
+          "ruleId": "swiftpm.registry-password",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "swiftpm.source-control-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "rotate_password",
+          "ruleId": "swiftpm.netrc-password",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "rotate_password",
+          "ruleId": "gradle.repository-password",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "gradle.repository-auth-header-value",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "rotate_password",
+          "ruleId": "netrc.password",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "rotate_password",
+          "ruleId": "generic.password-field",
+          "severity": "high"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "rotate_password",
+          "ruleId": "generic.database-password-field",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "rotate_password",
+          "ruleId": "generic.database-connection-password",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "rotate_password",
+          "ruleId": "generic.passphrase-field",
+          "severity": "high"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "review_sensitive_hash",
+          "ruleId": "generic.sensitive-hash",
+          "severity": "medium"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "rotate_credential",
+          "ruleId": "generic.api-key",
+          "severity": "high"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "rotate_credential",
+          "ruleId": "generic.auth-token",
+          "severity": "high"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "rotate_credential",
+          "ruleId": "generic.authorization-bearer",
+          "severity": "high"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "rotate_password",
+          "ruleId": "generic.authorization-basic",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "remove_sensitive_value",
+          "ruleId": "generic.secret",
+          "severity": "high"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "replace_private_key",
+          "ruleId": "wireguard.preshared-key",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "replace_private_key",
+          "ruleId": "wireguard.private-key",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "review_password_verifier",
+          "ruleId": "system.shadow-password-verifier",
+          "severity": "high"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "review_password_verifier",
+          "ruleId": "system.htpasswd-password-verifier",
+          "severity": "high"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "rotate_credential",
+          "ruleId": "mfa.otp-provisioning-secret",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "tailscale.api-access-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "tailscale.auth-key",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "tailscale.oauth-client-secret",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "tailscale.scim-key",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "tailscale.webhook-key",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "pattern",
+          "remediation": "remove_sensitive_value",
+          "ruleId": "financial.iban",
+          "severity": "high"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "remove_sensitive_value",
+          "ruleId": "financial.pan",
+          "severity": "high"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "remove_sensitive_value",
+          "ruleId": "financial.card-verification-code",
+          "severity": "high"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "pattern",
+          "remediation": "remove_sensitive_value",
+          "ruleId": "personal.it-codice-fiscale",
+          "severity": "high"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "pattern",
+          "remediation": "remove_sensitive_value",
+          "ruleId": "personal.pl-pesel",
+          "severity": "high"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "remove_sensitive_value",
+          "ruleId": "personal.uk-nhs-number",
+          "severity": "high"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "remove_sensitive_value",
+          "ruleId": "personal.us-ssn",
+          "severity": "high"
+        }
+      ],
+      "summary": {
+        "critical": 1,
+        "hasCandidates": false,
+        "hasCritical": true,
+        "high": 2,
+        "info": 0,
+        "isClean": false,
+        "low": 0,
+        "medium": 0,
+        "reportsWithCandidates": 0,
+        "reportsWithFindings": 1,
+        "reportsWithoutFindings": 0,
+        "scannedBytes": 99,
+        "scannedSources": 1,
+        "totalCandidates": 0,
+        "totalFindings": 3
+      }
+    },
+    {
+      "entries": [
+        {
+          "id": "literal",
+          "result": {
+            "candidateCount": 0,
+            "candidates": [],
+            "findingCount": 1,
+            "findings": [
+              {
+                "column": 7,
+                "confidence": "high",
+                "explanation": {
+                  "detectionMode": "matcher_only",
+                  "kind": "classified"
+                },
+                "line": 1,
+                "remediation": "rotate_credential",
+                "ruleId": "custom.acme-literal",
+                "severity": "high",
+                "span": {
+                  "end": 21,
+                  "start": 6
+                }
+              }
+            ],
+            "hasCritical": false,
+            "needsReview": true,
+            "sourceBytes": 31
+          },
+          "sourceBytes": 31
+        }
+      ],
+      "name": "custom_literal",
+      "rules": [
+        {
+          "detectionMode": "matcher_only",
+          "kind": "literal",
+          "remediation": "rotate_credential",
+          "ruleId": "custom.acme-literal",
+          "severity": "high"
+        }
+      ],
+      "summary": {
+        "critical": 0,
+        "hasCandidates": false,
+        "hasCritical": false,
+        "high": 1,
+        "info": 0,
+        "isClean": false,
+        "low": 0,
+        "medium": 0,
+        "reportsWithCandidates": 0,
+        "reportsWithFindings": 1,
+        "reportsWithoutFindings": 0,
+        "scannedBytes": 31,
+        "scannedSources": 1,
+        "totalCandidates": 0,
+        "totalFindings": 1
+      }
+    },
+    {
+      "entries": [
+        {
+          "id": "prefix",
+          "result": {
+            "candidateCount": 0,
+            "candidates": [],
+            "findingCount": 1,
+            "findings": [
+              {
+                "column": 5,
+                "confidence": "high",
+                "explanation": {
+                  "detectionMode": "matcher_only",
+                  "kind": "classified"
+                },
+                "line": 1,
+                "remediation": "revoke_and_rotate_credential",
+                "ruleId": "custom.acme-prefix",
+                "severity": "medium",
+                "span": {
+                  "end": 23,
+                  "start": 4
+                }
+              }
+            ],
+            "hasCritical": false,
+            "needsReview": true,
+            "sourceBytes": 24
+          },
+          "sourceBytes": 24
+        }
+      ],
+      "name": "custom_prefix",
+      "rules": [
+        {
+          "detectionMode": "matcher_only",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "custom.acme-prefix",
+          "severity": "medium"
+        }
+      ],
+      "summary": {
+        "critical": 0,
+        "hasCandidates": false,
+        "hasCritical": false,
+        "high": 0,
+        "info": 0,
+        "isClean": false,
+        "low": 0,
+        "medium": 1,
+        "reportsWithCandidates": 0,
+        "reportsWithFindings": 1,
+        "reportsWithoutFindings": 0,
+        "scannedBytes": 24,
+        "scannedSources": 1,
+        "totalCandidates": 0,
+        "totalFindings": 1
+      }
+    },
+    {
+      "entries": [
+        {
+          "id": "suffix",
+          "result": {
+            "candidateCount": 0,
+            "candidates": [],
+            "findingCount": 1,
+            "findings": [
+              {
+                "column": 7,
+                "confidence": "high",
+                "explanation": {
+                  "detectionMode": "matcher_only",
+                  "kind": "classified"
+                },
+                "line": 1,
+                "remediation": null,
+                "ruleId": "custom.acme-suffix",
+                "severity": "low",
+                "span": {
+                  "end": 28,
+                  "start": 6
+                }
+              }
+            ],
+            "hasCritical": false,
+            "needsReview": true,
+            "sourceBytes": 29
+          },
+          "sourceBytes": 29
+        }
+      ],
+      "name": "custom_suffix",
+      "rules": [
+        {
+          "detectionMode": "matcher_only",
+          "kind": "suffix",
+          "remediation": null,
+          "ruleId": "custom.acme-suffix",
+          "severity": "low"
+        }
+      ],
+      "summary": {
+        "critical": 0,
+        "hasCandidates": false,
+        "hasCritical": false,
+        "high": 0,
+        "info": 0,
+        "isClean": false,
+        "low": 1,
+        "medium": 0,
+        "reportsWithCandidates": 0,
+        "reportsWithFindings": 1,
+        "reportsWithoutFindings": 0,
+        "scannedBytes": 29,
+        "scannedSources": 1,
+        "totalCandidates": 0,
+        "totalFindings": 1
+      }
+    },
+    {
+      "entries": [
+        {
+          "id": "pattern",
+          "result": {
+            "candidateCount": 0,
+            "candidates": [],
+            "findingCount": 1,
+            "findings": [
+              {
+                "column": 6,
+                "confidence": "high",
+                "explanation": {
+                  "detectionMode": "matcher_only",
+                  "kind": "classified"
+                },
+                "line": 1,
+                "remediation": "remove_sensitive_value",
+                "ruleId": "custom.acme-pattern",
+                "severity": "critical",
+                "span": {
+                  "end": 17,
+                  "start": 5
+                }
+              }
+            ],
+            "hasCritical": true,
+            "needsReview": true,
+            "sourceBytes": 33
+          },
+          "sourceBytes": 33
+        }
+      ],
+      "name": "custom_pattern",
+      "rules": [
+        {
+          "detectionMode": "matcher_only",
+          "kind": "pattern",
+          "remediation": "remove_sensitive_value",
+          "ruleId": "custom.acme-pattern",
+          "severity": "critical"
+        }
+      ],
+      "summary": {
+        "critical": 1,
+        "hasCandidates": false,
+        "hasCritical": true,
+        "high": 0,
+        "info": 0,
+        "isClean": false,
+        "low": 0,
+        "medium": 0,
+        "reportsWithCandidates": 0,
+        "reportsWithFindings": 1,
+        "reportsWithoutFindings": 0,
+        "scannedBytes": 33,
+        "scannedSources": 1,
+        "totalCandidates": 0,
+        "totalFindings": 1
+      }
+    },
+    {
+      "entries": [
+        {
+          "id": "all",
+          "result": {
+            "candidateCount": 0,
+            "candidates": [],
+            "findingCount": 4,
+            "findings": [
+              {
+                "column": 1,
+                "confidence": "high",
+                "explanation": {
+                  "detectionMode": "matcher_only",
+                  "kind": "classified"
+                },
+                "line": 1,
+                "remediation": null,
+                "ruleId": "custom.literal",
+                "severity": "info",
+                "span": {
+                  "end": 14,
+                  "start": 0
+                }
+              },
+              {
+                "column": 16,
+                "confidence": "high",
+                "explanation": {
+                  "detectionMode": "matcher_only",
+                  "kind": "classified"
+                },
+                "line": 1,
+                "remediation": null,
+                "ruleId": "custom.prefix",
+                "severity": "low",
+                "span": {
+                  "end": 27,
+                  "start": 15
+                }
+              },
+              {
+                "column": 29,
+                "confidence": "high",
+                "explanation": {
+                  "detectionMode": "matcher_only",
+                  "kind": "classified"
+                },
+                "line": 1,
+                "remediation": null,
+                "ruleId": "custom.suffix",
+                "severity": "medium",
+                "span": {
+                  "end": 40,
+                  "start": 28
+                }
+              },
+              {
+                "column": 42,
+                "confidence": "high",
+                "explanation": {
+                  "detectionMode": "matcher_only",
+                  "kind": "classified"
+                },
+                "line": 1,
+                "remediation": "review_sensitive_hash",
+                "ruleId": "custom.pattern",
+                "severity": "high",
+                "span": {
+                  "end": 51,
+                  "start": 41
+                }
+              }
+            ],
+            "hasCritical": false,
+            "needsReview": true,
+            "sourceBytes": 52
+          },
+          "sourceBytes": 52
+        }
+      ],
+      "name": "custom_all_kinds",
+      "rules": [
+        {
+          "detectionMode": "matcher_only",
+          "kind": "literal",
+          "remediation": null,
+          "ruleId": "custom.literal",
+          "severity": "info"
+        },
+        {
+          "detectionMode": "matcher_only",
+          "kind": "prefix",
+          "remediation": null,
+          "ruleId": "custom.prefix",
+          "severity": "low"
+        },
+        {
+          "detectionMode": "matcher_only",
+          "kind": "suffix",
+          "remediation": null,
+          "ruleId": "custom.suffix",
+          "severity": "medium"
+        },
+        {
+          "detectionMode": "matcher_only",
+          "kind": "pattern",
+          "remediation": "review_sensitive_hash",
+          "ruleId": "custom.pattern",
+          "severity": "high"
+        }
+      ],
+      "summary": {
+        "critical": 0,
+        "hasCandidates": false,
+        "hasCritical": false,
+        "high": 1,
+        "info": 1,
+        "isClean": false,
+        "low": 1,
+        "medium": 1,
+        "reportsWithCandidates": 0,
+        "reportsWithFindings": 1,
+        "reportsWithoutFindings": 0,
+        "scannedBytes": 52,
+        "scannedSources": 1,
+        "totalCandidates": 0,
+        "totalFindings": 4
+      }
+    },
+    {
+      "entries": [
+        {
+          "id": "mixed",
+          "result": {
+            "candidateCount": 0,
+            "candidates": [],
+            "findingCount": 2,
+            "findings": [
+              {
+                "column": 8,
+                "confidence": "high",
+                "explanation": {
+                  "detectionMode": "matcher_only",
+                  "kind": "classified"
+                },
+                "line": 1,
+                "remediation": null,
+                "ruleId": "custom.acme-catalog",
+                "severity": "high",
+                "span": {
+                  "end": 25,
+                  "start": 7
+                }
+              },
+              {
+                "column": 9,
+                "confidence": "high",
+                "explanation": {
+                  "detectionMode": "deterministic",
+                  "kind": "classified"
+                },
+                "line": 2,
+                "remediation": "revoke_and_rotate_credential",
+                "ruleId": "github.classic-pat",
+                "severity": "critical",
+                "span": {
+                  "end": 71,
+                  "start": 34
+                }
+              }
+            ],
+            "hasCritical": true,
+            "needsReview": true,
+            "sourceBytes": 72
+          },
+          "sourceBytes": 72
+        }
+      ],
+      "name": "custom_before_catalog",
+      "rules": [
+        {
+          "detectionMode": "matcher_only",
+          "kind": "literal",
+          "remediation": null,
+          "ruleId": "custom.acme-catalog",
+          "severity": "high"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "github.classic-pat",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "github.fine-grained-pat",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "github.oauth-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "github.app-user-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "github.app-installation-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "pattern",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "github.stateless-installation-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "github.app-refresh-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "gitlab.access-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "gitlab.oauth-application-secret",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "gitlab.deploy-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "gitlab.runner-auth-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "gitlab.registration-derived-runner-auth-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "gitlab.ci-job-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "gitlab.trigger-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "gitlab.feed-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "gitlab.incoming-mail-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "gitlab.agent-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "gitlab.workspace-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "gitlab.scim-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "gitlab.feature-flag-client-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "stripe.live-secret-key",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "stripe.test-secret-key",
+          "severity": "high"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "stripe.live-restricted-key",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "stripe.test-restricted-key",
+          "severity": "high"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "stripe.webhook-secret",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "cloudflare.global-api-key",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "cloudflare.user-api-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "cloudflare.account-api-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "slack.bot-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "slack.user-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "slack.app-level-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "slack.workflow-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "pattern",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "telegram.bot-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "pattern",
+          "remediation": "remove_sensitive_value",
+          "ruleId": "jwt.signed-compact",
+          "severity": "high"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "pattern",
+          "remediation": "replace_private_key",
+          "ruleId": "nats.nkey-seed",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "pattern",
+          "remediation": "replace_private_key",
+          "ruleId": "nats.nkey-private-key",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "matcher_only",
+          "kind": "pattern",
+          "remediation": "replace_private_key",
+          "ruleId": "generic.pkcs8-private-key",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "matcher_only",
+          "kind": "pattern",
+          "remediation": "replace_private_key",
+          "ruleId": "generic.encrypted-private-key",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "matcher_only",
+          "kind": "pattern",
+          "remediation": "replace_private_key",
+          "ruleId": "generic.rsa-private-key",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "matcher_only",
+          "kind": "pattern",
+          "remediation": "replace_private_key",
+          "ruleId": "generic.ec-private-key",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "matcher_only",
+          "kind": "pattern",
+          "remediation": "replace_private_key",
+          "ruleId": "generic.openssh-private-key",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "matcher_only",
+          "kind": "pattern",
+          "remediation": "replace_private_key",
+          "ruleId": "generic.pgp-private-key",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "aws.access-key-id",
+          "severity": "high"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "aws.temporary-access-key-id",
+          "severity": "high"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "aws.secret-access-key",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "aws.session-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "azure.client-secret",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "azure.storage-account-key",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "azure.shared-access-signature",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "gcp.private-key-id",
+          "severity": "high"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "replace_private_key",
+          "ruleId": "gcp.private-key",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "replace_private_key",
+          "ruleId": "gcp.escaped-private-key",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "rotate_password",
+          "ruleId": "docker.registry-auth",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "npm.registry-auth-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "npm.registry-auth",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "rotate_password",
+          "ruleId": "npm.registry-password",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "rotate_password",
+          "ruleId": "composer.http-basic-password",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "composer.bearer-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "composer.bitbucket-consumer-secret",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "composer.forgejo-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "cargo.registry-env-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "cargo.registry-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "pypi.repository-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "nuget.package-source-cleartext-password",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "maven.server-password",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "rubygems.api-key",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "rubygems.host-api-key",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "swiftpm.registry-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "rotate_password",
+          "ruleId": "swiftpm.registry-password",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "swiftpm.source-control-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "rotate_password",
+          "ruleId": "swiftpm.netrc-password",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "rotate_password",
+          "ruleId": "gradle.repository-password",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "gradle.repository-auth-header-value",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "rotate_password",
+          "ruleId": "netrc.password",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "rotate_password",
+          "ruleId": "generic.password-field",
+          "severity": "high"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "rotate_password",
+          "ruleId": "generic.database-password-field",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "rotate_password",
+          "ruleId": "generic.database-connection-password",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "rotate_password",
+          "ruleId": "generic.passphrase-field",
+          "severity": "high"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "review_sensitive_hash",
+          "ruleId": "generic.sensitive-hash",
+          "severity": "medium"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "rotate_credential",
+          "ruleId": "generic.api-key",
+          "severity": "high"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "rotate_credential",
+          "ruleId": "generic.auth-token",
+          "severity": "high"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "rotate_credential",
+          "ruleId": "generic.authorization-bearer",
+          "severity": "high"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "rotate_password",
+          "ruleId": "generic.authorization-basic",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "remove_sensitive_value",
+          "ruleId": "generic.secret",
+          "severity": "high"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "replace_private_key",
+          "ruleId": "wireguard.preshared-key",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "replace_private_key",
+          "ruleId": "wireguard.private-key",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "review_password_verifier",
+          "ruleId": "system.shadow-password-verifier",
+          "severity": "high"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "review_password_verifier",
+          "ruleId": "system.htpasswd-password-verifier",
+          "severity": "high"
+        },
+        {
+          "detectionMode": "contextual",
+          "kind": "pattern",
+          "remediation": "rotate_credential",
+          "ruleId": "mfa.otp-provisioning-secret",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "tailscale.api-access-token",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "tailscale.auth-key",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "tailscale.oauth-client-secret",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "tailscale.scim-key",
+          "severity": "critical"
+        },
+        {
+          "detectionMode": "deterministic",
+          "kind": "prefix",
+          "remediation": "revoke_and_rotate_credential",
+          "ruleId": "tailscale.webhook-key",
+          "severity": "critical"
+        }
+      ],
+      "summary": {
+        "critical": 1,
+        "hasCandidates": false,
+        "hasCritical": true,
+        "high": 1,
+        "info": 0,
+        "isClean": false,
+        "low": 0,
+        "medium": 0,
+        "reportsWithCandidates": 0,
+        "reportsWithFindings": 1,
+        "reportsWithoutFindings": 0,
+        "scannedBytes": 72,
+        "scannedSources": 1,
+        "totalCandidates": 0,
+        "totalFindings": 2
+      }
+    },
+    {
+      "error": {
+        "code": 1,
+        "ruleId": "custom.bad-regex"
+      },
+      "name": "error_invalid_pattern"
+    },
+    {
+      "error": {
+        "code": 2,
+        "ruleId": "custom.empty-match"
+      },
+      "name": "error_pattern_matches_empty"
+    },
+    {
+      "error": {
+        "code": 4,
+        "ruleId": null
+      },
+      "name": "error_empty_rule_id"
+    },
+    {
+      "error": {
+        "code": 5,
+        "ruleId": "custom.duplicate"
+      },
+      "name": "error_duplicate_rule_id"
+    },
+    {
+      "error": {
+        "code": 5,
+        "ruleId": ""
+      },
+      "name": "error_duplicate_empty_ids"
+    },
+    {
+      "error": {
+        "code": 6,
+        "ruleId": "custom.empty-literal"
+      },
+      "name": "error_empty_literal"
+    },
+    {
+      "error": {
+        "code": 6,
+        "ruleId": "custom.empty-prefix"
+      },
+      "name": "error_empty_prefix"
+    },
+    {
+      "error": {
+        "code": 6,
+        "ruleId": "custom.empty-suffix"
+      },
+      "name": "error_empty_suffix"
+    },
+    {
+      "error": {
+        "code": 5,
+        "ruleId": "github.classic-pat"
+      },
+      "name": "error_catalog_collision"
+    }
+  ]
+}

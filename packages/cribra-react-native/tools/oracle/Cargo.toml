@@ -1,0 +1,11 @@
+[package]
+name = "cribra-rn-oracle"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+cribra = { path = "../../../.." }
+serde_json = "1.0"

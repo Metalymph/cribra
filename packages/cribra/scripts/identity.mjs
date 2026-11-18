@@ -11,8 +11,14 @@ import { resolve } from "node:path";
 
 import { packageRoot } from "./util.mjs";
 
-/** The provisional development identity. Release mode rejects this name. */
-export const PROVISIONAL_PACKAGE_NAME = "cribra-typescript";
+/**
+ * The legacy development identity. It is kept only so release gates can reject
+ * it explicitly; the approved identity is `@metalymph/cribra`.
+ */
+export const LEGACY_PACKAGE_NAME = "cribra-typescript";
+
+/** @deprecated Use `LEGACY_PACKAGE_NAME`; retained for older scripts. */
+export const PROVISIONAL_PACKAGE_NAME = LEGACY_PACKAGE_NAME;
 
 /** Git tag namespace for the independently versioned TypeScript package. */
 export const RELEASE_TAG_PREFIX = "typescript-v";
@@ -93,10 +99,7 @@ export function releasePolicy(manifest) {
 
 export function isProvisional(manifest) {
   const policy = releasePolicy(manifest);
-  return (
-    manifest.name === PROVISIONAL_PACKAGE_NAME ||
-    policy.state !== "approved"
-  );
+  return manifest.name === LEGACY_PACKAGE_NAME || policy.state !== "approved";
 }
 
 export function publishConfig(manifest) {
@@ -117,16 +120,16 @@ export function publishConfig(manifest) {
  * Fail closed unless the manifest is an approved, publishable Flow package.
  *
  * `cribraRelease.state` must be `approved` and `cribraRelease.approvedName`
- * must equal `name`. The provisional manifest deliberately keeps state
- * `pending-ownership`, so staging cannot run before the rename is authorized.
+ * must equal `name`. Any other state or the legacy `cribra-typescript` name is
+ * rejected so staging cannot run with an unapproved identity.
  */
 export function assertReleaseIdentity(manifest) {
   const policy = releasePolicy(manifest);
   if (policy.state !== "approved") {
     throw new Error(
       `release identity is not approved (${RELEASE_POLICY_FIELD}.state=` +
-        `${String(policy.state ?? "missing")}); rename the package only after ` +
-        "authenticated npm ownership is verified",
+        `${String(policy.state ?? "missing")}); set the approved identity ` +
+        `before preparing a release`,
     );
   }
   if (manifest.name !== policy.approvedName) {
@@ -135,9 +138,9 @@ export function assertReleaseIdentity(manifest) {
         `${String(policy.approvedName)}`,
     );
   }
-  if (manifest.name === PROVISIONAL_PACKAGE_NAME) {
+  if (manifest.name === LEGACY_PACKAGE_NAME) {
     throw new Error(
-      `release identity is still the provisional name ${PROVISIONAL_PACKAGE_NAME}`,
+      `release identity is still the legacy name ${LEGACY_PACKAGE_NAME}`,
     );
   }
   if (manifest.private === true) {

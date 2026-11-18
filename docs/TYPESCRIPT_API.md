@@ -2,13 +2,14 @@
 
 Status: **implemented for the WebAssembly Flow profile — W3.2B-2 foundation,
 W3.2B-3 streaming/incremental, W3.2B-4 transformations and Share Bundles,
-W3.2C-1 installed-artifact qualification, and W3.2C-2 release readiness. Core
-rejects transformations and Share Bundles with `unsupported_capability`.
+W3.2C-1 installed-artifact qualification, W3.2C-2 release readiness, and
+W3.2C-4 approved npm identity `@metalymph/cribra@0.1.0` (not yet published).
+Core rejects transformations and Share Bundles with `unsupported_capability`.
 Qualified from packed tarballs on Node 22/24/26, Chrome, Chromium, Playwright
 Firefox, Playwright WebKit, Vite, and webpack. Native Safari remains unverified
 because remote automation is not enabled.**
 
-## 0. Distribution qualification (W3.2C-1, release readiness W3.2C-2)
+## 0. Distribution qualification (W3.2C-1, release readiness W3.2C-2, approved identity W3.2C-4)
 
 The public artifact is the Flow package. A separately labeled test-only Core
 tarball is used only to prove capability gating. Qualification installs each
@@ -17,11 +18,11 @@ source, `dist/`, or a workspace alias.
 
 Package identity and version are read from `packages/cribra/package.json`; no
 qualification, packing, type-test, or release script hardcodes them. The
-current working identity is `cribra-typescript@0.1.0`, marked `"private": true`.
-`cribraRelease.approvedName` records `@metalymph/cribra`, but
-`cribraRelease.state` remains `"pending-ownership"` until authenticated npm
-ownership is proven. Release mode fails closed until both the literal rename and
-the state are approved. The TypeScript package follows its own SemVer and
+approved identity is `@metalymph/cribra@0.1.0`: `private` is absent and
+`cribraRelease.state` is `"approved"`. Authenticated npm ownership of the
+`@metalymph` scope was verified in W3.2C-4. The package is **not published**;
+no registry record exists. The legacy `cribra-typescript` name is rejected by
+release gates. The TypeScript package follows its own SemVer and
 `typescript-v*` tag namespace; it is independent of Core and `cribra-wasm`
 versions.
 
@@ -64,7 +65,7 @@ changing host settings.
 Revision: W3.2A-1R review corrections applied.
 
 Scope: W3.2A contract for one public TypeScript API shared by a
-WebAssembly backend (initial) and a future native backend. This document
+WebAssembly backend (initial) and a future native Node.js backend. This document
 contains no implementation and requires no Core, binding, or release change.
 
 Related contracts:
@@ -88,7 +89,7 @@ This document defines one isomorphic TypeScript contract that:
 - returns serializable data instead of native handles;
 - keeps UTF-8 byte offsets explicit;
 - reports real, backend-specific capabilities instead of assumed parity;
-- can later be satisfied by a native backend without changing public types.
+- can later be satisfied by a native Node.js backend without changing public types.
 
 ### Evidence conventions
 
@@ -164,10 +165,10 @@ Legend:
   adapter; `Flow only` means available only with the `transform` feature;
   `Absent` means no export exists.
 - **TypeScript implementation** — `None` means specified by this document but
-  not implemented in the private package. W3.2B-2 implemented the foundation,
-  W3.2B-3 streaming and incremental scanning, and W3.2B-4 transformations and
-  Share Bundles. Final qualification covers Node ESM and Chrome for both
-  profiles; bundlers and other browsers remain out of scope.
+  not implemented in the package. W3.2B-2 implemented the foundation, W3.2B-3
+  streaming and incremental scanning, and W3.2B-4 transformations and Share
+  Bundles. W3.2C-1 qualified Node ESM, TypeScript, selected browsers and
+  bundlers from installed tarballs.
 
 | Capability | Rust Core | WASM adapter (existing) | TypeScript contract | TypeScript implementation |
 | --- | --- | --- | --- | --- |
@@ -190,7 +191,7 @@ Legend:
 | Core/adapter versions | Crate metadata only | Adapter version exported; Core version absent | `getVersion` | Implemented (adapter version only) |
 | Capability probing | No | Exported | `getCapabilities` | Implemented (W3.2B-2) |
 | Transform an already-stored result | Yes, with `&ScanReport` | Live native result only | Not offered | None (deferred) |
-| Native backend | n/a | n/a | Same contract | None (future) |
+| Native Node.js backend | n/a | n/a | Same contract | None (future) |
 
 The capability taxonomy and its separation from streaming admission are defined
 in section 8.
@@ -770,7 +771,9 @@ Loading requirements:
   qualified with the package imported by name and the conditional browser entry
   selected. Rollup directly and esbuild directly are **not** claimed; those
   callers can pass explicit `InitOptions.wasm` bytes or URLs.
-- React Native is **not** claimed. It is a separate qualification target.
+- React Native through this WebAssembly package is **not** claimed. The separate
+  native `@metalymph/cribra-react-native` package has its own qualification; see
+  `website/src/content/docs/integration-react-native.md`.
 
 ### 4.2 Repeated and concurrent initialization
 
@@ -1277,12 +1280,11 @@ exported signature.
 
 ```json
 {
-  "name": "cribra-typescript",
+  "name": "@metalymph/cribra",
   "version": "0.1.0",
-  "private": true,
   "cribraRelease": {
     "approvedName": "@metalymph/cribra",
-    "state": "pending-ownership",
+    "state": "approved",
     "tagPrefix": "typescript-v",
     "distTag": "latest",
     "registry": "https://registry.npmjs.org/"
@@ -1314,8 +1316,8 @@ exported signature.
   tags. Scripts fail if a generated artifact disagrees with `package.json`.
 - **Release gate.** `cribraRelease.state` must be `"approved"` and
   `cribraRelease.approvedName` must equal `name` before release-mode checks
-  pass. The provisional state fails closed, so the literal rename to
-  `@metalymph/cribra` cannot be skipped by an operational mistake.
+  pass. The legacy `cribra-typescript` name is rejected, so an accidental
+  downgrade of the identity cannot pass staging.
 - **Independent versioning.** The package uses its own SemVer and
   `typescript-v<version>` tags. It is not synchronized with Core or
   `cribra-wasm`.
@@ -1361,14 +1363,15 @@ dynamic import. Vite and webpack rewrite `new URL(..., import.meta.url)` into an
 emitted hashed asset and are qualified. Rollup directly and esbuild directly
 are not assumed; those callers can always pass explicit bytes to `init()`.
 
-### 9.4 Future native backend
+### 9.4 Future native Node.js backend
 
 - The public `index.ts` types stay identical.
 - `init({ backend: "native" })` or a separate `/native` subpath on the approved
   package name selects an implementation that maps the same DTOs.
 - Backend-specific capability fields may differ; no field may be added to the
   common contract without a versioned minor release.
-- No native backend exists today.
+- No native Node.js backend exists today. React Native has a separate native
+  package and does not implement this API.
 
 ## 10. Compatibility and limitations
 
@@ -1387,7 +1390,7 @@ are not assumed; those callers can always pass explicit bytes to `init()`.
 | `usize` width | Offsets/limits must fit 32-bit `usize` on `wasm32` | Verified |
 | Published WASM artifact lag | `cribra-wasm 0.4.7` predates batch and Share Bundle work | Release dependency |
 | No CJS build | CommonJS consumers cannot `require()` the package | Out of v1 scope |
-| No React Native qualification | Not supported or claimed | Out of scope |
+| No React Native support in this WASM package | Use the separate native React Native package | Out of scope for this package |
 
 The published-artifact lag is recorded in `docs/ECOSYSTEM.md:95-99` and
 `docs/COMPATIBILITY.md:47-50`. W3.2B must target either a new adapter release
@@ -1396,7 +1399,7 @@ published package.
 
 ### 10.2 Explicitly out of scope
 
-- React Native support.
+- React Native support in this WebAssembly package.
 - Filesystem discovery, repository walking, or network acquisition.
 - Persistence, caching, or telemetry.
 - Reimplementing detection, validation, normalization, or transformation in
@@ -1411,7 +1414,7 @@ published package.
 | **W3.2A** | Contract (this document): feature inventory, public API, lifecycle, offsets, errors, packaging, capability model | Reviewed and approved; no code |
 | **W3.2B** | Implementation. Adapter work: version/capability exports, DTO materialization primitives, enum normalization. TypeScript package: `init`, synchronous `createScanner`, `scan`, `scanBatch`, transforms, Share Bundle, streaming, incremental, errors, offset helper | Type tests; Node ESM smoke test; explicit-asset browser smoke test; parity against direct WASM |
 | **W3.2C** | Qualification, distribution, and documentation: browser/bundler matrix, published-tarball consumer, capability truthfulness, disposal and DTO-autonomy tests, user docs, release preparation | Each claimed capability and environment verified; unsupported combinations documented |
-| **W3.3** | Native Rust MCP server (separate workstream; reuses Core, not this TypeScript package) | Separate design and approval |
+| **W3.3** | Native Rust MCP server (separate workstream; reuses Core, not this TypeScript package) | Published as `cribra-mcp` 0.1.1; independent of the TypeScript contract |
 
 W3.2B may deliver adapter exports and the wrapper incrementally, but it must not
 claim a capability before its verification exists. W3.2C owns the transition
@@ -1431,7 +1434,7 @@ the answer.
 
 | # | Question | Decision | Status |
 | --- | --- | --- | --- |
-| 1 | Package identity | Working manifest `cribra-typescript@0.1.0` with `private: true`; approved release name is `@metalymph/cribra`. The literal rename and `cribraRelease.state: "approved"` wait for authenticated npm ownership verification | Partially pending: release infrastructure resolved; ownership unverified |
+| 1 | Package identity | Approved manifest `@metalymph/cribra@0.1.0`, not private, with `cribraRelease.state: "approved"`. Authenticated npm ownership of `@metalymph` was verified; the package remains unpublished | Resolved for identity; release not yet authorized |
 | 2 | Module format | ESM-only for v1. CommonJS is out of scope and may be revisited after W3.2C | Resolved |
 | 3 | Minimum runtime | `engines.node` `>=22`; Node 22/24/26, Chrome, Chromium, Playwright Firefox, Playwright WebKit, Vite, and webpack qualified from packed artifacts. Native Safari unverified | Resolved |
 | 4 | Revision type | Keep `bigint`; never narrow to `number` | Resolved |
@@ -1447,13 +1450,11 @@ the answer.
 
 Genuinely pending items:
 
-- Authenticated npm ownership of `@metalymph` (and therefore the literal rename
-  to `@metalymph/cribra`). The release scripts fail closed until this is proven.
 - Approval of an additive `cribra::VERSION` constant, if `getVersion().core`
   should ever be non-optional.
-- The first authorized publication after review. Readiness, staging, provenance,
-  and approval requirements are specified in
-  [the release runbook](TYPESCRIPT_RELEASE.md).
+- The first authorized publication after review. The identity is approved, but
+  the package is not published. Readiness, staging, provenance, and approval
+  requirements are specified in [the release runbook](TYPESCRIPT_RELEASE.md).
 
 ## Appendix: source references
 

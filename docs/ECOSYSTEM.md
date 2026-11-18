@@ -88,8 +88,8 @@ Cribra provides several independently versioned interfaces:
 | Swift | UniFFI Core, Flow and Fuse source packages and XCFrameworks; official published Fuse SwiftPM package (`cribra-swift` 0.7.2) |
 | Kotlin/JVM | UniFFI Core, Flow and Fuse profile JARs and host bundles; planned official Fuse Maven artifact |
 | Python | UniFFI Core, Flow and Fuse consumers and Fuse wheel packaging; planned official Fuse PyPI package |
-| TypeScript | Implemented WebAssembly package (`cribra-typescript`, provisional and unpublished); future native backend separately gated |
-| MCP | Planned native Rust binary using MCP over stdio and reusing Cribra Core |
+| TypeScript | Implemented WebAssembly package (`@metalymph/cribra`, approved identity and unpublished); future native Node.js backend separately gated. React Native has a separate implemented native package |
+| MCP | Published native Rust tool integration using MCP over local stdio and reusing Cribra Core (`cribra-mcp` 0.1.1) |
 | CLI | Explicit UTF-8 file or standard-input scanning |
 
 Streaming and incremental sessions are Core-owned APIs. They are exposed by the
@@ -117,14 +117,33 @@ published to a package registry; registry publication is tracked separately in
 | Rust Core | Official, implemented | Authoritative engine |
 | C ABI | Official, implemented | Source-built libraries and checked-in header; `publish = false` |
 | WebAssembly | Official, implemented | Core and Flow source; published adapter release has a separate Core contract |
-| Swift | Official, implemented; Fuse package published | Local Core/Flow/Fuse SwiftPM packages and XCFrameworks, plus the published `cribra-swift` 0.7.2 Fuse SwiftPM package and XCFramework release asset; remotely qualified on macOS ARM64 with iOS Simulator compile/link; no Swift Package Index registration |
+| Swift | Official, implemented; Fuse package published | Local Core/Flow/Fuse SwiftPM packages and XCFrameworks, plus the published `cribra-swift` 0.7.2 Fuse SwiftPM package and XCFramework release asset; remotely qualified on macOS ARM64 with iOS Simulator compile/link; listed on the Swift Package Index for discovery, without treating it as Cribra compatibility-build evidence |
 | Kotlin/JVM | Official, implemented; distribution in progress | Local/CI profile JARs and host bundles; planned Fuse Maven artifact; no Maven publication |
 | Python | Official, implemented; distribution in progress | Core/Flow/Fuse source consumers and a local/CI Fuse wheel; planned Fuse PyPI package; no PyPI publication |
-| TypeScript (WebAssembly) | Official, implemented; provisional package unpublished | Higher-level package over typed WASM exports for browsers and compatible JS runtimes. Node 22/24/26, selected browsers and Vite/webpack are qualified from installed tarballs; no npm record or publication exists. |
-| TypeScript (native) | Official, planned; separately gated | Future UniFFI-backed backend against the established public API; Node.js requirements need investigation, and UniFFI does not by itself provide a working React Native binding |
-| MCP server | Official, planned | Ultra-lightweight native Rust binary over stdio reusing Cribra Core; no Node.js/Python runtime, database or external service; no arbitrary filesystem access by default |
+| TypeScript (WebAssembly) | Official, implemented; approved package unpublished | Higher-level package over typed WASM exports for browsers and compatible JS runtimes. Node 22/24/26, selected browsers and Vite/webpack are qualified from installed tarballs; no npm record or publication exists. |
+| React Native | Official, implemented and qualified; private, unpublished package | Native New Architecture TurboModule over the C ABI: TypeScript facade, Codegen spec, C++ bridge, `cribra-capi` 0.3.0 and Core 0.7.2. RN.1.6 evidence covers host plain/ASan/UBSan/TSan, iOS Simulator Debug/Release, Android ARM64 emulator Debug/Release, Android four-ABI builds and three JS reload cycles per platform; physical devices and iOS device builds are not tested. No npm publication or Expo Go claim |
+| TypeScript (native Node.js) | Official, planned; three separately gated milestones | Standalone native TypeScript backend for Node.js where compatible, separate from the completed React Native package. Gates: compatibility investigation with a documented fallback, binding implementation preserving classification semantics and resource ownership, and real Node.js consumer qualification. Not implemented and not implied by UniFFI, the WebAssembly package or React Native |
+| MCP server | Official, published — tool integration, not a language binding | Published `cribra-mcp` 0.1.1: native Rust binary over local stdio reusing Cribra Core with explicit caller-provided input; five qualified native targets; no HTTP transport, Node.js/Python runtime, database or external service; no arbitrary filesystem access by default. M3 conformance **PARTIAL PASS**, M4 distribution **PASS** |
 | C#, Go, PHP, Ruby, Elixir | Planned — demand-driven / community contribution | Not actively scheduled; considered only with demonstrated real-world demand or a viable community contribution |
 | Community integrations | Community-maintained | May use public interoperability surfaces; not officially tested, packaged or supported |
+
+The forward-looking priority order is maintained in the
+[roadmap](../ROADMAP.md#development-priority-order-forward-looking): dependency
+and CI maintenance; evaluation of Python and Kotlin/JVM documentation and
+official package distribution; then evaluation of further bindings based on
+demonstrated ecosystem demand. The published native MCP server is a tool
+integration, not a language binding. The React Native package is implemented and
+qualified but private and unpublished; it is not the native Node.js backend.
+Amon is a potential real-world, post-beta consumer for optional on-device
+sensitive-data scanning before content such as chat messages, posts and comments
+is shared. Amon integration is not a release dependency and must not block
+completion of the Cribra SDK.
+
+Doxygen-generated C API documentation is likewise explicitly demand-driven and
+unscheduled, alongside C#/.NET and Go bindings. Official GitHub/GitLab scanner
+integrations are not on the roadmap. Homebrew, Debian/Ubuntu APT and a dedicated
+embedded Linux distribution workstream are not active roadmap items; existing
+Linux builds and public interoperability contracts remain supported.
 
 Demand-driven candidates have no delivery dates and are not implemented,
 qualified or published. Community contributions are welcome under the repository
@@ -154,10 +173,13 @@ ecosystem. Approval, qualification and release are separate gates.
 
 Swift is the first completed public distribution: `cribra-swift` 0.7.2 is
 published, its Fuse XCFramework asset is checksum-verified, and a clean-room
-remote consumer passed on macOS ARM64 with iOS Simulator compile/link. Swift
-Package Index registration has not been submitted. Kotlin/JVM and Python remain
-official priorities with local/CI artifacts only; neither has a published public
-package.
+remote consumer passed on macOS ARM64 with iOS Simulator compile/link. The
+package is listed on the Swift Package Index for discovery; the listing is not
+Cribra compatibility-build evidence. Kotlin/JVM and Python remain official
+priorities with local/CI artifacts only; neither has a published public package.
+Their current priority is consolidating documentation, runnable examples and API
+guidance without asserting new registry releases. Maven Central and PyPI
+publication remain separate, unscheduled gates.
 
 The public package must expose the complete functionality implemented by the
 Fuse binding. It does not claim parity with Rust-only APIs that are absent from
@@ -187,10 +209,11 @@ This one-package, Fuse-first policy applies to Swift, Kotlin/JVM and Python
 distribution. It does not automatically define the packaging architecture of the
 C ABI, the raw WebAssembly crate, Rust feature selection, the MCP server or the
 TypeScript package. For TypeScript, the implemented WebAssembly package is
-distinct from the future native backend; they are separate targets, not
-Core/Flow/Fuse package variants. The working package is `cribra-typescript`; the
-intended `@metalymph/cribra` name is not an available installation instruction
-and remains pending ownership verification and release authorization.
+distinct from the future native Node.js backend; they are separate targets, not
+Core/Flow/Fuse package variants. React Native likewise has its own native package
+and is not the Node.js backend. The approved package identity is
+`@metalymph/cribra`; it is not an available installation instruction until a
+separately authorized release succeeds.
 
 ## Related projects and workflows
 
