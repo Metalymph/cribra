@@ -42,11 +42,23 @@ Your application supplies source identifiers and text. Cribra performs synchrono
 ## Use the CLI from this repository
 
 ```sh
-cargo build -p cribra-cli
+cargo install --path crates/cribra-cli   # installs the `cribra` executable
+cargo build -p cribra-cli                # or run target/debug/cribra
 target/debug/cribra scan examples/fixtures/inputs/credentials.env --format json
 ```
 
-Run these commands from the repository root. On Windows, the executable is `target/debug/cribra.exe`. A successful scan exits with code 0 even when it finds sensitive data or review candidates; applications choose their own failure policy. CLI registry publication is not established by the audit.
+Run these commands from the repository root. On Windows, the executable is `target/debug/cribra.exe`. A successful scan exits with code 0 even when it finds sensitive data or review candidates; applications choose their own failure policy. `cribra-cli` is not published to crates.io, so `cargo install cribra-cli` is not a registry path at this audit. The verified Cargo installation paths are the source-checkout commands above.
+
+## Use the MCP server
+
+`cribra-mcp` 0.1.1 is published as a native stdio server and a tool integration, not a language binding. Download the archive for your target from the [`cribra-mcp-v0.1.1` release](https://github.com/Metalymph/cribra/releases/tag/cribra-mcp-v0.1.1), verify `SHA256SUMS`, and configure the host with the absolute executable path:
+
+```sh
+tar -xzf cribra-mcp-0.1.1-<target>.tar.gz
+./cribra-mcp-0.1.1-<target>/cribra-mcp --version
+```
+
+The server exposes `cribra_scan` and `cribra_transform` over local stdio. It has no HTTP transport, network access, filesystem discovery or persistent storage. See the [MCP integration guide](/docs/integration-mcp/) for the five qualified targets, checksums, Claude Desktop/Claude Code/Codex configuration, protocol versions, the M3 **PARTIAL PASS** verdict and M4 distribution **PASS**.
 
 ## Choose another language
 

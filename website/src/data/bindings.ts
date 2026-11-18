@@ -1,5 +1,5 @@
 /** Repository evidence snapshot, not a live package-registry lookup. */
-export const evidenceDate = '2026-11-12';
+export const evidenceDate = '2026-11-17';
 export const repository = 'https://github.com/Metalymph/cribra';
 
 /** A labeled destination that is safe to render as a link. */
@@ -284,24 +284,24 @@ export const bindings: readonly Binding[] = [
 /** Official workstreams that are planned or in progress; none is a published package unless the matrix above says so. */
 export const plannedBindings = [
   {
+    name: 'Dependency and CI maintenance',
+    detail:
+      'Keep workspace dependencies, toolchains and workflows current, apply security fixes, and preserve the qualification gates without changing runtime behavior or upgrading dependencies as part of the current documentation cycle.',
+  },
+  {
+    name: 'Python and Kotlin/JVM documentation and distribution evaluation',
+    detail:
+      'Improve runnable examples and API guidance for the existing implemented bindings, and evaluate the Maven Central and PyPI publication gates. Neither registry publication is established, and evaluation does not authorize a release.',
+  },
+  {
+    name: 'Further bindings based on ecosystem demand',
+    detail:
+      'Consider additional bindings or adapters only with demonstrated real-world demand, a credible maintenance commitment, and the documented conformance, ownership, packaging and consumer-qualification gates.',
+  },
+  {
     name: 'TypeScript native backend for Node.js',
     detail:
       'Standalone native Node.js backend where compatible. This is a separate workstream from the implemented and qualified React Native package and is not implemented. Gates: a UniFFI 0.32.2 or direct C ABI compatibility investigation with a documented fallback; binding implementation preserving Cribra classification semantics and resource ownership; and real Node.js consumer qualification. No native Node.js package or publication is established.',
-  },
-  {
-    name: 'Native Rust MCP server',
-    detail:
-      'Planned ultra-lightweight stdio server over Cribra Core with explicit caller-provided input, no Node.js/Python runtime, database or external service, and no arbitrary filesystem access by default.',
-  },
-  {
-    name: 'CLI distribution through Homebrew and Debian/Ubuntu APT',
-    detail:
-      'Qualified prebuilt binaries that preserve canonical CLI semantics, version identity and privacy-safe diagnostics. Container-friendly OCI artifacts are an optional evaluation, not a commitment. No new CLI package publication is established.',
-  },
-  {
-    name: 'Python and Kotlin/JVM developer guidance',
-    detail:
-      'Consolidate documentation, runnable examples and API guidance for the existing implemented bindings without asserting new registry releases. Maven Central and PyPI publication remain separate, unscheduled gates.',
   },
 ] as const;
 
@@ -309,3 +309,35 @@ export const plannedBindings = [
 export const demandDrivenBindings = ['C#/.NET', 'Go', 'PHP', 'Ruby', 'Elixir'] as const;
 
 export const contributingHref = `${repository}/blob/main/CONTRIBUTING.md`;
+
+/**
+ * Published tool integrations. These are not language bindings and are kept
+ * separate from the language matrix so distribution and support claims do not
+ * imply a new binding.
+ */
+export interface ToolIntegration {
+  id: string;
+  name: string;
+  guide: BindingLink;
+  package: BindingLink;
+  implementation: string;
+  detail: string;
+  limits: string;
+}
+
+export const toolIntegrations: readonly ToolIntegration[] = [
+  {
+    id: 'mcp',
+    name: 'MCP server',
+    guide: { label: 'MCP integration guide', href: '/docs/integration-mcp/' },
+    package: {
+      label: 'cribra-mcp 0.1.1 release',
+      href: `${repository}/releases/tag/cribra-mcp-v0.1.1`,
+    },
+    implementation: 'Published · cribra-mcp 0.1.1 · five qualified native targets',
+    detail:
+      'Native Rust server speaking MCP over local stdio. Exposes exactly two tools, cribra_scan and cribra_transform, backed directly by Cribra Core. Hosts include Claude Desktop, Claude Code and Codex. MCP is a tool integration, not a language binding: it is not a WASM, UniFFI, C ABI, TypeScript or React Native package.',
+    limits:
+      'M3 conformance verdict is PARTIAL PASS: 10 of 10 applicable rows pass in the 147-row canonical matrix, the official runner is HTTP-only and executed zero rows, and a separate 10 SDK qualification scenarios pass (5 TypeScript, 5 Python); nothing is certified. M4 distribution is PASS. Stdio only; no HTTP/SSE, OAuth, filesystem discovery, keyed modes, telemetry or persistent storage. Five targets: aarch64/x86_64 Apple, x86_64/aarch64 Linux GNU, x86_64 Windows MSVC.',
+  },
+] as const;

@@ -9,6 +9,10 @@ The M3 conformance verdict is unchanged: **PARTIAL PASS**. See
 [`CONFORMANCE.md`](CONFORMANCE.md). Distribution readiness does not upgrade,
 replace, or re-certify that verdict.
 
+The M4 distribution verdict is **PASS**. The `cribra-mcp-v0.1.1` release
+published five native archives and one `SHA256SUMS` manifest; each archive was
+packaged and smoke-qualified on its own native runner before publication.
+
 ## 1. What is distributed
 
 `cribra-mcp` is a single native executable. It reads newline-delimited JSON-RPC
@@ -73,8 +77,10 @@ Determinism here applies to **packaging**, not to compilation. Given the same
 compiled executable, the archive bytes are reproducible. The executable itself
 is not claimed to be bit-for-bit reproducible: the Rust toolchain version, the
 linker, the OS SDK, absolute build paths, and platform code generation can all
-change the machine code. `SHA256SUMS` authenticates the exact published
-binaries; it is not a reproducible-build attestation.
+change the machine code. `SHA256SUMS` is an integrity check: it lets you
+confirm that a downloaded archive matches the bytes recorded in the manifest.
+It is not a cryptographic signature, does not assert who built the artifact,
+and is not a reproducible-build attestation.
 
 ## 4. Install
 
@@ -86,7 +92,13 @@ sudo mv cribra-mcp-0.1.1-<target> /opt/
 /opt/cribra-mcp-0.1.1-<target>/cribra-mcp --version
 ```
 
-Linux builds target glibc 2.35 or newer (Ubuntu 22.04 or equivalent). No musl
+Both published Linux binaries reference GLIBC symbols up to `GLIBC_2.34`, as
+measured with `readelf --version-info` on the published archives. A host must
+provide glibc 2.34 or newer. This is a binary symbol requirement, not a
+runtime-qualification statement: the x86_64 archive was runtime-qualified on
+the GitHub-hosted Ubuntu 26.04 image (`ubuntu-latest`) and the aarch64 archive
+on Ubuntu 24.04 ARM64 (`ubuntu-24.04-arm`). Older distributions that satisfy
+the symbol floor are expected to load but were not runtime-qualified. No musl
 or bundled libc build is published.
 
 macOS builds are ad-hoc signed, not notarized. If a browser download sets the
@@ -109,14 +121,35 @@ SHA-256 digest before running it.
 ### Checksums
 
 The release publishes one `SHA256SUMS` manifest covering all five archives.
+Verify only the entry for the archive you downloaded; checking the whole
+manifest fails when the other four archives are absent.
 
 ```sh
-shasum -a 256 -c SHA256SUMS     # macOS
-sha256sum -c SHA256SUMS         # Linux
+archive=cribra-mcp-0.1.1-<target>.tar.gz
+if ! awk -v f="$archive" '$2 == f' SHA256SUMS > "$archive.sha256"; then
+  echo "error: cannot read SHA256SUMS" >&2
+  exit 1
+fi
+if [ ! -s "$archive.sha256" ]; then
+  echo "error: SHA256SUMS has no entry for $archive" >&2
+  exit 1
+fi
+shasum -a 256 -c "$archive.sha256"    # macOS
+sha256sum -c "$archive.sha256"        # Linux
 ```
 
+`shasum`/`sha256sum -c` exit non-zero and report `FAILED` on a checksum
+mismatch. The explicit size check fails when the manifest has no entry for the
+archive, rather than silently verifying nothing.
+
 ```powershell
-Get-FileHash -Algorithm SHA256 cribra-mcp-0.1.1-x86_64-pc-windows-msvc.zip
+$archive = 'cribra-mcp-0.1.1-x86_64-pc-windows-msvc.zip'
+$entry = Get-Content SHA256SUMS | Where-Object { ($_ -split '\s+')[1] -eq $archive }
+if (-not $entry) { Write-Error "SHA256SUMS has no entry for $archive"; exit 1 }
+$expected = ($entry -split '\s+')[0].ToLower()
+$actual = (Get-FileHash -Algorithm SHA256 $archive).Hash.ToLower()
+if ($actual -ne $expected) { Write-Error "checksum mismatch for $archive"; exit 1 }
+"$archive OK"
 ```
 
 ### CLI surface
@@ -466,4 +499,4 @@ Not executed locally, and therefore not claimed as verified here:
 | macOS "cannot be opened" | Quarantine attribute | `xattr -d com.apple.quarantine <path>` |
 | `--version` works in a terminal but not in the host | `PATH` differs for GUI processes | Use an absolute path |
 | Checksum mismatch | Corrupted or partial download | Re-download the archive and re-verify |
-| Linux "GLIBC_2.xx not found" | Host glibc older than 2.35 | Use a newer distribution or build from source |
+| Linux "GLIBC_2.xx not found" | Host glibc older than 2.34, the highest symbol version referenced by the published binaries | Use a distribution with glibc 2.34 or newer, or build from source |
