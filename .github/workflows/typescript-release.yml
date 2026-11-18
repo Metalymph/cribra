@@ -106,7 +106,7 @@ jobs:
             --require-releaseable
 
       - name: Upload release candidate
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: typescript-release-${{ inputs.tag }}
           if-no-files-found: error
@@ -215,7 +215,7 @@ jobs:
 
       - name: Upload stage record
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: typescript-stage-${{ inputs.tag }}
           if-no-files-found: warn
