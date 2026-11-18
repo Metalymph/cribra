@@ -114,7 +114,7 @@ jobs:
           node-version: ${{ matrix.node }}
 
       - name: Download packed artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: metalymph-cribra-tarballs
           path: target/typescript-qualification/artifacts
@@ -154,7 +154,7 @@ jobs:
         run: npm ci --prefix packages/cribra/qualification
 
       - name: Download packed artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: metalymph-cribra-tarballs
           path: target/typescript-qualification/artifacts
@@ -211,7 +211,7 @@ jobs:
         run: npx playwright install --with-deps ${{ matrix.browser }}
 
       - name: Download packed artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: metalymph-cribra-tarballs
           path: target/typescript-qualification/artifacts
@@ -256,7 +256,7 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Download packed artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: metalymph-cribra-tarballs
           path: target/typescript-qualification/artifacts
@@ -294,7 +294,7 @@ jobs:
           node-version: "24"
 
       - name: Download packed artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: metalymph-cribra-tarballs
           path: target/typescript-qualification/artifacts
