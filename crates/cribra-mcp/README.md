@@ -555,8 +555,13 @@ Expected test coverage:
   transform text/structured agreement;
 - partial pipe writes for a multi-chunk response, and a mid-response client
   disconnect;
+- bounded stdout reads that fail on their own deadline even when a test widens
+  the production backpressure timeout;
 - the generated conformance matrix itself: completeness, uniqueness, verbatim
   canonical classification, and existence of every cited test.
+
+Transport test bounds, measured contention results, harness diagnostics, and
+platform limitations are recorded in [`MAINTENANCE.md`](MAINTENANCE.md).
 
 ## M2 exit criteria
 

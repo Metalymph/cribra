@@ -9,9 +9,20 @@ use std::time::Duration;
 use serde_json::json;
 use wait_timeout::ChildExt;
 
+use support::{StdoutChunks, read_prefix_and_close};
+
 /// Hang detector for work bounded by Core CPU time. Shared CI runners can be an
 /// order of magnitude slower than a developer machine.
 const CORE_WORK_TIMEOUT: Duration = Duration::from_secs(60);
+
+/// Hang detector for a single bounded stdout read.
+///
+/// The tests that widen `CRIBRA_MCP_BACKPRESSURE_TIMEOUT_MS` must not inherit
+/// that widened deadline as their progress bound: the read itself has to fail
+/// in bounded time even if the server stays alive without writing. 120s is
+/// roughly three times the slowest locally measured run under 5.8x CPU
+/// oversubscription.
+const STREAM_TIMEOUT: Duration = Duration::from_secs(120);
 
 fn modern_tools_list(id: u64) -> Vec<u8> {
     let request = json!({
@@ -263,16 +274,24 @@ fn large_transform_request(id: u64) -> Vec<u8> {
 /// A response larger than the pipe buffer is delivered to a slow reader in
 /// several partial writes. It must still reassemble into exactly one complete
 /// JSON line.
+///
+/// The reader here is the test thread, so a scheduling stall is not a stalled
+/// client. The backpressure deadline is widened for this test to keep a starved
+/// runner from being classified as a dead reader; framing is the only assertion,
+/// and the bounded wait after the read is unchanged. Chunks are collected on a
+/// helper thread so the test still fails in bounded time if the server stops
+/// writing, rather than waiting out the widened production deadline.
 #[test]
 fn large_response_survives_partial_pipe_writes() {
     let mut child = Command::new(env!("CARGO_BIN_EXE_cribra-mcp"))
+        .env("CRIBRA_MCP_BACKPRESSURE_TIMEOUT_MS", "600000")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
         .expect("spawn server");
 
-    let mut stdout = child.stdout.take().expect("stdout pipe");
+    let mut stdout = StdoutChunks::spawn(child.stdout.take().expect("stdout pipe"), 1024);
     let mut stdin = child.stdin.take().expect("stdin pipe");
     stdin
         .write_all(&large_transform_request(1))
@@ -282,11 +301,14 @@ fn large_response_survives_partial_pipe_writes() {
     // Deliberately read in small chunks so the writer performs many partial
     // writes and observes WouldBlock between them.
     let mut collected = Vec::new();
-    let mut chunk = [0u8; 1024];
     let line_end = loop {
-        let read = stdout.read(&mut chunk).expect("read stdout");
-        assert_ne!(read, 0, "stdout closed before the response was complete");
-        collected.extend_from_slice(&chunk[..read]);
+        let chunk = stdout.next(STREAM_TIMEOUT);
+        assert_ne!(
+            chunk.len(),
+            0,
+            "stdout closed before the response was complete"
+        );
+        collected.extend_from_slice(&chunk);
         if let Some(position) = collected.iter().position(|byte| *byte == b'\n') {
             break position;
         }
@@ -323,19 +345,61 @@ fn large_response_survives_partial_pipe_writes() {
     assert!(status.success());
 }
 
+/// A widened production deadline must never become the harness progress bound.
+///
+/// Both bounded readers must report failure on their own timeout while the
+/// write end stays open and silent, which is the shape of a server that hangs
+/// instead of answering.
+#[test]
+fn bounded_stdout_reads_fail_within_their_own_deadline() {
+    let probe = Duration::from_millis(50);
+
+    let (silent, still_open) = std::io::pipe().expect("create silent pipe");
+    let mut chunks = StdoutChunks::spawn(silent, 64);
+    let chunked = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        chunks.next(probe);
+    }));
+    assert!(
+        chunked.is_err(),
+        "a silent pipe must trip the chunk read deadline"
+    );
+
+    let (silent, still_open_prefix) = std::io::pipe().expect("create silent pipe");
+    let prefix = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        read_prefix_and_close(silent, 512, probe);
+    }));
+    assert!(
+        prefix.is_err(),
+        "a silent pipe must trip the prefix read deadline"
+    );
+
+    // Keep both write ends alive until after the assertions above so the
+    // readers could not have observed EOF instead of a timeout.
+    drop(still_open);
+    drop(still_open_prefix);
+}
+
 /// If the client disappears in the middle of a large response, the server must
 /// treat it as a broken pipe and terminate cleanly instead of hanging on a
 /// half-written line.
+///
+/// The production no-progress deadline is widened for this test only: the
+/// assertion is broken-pipe classification. On a starved runner the test thread
+/// can be descheduled for longer than the default deadline between the first
+/// partial read and closing the pipe, which would let the server report
+/// backpressure before it ever observes the disconnect. Sustained backpressure
+/// is asserted separately with an explicit short deadline, and both the prefix
+/// read and the wait below are bounded independently of that deadline.
 #[test]
 fn closed_stdout_mid_response_terminates_cleanly() {
     let mut child = Command::new(env!("CARGO_BIN_EXE_cribra-mcp"))
+        .env("CRIBRA_MCP_BACKPRESSURE_TIMEOUT_MS", "600000")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
         .expect("spawn server");
 
-    let mut stdout = child.stdout.take().expect("stdout pipe");
     let mut stdin = child.stdin.take().expect("stdin pipe");
     stdin
         .write_all(&large_transform_request(1))
@@ -343,10 +407,12 @@ fn closed_stdout_mid_response_terminates_cleanly() {
     stdin.flush().expect("flush request");
 
     // Consume only the start of the response, then close the read end.
-    let mut prefix = [0u8; 512];
-    let read = stdout.read(&mut prefix).expect("read partial response");
-    assert!(read > 0, "expected at least part of the response");
-    drop(stdout);
+    let prefix = read_prefix_and_close(
+        child.stdout.take().expect("stdout pipe"),
+        512,
+        STREAM_TIMEOUT,
+    );
+    assert!(!prefix.is_empty(), "expected at least part of the response");
 
     let status = child
         .wait_timeout(CORE_WORK_TIMEOUT)
