@@ -21,7 +21,15 @@ use support::{ServerProcess, validate_official};
 
 const MODERN: &str = "2026-07-28";
 const LEGACY: &str = "2025-11-25";
-const DEADLINE: Duration = Duration::from_secs(20);
+/// Bounded hang detector for round trips that perform Core work.
+///
+/// This file mixes protocol-only round trips with 1 MiB scans and broad regex
+/// scans. The slowest CI runner has measured 4-6x the local wall time for the
+/// whole binary, and tests run in parallel inside it; under controlled CPU
+/// contention the 1 MiB boundary case needs about 22s. A tighter bound reports
+/// scheduler delay as a transport failure, while this one still fails a
+/// genuinely wedged server.
+const DEADLINE: Duration = Duration::from_secs(120);
 
 fn modern_meta() -> Value {
     json!({

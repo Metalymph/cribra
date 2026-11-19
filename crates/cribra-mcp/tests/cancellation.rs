@@ -22,7 +22,14 @@ use serde_json::{Value, json};
 use support::{ServerProcess, validate_official};
 
 const MODERN: &str = "2026-07-28";
-const DEADLINE: Duration = Duration::from_secs(30);
+/// Bounded hang detector for a round trip that performs Core work.
+///
+/// The server under test is a debug build and the slowest CI runner has
+/// measured 4-6x the local wall time for this suite. Under controlled CPU
+/// contention the 1 MiB `(?s).` scan below needs about 42s, so a tighter bound
+/// reports scheduling delay as a transport failure. This remains a bounded
+/// detector: a genuinely wedged server still fails the test.
+const DEADLINE: Duration = Duration::from_secs(120);
 
 fn meta() -> Value {
     json!({
