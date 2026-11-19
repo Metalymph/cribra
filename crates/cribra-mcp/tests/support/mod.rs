@@ -76,6 +76,18 @@ pub fn validate_tool_output(tool: &str, structured: &Value) {
     panic!("{tool} structuredContent violates its output schema: {structured}{details}");
 }
 
+/// Removes the delimiter exactly the way `BufRead::lines` does.
+///
+/// A trailing `\r` is only removed when it immediately followed the `\n` that
+/// terminated the line. A final line without a newline keeps any `\r` it has,
+/// which is what `lines()` returns for the same bytes.
+pub fn normalize_stdout_line(line: &str) -> &str {
+    match line.strip_suffix('\n') {
+        Some(line) => line.strip_suffix('\r').unwrap_or(line),
+        None => line,
+    }
+}
+
 /// Terminal events reported by the stdout reader thread.
 ///
 /// Keeping the reason separate from the line stream is what lets a failed wait
@@ -94,15 +106,38 @@ enum StdoutEvent {
 /// Tests that widen the production backpressure deadline cannot rely on that
 /// deadline as their only progress bound. Reading from a helper thread keeps the
 /// wait bounded even when the child is alive but no longer writing.
+///
+/// The queue has a fixed capacity, so the reader cannot absorb an unbounded
+/// response faster than the test consumes it: a slow consumer still fills the
+/// pipe and keeps the partial-write path under test. Every chunk counts against
+/// an absolute response deadline and a maximum response size; a server that
+/// produces forever or overruns the response contract fails the test instead of
+/// growing memory or extending the deadline.
 pub struct StdoutChunks {
     chunks: Receiver<io::Result<Vec<u8>>>,
     spawned: Instant,
+    response_deadline: Duration,
+    max_bytes: usize,
+    received: usize,
 }
 
 impl StdoutChunks {
-    pub fn spawn<R: Read + Send + 'static>(mut stdout: R, chunk: usize) -> Self {
+    /// Creates a bounded chunk reader.
+    ///
+    /// `queue_capacity` bounds chunks buffered ahead of the consumer,
+    /// `response_deadline` bounds the whole response from spawn, and
+    /// `max_bytes` is the maximum complete response size the protocol allows.
+    pub fn spawn<R: Read + Send + 'static>(
+        mut stdout: R,
+        chunk: usize,
+        queue_capacity: usize,
+        response_deadline: Duration,
+        max_bytes: usize,
+    ) -> Self {
         assert!(chunk > 0, "stdout chunk size must be nonzero");
-        let (chunk_tx, chunks) = mpsc::channel();
+        assert!(queue_capacity > 0, "stdout queue capacity must be nonzero");
+        assert!(max_bytes >= chunk, "response cap must admit one chunk");
+        let (chunk_tx, chunks) = mpsc::sync_channel(queue_capacity);
         thread::Builder::new()
             .name("test-stdout-chunks".to_owned())
             .spawn(move || {
@@ -126,27 +161,97 @@ impl StdoutChunks {
         Self {
             chunks,
             spawned: Instant::now(),
+            response_deadline,
+            max_bytes,
+            received: 0,
         }
     }
 
     /// Returns the next chunk; a zero-length chunk means the child closed stdout.
     ///
-    /// Chunk contents are never included in a panic message.
-    pub fn next(&mut self, timeout: Duration) -> Vec<u8> {
-        match self.chunks.recv_timeout(timeout) {
-            Ok(Ok(bytes)) => bytes,
+    /// `stall_timeout` bounds a single wait. The cumulative response deadline and
+    /// the response-size cap apply across all calls. Chunk contents are never
+    /// included in a panic message.
+    pub fn next(&mut self, stall_timeout: Duration) -> Vec<u8> {
+        let elapsed = self.spawned.elapsed();
+        let remaining = self.response_deadline.saturating_sub(elapsed);
+        if remaining.is_zero() {
+            panic!(
+                "cumulative response deadline of {:?} exceeded after {:?}",
+                self.response_deadline, elapsed
+            );
+        }
+        match self.chunks.recv_timeout(remaining.min(stall_timeout)) {
+            Ok(Ok(bytes)) => {
+                self.received += bytes.len();
+                if self.received > self.max_bytes {
+                    panic!(
+                        "stdout response exceeded the {}-byte response contract after {:?}",
+                        self.max_bytes,
+                        self.spawned.elapsed()
+                    );
+                }
+                bytes
+            }
             Ok(Err(error)) => panic!(
                 "stdout read failed after {:?}: {error}",
                 self.spawned.elapsed()
             ),
-            Err(RecvTimeoutError::Timeout) => panic!(
-                "stdout read stalled: no data within {timeout:?} after {:?}",
-                self.spawned.elapsed()
-            ),
+            Err(RecvTimeoutError::Timeout) => {
+                let elapsed = self.spawned.elapsed();
+                if elapsed >= self.response_deadline {
+                    panic!(
+                        "cumulative response deadline of {:?} exceeded after {:?}",
+                        self.response_deadline, elapsed
+                    );
+                }
+                panic!("stdout read stalled: no data within {stall_timeout:?} after {elapsed:?}");
+            }
             Err(RecvTimeoutError::Disconnected) => panic!(
                 "stdout chunk reader ended without reporting EOF after {:?}",
                 self.spawned.elapsed()
             ),
+        }
+    }
+}
+
+/// Owns a raw transport child and terminates it on drop.
+///
+/// Panics unwind through `Drop`, so a timed-out assertion cannot leave a server
+/// running. Killing before reaping also closes the child's pipes, which is what
+/// lets helper reader threads see EOF and exit; no test joins those threads.
+pub struct ChildGuard {
+    child: Option<Child>,
+}
+
+impl ChildGuard {
+    pub fn spawn(command: &mut Command) -> Self {
+        Self {
+            child: Some(command.spawn().expect("spawn cribra-mcp")),
+        }
+    }
+
+    pub fn child_mut(&mut self) -> &mut Child {
+        self.child.as_mut().expect("child still owned")
+    }
+
+    /// Bounded exit wait with the same status caching as `Child::wait_timeout`.
+    pub fn wait_timeout(&mut self, timeout: Duration) -> Option<ExitStatus> {
+        self.child
+            .as_mut()
+            .expect("child still owned")
+            .wait_timeout(timeout)
+            .expect("wait child")
+    }
+}
+
+impl Drop for ChildGuard {
+    fn drop(&mut self) {
+        if let Some(mut child) = self.child.take() {
+            // `kill` and `wait` are both safe on an already-reaped child: the
+            // status is cached by `std`, so this never signals a recycled pid.
+            let _ = child.kill();
+            let _ = child.wait();
         }
     }
 }
@@ -248,10 +353,7 @@ impl ServerProcess {
                             break;
                         }
                         Ok(_) => {
-                            // Match `BufRead::lines` normalization: drop the
-                            // newline and an optional preceding carriage return.
-                            let line = buffer.strip_suffix('\n').unwrap_or(&buffer);
-                            let line = line.strip_suffix('\r').unwrap_or(line);
+                            let line = normalize_stdout_line(&buffer);
                             if line_tx.send(StdoutEvent::Line(line.to_owned())).is_err() {
                                 break;
                             }
@@ -267,14 +369,28 @@ impl ServerProcess {
 
         let stderr = Arc::new(Mutex::new(String::new()));
         let stderr_copy = Arc::clone(&stderr);
-        let stderr_thread = thread::spawn(move || {
-            let mut reader = BufReader::new(stderr_pipe);
-            let mut buffer = String::new();
-            let _ = reader.read_to_string(&mut buffer);
-            if let Ok(mut target) = stderr_copy.lock() {
-                *target = buffer;
-            }
-        });
+        let stderr_thread = thread::Builder::new()
+            .name("test-stderr-reader".to_owned())
+            .spawn(move || {
+                let mut reader = BufReader::new(stderr_pipe);
+                let mut buffer = [0u8; 4096];
+                loop {
+                    match reader.read(&mut buffer) {
+                        Ok(0) => break,
+                        Ok(read) => {
+                            // Append as bytes arrive so a snapshot taken while
+                            // the child is still running includes diagnostics
+                            // already published, not only post-exit output.
+                            if let Ok(mut target) = stderr_copy.lock() {
+                                target.push_str(&String::from_utf8_lossy(&buffer[..read]));
+                            }
+                        }
+                        Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
+                        Err(_) => break,
+                    }
+                }
+            })
+            .expect("spawn stderr reader");
 
         Self {
             child,
@@ -289,22 +405,27 @@ impl ServerProcess {
     }
 
     pub fn send_raw(&mut self, line: &str) {
-        let context = self.child_context();
-        let stdin = self.stdin.as_mut().expect("stdin still open");
-        if let Err(error) = stdin
-            .write_all(line.as_bytes())
-            .and_then(|()| stdin.write_all(b"\n"))
-            .and_then(|()| stdin.flush())
-        {
+        let result = {
+            let stdin = self.stdin.as_mut().expect("stdin still open");
+            stdin
+                .write_all(line.as_bytes())
+                .and_then(|()| stdin.write_all(b"\n"))
+                .and_then(|()| stdin.flush())
+        };
+        if let Err(error) = result {
+            let context = self.child_context();
             panic!("write request failed: {error}; {context}");
         }
     }
 
     /// Writes arbitrary bytes exactly as given, without appending a newline.
     pub fn send_bytes(&mut self, bytes: &[u8]) {
-        let context = self.child_context();
-        let stdin = self.stdin.as_mut().expect("stdin still open");
-        if let Err(error) = stdin.write_all(bytes).and_then(|()| stdin.flush()) {
+        let result = {
+            let stdin = self.stdin.as_mut().expect("stdin still open");
+            stdin.write_all(bytes).and_then(|()| stdin.flush())
+        };
+        if let Err(error) = result {
+            let context = self.child_context();
             panic!("write bytes failed: {error}; {context}");
         }
     }

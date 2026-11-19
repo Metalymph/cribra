@@ -55,7 +55,9 @@ progress bound.
 | `cancellation::DEADLINE` | 120 s | round trip that runs the 1 MiB `(?s).` scan |
 | `adversarial::DEADLINE` | 120 s | protocol round trips plus 1 MiB / broad-regex scans |
 | `transport_races::CORE_WORK_TIMEOUT` | 60 s | process exit after queued Core work |
-| `transport_races::STREAM_TIMEOUT` | 120 s | a single bounded stdout read |
+| `transport_races::STREAM_TIMEOUT` | 120 s | a single read and the cumulative response |
+| `transport_races::STDOUT_QUEUE_CHUNKS` | 2 chunks | chunks buffered ahead of the consumer |
+| `limits::MAX_RESPONSE_BYTES` | 8 MiB | cap on bytes collected from one response |
 | `CRIBRA_MCP_BACKPRESSURE_TIMEOUT_MS` override | 600000 ms | `closed_stdout_mid_response_terminates_cleanly`, `large_response_survives_partial_pipe_writes` |
 
 Measured need under controlled contention (64 CPU-saturating processes on an
@@ -78,16 +80,26 @@ Widening the production deadline removes the incidental progress bound that the
 5 s default provided. Both tests therefore read stdout through helpers in
 `tests/support/mod.rs`:
 
-- `StdoutChunks::spawn` + `next(timeout)` delivers 1 KiB chunks from a helper
-  thread with a bounded `recv_timeout`, preserving the framing assertion.
+- `StdoutChunks::spawn` + `next(stall_timeout)` delivers 1 KiB chunks from a
+  helper thread with a bounded `recv_timeout`.
+- The chunk queue is a `sync_channel` of `STDOUT_QUEUE_CHUNKS` (2), so a reader
+  cannot absorb an unbounded response ahead of the test. A slow consumer still
+  fills the pipe, preserving the partial-write path.
+- Every chunk counts against an absolute `STREAM_TIMEOUT` measured from spawn,
+  so a server that keeps producing an incomplete line cannot extend the test.
+- Every chunk also counts against `MAX_RESPONSE_BYTES` (8 MiB), the existing
+  protocol response-size contract; exceeding it fails with a contract message.
 - `read_prefix_and_close` reads a bounded prefix on a helper thread, closes the
   read end, then reports, so the broken-pipe wait starts immediately.
 
-The regression test
-`transport_races::bounded_stdout_reads_fail_within_their_own_deadline` keeps
-both write ends open and silent, and asserts that both helpers panic on their
-own timeout (~50 ms probe). A hung server therefore fails the suite in bounded
-time even with the production deadline set to 10 minutes.
+The regression tests
+`transport_races::bounded_stdout_reads_fail_within_their_own_deadline` (silent
+pipe, asserts the specific stall messages at a 50 ms probe) and
+`continuous_output_cannot_bypass_the_cumulative_response_deadline` (a producer
+writing continuously to an unterminated line, asserts the cumulative message)
+keep both bounds under test. A hung or endlessly producing server therefore
+fails the suite in bounded time even with the production deadline set to
+10 minutes.
 
 Sustained backpressure keeps its own short-deadline coverage:
 `sustained_stdout_backpressure_is_terminal_with_exit_3` uses a 50 ms override,
@@ -115,11 +127,25 @@ arguments. Server stderr is only echoed because the server's own diagnostics are
 fixed strings. Write failures in `send_raw`/`send_bytes` report the I/O error
 plus the same child context.
 
-Process cleanup: tests that use `ServerProcess` retain the existing `Drop`
-behavior. The raw-process tests (`closed_stdout_*`, `large_response_*`,
-`sustained_stdout_backpressure_*`) still rely on the child exiting on its own
-and are bounded by `CORE_WORK_TIMEOUT`/`STREAM_TIMEOUT`; a hang surfaces as a
-test failure instead of an indefinite block.
+The stderr reader appends bytes as they arrive, so a snapshot taken while the
+child is still running includes diagnostics already published rather than
+waiting for EOF. The process context for a failed write is captured at the
+failure itself, not before the write; the pre-write snapshot could describe a
+child that had not yet died.
+
+The stdout line reader preserves `BufRead::lines()` normalization exactly: a
+trailing `\r` is removed only when it followed the `\n` being removed. A final
+line without a newline keeps its `\r`.
+`transport_races::stdout_line_normalization_matches_bufread_lines` pins that
+behavior.
+
+Process cleanup: `ServerProcess` keeps its `Drop` implementation, which closes
+stdin, kills and reaps an unfinished child, then joins the stderr reader (the
+join is bounded because the killed child closes the pipe). Raw-process tests use
+`support::ChildGuard`, an RAII owner that kills and reaps on drop, including
+while a panic unwinds. Because the guard closes the pipes, helper reader threads
+observe EOF and exit; no test joins those reader threads. Bounded chunk and
+prefix reads also mean a test cannot block a thread forever on a silent server.
 
 ## 4. Stress qualification
 
@@ -133,6 +159,8 @@ Debug build, 2026-11-19, base commit `66677b3`:
 | Full MCP suite, 24 CPU hogs | 2 | 0 failures |
 | Full MCP suite, release | 2 | 0 failures |
 | Rust 1.97.0 MSRV, full MCP | 1 | 0 failures |
+| Corrective harness tests, 64 CPU hogs | 3 each | 0 failures |
+| Full MCP suite after corrections, 24 CPU hogs | 2 | 0 failures |
 
 CI remains the authority for the x86_64 runner. The local results establish that
 the new bounds absorb the same class of starvation, not that the CI runner is
