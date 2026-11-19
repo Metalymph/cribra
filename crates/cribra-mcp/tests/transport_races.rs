@@ -68,20 +68,26 @@ fn sustained_stdout_backpressure_is_terminal_with_exit_3() {
     );
 
     // Keep the read end open but never read it. Each tools/list response is
-    // about 8 KiB, so the output eventually stalls. The terminal condition is
-    // reported either by the write deadline or by the bounded writer queue,
-    // whichever the writer thread observes first; both are backpressure and
-    // both must terminate with the same explicit code and a diagnostic.
+    // about 8 KiB, so 16 of them exceed any ordinary pipe buffer and the output
+    // must stall. The terminal condition is reported either by the write
+    // deadline or by the bounded writer queue, whichever the writer thread
+    // observes first; both are backpressure and both must terminate with the
+    // same explicit code and a diagnostic.
+    //
+    // stdin stays open until the exit is observed. Closing it first races the
+    // reader's EOF shutdown against the writer's deadline: on a loaded Intel
+    // runner the server can discard the queued work and exit 0 before the
+    // writer ever blocks, which makes the test classify EOF instead of
+    // backpressure. EOF shutdown has its own coverage in the
+    // `eof_discards_*` tests.
     let _unread_stdout = child.child_mut().stdout.take().expect("stdout pipe");
     let mut stdin = child.child_mut().stdin.take().expect("stdin pipe");
-    for id in 1..=12 {
+    for id in 1..=16 {
         stdin
             .write_all(&modern_tools_list(id))
             .expect("write request");
     }
     stdin.flush().expect("flush requests");
-    // Closing stdin must not interrupt a blocked stdout write.
-    drop(stdin);
 
     let status = child
         .wait_timeout(Duration::from_secs(5))
@@ -91,6 +97,7 @@ fn sustained_stdout_backpressure_is_terminal_with_exit_3() {
         Some(3),
         "expected explicit terminal exit code"
     );
+    drop(stdin);
 
     let mut stderr = String::new();
     child

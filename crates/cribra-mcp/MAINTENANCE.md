@@ -44,6 +44,15 @@ Direct experiment against the unmodified server, no harness involved:
 The server is correct in all three rows. Only the classification the test wants
 to observe depends on the harness reaching the disconnect before the deadline.
 
+One further race was found by the first corrective CI run:
+`sustained_stdout_backpressure_is_terminal_with_exit_3` exited 0 on
+`macos-15-intel` because the harness closed stdin immediately after writing its
+requests. The reader's EOF shutdown could then discard the queued work before
+the writer blocked, so the test classified EOF instead of backpressure. The
+test now keeps stdin open until the terminal exit is observed and writes 16
+requests (~8.2 KiB each, measured) so the pipe must stall; EOF shutdown keeps
+its own coverage in the `eof_discards_*` tests.
+
 ## 2. Deadline policy
 
 All transport waits are bounded hang detectors. No test relies on an unbounded
@@ -161,6 +170,7 @@ Debug build, 2026-11-19, base commit `66677b3`:
 | Rust 1.97.0 MSRV, full MCP | 1 | 0 failures |
 | Corrective harness tests, 64 CPU hogs | 3 each | 0 failures |
 | Full MCP suite after corrections, 24 CPU hogs | 2 | 0 failures |
+| Backpressure test after CI race fix | 25 isolated + 5 under 64 hogs | 0 failures |
 
 CI remains the authority for the x86_64 runner. The local results establish that
 the new bounds absorb the same class of starvation, not that the CI runner is
