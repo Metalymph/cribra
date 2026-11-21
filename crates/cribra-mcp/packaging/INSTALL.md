@@ -5,24 +5,11 @@ newline-delimited JSON-RPC 2.0 on stdin and writes responses on stdout. It has
 no network access, no filesystem access, no configuration file, and no
 persistent storage.
 
-## 1. Extract
+## 1. Verify the checksum (recommended)
 
-{{extract_block}}
-
-The archive contains:
-
-```
-{{directory}}/
-  {{binary}}
-  LICENSE
-  INSTALL.md
-```
-
-## 2. Verify the checksum (recommended)
-
-The release publishes one `SHA256SUMS` file covering every archive. Verify only
-the entry for this archive; checking the whole manifest fails when the other
-archives are absent.
+Verify the archive **before extracting it**. The release publishes one
+`SHA256SUMS` file covering every archive. Verify only the entry for this
+archive; checking the whole manifest fails when the other archives are absent.
 
 {{checksum_block}}
 
@@ -34,6 +21,19 @@ rather than silently verifying nothing.
 that the archive matches the bytes recorded in the manifest, but it is not a
 cryptographic signature, does not assert who built the artifact, and is not a
 reproducible-build attestation.
+
+## 2. Extract
+
+{{extract_block}}
+
+The archive contains:
+
+```
+{{directory}}/
+  {{binary}}
+  LICENSE
+  INSTALL.md
+```
 
 ## 3. Install to a user-local directory
 
@@ -53,11 +53,14 @@ Serve mode takes no arguments. Unknown or extra arguments fail with exit code
 `2` and write nothing to stdout.
 
 **stdin lifetime:** the host must start one process per session and keep its
-stdin open for as long as the session needs the server. `cribra-mcp` exits on
-stdin EOF, after draining queued work, with exit code `0`. An immediate EOF
-(for example, running the executable with stdin connected to an empty file or
-`/dev/null`) is therefore a clean no-op shutdown, not an error. The server does
-not daemonize and does not stay alive without a client.
+stdin open for as long as the session needs the server. `cribra-mcp` treats
+stdin EOF as the end of the session and exits cleanly with exit code `0`.
+Responses already written to stdout remain valid. Work that had not started may
+be discarded, and a request written immediately before EOF may therefore
+return no response. MCP hosts must keep stdin open while awaiting responses.
+An immediate EOF (for example, running the executable with stdin connected to
+an empty file or `/dev/null`) is a clean no-op shutdown, not an error. The
+server does not daemonize and does not stay alive without a client.
 
 ## 5. Configure your MCP host
 

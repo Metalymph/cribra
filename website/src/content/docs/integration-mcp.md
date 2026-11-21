@@ -177,10 +177,12 @@ cribra-mcp --help     Print help
 Unknown or extra arguments fail with exit code `2` and write nothing to stdout.
 While serving, stdout carries protocol messages only; diagnostics go to stderr.
 
-The host must keep stdin open for the session lifetime. On stdin EOF the server
-drains queued work and exits `0`; an immediate EOF (`cribra-mcp < /dev/null` or
-the platform equivalent) is a clean no-op shutdown. The server does not
-daemonize.
+The host must keep stdin open for the session lifetime. stdin EOF ends the
+session cleanly with exit code `0`. Responses already written to stdout remain
+valid; work that had not started may be discarded, so a request written
+immediately before EOF may return no response. Hosts must keep stdin open while
+awaiting responses. An immediate EOF (`cribra-mcp < /dev/null` or the platform
+equivalent) is a clean no-op shutdown. The server does not daemonize.
 
 ## Local stdio transport
 

@@ -91,6 +91,8 @@ Qualified:
   against synthetic input;
 - legacy `initialize` / `notifications/initialized` works;
 - immediate stdin EOF (`< /dev/null`) is a clean exit `0`, not a hang or error;
+  responses already written remain valid, while not-yet-started work may be
+  discarded and an immediate request followed by EOF may return no response;
 - no network listener, filesystem discovery, configuration file, or persistent
   state was observed.
 

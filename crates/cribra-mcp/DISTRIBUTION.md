@@ -91,6 +91,40 @@ and is not a reproducible-build attestation.
 
 ## 4. Install
 
+### Verify before extraction
+
+The release publishes one `SHA256SUMS` manifest covering all five archives.
+Verify only the entry for the archive you downloaded before extracting it;
+checking the whole manifest fails when the other four archives are absent.
+
+```sh
+archive=cribra-mcp-0.1.1-<target>.tar.gz
+if ! awk -v f="$archive" '$2 == f' SHA256SUMS > "$archive.sha256"; then
+  echo "error: cannot read SHA256SUMS" >&2
+  exit 1
+fi
+if [ ! -s "$archive.sha256" ]; then
+  echo "error: SHA256SUMS has no entry for $archive" >&2
+  exit 1
+fi
+shasum -a 256 -c "$archive.sha256"    # macOS
+sha256sum -c "$archive.sha256"        # Linux
+```
+
+`shasum`/`sha256sum -c` exit non-zero and report `FAILED` on a checksum
+mismatch. The explicit size check fails when the manifest has no entry for the
+archive, rather than silently verifying nothing.
+
+```powershell
+$archive = 'cribra-mcp-0.1.1-x86_64-pc-windows-msvc.zip'
+$entry = Get-Content SHA256SUMS | Where-Object { ($_ -split '\s+')[1] -eq $archive }
+if (-not $entry) { Write-Error "SHA256SUMS has no entry for $archive"; exit 1 }
+$expected = ($entry -split '\s+')[0].ToLower()
+$actual = (Get-FileHash -Algorithm SHA256 $archive).Hash.ToLower()
+if ($actual -ne $expected) { Write-Error "checksum mismatch for $archive"; exit 1 }
+"$archive OK"
+```
+
 ### macOS and Linux
 
 ```sh
@@ -138,40 +172,6 @@ no publisher signature and the release provides no SmartScreen bypass. Verify
 the SHA-256 digest before running it and follow your organization's
 application-control policy.
 
-### Checksums
-
-The release publishes one `SHA256SUMS` manifest covering all five archives.
-Verify only the entry for the archive you downloaded; checking the whole
-manifest fails when the other four archives are absent.
-
-```sh
-archive=cribra-mcp-0.1.1-<target>.tar.gz
-if ! awk -v f="$archive" '$2 == f' SHA256SUMS > "$archive.sha256"; then
-  echo "error: cannot read SHA256SUMS" >&2
-  exit 1
-fi
-if [ ! -s "$archive.sha256" ]; then
-  echo "error: SHA256SUMS has no entry for $archive" >&2
-  exit 1
-fi
-shasum -a 256 -c "$archive.sha256"    # macOS
-sha256sum -c "$archive.sha256"        # Linux
-```
-
-`shasum`/`sha256sum -c` exit non-zero and report `FAILED` on a checksum
-mismatch. The explicit size check fails when the manifest has no entry for the
-archive, rather than silently verifying nothing.
-
-```powershell
-$archive = 'cribra-mcp-0.1.1-x86_64-pc-windows-msvc.zip'
-$entry = Get-Content SHA256SUMS | Where-Object { ($_ -split '\s+')[1] -eq $archive }
-if (-not $entry) { Write-Error "SHA256SUMS has no entry for $archive"; exit 1 }
-$expected = ($entry -split '\s+')[0].ToLower()
-$actual = (Get-FileHash -Algorithm SHA256 $archive).Hash.ToLower()
-if ($actual -ne $expected) { Write-Error "checksum mismatch for $archive"; exit 1 }
-"$archive OK"
-```
-
 ### CLI surface
 
 ```text
@@ -184,10 +184,12 @@ Unknown or extra arguments fail with exit code `2` and write nothing to stdout.
 While serving, stdout carries protocol messages only; the first byte is `{`.
 Diagnostics go to stderr.
 
-The host must keep stdin open for the session lifetime. On stdin EOF the server
-drains queued work and exits `0`; an immediate EOF (`cribra-mcp < /dev/null` or
-the platform equivalent) is a clean no-op shutdown. The server does not
-daemonize.
+The host must keep stdin open for the session lifetime. stdin EOF ends the
+session cleanly with exit code `0`. Responses already written to stdout remain
+valid; work that had not started may be discarded, so a request written
+immediately before EOF may return no response. Hosts must keep stdin open while
+awaiting responses. An immediate EOF (`cribra-mcp < /dev/null` or the platform
+equivalent) is a clean no-op shutdown. The server does not daemonize.
 
 ## 5. Host configuration
 
@@ -489,7 +491,9 @@ source-free errors.
   written before the exit code becomes observable, so a process exit cannot
   race the message away; this matters on Windows, where `ExitProcess` stops
   every other thread immediately.
-- On stdin EOF the server drains and discards queued work, then exits `0`.
+- On stdin EOF the server ends the session cleanly with exit code `0`;
+  responses already written remain valid, and work that had not started may be
+  discarded.
 - A closed stdout pipe results in a clean, deterministic shutdown.
 
 ## 9. Release process

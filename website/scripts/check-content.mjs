@@ -714,6 +714,18 @@ function checkMcpDocsStatus(docsById) {
       /integrity check, not an authenticity/i,
       'MCP guide must describe SHA256SUMS as integrity verification, not authentication',
     ],
+    [
+      /Responses already written to stdout remain/i,
+      'MCP guide must state that already written EOF responses remain valid',
+    ],
+    [
+      /before EOF may return no response/i,
+      'MCP guide must warn that a request immediately before EOF may return no response',
+    ],
+    [
+      /keep stdin open while\s+awaiting responses/i,
+      'MCP guide must require hosts to keep stdin open while awaiting responses',
+    ],
     [/GLIBC_2\.34/, 'MCP guide must record the measured GLIBC_2.34 symbol floor'],
     [
       /binary symbol requirement, not a\s+runtime-qualification statement/i,
@@ -776,6 +788,10 @@ function checkMcpDocsStatus(docsById) {
   assert(
     !/Run anyway/i.test(mcp.contents),
     'MCP guide must not present a SmartScreen bypass',
+  );
+  assert(
+    !/drains? queued work/i.test(mcp.contents),
+    'MCP guide must not claim that EOF drains queued work',
   );
   assert(
     !/GLIBC_2\.35/.test(mcp.contents),

@@ -6,6 +6,9 @@ guard the packaging policy that broke earlier releases:
 
 * the host-configuration example must be valid JSON on every target;
 * Windows backslashes must be JSON-escaped;
+* checksum verification must appear before archive extraction;
+* CLI verification commands must use the installed executable path, not the
+  current working directory;
 * extraction and checksum commands must match the target platform;
 * the macOS ARM64 ad-hoc signature and x86_64 unsigned artifact must stay
   distinct;
@@ -90,6 +93,43 @@ class InstallDocumentTests(unittest.TestCase):
         self.assertNotIn("shasum", windows)
         self.assertNotIn("sha256sum", windows)
 
+    def test_checksum_verification_precedes_extraction(self) -> None:
+        for target in package.TARGETS:
+            with self.subTest(target=target):
+                text = render(target)
+                self.assertLess(
+                    text.index("## 1. Verify the checksum"),
+                    text.index("## 2. Extract"),
+                )
+                if target == "x86_64-pc-windows-msvc":
+                    checksum = "Get-FileHash -Algorithm SHA256"
+                    extraction = "Expand-Archive -Path"
+                else:
+                    checksum = (
+                        "shasum -a 256 -c"
+                        if target.endswith("apple-darwin")
+                        else "sha256sum -c"
+                    )
+                    extraction = "tar -xzf"
+                self.assertLess(text.index(checksum), text.index(extraction))
+
+    def test_cli_commands_use_installed_paths(self) -> None:
+        for target in package.TARGETS:
+            with self.subTest(target=target):
+                text = render(target)
+                directory = package.directory_name(VERSION, target)
+                if target == "x86_64-pc-windows-msvc":
+                    command = rf"$HOME\cribra-mcp\{directory}\cribra-mcp.exe"
+                    prefix = f'& "{command}"'
+                    stale = r".\cribra-mcp.exe"
+                else:
+                    command = f"$HOME/cribra-mcp/{directory}/cribra-mcp"
+                    prefix = f'"{command}"'
+                    stale = "./cribra-mcp"
+                self.assertEqual(text.count(f"{prefix} --version"), 1)
+                self.assertEqual(text.count(f"{prefix} --help"), 1)
+                self.assertNotIn(stale, text)
+
     def test_single_archive_checksum_verification(self) -> None:
         for target in package.TARGETS:
             with self.subTest(target=target):
@@ -135,12 +175,23 @@ class InstallDocumentTests(unittest.TestCase):
         for target in package.TARGETS:
             with self.subTest(target=target):
                 text = render(target)
+                normalized = " ".join(text.split())
                 self.assertIn("--version", text)
                 self.assertIn("--help", text)
-                self.assertIn("stdin lifetime", text.lower())
-                self.assertIn("stdin EOF", text)
-                self.assertIn("immediate EOF", text)
-                self.assertIn("exit code `0`", text)
+                self.assertIn("stdin lifetime", normalized.lower())
+                self.assertIn("stdin EOF", normalized)
+                self.assertIn("immediate EOF", normalized)
+                self.assertIn("exit code `0`", normalized)
+                self.assertIn(
+                    "Work that had not started may be discarded", normalized
+                )
+                self.assertIn(
+                    "may therefore return no response", normalized
+                )
+                self.assertIn(
+                    "keep stdin open while awaiting responses", normalized
+                )
+                self.assertNotIn("draining queued work", normalized)
 
     def test_initialization_and_memory_are_documented(self) -> None:
         text = render("aarch64-apple-darwin")

@@ -191,6 +191,15 @@ def absolute_config_value(target: str, version: str) -> str:
     return user_local_binary(target, version)
 
 
+def installed_shell_binary(target: str, version: str) -> str:
+    """Returns the installed executable path as a shell-expanded user path."""
+    directory = directory_name(version, target)
+    binary = binary_name(target)
+    if platform_of(target) == "windows":
+        return rf"$HOME\cribra-mcp\{directory}\{binary}"
+    return f"$HOME/cribra-mcp/{directory}/{binary}"
+
+
 def extract_block(target: str, archive: str) -> str:
     if platform_of(target) == "windows":
         return (
@@ -235,35 +244,32 @@ def checksum_block(target: str, archive: str) -> str:
 
 def install_block(target: str, version: str) -> str:
     directory = directory_name(version, target)
-    binary = binary_name(target)
     if platform_of(target) == "windows":
         return (
             "```powershell\n"
             "$dest = Join-Path $HOME 'cribra-mcp'\n"
             "New-Item -ItemType Directory -Force -Path $dest | Out-Null\n"
             f"Move-Item {directory} $dest\n"
-            f"& \"$dest\\{directory}\\{binary}\" --version\n"
             "```"
         )
     return (
         "```sh\n"
         "mkdir -p \"$HOME/cribra-mcp\"\n"
         f"mv {directory} \"$HOME/cribra-mcp/\"\n"
-        f"\"$HOME/cribra-mcp/{directory}/{binary}\" --version\n"
         "```"
     )
 
 
-def cli_block(target: str) -> str:
-    binary = binary_name(target)
+def cli_block(target: str, version: str) -> str:
+    binary = installed_shell_binary(target, version)
     if platform_of(target) == "windows":
         return (
             "```powershell\n"
-            f".\\{binary} --version\n"
-            f".\\{binary} --help\n"
+            f'& "{binary}" --version\n'
+            f'& "{binary}" --help\n'
             "```"
         )
-    return f"```sh\n./{binary} --version\n./{binary} --help\n```"
+    return f'```sh\n"{binary}" --version\n"{binary}" --help\n```'
 
 
 def host_config(target: str, version: str) -> dict:
@@ -302,7 +308,7 @@ def render_install(version: str, target: str, archive: str) -> str:
         "{{extract_block}}": extract_block(target, archive),
         "{{checksum_block}}": checksum_block(target, archive),
         "{{install_block}}": install_block(target, version),
-        "{{cli_block}}": cli_block(target),
+        "{{cli_block}}": cli_block(target, version),
         "{{host_config}}": json.dumps(host_config(target, version), indent=2),
         "{{platform_note}}": platform_note(target),
     }
@@ -442,6 +448,23 @@ def verify_archive(archive: Path, expected_version: str | None = None) -> dict:
         )
     if platform_of(target) == "windows" and not command.endswith(".exe"):
         fail(f"{name}: INSTALL.md Windows command does not name the .exe")
+
+    verify_heading = "## 1. Verify the checksum"
+    extract_heading = "## 2. Extract"
+    if (
+        verify_heading not in install_text
+        or extract_heading not in install_text
+        or install_text.index(verify_heading) > install_text.index(extract_heading)
+    ):
+        fail(f"{name}: INSTALL.md must verify the checksum before extraction")
+
+    installed = installed_shell_binary(target, version)
+    for option in ("--version", "--help"):
+        if f'"{installed}" {option}' not in install_text:
+            fail(
+                f"{name}: INSTALL.md {option} does not use the installed path "
+                f"{installed!r}"
+            )
 
     for required in (
         version,
