@@ -604,9 +604,14 @@ and musl targets are not produced.
 ## Distribution
 
 Prebuilt archives for the five supported targets, one `SHA256SUMS` manifest,
-install instructions, and verified host configuration (Claude Desktop, Claude
-Code, Codex, and generic stdio hosts) are documented in
-[`DISTRIBUTION.md`](DISTRIBUTION.md).
+install instructions, and host configuration (Claude Desktop, Claude Code,
+Codex CLI, Codex Desktop status, OpenCode, Copilot design-only, and generic
+stdio hosts) are documented in [`DISTRIBUTION.md`](DISTRIBUTION.md).
+
+The consolidated DX.1–DX.5 evidence and the **PARTIAL PASS** developer
+experience verdict are in
+[`DEVELOPER_EXPERIENCE.md`](DEVELOPER_EXPERIENCE.md). M3 remains **PARTIAL
+PASS** and M4 remains **PASS**; DX does not upgrade either.
 
 Qualification commands:
 

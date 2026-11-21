@@ -21,6 +21,8 @@ import argparse
 import gzip
 import hashlib
 import io
+import json
+import re
 import shutil
 import struct
 import sys
@@ -48,22 +50,48 @@ TARGETS = {
 }
 
 PLATFORM_NOTES = {
-    "darwin": (
-        "macOS note: the executable is ad-hoc signed but not notarized. If "
-        "Gatekeeper quarantines a browser download, clear the attribute with\n"
-        "`xattr -d com.apple.quarantine {binary}` before configuring the host."
+    "darwin-aarch64": (
+        "macOS ARM64 note: this executable is **ad-hoc signed** (`codesign -dv` "
+        "reports `Signature=adhoc`) but it is **not notarized**. Gatekeeper may "
+        "refuse to launch a browser-downloaded copy because no Developer ID "
+        "signature or notarization ticket is present. This release provides no "
+        "quarantine-removal command and no Gatekeeper bypass; verify the SHA-256 "
+        "digest and do not install the artifact if your policy requires a "
+        "notarized binary."
+    ),
+    "darwin-x86_64": (
+        "macOS x86_64 note: this executable is **unsigned** and **not "
+        "notarized**; unlike the ARM64 artifact it has no ad-hoc signature. "
+        "Gatekeeper may refuse to launch a browser-downloaded copy because no "
+        "Developer ID signature or notarization ticket is present. This release "
+        "provides no quarantine-removal command and no Gatekeeper bypass; verify "
+        "the SHA-256 digest and do not install the artifact if your policy "
+        "requires a signed or notarized binary."
     ),
     "linux": (
-        "Linux note: the binaries reference GLIBC symbols up to 2.34, so the "
-        "host must provide glibc 2.34 or newer. This is a binary symbol "
-        "requirement, not a runtime-qualified distribution list. This build "
-        "does not use musl or any bundled libc."
+        "Linux note: both published Linux archives were inspected statically "
+        "with `readelf --version-info`; they reference GLIBC symbols up to "
+        "**GLIBC_2.34**. The host must provide glibc 2.34 or newer. This is a "
+        "binary symbol requirement, not a runtime-qualified distribution list: "
+        "the x86_64 archive was executed natively on Ubuntu 26.04 and the "
+        "aarch64 archive on Ubuntu 24.04 ARM64, but no other distribution was "
+        "executed. This build does not use musl or any bundled libc."
     ),
     "windows": (
-        "Windows note: the executable is unsigned, so SmartScreen may prompt "
-        "once. Verify the SHA-256 digest before running it."
+        "Windows note: the executable is **unsigned**, so SmartScreen may warn "
+        "or block it. There is no publisher signature and this release provides "
+        "no SmartScreen bypass. Verify the SHA-256 digest before running it and "
+        "follow your organization's application-control policy."
     ),
 }
+
+
+def platform_note(target: str) -> str:
+    platform = platform_of(target)
+    if platform == "darwin":
+        architecture = "aarch64" if target.startswith("aarch64-") else "x86_64"
+        return PLATFORM_NOTES[f"darwin-{architecture}"]
+    return PLATFORM_NOTES[platform]
 
 
 def fail(message: str) -> NoReturn:
@@ -143,22 +171,146 @@ def detect_binary_format(data: bytes) -> tuple[str, str]:
     fail("unrecognized executable format")
 
 
+def user_local_directory(target: str, version: str) -> str:
+    """Returns a user-local absolute directory that does not need elevation."""
+    directory = directory_name(version, target)
+    platform = platform_of(target)
+    if platform == "windows":
+        return rf"C:\Users\you\cribra-mcp\{directory}"
+    if platform == "darwin":
+        return f"/Users/you/cribra-mcp/{directory}"
+    return f"/home/you/cribra-mcp/{directory}"
+
+
+def user_local_binary(target: str, version: str) -> str:
+    separator = "\\" if platform_of(target) == "windows" else "/"
+    return f"{user_local_directory(target, version)}{separator}{binary_name(target)}"
+
+
+def absolute_config_value(target: str, version: str) -> str:
+    return user_local_binary(target, version)
+
+
+def installed_shell_binary(target: str, version: str) -> str:
+    """Returns the installed executable path as a shell-expanded user path."""
+    directory = directory_name(version, target)
+    binary = binary_name(target)
+    if platform_of(target) == "windows":
+        return rf"$HOME\cribra-mcp\{directory}\{binary}"
+    return f"$HOME/cribra-mcp/{directory}/{binary}"
+
+
+def extract_block(target: str, archive: str) -> str:
+    if platform_of(target) == "windows":
+        return (
+            "```powershell\n"
+            f"tar -xf {archive}\n"
+            "# or\n"
+            f"Expand-Archive -Path {archive} -DestinationPath .\n"
+            "```"
+        )
+    return f"```sh\ntar -xzf {archive}\n```"
+
+
+def checksum_block(target: str, archive: str) -> str:
+    if platform_of(target) == "windows":
+        return (
+            "```powershell\n"
+            f"$archive = '{archive}'\n"
+            "$entry = Get-Content SHA256SUMS | Where-Object { ($_ -split '\\s+')[1] -eq $archive }\n"
+            "if (-not $entry) { Write-Error \"SHA256SUMS has no entry for $archive\"; exit 1 }\n"
+            "$expected = ($entry -split '\\s+')[0].ToLower()\n"
+            "$actual = (Get-FileHash -Algorithm SHA256 $archive).Hash.ToLower()\n"
+            "if ($actual -ne $expected) { Write-Error \"checksum mismatch for $archive\"; exit 1 }\n"
+            "\"$archive OK\"\n"
+            "```"
+        )
+    checker = "shasum -a 256" if platform_of(target) == "darwin" else "sha256sum"
+    return (
+        "```sh\n"
+        f"archive={archive}\n"
+        "if ! awk -v f=\"$archive\" '$2 == f' SHA256SUMS > \"$archive.sha256\"; then\n"
+        "  echo \"error: cannot read SHA256SUMS\" >&2\n"
+        "  exit 1\n"
+        "fi\n"
+        "if [ ! -s \"$archive.sha256\" ]; then\n"
+        "  echo \"error: SHA256SUMS has no entry for $archive\" >&2\n"
+        "  exit 1\n"
+        "fi\n"
+        f"{checker} -c \"$archive.sha256\"\n"
+        "```"
+    )
+
+
+def install_block(target: str, version: str) -> str:
+    directory = directory_name(version, target)
+    if platform_of(target) == "windows":
+        return (
+            "```powershell\n"
+            "$dest = Join-Path $HOME 'cribra-mcp'\n"
+            "New-Item -ItemType Directory -Force -Path $dest | Out-Null\n"
+            f"Move-Item {directory} $dest\n"
+            "```"
+        )
+    return (
+        "```sh\n"
+        "mkdir -p \"$HOME/cribra-mcp\"\n"
+        f"mv {directory} \"$HOME/cribra-mcp/\"\n"
+        "```"
+    )
+
+
+def cli_block(target: str, version: str) -> str:
+    binary = installed_shell_binary(target, version)
+    if platform_of(target) == "windows":
+        return (
+            "```powershell\n"
+            f'& "{binary}" --version\n'
+            f'& "{binary}" --help\n'
+            "```"
+        )
+    return f'```sh\n"{binary}" --version\n"{binary}" --help\n```'
+
+
+def host_config(target: str, version: str) -> dict:
+    return {
+        "mcpServers": {
+            "cribra": {
+                "command": user_local_binary(target, version),
+                "args": [],
+            }
+        }
+    }
+
+
+def install_host_config(text: str) -> dict:
+    """Extracts and parses the single JSON host-configuration example."""
+    match = re.search(r"```json\n(.*?)\n```", text, re.DOTALL)
+    if match is None:
+        fail("INSTALL.md has no JSON host-configuration block")
+    try:
+        config = json.loads(match.group(1))
+    except json.JSONDecodeError as error:
+        fail(f"INSTALL.md host configuration is not valid JSON: {error}")
+    if not isinstance(config, dict):
+        fail("INSTALL.md host configuration must be a JSON object")
+    return config
+
+
 def render_install(version: str, target: str, archive: str) -> str:
     binary = binary_name(target)
-    platform = platform_of(target)
-    absolute = (
-        rf"C:\Tools\{directory_name(version, target)}\{binary}"
-        if platform == "windows"
-        else f"/opt/{directory_name(version, target)}/{binary}"
-    )
     replacements = {
         "{{version}}": version,
         "{{target}}": target,
         "{{archive}}": archive,
         "{{directory}}": directory_name(version, target),
         "{{binary}}": binary,
-        "{{absolute}}": absolute,
-        "{{platform_note}}": PLATFORM_NOTES[platform].format(binary=binary),
+        "{{extract_block}}": extract_block(target, archive),
+        "{{checksum_block}}": checksum_block(target, archive),
+        "{{install_block}}": install_block(target, version),
+        "{{cli_block}}": cli_block(target, version),
+        "{{host_config}}": json.dumps(host_config(target, version), indent=2),
+        "{{platform_note}}": platform_note(target),
     }
     text = INSTALL_TEMPLATE.read_text(encoding="utf-8")
     for placeholder, value in replacements.items():
@@ -275,12 +427,77 @@ def verify_archive(archive: Path, expected_version: str | None = None) -> dict:
         fail(f"{name}: LICENSE does not look like the repository license")
 
     install_text = read_entry(archive, f"{directory}/INSTALL.md").decode("utf-8")
-    for required in (version, target, absolute_config_value(target, version)):
-        if required not in install_text:
-            fail(f"{name}: INSTALL.md is missing {required!r}")
     for placeholder in ("{{", "}}"):
         if placeholder in install_text:
             fail(f"{name}: INSTALL.md still contains {placeholder!r}")
+
+    config = install_host_config(install_text)
+    servers = config.get("mcpServers")
+    if not isinstance(servers, dict) or "cribra" not in servers:
+        fail(f"{name}: INSTALL.md JSON has no mcpServers.cribra entry")
+    server = servers["cribra"]
+    if not isinstance(server, dict):
+        fail(f"{name}: INSTALL.md mcpServers.cribra is not a JSON object")
+    command = server.get("command")
+    if not isinstance(command, str):
+        fail(f"{name}: INSTALL.md mcpServers.cribra has no string command")
+    if command != absolute_config_value(target, version):
+        fail(
+            f"{name}: INSTALL.md command {command!r} is not the expected "
+            f"{absolute_config_value(target, version)!r}"
+        )
+    if platform_of(target) == "windows" and not command.endswith(".exe"):
+        fail(f"{name}: INSTALL.md Windows command does not name the .exe")
+
+    verify_heading = "## 1. Verify the checksum"
+    extract_heading = "## 2. Extract"
+    if (
+        verify_heading not in install_text
+        or extract_heading not in install_text
+        or install_text.index(verify_heading) > install_text.index(extract_heading)
+    ):
+        fail(f"{name}: INSTALL.md must verify the checksum before extraction")
+
+    installed = installed_shell_binary(target, version)
+    for option in ("--version", "--help"):
+        if f'"{installed}" {option}' not in install_text:
+            fail(
+                f"{name}: INSTALL.md {option} does not use the installed path "
+                f"{installed!r}"
+            )
+
+    for required in (
+        version,
+        target,
+        "--version",
+        "--help",
+        "stdin",
+        "EOF",
+        "SHA256SUMS has no entry",
+        "integrity check, not an authenticity",
+    ):
+        if required not in install_text:
+            fail(f"{name}: INSTALL.md is missing {required!r}")
+
+    if "xattr" in install_text or "Run anyway" in install_text:
+        fail(f"{name}: INSTALL.md presents a Gatekeeper or SmartScreen bypass")
+
+    platform = platform_of(target)
+    if platform == "darwin":
+        if "not notarized" not in install_text:
+            fail(f"{name}: INSTALL.md does not state that the binary is not notarized")
+        if target == "aarch64-apple-darwin" and "ad-hoc signed" not in install_text:
+            fail(f"{name}: INSTALL.md does not describe the ARM64 ad-hoc signature")
+        if target == "x86_64-apple-darwin" and "unsigned" not in install_text:
+            fail(f"{name}: INSTALL.md does not describe the x86_64 unsigned artifact")
+    elif platform == "linux":
+        for required in ("GLIBC_2.34", "readelf --version-info"):
+            if required not in install_text:
+                fail(f"{name}: INSTALL.md is missing {required!r}")
+    else:
+        for required in ("SmartScreen", "unsigned"):
+            if required not in install_text:
+                fail(f"{name}: INSTALL.md is missing {required!r}")
 
     return {
         "archive": name,
@@ -291,14 +508,6 @@ def verify_archive(archive: Path, expected_version: str | None = None) -> dict:
         "bytes": archive.stat().st_size,
         "sha256": sha256_file(archive),
     }
-
-
-def absolute_config_value(target: str, version: str) -> str:
-    binary = binary_name(target)
-    directory = directory_name(version, target)
-    if platform_of(target) == "windows":
-        return rf"C:\Tools\{directory}\{binary}"
-    return f"/opt/{directory}/{binary}"
 
 
 def sha256_file(path: Path) -> str:

@@ -104,7 +104,7 @@ mcp-package-smoke outdir="target/mcp-dist":
 # Regression-test the distribution verifier's version and completeness policy.
 mcp-smoke-tests:
     python3 -B -m unittest discover \
-      -s crates/cribra-mcp/qualification/packaging -p 'test_smoke.py'
+      -s crates/cribra-mcp/qualification/packaging -p 'test_*.py'
 
 # Local dry run of the complete MCP release qualification. Never publishes.
 mcp-release-readiness:
