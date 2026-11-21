@@ -58,7 +58,7 @@ tar -xzf cribra-mcp-0.1.1-<target>.tar.gz
 ./cribra-mcp-0.1.1-<target>/cribra-mcp --version
 ```
 
-The server exposes `cribra_scan` and `cribra_transform` over local stdio. It has no HTTP transport, network access, filesystem discovery or persistent storage. See the [MCP integration guide](/docs/integration-mcp/) for the five qualified targets, checksums, Claude Desktop/Claude Code/Codex configuration, protocol versions, the M3 **PARTIAL PASS** verdict and M4 distribution **PASS**.
+The server exposes `cribra_scan` and `cribra_transform` over local stdio. It has no HTTP transport, network access, filesystem discovery or persistent storage. See the [MCP integration guide](/docs/integration-mcp/) for the five qualified targets, checksums, Claude Desktop/Claude Code/Codex/OpenCode configuration, the design-only Copilot Actions proposal, protocol versions, the M3 **PARTIAL PASS** verdict, M4 distribution **PASS**, and the overall DX **PARTIAL PASS** verdict.
 
 ## Choose another language
 

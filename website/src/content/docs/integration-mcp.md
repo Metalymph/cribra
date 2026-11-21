@@ -1,6 +1,6 @@
 ---
 title: MCP server integration
-description: Install the published cribra-mcp 0.1.1 stdio server, verify its archives, and configure it in Claude Desktop, Claude Code and Codex.
+description: Install the published cribra-mcp 0.1.1 stdio server, verify its archives, and configure it in Claude Desktop, Claude Code, Codex, OpenCode and the proposed Copilot Actions setup.
 order: 29
 ---
 
@@ -23,6 +23,7 @@ presentation, networking and destination policy.
 | Published version | `cribra-mcp` 0.1.1 — [release `cribra-mcp-v0.1.1`](https://github.com/Metalymph/cribra/releases/tag/cribra-mcp-v0.1.1)                                                                                                                                             |
 | M3 conformance    | **PARTIAL PASS** — the 147-row conformance matrix has 10 of 10 applicable rows passing, but the official runner is HTTP-only and executed 0 rows; separately, 10 of 10 independent SDK qualification scenarios pass (5 TypeScript, 5 Python). Nothing is certified |
 | M4 distribution   | **PASS** — five native archives and one `SHA256SUMS` manifest, packaged and smoke-qualified on their own native runners                                                                                                                                            |
+| Developer experience | **PARTIAL PASS** — macOS ARM64 clean-room execution passed; Codex CLI and OpenCode host-mediated integration passed; model-driven host runs and Copilot runtime remain unqualified |
 | Transport         | Local stdio only                                                                                                                                                                                                                                                   |
 
 Two distinct M3 evidence sets back the verdict, and they are not
@@ -41,9 +42,16 @@ interchangeable:
 
 The M4 distribution result does not upgrade, replace or re-certify the M3
 verdict. The canonical records are the
-[M3 conformance record](https://github.com/Metalymph/cribra/blob/main/crates/cribra-mcp/CONFORMANCE.md)
+[M3 conformance record](https://github.com/Metalymph/cribra/blob/main/crates/cribra-mcp/CONFORMANCE.md),
+the
+[M4 distribution record](https://github.com/Metalymph/cribra/blob/main/crates/cribra-mcp/DISTRIBUTION.md),
 and the
-[M4 distribution record](https://github.com/Metalymph/cribra/blob/main/crates/cribra-mcp/DISTRIBUTION.md).
+[developer-experience record](https://github.com/Metalymph/cribra/blob/main/crates/cribra-mcp/DEVELOPER_EXPERIENCE.md).
+The overall DX verdict is **PARTIAL PASS**. Only the macOS ARM64 public
+artifact was re-executed from a clean-room extraction; the other four targets
+were inspected statically in DX.1. Codex CLI and OpenCode evidence is
+host-mediated, not model-driven. Copilot is documented feasibility and design
+only.
 
 ## Qualified targets
 
@@ -66,8 +74,20 @@ must provide glibc 2.34 or newer. That is a binary symbol requirement, not a
 runtime-qualification statement: the x86_64 archive was runtime-qualified on
 GitHub's Ubuntu 26.04 image and the aarch64 archive on Ubuntu 24.04 ARM64.
 Older distributions that satisfy the symbol floor are expected to load but were
-not runtime-qualified. macOS archives are ad-hoc signed, not notarized;
-Windows executables are unsigned.
+not runtime-qualified.
+
+The macOS artifacts are not notarized and their signatures differ: the
+`aarch64-apple-darwin` executable is **ad-hoc signed** (`codesign -dv` reports
+`Signature=adhoc`), while the `x86_64-apple-darwin` executable is **unsigned**.
+The Windows executable is unsigned. Gatekeeper or SmartScreen may therefore
+refuse a browser-downloaded copy. This release provides no quarantine-removal
+command and no Gatekeeper or SmartScreen bypass; verify the SHA-256 digest and
+do not install the artifact if your policy requires a signed or notarized
+binary.
+
+M4 ran each archive on its own native CI runner. DX.1's independent
+consumer-side re-check re-executed only the macOS ARM64 artifact and inspected
+the other four; it does not extend runtime qualification to them.
 
 ## Download and verify
 
@@ -130,21 +150,20 @@ Each archive extracts to exactly one directory containing the executable,
 
 ```sh
 tar -xzf cribra-mcp-0.1.1-<target>.tar.gz
-sudo mv cribra-mcp-0.1.1-<target> /opt/
-/opt/cribra-mcp-0.1.1-<target>/cribra-mcp --version
+mkdir -p "$HOME/cribra-mcp"
+mv cribra-mcp-0.1.1-<target> "$HOME/cribra-mcp/"
+"$HOME/cribra-mcp/cribra-mcp-0.1.1-<target>/cribra-mcp" --version
 ```
 
-If a browser download sets the macOS quarantine attribute:
-
-```sh
-xattr -d com.apple.quarantine /opt/cribra-mcp-0.1.1-<target>/cribra-mcp
-```
+The archive is user-local: no `sudo`, no `/opt`, and no system-wide install is
+required. Use the expanded absolute path in host configuration; GUI-launched
+hosts may not expand `~` or `$HOME`.
 
 ### Windows
 
 ```powershell
-Expand-Archive cribra-mcp-0.1.1-x86_64-pc-windows-msvc.zip -DestinationPath C:\Tools
-C:\Tools\cribra-mcp-0.1.1-x86_64-pc-windows-msvc\cribra-mcp.exe --version
+Expand-Archive cribra-mcp-0.1.1-x86_64-pc-windows-msvc.zip -DestinationPath "$HOME\cribra-mcp"
+& "$HOME\cribra-mcp\cribra-mcp-0.1.1-x86_64-pc-windows-msvc\cribra-mcp.exe" --version
 ```
 
 ### CLI surface
@@ -157,6 +176,11 @@ cribra-mcp --help     Print help
 
 Unknown or extra arguments fail with exit code `2` and write nothing to stdout.
 While serving, stdout carries protocol messages only; diagnostics go to stderr.
+
+The host must keep stdin open for the session lifetime. On stdin EOF the server
+drains queued work and exits `0`; an immediate EOF (`cribra-mcp < /dev/null` or
+the platform equivalent) is a clean no-op shutdown. The server does not
+daemonize.
 
 ## Local stdio transport
 
@@ -184,7 +208,7 @@ Config file:
 {
   "mcpServers": {
     "cribra": {
-      "command": "/opt/cribra-mcp-0.1.1-aarch64-apple-darwin/cribra-mcp",
+      "command": "/Users/you/cribra-mcp/cribra-mcp-0.1.1-aarch64-apple-darwin/cribra-mcp",
       "args": []
     }
   }
@@ -198,7 +222,7 @@ Restart Claude Desktop completely after editing the file.
 Current Claude Code releases accept an explicit transport and a `--` separator:
 
 ```sh
-claude mcp add --transport stdio -s user cribra -- /opt/cribra-mcp-0.1.1-aarch64-apple-darwin/cribra-mcp
+claude mcp add --transport stdio -s user cribra -- /Users/you/cribra-mcp/cribra-mcp-0.1.1-aarch64-apple-darwin/cribra-mcp
 ```
 
 Project scope writes a committed `.mcp.json`:
@@ -208,7 +232,7 @@ Project scope writes a committed `.mcp.json`:
   "mcpServers": {
     "cribra": {
       "type": "stdio",
-      "command": "/opt/cribra-mcp-0.1.1-aarch64-apple-darwin/cribra-mcp",
+      "command": "/Users/you/cribra-mcp/cribra-mcp-0.1.1-aarch64-apple-darwin/cribra-mcp",
       "args": []
     }
   }
@@ -225,18 +249,103 @@ Codex stores MCP servers in `$CODEX_HOME/config.toml` (default
 
 ```toml
 [mcp_servers.cribra]
-command = "/opt/cribra-mcp-0.1.1-aarch64-apple-darwin/cribra-mcp"
+command = "/Users/you/cribra-mcp/cribra-mcp-0.1.1-aarch64-apple-darwin/cribra-mcp"
 ```
 
 ```sh
-codex mcp add cribra -- /opt/cribra-mcp-0.1.1-aarch64-apple-darwin/cribra-mcp
+codex mcp add cribra -- /Users/you/cribra-mcp/cribra-mcp-0.1.1-aarch64-apple-darwin/cribra-mcp
 codex mcp list
 codex mcp get cribra
 ```
 
-Codex CLI `0.169.0-alpha.11.1` was verified with an isolated `CODEX_HOME`;
-`codex mcp get cribra` reported `transport: stdio`, `enabled: true` and the
-absolute command.
+Codex CLI `0.169.0-alpha.11.1` was verified during M4 and `0.169.1` was
+re-qualified during DX.2, both with an isolated `CODEX_HOME`. `codex mcp get
+cribra` reported `transport: stdio`, `enabled: true` and the absolute command.
+DX.2 also drove Codex's own `app-server`: it discovered exactly two tools,
+relayed real `cribra_scan` and `cribra_transform` calls, reused one server
+child, and left no process after teardown. The default negotiation was legacy
+`2025-11-25`. Model-driven invocation was **not qualified** because the account
+was usage-limited.
+
+### Codex Desktop
+
+**PENDING — not qualified.** Codex Desktop `26.1111.71704` bundles the same
+`codex-cli 0.169.1` host layer and shares the same `config.toml` MCP
+configuration, but the Desktop GUI was not driven. Qualification requires an
+authorized change to the shared global config, a restart, GUI approval and a
+model turn. The CLI `app-server` PASS is evidence for the shared host layer,
+not an executed Desktop result.
+
+### OpenCode
+
+OpenCode `2.3.2` uses a local stdio server in the project configuration:
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "servers": {
+      "cribra": {
+        "type": "local",
+        "command": [
+          "/Users/you/cribra-mcp/cribra-mcp-0.1.1-aarch64-apple-darwin/cribra-mcp"
+        ]
+      }
+    }
+  },
+  "permissions": [
+    { "action": "*", "resource": "*", "effect": "deny" },
+    { "action": "cribra_cribra_scan", "resource": "*", "effect": "allow" },
+    { "action": "cribra_cribra_transform", "resource": "*", "effect": "allow" }
+  ]
+}
+```
+
+OpenCode's MCP permission action is `<server>_<tool>`, so the two Cribra
+actions are `cribra_cribra_scan` and `cribra_cribra_transform`. The example is
+deny-by-default and allows only those two MCP actions. `opencode mcp list`
+reported `✓ cribra connected` in DX.3, and the host log reported
+`mcp connected server=cribra tools=2`.
+
+OpenCode's default `legacy` negotiation connected with `2025-11-25`; a separate
+isolated configuration pinned `2026-07-28` and also connected. Cold setup from
+private `opencode serve` start to connected was `0.534 s` on the default path
+and `0.612 s` with the pinned modern revision. The host-mediated matrix passed
+scan, candidates, redact, template, structured errors, repeats and process
+cleanup. Model-driven execution was **not qualified** because provider turns
+were blocked before any model response.
+
+For OpenCode's no-model Code Mode automation path, `codemode: true` and an
+`execute` permission are additionally required; that is a host automation
+detail, not a requirement for ordinary agent use.
+
+### GitHub Copilot cloud agent (design only)
+
+**NOT QUALIFIED — documented feasibility and design only.** No Copilot session
+was started. The account is Copilot Free with `cloud_sessions_enabled: false`,
+and Copilot cloud agent requires a paid plan.
+
+The proposed design uses the Linux x86_64 archive, a pinned SHA-256 digest, and
+`/opt/cribra/bin/cribra-mcp`. It is recorded as an example only in the
+[developer-experience record](https://github.com/Metalymph/cribra/blob/main/crates/cribra-mcp/DEVELOPER_EXPERIENCE.md#dx4--github-copilot-cloud-agent).
+No operational Copilot workflow is committed to this repository, and no
+repository setting was changed.
+
+Copilot-specific constraints:
+
+- repository MCP servers are entered in **Settings → Copilot → MCP servers**,
+  not in a committed `.github/mcp.json`; the setting is shared with Copilot code
+  review;
+- the `tools` array is an exact allowlist, and configured tools are called
+  autonomously without approval;
+- runners are Ubuntu x64 or Windows x64 only; macOS runners are unsupported;
+- `.github/workflows/copilot-setup-steps.yml` applies only to **Actions**
+  sessions. **Cloud sandbox sessions do not run that setup workflow**, so an
+  absolute path installed by it will not exist in a Cloud session.
+
+A future qualification must start an **Actions**-based session, confirm that
+`cribra` starts with exactly `cribra_scan` and `cribra_transform`, run the
+synthetic matrix, and capture teardown and any observable protocol revision.
 
 ### Generic stdio hosts
 
@@ -244,7 +353,7 @@ Any host that supports an MCP `stdio` server accepts the same three fields:
 
 ```json
 {
-  "command": "/opt/cribra-mcp-0.1.1-aarch64-apple-darwin/cribra-mcp",
+  "command": "/Users/you/cribra-mcp/cribra-mcp-0.1.1-aarch64-apple-darwin/cribra-mcp",
   "args": [],
   "env": {}
 }
@@ -366,11 +475,14 @@ The M3 record documents the 147-row canonical matrix with 10 applicable passes,
 the official-runner limitation, adversarial transport and privacy tests, and the
 separate 10 independent SDK qualification scenarios (5 TypeScript, 5 Python).
 The M4 record documents host configuration checks, deterministic packaging,
-packaged smoke scenarios and the unsupported-host boundaries.
+packaged smoke scenarios and the unsupported-host boundaries. The developer
+experience record documents the clean-room macOS ARM64 re-execution, the
+host-mediated Codex and OpenCode runs, and the design-only Copilot status.
 
 ## Related
 
 - [MCP distribution record](https://github.com/Metalymph/cribra/blob/main/crates/cribra-mcp/DISTRIBUTION.md)
+- [Developer-experience record](https://github.com/Metalymph/cribra/blob/main/crates/cribra-mcp/DEVELOPER_EXPERIENCE.md)
 - [MCP conformance record](https://github.com/Metalymph/cribra/blob/main/crates/cribra-mcp/CONFORMANCE.md)
 - [MCP server README](https://github.com/Metalymph/cribra/blob/main/crates/cribra-mcp/README.md)
 - [Compatibility and distribution](/docs/compatibility-and-distribution/)

@@ -723,6 +723,19 @@ function checkMcpDocsStatus(docsById) {
     [/Claude Desktop/, 'MCP guide must document Claude Desktop'],
     [/Claude Code/, 'MCP guide must document Claude Code'],
     [/Codex/, 'MCP guide must document Codex'],
+    [/Codex Desktop/, 'MCP guide must document Codex Desktop separately'],
+    [/PENDING/, 'MCP guide must mark Codex Desktop as pending'],
+    [/OpenCode/, 'MCP guide must document OpenCode'],
+    [/Copilot/, 'MCP guide must document Copilot feasibility'],
+    [/design only/i, 'MCP guide must mark Copilot as design only'],
+    [
+      /Cloud sandbox sessions do not run/i,
+      'MCP guide must explain that Cloud sessions do not run the Actions setup workflow',
+    ],
+    [
+      /Developer experience[^\n]*PARTIAL PASS/i,
+      'MCP guide must record the overall DX PARTIAL PASS verdict',
+    ],
     [/cribra_scan/, 'MCP guide must document cribra_scan'],
     [/cribra_transform/, 'MCP guide must document cribra_transform'],
     [/metadata[- ]only/i, 'MCP guide must document metadata-only scan results'],
@@ -755,6 +768,18 @@ function checkMcpDocsStatus(docsById) {
   assert(
     !/authenticates the exact published binaries/i.test(mcp.contents),
     'MCP guide must not claim SHA256SUMS authenticates published binaries',
+  );
+  assert(
+    !/\bxattr\b/i.test(mcp.contents),
+    'MCP guide must not present a Gatekeeper quarantine-removal bypass',
+  );
+  assert(
+    !/Run anyway/i.test(mcp.contents),
+    'MCP guide must not present a SmartScreen bypass',
+  );
+  assert(
+    !/GLIBC_2\.35/.test(mcp.contents),
+    'MCP guide must use the measured GLIBC_2.34 floor, not 2.35',
   );
 }
 
