@@ -1,0 +1,16 @@
+{
+  "profile": "flow",
+  "features": [
+    "transform"
+  ],
+  "wasmBindgenVersion": "0.2.126",
+  "wasmOptVersion": "133",
+  "productionWasm": {
+    "bytes": 1422511,
+    "sha256": "a7e11b118d1ab52b23db41d9ea9826fb564907b25e33cfb1ea5c8833e911f9c3"
+  },
+  "glue": {
+    "bytes": 94659,
+    "sha256": "2583d2a30c286f725d46283c8cbdb6245d97a52b492f458c5eefdbfcb01467cb"
+  }
+}

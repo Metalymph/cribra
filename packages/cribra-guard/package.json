@@ -1,0 +1,25 @@
+{
+  "name": "cribra-guard",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Qualification-only Chromium MV3 host for the Cribra Flow WebAssembly scanner",
+  "license": "MIT",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "build:qualification": "node scripts/build.mjs --with-qualification",
+    "build:lock": "node scripts/build.mjs --write-lock",
+    "precheck": "node scripts/prepare.mjs",
+    "check": "tsc -p tsconfig.json --noEmit",
+    "qualify": "node scripts/qualify.mjs",
+    "qualify:headed": "node scripts/qualify.mjs --headed",
+    "qa": "npm run build:qualification && npm run check && npm run qualify"
+  },
+  "devDependencies": {
+    "@types/chrome": "0.3.7",
+    "@types/node": "26.6.6",
+    "esbuild": "0.28.2",
+    "playwright-core": "1.64.1",
+    "typescript": "5.9.3"
+  }
+}
