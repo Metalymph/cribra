@@ -529,7 +529,7 @@ async function buildFailureVariant(name, wasmBytes) {
       resolve(packageRoot, ".build/flow/cribra.js"),
       "--out",
       outDir,
-      "--allow-provenance-change",
+      "--allow-unverified",
     ],
     { cwd: packageRoot, stdio: "inherit" },
   );

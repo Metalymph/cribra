@@ -54,6 +54,8 @@ sha256:   a5bd3f0b498fedc62f5af1b91e44693ac2417b07eddfbba81cdede3356fccd4a
 profile:  flow
 ```
 
+The Linux CI run produced exactly the pinned `linux-x64` digest.
+
 `wasm-opt -Oz --strip-producers` is applied to the wasm-bindgen output. The
 producers section is stripped so the digest does not depend on whether the
 wasm-bindgen CLI was installed from source or a prebuilt archive.
@@ -120,3 +122,8 @@ node scripts/build.mjs --write-lock
 This updates only the current host's entry and preserves the others. Then
 re-run `npm run qualify` and record the new measurements. Do not accept a silent
 artifact change.
+
+A normal build rejects a missing lock, an unknown host, and any digest
+mismatch. Test-only failure-injection builds must pass `--skip-build
+--allow-unverified`; provenance overrides cannot silently produce a release
+package.

@@ -25,6 +25,14 @@ import { fileURLToPath } from "node:url";
 
 import * as esbuild from "esbuild";
 
+import {
+  assertLock,
+  assertUnverifiedOutput,
+  mergeLock,
+  platformKey,
+  resolveLockMode,
+} from "./artifact-lock.mjs";
+
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const packageRoot = resolve(scriptDir, "..");
 const repoRoot = resolve(packageRoot, "../..");
@@ -57,7 +65,7 @@ function parseArgs(argv) {
 const flags = parseArgs(process.argv.slice(2));
 const skipBuild = flags.get("skip-build") === true;
 const writeLock = flags.get("write-lock") === true;
-const allowProvenanceChange = flags.get("allow-provenance-change") === true;
+const allowUnverified = flags.get("allow-unverified") === true;
 const withQualification = flags.get("with-qualification") === true;
 const wasmOverride =
   typeof flags.get("wasm") === "string" ? resolve(flags.get("wasm")) : undefined;
@@ -113,10 +121,6 @@ function rustFlags() {
   return [process.env.RUSTFLAGS, reproducibleRustFlags()]
     .filter((value) => value !== undefined && value.length > 0)
     .join(" ");
-}
-
-function platformKey() {
-  return `${process.platform}-${process.arch}`;
 }
 
 async function requireFile(path) {
@@ -254,50 +258,6 @@ async function readLock() {
   }
 }
 
-function assertLock(lock, artifact, glue, raw) {
-  const key = platformKey();
-  const expected = lock.artifacts?.[key];
-  if (expected === undefined) {
-    throw new Error(
-      `artifact.lock.json has no entry for ${key}. ` +
-        "Run `node scripts/build.mjs --write-lock` on this platform to add one.",
-    );
-  }
-
-  const mismatches = [];
-  if (lock.profile !== "flow") mismatches.push("profile");
-  if (lock.wasmBindgenVersion !== artifact.wasmBindgenVersion) {
-    mismatches.push("wasm-bindgen version");
-  }
-  if (lock.wasmOptVersion !== artifact.wasmOptVersion) {
-    mismatches.push("wasm-opt version");
-  }
-  for (const field of ["bytes", "sha256"]) {
-    if (expected.productionWasm?.[field] !== artifact.productionWasm[field]) {
-      mismatches.push(`production WASM ${field}`);
-    }
-    if (expected.glue?.[field] !== glue[field]) {
-      mismatches.push(`glue ${field}`);
-    }
-  }
-  if (raw !== null && expected.rawWasm !== undefined) {
-    for (const field of ["bytes", "sha256"]) {
-      if (expected.rawWasm[field] !== raw[field]) {
-        mismatches.push(`raw WASM ${field}`);
-      }
-    }
-  }
-  if (mismatches.length > 0) {
-    throw new Error(
-      `artifact.lock.json mismatch for ${key}: ${mismatches.join(", ")}. ` +
-        `Computed production WASM ${artifact.productionWasm.bytes} bytes ` +
-        `sha256 ${artifact.productionWasm.sha256}; glue ${glue.bytes} bytes ` +
-        `sha256 ${glue.sha256}. ` +
-        "Rebuild intentionally and pass --write-lock to update provenance.",
-    );
-  }
-}
-
 async function main() {
   const bindgen = await wasmBindgenVersion();
   const optVersion = wasmOptVersion();
@@ -344,40 +304,35 @@ async function main() {
   };
 
   const lock = await readLock();
-  const verifyLock =
-    lock !== undefined &&
-    !skipBuild &&
-    wasmOverride === undefined &&
-    !writeLock;
-  if (verifyLock && !allowProvenanceChange) {
-    assertLock(lock, artifact, glue, raw);
-  }
-  if (writeLock) {
+  const lockMode = resolveLockMode({
+    writeLock,
+    allowUnverified,
+    skipBuild,
+    wasmOverride: wasmOverride !== undefined,
+    glueOverride: glueOverride !== undefined,
+  });
+  assertUnverifiedOutput({
+    mode: lockMode,
+    targetOutDir,
+    releaseOutDir: outDir,
+  });
+  if (lockMode === "verify") {
+    assertLock(lock, {
+      key: platformKey(),
+      artifact,
+      glue,
+      raw,
+    });
+  } else if (lockMode === "write") {
     const key = platformKey();
-    const existing = lock?.artifacts?.[key] ?? {};
-    const artifacts = {
-      ...(lock?.artifacts ?? {}),
-      [key]: {
-        productionWasm,
-        glue,
-        ...(raw === null
-          ? existing.rawWasm === undefined
-            ? {}
-            : { rawWasm: existing.rawWasm }
-          : { rawWasm: raw }),
-      },
-    };
-    const next = {
-      profile: "flow",
+    const next = mergeLock({
+      existing: lock,
+      key,
+      artifact,
+      glue,
+      raw,
       features: FLOW_FEATURES,
-      wasmBindgenVersion: bindgen.version,
-      wasmOptVersion: optVersion,
-      artifacts: Object.fromEntries(
-        Object.entries(artifacts).sort(([left], [right]) =>
-          left.localeCompare(right),
-        ),
-      ),
-    };
+    });
     await writeFile(lockPath, `${JSON.stringify(next, null, 2)}\n`, "utf8");
     process.stdout.write(`wrote ${lockPath} (${key})\n`);
   }

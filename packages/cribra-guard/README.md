@@ -89,12 +89,19 @@ npm run build
 # Qualification build: adds the test-only page and bridge.
 npm run build:qualification
 npm run check
+npm run test:lock
 npm run qualify
 ```
 
-`npm run qa` runs the qualification build, type-check, and qualification
-together. The ordinary `npm run build` output is the package shape intended for
-future release packaging; it contains no test harness.
+`npm run qa` runs the qualification build, type-check, lock-policy regression
+tests, and qualification together. The ordinary `npm run build` output is the
+package shape intended for future release packaging; it contains no test
+harness.
+
+A normal build requires a matching `artifact.lock.json` entry for the current
+host. Missing locks, unknown hosts, and digest mismatches fail before any
+output is written. Test-only harness builds that skip or override the artifact
+must pass `--skip-build --allow-unverified`; there is no implicit bypass.
 
 CI: `.github/workflows/cribra-guard.yml` runs the same procedure on Ubuntu with
 pinned Rust 1.100.0, wasm-bindgen 0.2.126, Binaryen 133, Playwright 1.64.1 and

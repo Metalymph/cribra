@@ -11,9 +11,10 @@
     "build:lock": "node scripts/build.mjs --write-lock",
     "precheck": "node scripts/prepare.mjs",
     "check": "tsc -p tsconfig.json --noEmit",
+    "test:lock": "node --test scripts/artifact-lock.test.mjs",
     "qualify": "node scripts/qualify.mjs",
     "qualify:headed": "node scripts/qualify.mjs --headed",
-    "qa": "npm run build:qualification && npm run check && npm run qualify"
+    "qa": "npm run build:qualification && npm run check && npm run test:lock && npm run qualify"
   },
   "devDependencies": {
     "@types/chrome": "0.3.7",
