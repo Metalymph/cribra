@@ -22,7 +22,7 @@ does not claim universal pre-send interception.
 | `scripts/build.mjs` | Rebuilds the Flow artifact from Rust source, verifies `artifact.lock.json`, bundles the extension (release-safe by default; `--with-qualification` adds the test page) |
 | `scripts/prepare.mjs` | Refreshes the ignored wrapper version/declaration surface before `tsc` |
 | `scripts/qualify.mjs` | Real Chromium MV3 qualification, lifecycle tests, failure injection, memory and network evidence |
-| `artifact.lock.json` | Pinned production WASM and glue hashes plus toolchain versions |
+| `artifact.lock.json` | Per-host pinned production WASM and glue hashes plus toolchain versions |
 
 There is no content script, page adapter, approval UI, offscreen document,
 telemetry, or persistence.
@@ -32,19 +32,31 @@ telemetry, or persistence.
 The extension never reads the WASM or glue from `packages/cribra/src/wasm` or
 `packages/cribra/dist`. Both are generated locations and can hold different
 builds. `scripts/build.mjs` always builds the reviewed Rust source into
-`.build/flow`, applies `wasm-opt -Oz`, and verifies the result against
-`artifact.lock.json`.
+`.build/flow`, applies `wasm-opt -Oz --strip-producers`, and verifies the
+result against `artifact.lock.json`. The build sets `--remap-path-prefix` for
+the Cargo registry, workspace, and rust-src locations so host paths do not leak
+into the artifact.
 
 - Source crate: `cribra-wasm` 0.4.7, Core `cribra` 0.7.2
 - Features: `transform` (the Flow profile)
 - `wasm-bindgen`: 0.2.126, exactly as pinned by `Cargo.lock`
-- `wasm-opt`: 133, `-Oz`
-- Production WASM: 1,422,511 bytes
-  - SHA-256 `a7e11b118d1ab52b23db41d9ea9826fb564907b25e33cfb1ea5c8833e911f9c3`
-- Raw wasm-bindgen WASM before `-Oz`: 1,820,743 bytes
-  - SHA-256 `b0edc6aa008f8a2cb4bb27f8939445d67cf1951c636b0e5e500eb8e55d506e7f`
+- `wasm-opt`: 133, `-Oz --strip-producers`
+- Registry and toolchain source paths are remapped; the build pins one
+  production digest per build host because rustc's crate disambiguators and
+  symbol ordering are host-specific.
+- Production WASM (`darwin-arm64`): 1,420,144 bytes
+  - SHA-256 `b3706880cbe172f1ad471bbbd1b3eb54ff38af1eb0b7d77c0130e327f1d7e990`
+- Production WASM (`linux-x64`, CI): 1,420,144 bytes
+  - SHA-256 `a5bd3f0b498fedc62f5af1b91e44693ac2417b07eddfbba81cdede3356fccd4a`
+- Raw wasm-bindgen WASM before `-Oz` (`darwin-arm64`): 1,818,487 bytes
+  - SHA-256 `3563d087ec2288358ade5fae58c002832727361a8e6002b4c0af8c435facfa06`
 - Generated glue: 94,659 bytes
   - SHA-256 `2583d2a30c286f725d46283c8cbdb6245d97a52b492f458c5eefdbfcb01467cb`
+
+`artifact.lock.json` verifies the digest for the current host. An unknown host
+fails closed until `--write-lock` records its digest. The Linux CI digest is the
+canonical release-build digest; local macOS builds are qualified against their
+own pinned entry.
 
 The service worker fetches only
 `chrome-extension://<id>/wasm/cribra_bg.wasm`, verifies its byte length and
@@ -86,7 +98,9 @@ future release packaging; it contains no test harness.
 
 CI: `.github/workflows/cribra-guard.yml` runs the same procedure on Ubuntu with
 pinned Rust 1.100.0, wasm-bindgen 0.2.126, Binaryen 133, Playwright 1.64.1 and
-Node.js 24, then verifies that the release build excludes the test harness.
+Node.js 24, then verifies that the release build excludes the test harness. The
+Linux build verifies the `linux-x64` lock entry and is the canonical release
+artifact.
 
 The build also regenerates the wrapper's ignored
 `src/generated/package-version.ts` and copies the matching generated glue
@@ -98,14 +112,16 @@ A local bindgen install under `packages/cribra-guard/.tools` is used when
 present; otherwise `wasm-bindgen` must be on `PATH`. The build refuses a
 version that does not match `Cargo.lock`.
 
-To intentionally accept a new artifact, rebuild and update the lock:
+To intentionally accept a new artifact, rebuild and update the current host's
+lock entry:
 
 ```sh
 node scripts/build.mjs --write-lock
 ```
 
-The lock is verified on every ordinary `npm run build`. The build does not
-require a published npm package.
+Other hosts' entries are preserved. The lock is verified on every ordinary
+`npm run build`, and an unknown host fails closed. The build does not require a
+published npm package.
 
 ## Load the unpacked extension
 
@@ -190,25 +206,25 @@ Latest measurements (Chrome for Testing 156.0.8078.4, macOS arm64):
 
 | Measurement | Result |
 | --- | --- |
-| WASM | 1,422,511 bytes; 512,990 bytes gzip |
-| Release extension (unpacked) | 1,564,025 bytes |
-| Release extension (`zip -9 -r`) | 540,347 bytes |
-| Qualification extension (unpacked) | 1,565,019 bytes |
-| Qualification extension (`zip -9 -r`) | 541,188 bytes |
-| Launch to first response | 1,368 ms (includes Playwright launch) |
-| Worker Flow init | 39.4 ms |
-| Scanner construction | 210.4 ms |
-| First scan | 5.2 ms (worker-measured) |
+| WASM | 1,420,144 bytes; 512,561 bytes gzip |
+| Release extension (unpacked) | 1,561,769 bytes |
+| Release extension (`zip -9 -r`) | 540,046 bytes |
+| Qualification extension (unpacked) | 1,562,763 bytes |
+| Qualification extension (`zip -9 -r`) | 540,888 bytes |
+| Launch to first response | 3,093 ms (includes Playwright launch) |
+| Worker Flow init | 11.3 ms |
+| Scanner construction | 212.0 ms |
+| First scan | 8.9 ms (worker-measured) |
 | Warm scan p50 / p95 | 0.0 ms / 0.1 ms |
-| Warm scan round-trip mean | 0.193 ms |
+| Warm scan round-trip mean | 0.180 ms |
 | Warm transform p50 / p95 | 0.0 ms / 0.1 ms |
-| Warm transform round-trip mean | 0.190 ms |
+| Warm transform round-trip mean | 0.194 ms |
 | WASM linear memory (declared initial) | 23 pages, 1,507,328 bytes |
 | V8 worker heap after 300 scans | 936,532 bytes |
-| V8 worker heap after 1,500 scans | 950,820 bytes |
-| Heap retention delta over 1,200 scans | 14,288 bytes |
-| Forced stop | 101.5 ms |
-| Offline cold reinit | 6.9 ms |
+| V8 worker heap after 1,500 scans | 945,328 bytes |
+| Heap retention delta over 1,200 scans | 8,796 bytes |
+| Forced stop | 101.8 ms |
+| Offline cold reinit | 7.3 ms |
 
 Release figures come from a separate `npm run build`; qualification figures
 include the 854-byte test page and bridge. The report records both.

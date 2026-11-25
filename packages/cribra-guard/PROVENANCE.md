@@ -32,23 +32,43 @@ contain a different build.
 
 ## Production artifact
 
+The production artifact is byte-reproducible on a given build host, but rustc's
+crate disambiguators and symbol ordering are host-specific. `artifact.lock.json`
+therefore pins one digest per host key and fails closed for unknown hosts. The
+`linux-x64` entry is the canonical release-build digest used by CI.
+
 ```text
-path:    .build/flow/cribra_bg.wasm
-shipped: dist/wasm/cribra_bg.wasm
-bytes:   1422511
-sha256:  a7e11b118d1ab52b23db41d9ea9826fb564907b25e33cfb1ea5c8833e911f9c3
-profile: flow
+platform: darwin-arm64
+path:     .build/flow/cribra_bg.wasm
+shipped:  dist/wasm/cribra_bg.wasm
+bytes:    1420144
+sha256:   b3706880cbe172f1ad471bbbd1b3eb54ff38af1eb0b7d77c0130e327f1d7e990
+profile:  flow
 ```
 
-`wasm-opt -Oz` is applied to the wasm-bindgen output.
+```text
+platform: linux-x64
+path:     .build/flow/cribra_bg.wasm
+bytes:    1420144
+sha256:   a5bd3f0b498fedc62f5af1b91e44693ac2417b07eddfbba81cdede3356fccd4a
+profile:  flow
+```
+
+`wasm-opt -Oz --strip-producers` is applied to the wasm-bindgen output. The
+producers section is stripped so the digest does not depend on whether the
+wasm-bindgen CLI was installed from source or a prebuilt archive.
 
 ## Intermediate wasm-bindgen artifact
 
 ```text
-path:    .build/raw/cribra_bg.wasm
-bytes:   1820743
-sha256:  b0edc6aa008f8a2cb4bb27f8939445d67cf1951c636b0e5e500eb8e55d506e7f
+platform: darwin-arm64
+path:     .build/raw/cribra_bg.wasm
+bytes:    1818487
+sha256:   3563d087ec2288358ade5fae58c002832727361a8e6002b4c0af8c435facfa06
 ```
+
+The raw Linux artifact differs only in the wasm-bindgen producers metadata; it
+is not pinned. The production artifact strips that metadata before hashing.
 
 ## Generated glue
 
@@ -73,15 +93,21 @@ npm run build
 The build runs:
 
 ```sh
+RUSTFLAGS="--remap-path-prefix=<cargo-registry>=/cargo/registry \
+  --remap-path-prefix=<workspace>=/cribra \
+  --remap-path-prefix=<rust-src>=/rustc/<commit>" \
 cargo build -p cribra-wasm --target wasm32-unknown-unknown --release --locked
 wasm-bindgen --target web --out-dir .build/raw --out-name cribra \
   target/wasm32-unknown-unknown/release/cribra_wasm.wasm
-wasm-opt -Oz .build/raw/cribra_bg.wasm -o .build/flow/cribra_bg.wasm
+wasm-opt -Oz --strip-producers .build/raw/cribra_bg.wasm \
+  -o .build/flow/cribra_bg.wasm
 ```
 
-A second identical build produced the same WASM, glue, and service-worker
-hashes. The extension embeds the WASM size and SHA-256 at build time and checks
-the fetched extension asset before initialization.
+Remapping prevents absolute registry and toolchain paths from being embedded in
+panic locations. A second identical build on the same host produced the same
+WASM, glue, and service-worker hashes. The extension embeds the WASM size and
+SHA-256 at build time and checks the fetched extension asset before
+initialization.
 
 ## Intentional updates
 
@@ -91,5 +117,6 @@ Only update the lock after an intentional artifact change:
 node scripts/build.mjs --write-lock
 ```
 
-Then re-run `npm run qualify` and record the new measurements. Do not accept a
-silent artifact change.
+This updates only the current host's entry and preserves the others. Then
+re-run `npm run qualify` and record the new measurements. Do not accept a silent
+artifact change.

@@ -19,6 +19,7 @@ import {
 } from "node:fs/promises";
 import { constants, existsSync } from "node:fs";
 import { createHash } from "node:crypto";
+import { homedir } from "node:os";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -86,6 +87,38 @@ function sha256(bytes) {
   return createHash("sha256").update(bytes).digest("hex");
 }
 
+/**
+ * Panic locations embed absolute registry, workspace, and rust-src paths.
+ * Remapping them removes host-specific paths from the WASM. The lock still
+ * pins one digest per host because rustc's crate disambiguators and symbol
+ * ordering can differ across hosts.
+ */
+function reproducibleRustFlags() {
+  const cargoHome = process.env.CARGO_HOME ?? resolve(homedir(), ".cargo");
+  const sysroot = run("rustc", ["--print", "sysroot"]).trim();
+  const commit = run("rustc", ["-vV"]).match(/^commit-hash:\s*(\S+)$/m)?.[1];
+  const flags = [
+    `--remap-path-prefix=${resolve(cargoHome, "registry")}=/cargo/registry`,
+    `--remap-path-prefix=${repoRoot}=/cribra`,
+  ];
+  if (commit !== undefined) {
+    flags.push(
+      `--remap-path-prefix=${resolve(sysroot, "lib/rustlib/src/rust")}=/rustc/${commit}`,
+    );
+  }
+  return flags.join(" ");
+}
+
+function rustFlags() {
+  return [process.env.RUSTFLAGS, reproducibleRustFlags()]
+    .filter((value) => value !== undefined && value.length > 0)
+    .join(" ");
+}
+
+function platformKey() {
+  return `${process.platform}-${process.arch}`;
+}
+
 async function requireFile(path) {
   await access(path, constants.R_OK);
 }
@@ -145,7 +178,7 @@ async function buildArtifact(bindgen) {
     "--release",
     "--locked",
   ], {
-    env: { ...process.env, CARGO_INCREMENTAL: "0" },
+    env: { ...process.env, CARGO_INCREMENTAL: "0", RUSTFLAGS: rustFlags() },
     stdio: ["ignore", "inherit", "inherit"],
   });
 
@@ -177,6 +210,7 @@ async function buildArtifact(bindgen) {
   );
   run("wasm-opt", [
     "-Oz",
+    "--strip-producers",
     resolve(rawDir, "cribra_bg.wasm"),
     "-o",
     resolve(artifactDir, "cribra_bg.wasm"),
@@ -220,7 +254,16 @@ async function readLock() {
   }
 }
 
-function assertLock(lock, artifact, glue) {
+function assertLock(lock, artifact, glue, raw) {
+  const key = platformKey();
+  const expected = lock.artifacts?.[key];
+  if (expected === undefined) {
+    throw new Error(
+      `artifact.lock.json has no entry for ${key}. ` +
+        "Run `node scripts/build.mjs --write-lock` on this platform to add one.",
+    );
+  }
+
   const mismatches = [];
   if (lock.profile !== "flow") mismatches.push("profile");
   if (lock.wasmBindgenVersion !== artifact.wasmBindgenVersion) {
@@ -229,17 +272,27 @@ function assertLock(lock, artifact, glue) {
   if (lock.wasmOptVersion !== artifact.wasmOptVersion) {
     mismatches.push("wasm-opt version");
   }
-  for (const key of ["bytes", "sha256"]) {
-    if (lock.productionWasm?.[key] !== artifact.productionWasm[key]) {
-      mismatches.push(`production WASM ${key}`);
+  for (const field of ["bytes", "sha256"]) {
+    if (expected.productionWasm?.[field] !== artifact.productionWasm[field]) {
+      mismatches.push(`production WASM ${field}`);
     }
-    if (lock.glue?.[key] !== glue[key]) {
-      mismatches.push(`glue ${key}`);
+    if (expected.glue?.[field] !== glue[field]) {
+      mismatches.push(`glue ${field}`);
+    }
+  }
+  if (raw !== null && expected.rawWasm !== undefined) {
+    for (const field of ["bytes", "sha256"]) {
+      if (expected.rawWasm[field] !== raw[field]) {
+        mismatches.push(`raw WASM ${field}`);
+      }
     }
   }
   if (mismatches.length > 0) {
     throw new Error(
-      `artifact.lock.json mismatch: ${mismatches.join(", ")}. ` +
+      `artifact.lock.json mismatch for ${key}: ${mismatches.join(", ")}. ` +
+        `Computed production WASM ${artifact.productionWasm.bytes} bytes ` +
+        `sha256 ${artifact.productionWasm.sha256}; glue ${glue.bytes} bytes ` +
+        `sha256 ${glue.sha256}. ` +
         "Rebuild intentionally and pass --write-lock to update provenance.",
     );
   }
@@ -297,15 +350,36 @@ async function main() {
     wasmOverride === undefined &&
     !writeLock;
   if (verifyLock && !allowProvenanceChange) {
-    assertLock(lock, artifact, glue);
+    assertLock(lock, artifact, glue, raw);
   }
   if (writeLock) {
-    await writeFile(
-      lockPath,
-      `${JSON.stringify(artifact, null, 2)}\n`,
-      "utf8",
-    );
-    process.stdout.write(`wrote ${lockPath}\n`);
+    const key = platformKey();
+    const existing = lock?.artifacts?.[key] ?? {};
+    const artifacts = {
+      ...(lock?.artifacts ?? {}),
+      [key]: {
+        productionWasm,
+        glue,
+        ...(raw === null
+          ? existing.rawWasm === undefined
+            ? {}
+            : { rawWasm: existing.rawWasm }
+          : { rawWasm: raw }),
+      },
+    };
+    const next = {
+      profile: "flow",
+      features: FLOW_FEATURES,
+      wasmBindgenVersion: bindgen.version,
+      wasmOptVersion: optVersion,
+      artifacts: Object.fromEntries(
+        Object.entries(artifacts).sort(([left], [right]) =>
+          left.localeCompare(right),
+        ),
+      ),
+    };
+    await writeFile(lockPath, `${JSON.stringify(next, null, 2)}\n`, "utf8");
+    process.stdout.write(`wrote ${lockPath} (${key})\n`);
   }
 
   const wasmManifest = await readFile(
@@ -399,6 +473,7 @@ async function main() {
   const provenance = {
     schemaVersion: 1,
     builtAt: new Date().toISOString(),
+    platform: platformKey(),
     git: { commit: gitCommit, dirty: gitStatus.length > 0 },
     toolchain: {
       rustc: rustcVersion,
@@ -422,7 +497,7 @@ async function main() {
       sha256: productionWasm.sha256,
       raw: raw,
       note:
-        "wasm-opt -Oz applied to the wasm-bindgen output of the transform-enabled cribra-wasm crate",
+        "wasm-opt -Oz --strip-producers applied to the wasm-bindgen output of the transform-enabled cribra-wasm crate; registry and toolchain paths are remapped for reproducibility",
     },
     glue: {
       path: "wasm/cribra.js",

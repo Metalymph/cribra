@@ -5,12 +5,30 @@
   ],
   "wasmBindgenVersion": "0.2.126",
   "wasmOptVersion": "133",
-  "productionWasm": {
-    "bytes": 1422511,
-    "sha256": "a7e11b118d1ab52b23db41d9ea9826fb564907b25e33cfb1ea5c8833e911f9c3"
-  },
-  "glue": {
-    "bytes": 94659,
-    "sha256": "2583d2a30c286f725d46283c8cbdb6245d97a52b492f458c5eefdbfcb01467cb"
+  "artifacts": {
+    "darwin-arm64": {
+      "productionWasm": {
+        "bytes": 1420144,
+        "sha256": "b3706880cbe172f1ad471bbbd1b3eb54ff38af1eb0b7d77c0130e327f1d7e990"
+      },
+      "glue": {
+        "bytes": 94659,
+        "sha256": "2583d2a30c286f725d46283c8cbdb6245d97a52b492f458c5eefdbfcb01467cb"
+      },
+      "rawWasm": {
+        "bytes": 1818487,
+        "sha256": "3563d087ec2288358ade5fae58c002832727361a8e6002b4c0af8c435facfa06"
+      }
+    },
+    "linux-x64": {
+      "productionWasm": {
+        "bytes": 1420144,
+        "sha256": "a5bd3f0b498fedc62f5af1b91e44693ac2417b07eddfbba81cdede3356fccd4a"
+      },
+      "glue": {
+        "bytes": 94659,
+        "sha256": "2583d2a30c286f725d46283c8cbdb6245d97a52b492f458c5eefdbfcb01467cb"
+      }
+    }
   }
 }

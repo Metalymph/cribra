@@ -606,6 +606,13 @@ async function main() {
   const lock = JSON.parse(
     await readFile(resolve(packageRoot, "artifact.lock.json"), "utf8"),
   );
+  const lockedArtifact =
+    lock.artifacts?.[`${process.platform}-${process.arch}`];
+  if (lockedArtifact === undefined) {
+    throw new Error(
+      `artifact.lock.json has no entry for ${process.platform}-${process.arch}`,
+    );
+  }
   const manifest = JSON.parse(
     await readFile(resolve(distDir, "manifest.json"), "utf8"),
   );
@@ -628,12 +635,12 @@ async function main() {
 
   must(
     "artifact lock matches packaged Flow WASM",
-    lock.productionWasm.sha256 === wasmSha256 &&
-      lock.productionWasm.bytes === packagedWasm.byteLength &&
+    lockedArtifact.productionWasm.sha256 === wasmSha256 &&
+      lockedArtifact.productionWasm.bytes === packagedWasm.byteLength &&
       artifact.artifact.sha256 === wasmSha256 &&
       artifact.artifact.bytes === packagedWasm.byteLength,
     {
-      lock: lock.productionWasm,
+      lock: lockedArtifact.productionWasm,
       artifact: artifact.artifact,
       measured: { bytes: packagedWasm.byteLength, sha256: wasmSha256 },
     },
@@ -692,8 +699,8 @@ async function main() {
     );
     must(
       "runtime loaded the pinned production artifact",
-      first.init.wasmSha256 === lock.productionWasm.sha256 &&
-        first.init.wasmBytes === lock.productionWasm.bytes,
+      first.init.wasmSha256 === lockedArtifact.productionWasm.sha256 &&
+        first.init.wasmBytes === lockedArtifact.productionWasm.bytes,
       {
         sha256: first.init.wasmSha256,
         bytes: first.init.wasmBytes,
@@ -1265,7 +1272,7 @@ async function main() {
       offlineRestart.ok === true &&
         offlineRestart.init.cold === true &&
         offlineRestart.init.artifactVerified === true &&
-        offlineRestart.init.wasmSha256 === lock.productionWasm.sha256,
+        offlineRestart.init.wasmSha256 === lockedArtifact.productionWasm.sha256,
       offlineRestart.ok
         ? {
             cold: offlineRestart.init.cold,
