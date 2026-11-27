@@ -67,6 +67,7 @@ const skipBuild = flags.get("skip-build") === true;
 const writeLock = flags.get("write-lock") === true;
 const allowUnverified = flags.get("allow-unverified") === true;
 const withQualification = flags.get("with-qualification") === true;
+const contentQualification = flags.get("content-qualification") === true;
 const wasmOverride =
   typeof flags.get("wasm") === "string" ? resolve(flags.get("wasm")) : undefined;
 const glueOverride =
@@ -75,10 +76,29 @@ const artifactDir =
   typeof flags.get("artifact-dir") === "string"
     ? resolve(flags.get("artifact-dir"))
     : defaultArtifactDir;
+
+/**
+ * A content qualification build never changes the WASM artifact. Reuse an
+ * existing artifact only when it is present and no artifact-mutating flag was
+ * supplied. `assertLock` still verifies the reused bytes against the lock, so a
+ * stale artifact fails closed.
+ */
+const reuseArtifact =
+  !writeLock &&
+  (flags.get("reuse-artifact") === true ||
+    (contentQualification &&
+      !skipBuild &&
+      wasmOverride === undefined &&
+      glueOverride === undefined &&
+      existsSync(resolve(defaultArtifactDir, "cribra_bg.wasm")) &&
+      existsSync(resolve(defaultArtifactDir, "cribra.js"))));
+
 const targetOutDir =
   typeof flags.get("out") === "string"
     ? resolve(flags.get("out"))
-    : outDir;
+    : contentQualification
+      ? resolve(packageRoot, ".build/content-dist")
+      : outDir;
 
 function run(command, args, options = {}) {
   process.stdout.write(`$ ${command} ${args.join(" ")}\n`);
@@ -259,11 +279,19 @@ async function readLock() {
 }
 
 async function main() {
-  const bindgen = await wasmBindgenVersion();
-  const optVersion = wasmOptVersion();
+  const lock = await readLock();
+  const bindgen = reuseArtifact
+    ? {
+        binary: "wasm-bindgen",
+        version: lock?.wasmBindgenVersion ?? "unknown",
+      }
+    : await wasmBindgenVersion();
+  const optVersion = reuseArtifact
+    ? (lock?.wasmOptVersion ?? "unknown")
+    : wasmOptVersion();
   generatePackageVersion();
 
-  if (!skipBuild) {
+  if (!skipBuild && !reuseArtifact) {
     await buildArtifact(bindgen);
     await prepareTypeScriptSurface();
   }
@@ -286,7 +314,7 @@ async function main() {
   };
 
   let raw = null;
-  if (!skipBuild && wasmOverride === undefined) {
+  if (!skipBuild && !reuseArtifact && wasmOverride === undefined) {
     const rawBytes = await readFile(resolve(rawDir, "cribra_bg.wasm"));
     raw = {
       bytes: rawBytes.byteLength,
@@ -303,7 +331,6 @@ async function main() {
     glue,
   };
 
-  const lock = await readLock();
   const lockMode = resolveLockMode({
     writeLock,
     allowUnverified,
@@ -383,7 +410,7 @@ async function main() {
     ],
   });
 
-  if (withQualification) {
+  if (withQualification && !contentQualification) {
     await esbuild.build({
       entryPoints: [resolve(packageRoot, "src/qualification.ts")],
       outfile: resolve(targetOutDir, "qualification.js"),
@@ -398,17 +425,39 @@ async function main() {
     });
   }
 
+  let contentScriptBytes;
+  if (contentQualification) {
+    await esbuild.build({
+      entryPoints: [resolve(packageRoot, "src/content/content-script.ts")],
+      outfile: resolve(targetOutDir, "content-script.js"),
+      bundle: true,
+      format: "iife",
+      platform: "browser",
+      target: ["chrome120"],
+      sourcemap: false,
+      minify: false,
+      legalComments: "none",
+      logLevel: "warning",
+      define: {
+        __CRIBRA_CONTENT_QUALIFICATION__: "true",
+      },
+    });
+    contentScriptBytes = await readFile(
+      resolve(targetOutDir, "content-script.js"),
+    );
+  }
+
   await mkdir(resolve(targetOutDir, "wasm"), { recursive: true });
   // esbuild may copy the pre-WASM-opt asset because the generated glue keeps a
   // default `new URL(...)`. The runtime always receives explicit bytes, so the
   // only asset that ships is the verified production artifact.
   await writeFile(resolve(targetOutDir, "wasm/cribra_bg.wasm"), productionBytes);
 
-  await cp(
-    resolve(packageRoot, "manifest.json"),
-    resolve(targetOutDir, "manifest.json"),
-  );
-  if (withQualification) {
+  const manifestSource = contentQualification
+    ? resolve(packageRoot, "manifest.qualification.json")
+    : resolve(packageRoot, "manifest.json");
+  await cp(manifestSource, resolve(targetOutDir, "manifest.json"));
+  if (withQualification && !contentQualification) {
     await cp(
       resolve(packageRoot, "qualification.html"),
       resolve(targetOutDir, "qualification.html"),
@@ -418,12 +467,11 @@ async function main() {
   const serviceWorkerBytes = await readFile(
     resolve(targetOutDir, "service-worker.js"),
   );
-  const qualificationBytes = withQualification
-    ? await readFile(resolve(targetOutDir, "qualification.js"))
-    : undefined;
-  const manifest = JSON.parse(
-    await readFile(resolve(packageRoot, "manifest.json"), "utf8"),
-  );
+  const qualificationBytes =
+    withQualification && !contentQualification
+      ? await readFile(resolve(targetOutDir, "qualification.js"))
+      : undefined;
+  const manifest = JSON.parse(await readFile(manifestSource, "utf8"));
 
   const provenance = {
     schemaVersion: 1,
@@ -465,6 +513,16 @@ async function main() {
         bytes: serviceWorkerBytes.byteLength,
         sha256: sha256(serviceWorkerBytes),
       },
+      ...(contentScriptBytes === undefined
+        ? {}
+        : {
+            contentScript: {
+              path: "content-script.js",
+              bytes: contentScriptBytes.byteLength,
+              sha256: sha256(contentScriptBytes),
+              qualificationOnly: true,
+            },
+          }),
       ...(qualificationBytes === undefined
         ? {}
         : {
@@ -487,7 +545,9 @@ async function main() {
     "wasm/cribra_bg.wasm",
     "artifact.json",
   ];
-  if (withQualification) {
+  if (contentQualification) {
+    requiredFiles.push("content-script.js");
+  } else if (withQualification) {
     requiredFiles.push("qualification.html", "qualification.js");
   }
   for (const file of requiredFiles) {
@@ -497,7 +557,10 @@ async function main() {
   process.stdout.write(
     `built Flow extension in ${targetOutDir}\n` +
       `  wasm ${productionWasm.bytes} bytes sha256 ${productionWasm.sha256}\n` +
-      `  service worker ${serviceWorkerBytes.byteLength} bytes\n`,
+      `  service worker ${serviceWorkerBytes.byteLength} bytes\n` +
+      (contentScriptBytes === undefined
+        ? ""
+        : `  content script ${contentScriptBytes.byteLength} bytes (qualification only)\n`),
   );
 }
 
