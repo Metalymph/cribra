@@ -8,14 +8,19 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "build:qualification": "node scripts/build.mjs --with-qualification",
+    "build:content-qualification": "node scripts/build.mjs --content-qualification",
     "build:lock": "node scripts/build.mjs --write-lock",
     "precheck": "node scripts/prepare.mjs",
     "check": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit",
     "test:lock": "node --test scripts/artifact-lock.test.mjs",
+    "test:packaging": "node --test scripts/packaging.test.mjs",
     "test:guard": "node scripts/test-guard.mjs",
+    "test:content": "node scripts/test-content.mjs",
     "qualify": "node scripts/qualify.mjs",
     "qualify:headed": "node scripts/qualify.mjs --headed",
-    "qa": "npm run build:qualification && npm run check && npm run test:lock && npm run test:guard && npm run qualify"
+    "qualify:content": "node scripts/qualify-content.mjs",
+    "qualify:content:headed": "node scripts/qualify-content.mjs --headed",
+    "qa": "npm run build:qualification && npm run build:content-qualification && npm run check && npm run test:lock && npm run test:packaging && npm run test:guard && npm run test:content && npm run qualify && npm run qualify:content"
   },
   "devDependencies": {
     "@types/chrome": "0.3.7",

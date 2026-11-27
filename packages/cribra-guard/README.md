@@ -1,31 +1,45 @@
-# Cribra Guard — MV3 Flow host qualification
+# Cribra Guard — MV3 Flow host and content-layer qualification
 
-Private WEBEXT.1A workspace. It is not published, not a Guard UI, and not a
+Private WEBEXT.1A/1B workspace. It is not published, not a Guard UI, and not a
 general browser interception layer.
 
-This package proves one architecture: a Chromium Manifest V3 extension service
-worker can explicitly initialize the existing Cribra Flow WebAssembly backend,
-scan synthetic sources, redact/template them, and recover safely across worker
-lifecycle events.
+This package proves two architectures:
 
-Every detected finding or candidate still requires user review. This milestone
-does not claim universal pre-send interception.
+1. a Chromium Manifest V3 extension service worker can explicitly initialize the
+   existing Cribra Flow WebAssembly backend, scan synthetic sources,
+   redact/template them, and recover safely across worker lifecycle events;
+2. a qualification-only classic content script can synchronously intercept
+   explicitly recognized submission paths, capture exact editor snapshots, and
+   perform controlled, read-back-verified editor replacement without claiming
+   universal interception or protection.
+
+Every detected finding or candidate still requires user review. The content
+layer is a fixture-qualified adapter proof, not an authorization controller or
+approval UI.
 
 ## What is here
 
 | Path | Purpose |
 | --- | --- |
-| `manifest.json` | MV3 manifest, module service worker, empty permissions, WASM-capable extension CSP |
+| `manifest.json` | Production MV3 manifest, module service worker, empty permissions, WASM-capable extension CSP. No content scripts. |
+| `manifest.qualification.json` | Qualification-only manifest: one content script at `document_start`, access only to `http://127.0.0.1/*` |
 | `src/service-worker.ts` | Explicit local asset load, pinned-hash verification, Flow init, scanner lifecycle, message handling |
 | `src/protocol.ts` | Strict message validation, UTF-8 span plus UTF-16 text-range projection, sanitized errors |
+| `src/guard/` | Pure deterministic Guard policy and submission state machine (WEBEXT.1B.1) |
+| `src/content/` | Typed page-adapter contract, fixture adapters, snapshot store, editor read/write, synchronous interceptor, qualification hook |
 | `src/qualification.ts` | Qualification-only extension page bridge for real `chrome.runtime.sendMessage` calls |
-| `scripts/build.mjs` | Rebuilds the Flow artifact from Rust source, verifies `artifact.lock.json`, bundles the extension (release-safe by default; `--with-qualification` adds the test page) |
+| `scripts/build.mjs` | Rebuilds the Flow artifact, verifies `artifact.lock.json`, and emits either the release/WASM qualification package or the separate content qualification package |
 | `scripts/prepare.mjs` | Refreshes the ignored wrapper version/declaration surface before `tsc` |
-| `scripts/qualify.mjs` | Real Chromium MV3 qualification, lifecycle tests, failure injection, memory and network evidence |
+| `scripts/qualify.mjs` | Real Chromium MV3 WASM-host qualification, lifecycle tests, failure injection, memory and network evidence |
+| `scripts/qualify-content.mjs` | Real Chromium extension-context content qualification against local fixtures and endpoint receipts |
+| `scripts/test-guard.mjs` | Deterministic pure-Guard unit tests |
+| `scripts/test-content.mjs` | Deterministic content-layer unit tests with a tiny in-memory DOM |
+| `scripts/packaging.test.mjs` | Release/qualification packaging-boundary regression tests |
 | `artifact.lock.json` | Per-host pinned production WASM and glue hashes plus toolchain versions |
 
-There is no content script, page adapter, approval UI, offscreen document,
-telemetry, or persistence.
+The production package contains no content script, page adapter, approval UI,
+offscreen document, telemetry, or persistence. The content script, fixtures,
+and isolated-world test hook are emitted only into `.build/content-dist/`.
 
 ## Artifact provenance
 
@@ -83,25 +97,39 @@ mode. The headless shell does not load extensions, so do not install with
 cd packages/cribra-guard
 npm install
 
-# Release-safe extension: no qualification page or bridge.
+# Release-safe extension: no qualification page, bridge, or content script.
 npm run build
 
-# Qualification build: adds the test-only page and bridge.
+# WASM-host qualification build: adds the test-only page and bridge to dist/.
 npm run build:qualification
+
+# Separate content qualification package in .build/content-dist/.
+# Reuses and re-verifies the existing .build/flow artifact when present;
+# otherwise it performs a normal verified build.
+npm run build:content-qualification
+
 npm run check
 npm run test:lock
+npm run test:packaging
+npm run test:guard
+npm run test:content
 npm run qualify
+npm run qualify:content
 ```
 
-`npm run qa` runs the qualification build, type-check, lock-policy regression
-tests, and qualification together. The ordinary `npm run build` output is the
-package shape intended for future release packaging; it contains no test
-harness.
+`npm run qa` runs both qualification builds, strict type-checks both source and
+test surfaces, the lock and packaging regressions, the pure Guard tests, the
+content-layer unit tests, the existing Chromium MV3 WASM qualification, and the
+new Chromium extension-context content qualification. The ordinary
+`npm run build` output is the package shape intended for future release
+packaging; it contains no test harness and no content script.
 
 A normal build requires a matching `artifact.lock.json` entry for the current
 host. Missing locks, unknown hosts, and digest mismatches fail before any
 output is written. Test-only harness builds that skip or override the artifact
-must pass `--skip-build --allow-unverified`; there is no implicit bypass.
+must pass `--skip-build --allow-unverified`; there is no implicit bypass. A
+content qualification build reuses `.build/flow` only when it can still verify
+the pinned production digest and glue against the lock.
 
 CI: `.github/workflows/cribra-guard.yml` runs the same procedure on Ubuntu with
 pinned Rust 1.100.0, wasm-bindgen 0.2.126, Binaryen 133, Playwright 1.64.1 and
@@ -169,6 +197,131 @@ Failures use fixed messages such as
 
 Source input is capped at 1,000,000 UTF-16 code units for this qualification
 host. Oversized requests are rejected before scanning.
+
+## Content layer (qualification only)
+
+The content layer lives under `src/content/`. It does not import the Guard state
+machine, the scanner, WASM, storage, or any messaging controller. It is built
+only into `.build/content-dist/`.
+
+### Adapter contract
+
+Each page adapter owns exactly one explicitly recognized submission shape:
+
+| Type | Meaning |
+| --- | --- |
+| `SupportedCoverage` | The form and designated editor are recognized and writable |
+| `UnsupportedCoverage` | The form/editor is outside this adapter's scope |
+| `DegradedCoverage` | The editor is recognized but not safely writable |
+| `InvalidatedCoverage` | A previously recognized path lost its editor, form, or adapter identity |
+
+Adapters expose identity/version, coverage detection, submitter support, exact
+source read, controlled replacement, and focus. Capture results are a separate
+source-free discriminated union: `captured`, `duplicate`, `invalidated`,
+`degraded`, `not_cancellable`, and `unsupported_ignored`.
+
+### Supported and unsupported paths
+
+Supported fixture paths:
+
+- A marked native form with exactly one designated `textarea` or ordinary
+  `text`/`search` input. Click, keyboard, and `requestSubmit()` are intercepted
+  synchronously; multiple submit buttons, validation, repeated attempts, editor
+  replacement, and form replacement are qualified.
+- One marked plain-text `contenteditable`. The logical source is exact
+  `textContent`; replacement uses `textContent` only, never `innerHTML`.
+
+Explicitly unsupported or bypassing paths:
+
+- Unmarked forms and arbitrary fields are untouched.
+- Password and hidden designated editors are rejected.
+- Rich-text editors, canvas editors, closed shadow roots, framework editor
+  models, and multiple eligible editors are unsupported.
+- `form.submit()` bypasses the submit event.
+- Direct `fetch`/XHR, `sendBeacon`, autosave, and other page network channels are
+  outside DOM interception.
+- Non-cancellable events are reported, not claimed as blocked.
+- A page `window` capture handler runs before document capture.
+- A previously recognized form that loses its editor, marker, or writability
+  stays blocked while it can still be intercepted; if the form itself is
+  replaced, a coverage-loss report is emitted instead of claiming protection.
+
+### Snapshot invariants
+
+- Equality is exact JavaScript string equality, never normalized text.
+- Snapshot identifiers are opaque, counter-plus-random, and never reused.
+- A snapshot binds to the adapter, editor instance, form instance, document,
+  and exact source.
+- Observable `input`/`change` events and pending `MutationObserver` records
+  invalidate associated snapshots before final verification.
+- Invalidation is sticky: A-to-B-to-A does not revive the A snapshot, and an
+  invalidated identifier cannot be reused.
+- Editor and form replacement invalidate associated snapshots.
+- Pending captures have an explicit `release` path and are bounded; the store
+  evicts oldest invalid/released records first.
+- Source is limited to 1,000,000 UTF-16 code units per snapshot, matching the
+  scanner protocol limit, and 4,000,000 aggregate retained code units across
+  valid snapshots. An oversized intercepted submission stays blocked with no
+  snapshot and no pending editor. Eviction, release, invalidation, suspension,
+  and disposal clear retained source references.
+- Source is transient in memory only. It is never logged, stored, or returned by
+  the qualification hook.
+- Silent programmatic changes are detected through explicit read-back where
+  observable. A silent transient change that returns to the original text
+  before read-back is not observable and is documented as a limitation.
+
+### Browser lifecycle
+
+- A non-persisted `pagehide` disposes the interceptor. A new document receives
+  a fresh content script on the next navigation.
+- A persisted `pagehide` (Back/Forward Cache) invalidates every snapshot, clears
+  retained source, and keeps the submit listener installed. A persisted
+  `pageshow` keeps automatic interception active; a fresh capture is required.
+- Explicit `dispose` or non-persisted teardown leaves `installed()` false. The
+  implementation does not claim protection while inactive.
+- The qualification exercises synthetic persisted `pagehide`/`pageshow` events
+  and real back navigation. Whether Chromium actually restores a particular page
+  from bfcache is browser/profile-controlled; if it does not restore, a fresh
+  content script is injected. Both paths are qualified as protected.
+
+### Controlled replacement
+
+- Native controls use the prototype `value` setter, then dispatch `input` and
+  `change`.
+- Contenteditable uses `textContent` only.
+- Success requires exact read-back equality. Detached, read-only, disabled,
+  normalized, partial, or mismatched writes are failures.
+- Unicode, surrogate pairs, multiline textarea content, and empty text are
+  qualified.
+- A successful replacement always invalidates the previous source snapshot. The
+  future controller must establish a new snapshot and perform transformation
+  revalidation. This milestone never submits after writing.
+
+### Coverage accuracy
+
+Qualification covers only the designated editor text and the tested submission
+path. It does not claim protection for other form fields, entire serialized HTTP
+request bodies, hidden or password fields, attachments, or page-controlled
+autosave/network channels. The sensitive fixture demonstrates that browser form
+serialization can include more fields than the exact editor snapshot.
+
+### Trust boundary and packaging isolation
+
+- The page DOM, fixture markers (`data-cribra-adapter`, `data-cribra-editor`),
+  page events, and page messages are never proof of consent, browser identity,
+  or authorization.
+- Capture results are source-free diagnostics. The future controller must
+  authenticate extension senders, derive tab/frame/adapter identity from trusted
+  browser APIs, and bind authorization to exact snapshots.
+- The qualification manifest grants access only to `http://127.0.0.1/*`, uses no
+  `scripting`, `debugger`, `webRequestBlocking`, `storage`, or `tabs`
+  permission, and is never emitted into the production package.
+- The isolated-world qualification hook is installed only in
+  `.build/content-dist/`. It is unreachable from the page and returns only
+  metadata, booleans, and replacement status.
+- Production `dist/` has empty permissions, empty host permissions, no content
+  scripts, no web-accessible resources, and no content script file. The
+  production WASM and glue digests remain pinned and unchanged.
 
 ## Qualification
 
@@ -246,6 +399,43 @@ Worker-measured durations are short because `performance.now()` is coarsened in
 this context and the synthetic source is small. The report is authoritative for
 the exact run.
 
+### Content qualification
+
+`npm run qualify:content` launches the separate `.build/content-dist/` unpacked
+extension in Chromium and serves local fixtures from `http://127.0.0.1`. It
+reaches the isolated-world hook through CDP and proves interception with
+fixture-side handler counters and local endpoint receipts.
+
+The current run passes all 153 checks. Additional deterministic gates pass
+content unit tests **55/55** and packaging regressions **7/7**. Coverage
+includes:
+
+- classic IIFE content script, `document_start`, main frame only,
+  localhost-only manifest, no `scripting`/`debugger`/`webRequestBlocking`/
+  `storage`/`tabs` permissions;
+- native textarea and text-input click, keyboard, and `requestSubmit()` paths;
+- duplicate suppression, explicit release, and recapture with new identifiers;
+- multiple submit buttons, validation, and repeated attempts;
+- a sensitive fixture where only the designated editor is snapshotted while the
+  browser form serialization still contains password, hidden, and unrelated
+  fields;
+- contenteditable exact `textContent`, Unicode/surrogates, multiline, empty
+  text, input/change notifications, and controlled replacement;
+- editor and form replacement, invalidation, coverage-loss reporting, and
+  unmarked replacement forms remaining unsupported;
+- A-to-B-to-A sticky invalidation, pending `MutationObserver` flush, silent
+  programmatic read-back detection, and the documented silent transient limit;
+- listener installation/cleanup, navigation teardown, synthetic persisted
+  pagehide/pageshow, real back navigation, multiple independent tabs, and
+  bounded snapshot storage;
+- oversized source remaining blocked with no snapshot or pending editor;
+- `form.submit()`, direct fetch, autosave, earlier window handlers, and
+  non-cancellable events as explicit limitations;
+- no source text in console output, capture results, metadata, server receipts,
+  or extension profile storage.
+
+The report is written to `.build/content-qualification/report.json`.
+
 ## Known limitations
 
 - Every finding or candidate requires user review. The host does not claim
@@ -262,5 +452,27 @@ the exact run.
   checks `scanner.disposed` and recreates the scanner.
 - The qualification page and message bridge are emitted only by
   `npm run build:qualification`; the ordinary release build omits them.
-- No content script, page adapter, approval UI, offscreen document, telemetry,
-  backend, or publication is included.
+- The production package contains no content script or page adapter. The
+  content layer is a qualification-only fixture proof; consent, approval UI,
+  authenticated controller messaging, transformation orchestration, and
+  authorized resubmission belong to later milestones.
+- Content interception cannot stop direct fetch/XHR, `form.submit()`,
+  non-cancellable events, earlier window capture handlers, autosave, or
+  unsupported editors. It does not claim universal protection.
+- DOM observation cannot detect every transient or silent mutation. A silent
+  change that returns to the original text before read-back is not observable.
+- Snapshot coverage is the exact designated editor text, not the entire browser
+  form serialization, attachments, hidden or password fields, or
+  page-controlled network channels.
+- Source retention is bounded to 1,000,000 UTF-16 code units per snapshot and
+  4,000,000 aggregate code units. Oversized intercepted content stays blocked;
+  it is never silently submitted.
+- Real Back/Forward Cache eligibility is browser/profile-controlled. Persisted
+  pagehide/pageshow and real back navigation are qualified, but the test does
+  not force a bfcache restore. If the page is restored without bfcache, a fresh
+  content script is injected.
+- Adapter detection and read failures are fail-closed: a cancelable submit is
+  cancelled and reported as invalidated rather than risk a silent bypass. A
+  faulty adapter can therefore over-block a form, but it cannot fail open.
+- No approval UI, offscreen document, telemetry, backend, or publication is
+  included.

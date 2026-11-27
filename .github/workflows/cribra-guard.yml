@@ -102,15 +102,85 @@ jobs:
       - name: Build, type-check and qualify
         run: npm run qa --prefix packages/cribra-guard
 
-      - name: Verify release build excludes the qualification harness
+      - name: Verify release build excludes all qualification artifacts
         run: |
           set -euo pipefail
           npm run build --prefix packages/cribra-guard
           test ! -e packages/cribra-guard/dist/qualification.html
           test ! -e packages/cribra-guard/dist/qualification.js
+          test ! -e packages/cribra-guard/dist/content-script.js
+          test ! -e packages/cribra-guard/dist/manifest.qualification.json
           test -f packages/cribra-guard/dist/manifest.json
           test -f packages/cribra-guard/dist/service-worker.js
           test -f packages/cribra-guard/dist/wasm/cribra_bg.wasm
+          node - <<'NODE'
+          const fs = require("node:fs");
+          const manifest = JSON.parse(
+            fs.readFileSync("packages/cribra-guard/dist/manifest.json", "utf8"),
+          );
+          if ((manifest.permissions ?? []).length !== 0) {
+            throw new Error("production permissions are not empty");
+          }
+          if ((manifest.host_permissions ?? []).length !== 0) {
+            throw new Error("production host permissions are not empty");
+          }
+          if ((manifest.content_scripts ?? []).length !== 0) {
+            throw new Error("production content scripts are not empty");
+          }
+          if ((manifest.web_accessible_resources ?? []).length !== 0) {
+            throw new Error("production web-accessible resources are not empty");
+          }
+          NODE
+          node - <<'NODE'
+          const fs = require("node:fs");
+          const manifest = JSON.parse(
+            fs.readFileSync(
+              "packages/cribra-guard/.build/content-dist/manifest.json",
+              "utf8",
+            ),
+          );
+          const entries = manifest.content_scripts ?? [];
+          if (entries.length !== 1) {
+            throw new Error(
+              "content qualification must register exactly one content script",
+            );
+          }
+          if (
+            JSON.stringify(entries[0].matches) !==
+            JSON.stringify(["http://127.0.0.1/*"])
+          ) {
+            throw new Error(
+              "content qualification matches are not localhost-only",
+            );
+          }
+          if (
+            JSON.stringify(manifest.host_permissions ?? []) !==
+            JSON.stringify(["http://127.0.0.1/*"])
+          ) {
+            throw new Error(
+              "content qualification hosts are not localhost-only",
+            );
+          }
+          if ((manifest.permissions ?? []).length !== 0) {
+            throw new Error("content qualification permissions are not empty");
+          }
+          if (
+            !fs.existsSync(
+              "packages/cribra-guard/.build/content-dist/content-script.js",
+            )
+          ) {
+            throw new Error("content qualification script is missing");
+          }
+          if (
+            fs.existsSync(
+              "packages/cribra-guard/.build/content-dist/qualification.html",
+            )
+          ) {
+            throw new Error(
+              "content qualification includes the WASM qualification harness",
+            );
+          }
+          NODE
 
       - name: Verify the build leaves tracked files untouched
         run: |
@@ -126,4 +196,6 @@ jobs:
           retention-days: 14
           path: |
             packages/cribra-guard/.build/qualification/report.json
+            packages/cribra-guard/.build/content-qualification/report.json
             packages/cribra-guard/dist/artifact.json
+            packages/cribra-guard/.build/content-dist/artifact.json

@@ -4,6 +4,6 @@
     "types": ["node"],
     "noEmit": true
   },
-  "include": ["src/guard/**/*.ts"],
+  "include": ["src/guard/**/*.ts", "src/content/**/*.ts"],
   "exclude": []
 }
